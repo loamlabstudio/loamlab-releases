@@ -10,7 +10,7 @@ param(
     [string]$notes
 )
 
-$ROOT = "c:\Users\qingwen\.gemini\antigravity\playground\luminescent-einstein"
+$ROOT = "c:\Users\qingwen\.gemini\antigravity\workspaces\土窟設計su渲染插件"
 $BACKEND = "$ROOT\loamlab_backend"
 $CONFIG = "$ROOT\loamlab_plugin\config.rb"
 $OUT_RBZ = "$ROOT\loamlab_plugin.rbz"

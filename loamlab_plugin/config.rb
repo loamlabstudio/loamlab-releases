@@ -6,7 +6,8 @@ module LoamLab
   # - 闂佸娅﹂梽銈夊盁閺呭倽鐝涙穱婵囧瘮 "development" (闁絿绐旈懛顏呮拱濮?localhost:3000)
   # - 閸熷棗瀵查幍鎾冲瘶闁插鍤?.rbz)閸撳稄绱濋崟娆忕箑鐏忓洦顒濈拋濠冩毄閺€鍦仱 "production" (闁絿绐旈懛?Vercel 闂嗚尙顏径褑鍙?
   # ==============================================================================
-  ENV_MODE = "production" # "development" | "production"
+  ENV_MODE = "production"   # 永遠打真實 Vercel（開發與發布版本一致）
+  BUILD_TYPE = "dev"        # "dev" | "release" — build_rbz.ps1 打包時自動切為 release
 
   if ENV_MODE == "production"
     # ! 闂嗚尙顏径褑鍙囬惃鍕劀瀵繒鎭崸鈧?(鐠滃褰岄幋鎰亶闁劎璁插宀€娈?Vercel 缂嶆彃鐓欓敍灞筋洤 https://loamlab.vercel.app)
@@ -19,6 +20,7 @@ module LoamLab
   # 鐣跺墠铏熺⒓ (閫ｅ嫊 updater 鐗堟湰姣斿皪姗熷埗)
   VERSION = '1.2.0-beta'
 end
+
 
 
 

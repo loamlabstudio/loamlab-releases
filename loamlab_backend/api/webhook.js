@@ -58,13 +58,13 @@ export default async function handler(req, res) {
             let isSubscription = false;
 
             // ============================================================
-            // ★ 請至 LemonSqueezy 後台 Products > Variants 取得真實 ID
-            //   並依序替換下方的 VARIANT_ID_XXX 數字
+            // ★ Variant IDs — 請至 LemonSqueezy 後台 Products > Variants 取得真實 ID
+            //   同步更新 app.js 的 LS_VARIANTS 物件（兩邊必須對齊）
             // ============================================================
-            const VARIANT_STARTER = 100000; // ← 替換為 Starter Variant ID
-            const VARIANT_PRO = 100001; // ← 替換為 Pro Variant ID
-            const VARIANT_STUDIO = 100002; // ← 替換為 Studio Variant ID
-            const VARIANT_TOPUP = 100003; // ← 替換為 Top-up Variant ID
+            const VARIANT_TOPUP   = 99999;  // ← 同步 LS_VARIANTS.TOPUP
+            const VARIANT_STARTER = 12345;  // ← 同步 LS_VARIANTS.STARTER
+            const VARIANT_PRO     = 12346;  // ← 同步 LS_VARIANTS.PRO
+            const VARIANT_STUDIO  = 12347;  // ← 同步 LS_VARIANTS.STUDIO
 
             if (variantId === VARIANT_STARTER) {        // Starter $35 / NT$1,120
                 pointsToAdd = 300;                      // 月費點數 (寫入 points)
@@ -106,7 +106,8 @@ export default async function handler(req, res) {
                         .update({
                             points: newPoints,
                             lifetime_points: newLifetimePoints,
-                            referral_rewarded: shouldRewardRef ? true : user.referral_rewarded
+                            referral_rewarded: shouldRewardRef ? true : user.referral_rewarded,
+                            is_beta_tester: true
                         })
                         .eq('email', customerEmail);
 

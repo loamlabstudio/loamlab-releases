@@ -4,6 +4,135 @@ let currentPct = 0;
 let totalScenesToRender = 0;
 let finishedScenesCount = 0;
 
+// =========================================================
+// 工具切換系統 (Tool Switcher)
+// =========================================================
+let currentActiveTool = 1;
+let selectedShotStyle = 'dramatic';
+
+const PROXY_PREFIX = "This interior design scene contains simple geometric proxy shapes (boxes/blocks/cylinders) representing furniture placeholders. Replace each proxy with a realistic, high-quality piece of furniture of the indicated type while preserving its exact position, scale, and spatial relationship. ";
+
+const NINEGRID_PREFIX = "Generate a single 3×3 nine-panel grid composition image showing this interior from 9 distinct dramatic camera angles in a magazine-style layout: [1.Wide angle overview] [2.Eye-level straight-on] [3.Bird's eye top-down] [4.Worm's eye looking up] [5.45° corner diagonal] [6.Entrance threshold] [7.Close-up material detail] [8.Golden hour window shot] [9.Cinematic low dramatic angle]. Each panel separated by thin white dividing lines. ";
+
+const SHOT_MODIFIERS = {
+    industrial: "Hard dramatic shadows, high contrast, exposed concrete and raw industrial materials, cool tones. ",
+    natural: "Soft diffused daylight, warm earth tones, organic textures, airy and breathing atmosphere. ",
+    dramatic: "Golden hour side lighting, cinematic depth of field, bold light-shadow contrasts, editorial feel. ",
+    minimal: "Clean white walls, extreme negative space, calm and serene minimalist atmosphere, neutral palette. "
+};
+
+const TOOL_FURNITURE_TAGS = [
+    { label: '沙發', tag: 'sofa' }, { label: '單椅', tag: 'armchair' },
+    { label: '餐桌椅', tag: 'dining table and chairs' }, { label: '床組', tag: 'bed frame with mattress' },
+    { label: '衣櫃', tag: 'wardrobe' }, { label: '書桌', tag: 'desk' },
+    { label: '落地燈', tag: 'floor lamp' }, { label: '茶几', tag: 'coffee table' }
+];
+
+function setActiveTool(n) {
+    currentActiveTool = n;
+
+    // Sidebar 樣式切換
+    document.querySelectorAll('.sidebar-tool-btn').forEach(btn => {
+        const bar = btn.querySelector('.sidebar-active-bar');
+        btn.classList.remove('bg-white/10', 'border', 'border-white/20');
+        btn.classList.add('text-white/50');
+        btn.classList.remove('text-white');
+        if (bar) bar.classList.add('hidden');
+    });
+    const activeBtn = document.getElementById(`sidebar-tool-${n}`);
+    if (activeBtn) {
+        activeBtn.classList.add('bg-white/10', 'border', 'border-white/20', 'text-white');
+        activeBtn.classList.remove('text-white/50');
+        const bar = activeBtn.querySelector('.sidebar-active-bar');
+        if (bar) bar.classList.remove('hidden');
+    }
+
+    const hintBanner = document.getElementById('tool-hint-banner');
+    const shotStyleSelector = document.getElementById('shot-style-selector');
+    const materialTagsDiv = document.getElementById('material-tags');
+    const promptInput = document.getElementById('user-prompt-input');
+    const titleEl = document.querySelector('[data-i18n="title"]');
+
+    if (hintBanner) hintBanner.classList.add('hidden');
+    if (shotStyleSelector) shotStyleSelector.classList.add('hidden');
+    if (materialTagsDiv) materialTagsDiv.classList.remove('hidden');
+
+    if (n === 1) {
+        if (titleEl) titleEl.textContent = (UI_LANG[currentLang] || UI_LANG['en-US'])['title'];
+        rebuildMaterialTags();
+        if (promptInput) promptInput.placeholder = (UI_LANG[currentLang] || UI_LANG['en-US'])['prompt_ph'];
+    } else if (n === 2) {
+        if (titleEl) titleEl.textContent = '家具換裝 Furniture Swap';
+        if (hintBanner) {
+            hintBanner.className = 'w-full rounded-lg px-3 py-2.5 text-[11px] leading-relaxed bg-amber-500/10 border border-amber-500/20 text-amber-200/70';
+            hintBanner.textContent = '💡 在 SU 中用方塊代理家具位置，選好場景後渲染，AI 將依家具類型替換方塊。渲染完成後可點擊卡片上的 SWAP 按鈕進行局部替換。';
+        }
+        rebuildFurnitureTags();
+        if (promptInput) promptInput.placeholder = 'e.g. Nordic style, warm wood tone, minimalist...';
+    } else if (n === 3) {
+        if (titleEl) titleEl.textContent = '九宮格鏡頭 9-Grid Shots';
+        if (hintBanner) {
+            hintBanner.className = 'w-full rounded-lg px-3 py-2.5 text-[11px] leading-relaxed bg-blue-500/10 border border-blue-500/20 text-blue-200/70';
+            hintBanner.textContent = '📸 AI 輸出一張包含 9 個不同鏡頭角度的九宮格構圖大圖。選擇鏡頭風格後渲染即可。';
+        }
+        if (shotStyleSelector) shotStyleSelector.classList.remove('hidden');
+        if (materialTagsDiv) materialTagsDiv.classList.add('hidden');
+        if (promptInput) promptInput.placeholder = 'e.g. high-end residential, warm sunset mood...';
+    }
+
+    updateCostPreview();
+}
+
+function rebuildMaterialTags() {
+    const container = document.getElementById('material-tags');
+    if (!container) return;
+    const tags = [
+        { label: 'Wood', tag: 'wood material' }, { label: 'Glass', tag: 'clear glass' },
+        { label: 'Concrete', tag: 'concrete texture' }, { label: 'Marble', tag: 'marble texture' },
+        { label: 'Metal', tag: 'metallic finish' }, { label: 'Fabric', tag: 'fabric material' },
+        { label: 'Leather', tag: 'leather material' }
+    ];
+    const cls = 'text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none';
+    container.innerHTML = tags.map(t => `<span class="${cls}" data-tag="${t.tag}">${t.label}</span>`).join('');
+    container.querySelectorAll('span[data-tag]').forEach(span => {
+        span.addEventListener('click', () => appendToPrompt(span.getAttribute('data-tag')));
+    });
+}
+
+function rebuildFurnitureTags() {
+    const container = document.getElementById('material-tags');
+    if (!container) return;
+    const cls = 'text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-amber-500/20 text-amber-200/60 hover:text-amber-100 hover:bg-amber-500/10 hover:border-amber-400/40 cursor-pointer transition-all active:scale-95 tracking-wide select-none';
+    container.innerHTML = TOOL_FURNITURE_TAGS.map(t => `<span class="${cls}" data-tag="${t.tag}">${t.label}</span>`).join('');
+    container.querySelectorAll('span[data-tag]').forEach(span => {
+        span.addEventListener('click', () => appendToPrompt(span.getAttribute('data-tag')));
+    });
+}
+
+function appendToPrompt(val) {
+    const textPrompt = document.getElementById('user-prompt-input');
+    if (!textPrompt || !val) return;
+    const cur = textPrompt.value.trim();
+    textPrompt.value = cur ? (cur.endsWith(',') ? cur + ' ' + val : cur + ', ' + val) : val;
+}
+
+// 工具 3：渲染開始時顯示 9 格骨架
+function showNineGridPlaceholder() {
+    const placeholderEl = document.getElementById('preview-placeholder');
+    const gridEl = document.getElementById('preview-grid');
+    if (placeholderEl) placeholderEl.classList.add('hidden');
+    if (gridEl) {
+        gridEl.innerHTML = Array(9).fill(0).map(() =>
+            `<div class="aspect-video bg-white/[0.03] rounded-xl border border-white/[0.04] overflow-hidden relative">
+                <div class="absolute inset-0 animate-pulse bg-gradient-to-br from-white/[0.02] to-transparent"></div>
+             </div>`
+        ).join('');
+        gridEl.className = 'w-full h-full px-6 grid grid-cols-3 gap-3 content-start items-start overflow-y-auto custom-scrollbar pb-6';
+        gridEl.classList.remove('hidden');
+    }
+}
+
+// =========================================================
 // 動態更新渲染按鈕上的預計點數消耗
 function updateCostPreview() {
     const costLabel = document.getElementById('render-cost-preview');
@@ -86,6 +215,12 @@ window.receiveFromRuby = function (data) {
             API_BASE = data.api_base;
             console.log("API_BASE updated to:", API_BASE);
         }
+        if (data.build_type === 'dev') {
+            const badge = document.createElement('div');
+            badge.textContent = 'DEV';
+            badge.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);background:#dc2626;color:white;font-size:10px;font-weight:900;padding:2px 12px;border-radius:4px;z-index:9999;letter-spacing:3px;pointer-events:none;box-shadow:0 0 12px rgba(220,38,38,0.6);';
+            document.body.appendChild(badge);
+        }
         const langStr = data.lang || 'en-US';
         document.getElementById('lang-select').value = langStr;
         window.setLanguage(langStr);
@@ -117,6 +252,7 @@ window.receiveFromRuby = function (data) {
         if (previewArea) previewArea.classList.add('is-rendering');
 
         startRenderTimer();
+        if (currentActiveTool === 3) showNineGridPlaceholder();
     } else if (data.status === 'uploading') {
         statusText.textContent = langObj['status_uploading'] || '正在建構魔法...';
         // 進度由 startRenderTimer 控制
@@ -261,6 +397,18 @@ window.receiveFromRuby = function (data) {
                             badge.parentNode.replaceChild(btnContainer, badge);
                             btnContainer.appendChild(badge);
                             btnContainer.appendChild(saveBtn);
+
+                            // SWAP 按鈕（工具 1/2 才顯示，工具 3 九宮格不做局部替換）
+                            if (currentActiveTool !== 3) {
+                                const swapBtn = document.createElement('button');
+                                swapBtn.className = "text-[9px] px-2.5 py-1 rounded border border-amber-500/30 text-amber-300/80 hover:bg-amber-500/20 hover:text-amber-200 hover:border-amber-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm";
+                                swapBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> SWAP`;
+                                swapBtn.onclick = (e) => {
+                                    e.stopPropagation();
+                                    openSwapModal(originalImgSrc, targetUrl);
+                                };
+                                btnContainer.appendChild(swapBtn);
+                            }
                         }
                     }
                 });
@@ -429,6 +577,14 @@ document.addEventListener("DOMContentLoaded", () => {
         const selectedScenes = Array.from(checkboxes).map(cb => cb.value);
         const userPrompt = textPrompt ? textPrompt.value.trim() : "";
 
+        // 依工具組裝最終 Prompt
+        let finalPrompt = userPrompt;
+        if (currentActiveTool === 2) {
+            finalPrompt = PROXY_PREFIX + userPrompt;
+        } else if (currentActiveTool === 3) {
+            finalPrompt = NINEGRID_PREFIX + SHOT_MODIFIERS[selectedShotStyle] + userPrompt;
+        }
+
         // 重置多重算圖計數器
         totalScenesToRender = selectedScenes.length;
         finishedScenesCount = 0;
@@ -458,7 +614,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (window.sketchup) {
-            sketchup.render_scene({ scenes: selectedScenes, prompt: userPrompt, resolution: resolution, expected_cost: totalCost });
+            sketchup.render_scene({ scenes: selectedScenes, prompt: finalPrompt, resolution: resolution, expected_cost: totalCost });
         } else {
             console.log('Simulating render req for:', selectedScenes, 'Prompt:', userPrompt, 'Res:', resolution, 'Cost:', totalCost);
             // 本地模擬扣款特效
@@ -501,6 +657,35 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
+
+    // 鏡頭風格標籤切換 (工具 3)
+    document.querySelectorAll('.shot-style-tag').forEach(tag => {
+        tag.addEventListener('click', () => {
+            selectedShotStyle = tag.getAttribute('data-style');
+            document.querySelectorAll('.shot-style-tag').forEach(t => {
+                t.classList.remove('bg-blue-500/20', 'border-blue-400/40', 'text-blue-200');
+                t.classList.add('bg-black/40', 'border-white/10', 'text-white/60');
+            });
+            tag.classList.remove('bg-black/40', 'border-white/10', 'text-white/60');
+            tag.classList.add('bg-blue-500/20', 'border-blue-400/40', 'text-blue-200');
+        });
+    });
+
+    // Swap Modal 控制按鈕
+    document.getElementById('btn-close-swap')?.addEventListener('click', closeSwapModal);
+    document.getElementById('btn-clear-mask')?.addEventListener('click', clearSwapMask);
+    document.getElementById('btn-execute-swap')?.addEventListener('click', executeSwap);
+
+    // Swap Modal 快捷 Tags → 附加到 swap-prompt-input
+    document.querySelectorAll('.swap-item-tag').forEach(tag => {
+        tag.addEventListener('click', () => {
+            const input = document.getElementById('swap-prompt-input');
+            if (!input) return;
+            const val = tag.getAttribute('data-tag');
+            const cur = input.value.trim();
+            input.value = cur ? (cur.endsWith(',') ? cur + ' ' + val : cur + ', ' + val) : val;
+        });
+    });
 });
 
 // 同步預覽畫面事件
@@ -579,6 +764,19 @@ window.openPricingModal = openPricingModal; // 讓共用邏輯呼叫
 
 let authPollTimer = null;
 let API_BASE = "https://loamlab-camera-backend.vercel.app";
+
+// =========================================================
+// LemonSqueezy Variant IDs & Beta 折扣碼
+// ★ 請至 LemonSqueezy 後台 Products > Variants 取得真實 ID 後更新此處
+// ★ webhook.js 的 VARIANT_* 常數必須與此同步
+// =========================================================
+const LS_VARIANTS = {
+    TOPUP:   99999,   // ← 替換為 Top-up Variant ID
+    STARTER: 12345,   // ← 替換為 Starter Variant ID
+    PRO:     12346,   // ← 替換為 Pro Variant ID
+    STUDIO:  12347    // ← 替換為 Studio Variant ID
+};
+const BETA_DISCOUNT_CODE = 'LOAM_BETA_30';
 
 window.updateLoginUI = function (email, points, refCode, referredBy) {
     const btnLogin = document.getElementById('btn-login');
@@ -686,7 +884,7 @@ window.openCheckout = function (variantId) {
     }
     // LemonSqueezy 支援透過 ?checkout[email]= 來預填並鎖死結帳信箱，加上 custom 以供 Webhook 辨識防錯
     const storeUrl = "https://loamlabstudio.lemonsqueezy.com/checkout/buy/";
-    const finalUrl = `${storeUrl}${variantId}?checkout[email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[custom][user_email]=${encodeURIComponent(window.loamlabUserEmail)}`;
+    const finalUrl = `${storeUrl}${variantId}?checkout[email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[custom][user_email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[discount_code]=${BETA_DISCOUNT_CODE}`;
 
     if (window.sketchup) {
         sketchup.open_browser(finalUrl);
@@ -919,4 +1117,137 @@ if (btnDevReload) {
             location.reload();
         }
     });
+}
+
+// =========================================================
+// SWAP Modal — 遮罩替換彈窗
+// =========================================================
+let swapIsDrawing = false;
+let swapCanvas = null;
+let swapCtx = null;
+let swapRenderedUrl = null;
+
+function openSwapModal(sketchupImgSrc, renderedImgUrl) {
+    swapRenderedUrl = renderedImgUrl;
+    const modal = document.getElementById('swap-modal');
+    if (!modal) return;
+
+    // 設定底圖（已渲染結果）
+    const baseImg = document.getElementById('swap-base-image');
+    if (baseImg) baseImg.src = renderedImgUrl;
+
+    // 初始化 canvas
+    swapCanvas = document.getElementById('swap-mask-canvas');
+    if (swapCanvas) {
+        // 等底圖載入完後再同步 canvas 尺寸
+        if (baseImg) {
+            const syncSize = () => {
+                swapCanvas.width = baseImg.offsetWidth || 512;
+                swapCanvas.height = baseImg.offsetHeight || 288;
+                swapCtx = swapCanvas.getContext('2d');
+                swapCtx.strokeStyle = 'rgba(255,100,50,0.85)';
+                swapCtx.lineWidth = parseInt(document.getElementById('swap-brush-size')?.value || '20', 10);
+                swapCtx.lineCap = 'round';
+                swapCtx.lineJoin = 'round';
+            };
+            if (baseImg.complete) syncSize();
+            else baseImg.onload = syncSize;
+        }
+    }
+
+    // 重置 prompt
+    const promptInput = document.getElementById('swap-prompt-input');
+    if (promptInput) promptInput.value = '';
+
+    // 顯示 modal
+    modal.classList.remove('hidden');
+    setTimeout(() => modal.classList.remove('opacity-0'), 10);
+
+    // 綁定刷子繪製事件（避免重複綁定）
+    if (swapCanvas && !swapCanvas._swapBound) {
+        swapCanvas._swapBound = true;
+
+        const getPos = (e) => {
+            const rect = swapCanvas.getBoundingClientRect();
+            const src = e.touches ? e.touches[0] : e;
+            return { x: (src.clientX - rect.left) * (swapCanvas.width / rect.width), y: (src.clientY - rect.top) * (swapCanvas.height / rect.height) };
+        };
+
+        swapCanvas.addEventListener('mousedown', (e) => { swapIsDrawing = true; const p = getPos(e); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); });
+        swapCanvas.addEventListener('mousemove', (e) => { if (!swapIsDrawing) return; const p = getPos(e); swapCtx.lineTo(p.x, p.y); swapCtx.stroke(); });
+        swapCanvas.addEventListener('mouseup', () => { swapIsDrawing = false; });
+        swapCanvas.addEventListener('mouseleave', () => { swapIsDrawing = false; });
+
+        swapCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); swapIsDrawing = true; const p = getPos(e); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); }, { passive: false });
+        swapCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (!swapIsDrawing) return; const p = getPos(e); swapCtx.lineTo(p.x, p.y); swapCtx.stroke(); }, { passive: false });
+        swapCanvas.addEventListener('touchend', () => { swapIsDrawing = false; });
+    }
+
+    // 刷子尺寸同步
+    document.getElementById('swap-brush-size')?.addEventListener('input', (e) => {
+        if (swapCtx) swapCtx.lineWidth = parseInt(e.target.value, 10);
+    });
+}
+
+function closeSwapModal() {
+    const modal = document.getElementById('swap-modal');
+    if (!modal) return;
+    modal.classList.add('opacity-0');
+    setTimeout(() => modal.classList.add('hidden'), 300);
+}
+
+function clearSwapMask() {
+    if (swapCtx && swapCanvas) {
+        swapCtx.clearRect(0, 0, swapCanvas.width, swapCanvas.height);
+    }
+}
+
+async function executeSwap() {
+    const btn = document.getElementById('btn-execute-swap');
+    const refUrl = document.getElementById('swap-reference-url')?.value.trim() || '';
+    const prompt = document.getElementById('swap-prompt-input')?.value.trim() || '';
+
+    if (!swapCanvas || !swapRenderedUrl) return;
+
+    // 將遮罩 canvas 匯出為 base64 PNG（黑底白遮罩格式）
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = swapCanvas.width;
+    maskCanvas.height = swapCanvas.height;
+    const mCtx = maskCanvas.getContext('2d');
+    mCtx.fillStyle = '#000000';
+    mCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+    mCtx.globalCompositeOperation = 'destination-out';
+    mCtx.drawImage(swapCanvas, 0, 0);
+    mCtx.globalCompositeOperation = 'source-over';
+    // 反轉：白色為遮罩區域
+    const maskData = mCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
+    for (let i = 0; i < maskData.data.length; i += 4) {
+        maskData.data[i] = 255 - maskData.data[i];
+        maskData.data[i + 1] = 255 - maskData.data[i + 1];
+        maskData.data[i + 2] = 255 - maskData.data[i + 2];
+    }
+    mCtx.putImageData(maskData, 0, 0);
+    const maskBase64 = maskCanvas.toDataURL('image/png');
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/inpaint`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_url: swapRenderedUrl, mask_base64: maskBase64, reference_url: refUrl, prompt })
+        });
+        const result = await resp.json();
+        if (result.code === 0 && result.url) {
+            // 替換成功：關閉 modal 並顯示提示
+            closeSwapModal();
+            alert('Swap complete! Result: ' + result.url);
+        } else {
+            alert(result.msg || 'Furniture swap is coming in the next update.');
+        }
+    } catch (err) {
+        alert('Swap coming soon — backend not yet configured.');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Execute SWAP'; }
+    }
 }

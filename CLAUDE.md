@@ -55,6 +55,42 @@ Key tables:
 
 ---
 
+## 環境隔離架構（Dev vs Public Beta）
+
+### 核心規則
+**`.rbz` 打包件是唯一的隔離邊界。** 用戶安裝的版本是凍結的，開發者的 workspace 是活的。兩者打同一個 Production Vercel 後端，但不互相干擾（各用各的帳號）。
+
+```
+[開發者 workspace]                     [公測用戶安裝的 .rbz]
+BUILD_TYPE = "dev"                     BUILD_TYPE = "release"
+ENV_MODE   = "production"              ENV_MODE   = "production"
+      ↓                                       ↓
+Production Vercel（開發者帳號測試）    Production Vercel（用戶帳號）
+```
+
+### 兩個獨立開關
+| 變數 | 職責 | 開發版 | 發布版 |
+|---|---|---|---|
+| `ENV_MODE` | 打哪個後端 | `production` | `production` |
+| `BUILD_TYPE` | 是否為開發者構建 | `dev` | `release` |
+
+> `ENV_MODE` 現在恆為 `production`，不再用來區分環境。`BUILD_TYPE` 是唯一決定 DEV badge 與 preferences_key 的開關。
+
+### 環境辨別方式
+| | 開發版（workspace） | 公測版（.rbz） |
+|---|---|---|
+| UI 標記 | 頂部紅色 `DEV` badge | 無 badge |
+| Dialog 標題 | `LoamLab AI Renderer [DEV]` | `LoamLab AI Renderer` |
+| SketchUp preferences_key | `com.loamlab.airenderer.dev` | `com.loamlab.airenderer` |
+| 後端 | Production Vercel | Production Vercel |
+
+### 不變的規則
+- **`config.rb` 在 repo 裡永遠是 `BUILD_TYPE = "dev"`** — `build_rbz.ps1` 打包時自動切為 `release`，完成後恢復
+- **`build_rbz.ps1` 是唯一能產生 release 版本的路徑** — 任何手動改動都不算發布
+- **Variant ID 維護點**：`app.js` 的 `LS_VARIANTS` 物件（前端）與 `webhook.js` 的 `VARIANT_*` 常數（後端）必須同步更新
+
+---
+
 ## Build & Deploy
 
 ### Package Plugin (`.rbz`)

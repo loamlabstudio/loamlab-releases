@@ -226,32 +226,34 @@
             class="w-[84px] bg-[#0c0c0e] border-r border-[var(--border-white)] flex flex-col items-center py-6 gap-6 z-10 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.5)]">
             <div class="flex flex-col gap-4 w-full px-3">
                 <!-- 1. 真實渲染 (Active) -->
-                <div class="w-full aspect-square rounded-xl bg-white/10 transition-colors cursor-pointer flex flex-col items-center justify-center text-white group relative overflow-hidden shadow-sm border border-white/20 hover:bg-white/20"
-                    title="真實渲染">
-                    <div class="absolute inset-x-0 top-0 h-1 bg-[var(--accent-red)]"></div>
+                <div id="sidebar-tool-1" class="sidebar-tool-btn w-full aspect-square rounded-xl bg-white/10 transition-colors cursor-pointer flex flex-col items-center justify-center text-white group relative overflow-hidden shadow-sm border border-white/20 hover:bg-white/20"
+                    title="真實渲染" onclick="setActiveTool(1)">
+                    <div class="absolute inset-x-0 top-0 h-1 bg-[var(--accent-red)] sidebar-active-bar"></div>
                     <svg class="w-6 h-6 mb-1 text-[var(--accent-red)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
                         </path>
                     </svg>
                 </div>
-                <!-- 2. 指定家具替換 (Inactive) -->
-                <div class="w-full aspect-square rounded-xl bg-transparent transition-colors cursor-not-allowed opacity-40 flex flex-col items-center justify-center text-white group relative hover:bg-white/5"
-                    title="指定家具替換 (Beta 迭代中)">
+                <!-- 2. 代理建模 / 局部換裝 (Beta Active) -->
+                <div id="sidebar-tool-2" class="sidebar-tool-btn w-full aspect-square rounded-xl bg-transparent transition-colors cursor-pointer flex flex-col items-center justify-center text-white/50 group relative hover:bg-white/10 hover:text-white"
+                    title="代理建模 / 局部換裝" onclick="setActiveTool(2)">
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
                         </path>
                     </svg>
+                    <span class="text-[7px] font-bold tracking-widest text-white/30 absolute bottom-1.5">SWAP</span>
                 </div>
-                <!-- 3. 多角度生成 (Inactive) -->
-                <div class="w-full aspect-square rounded-xl bg-transparent transition-colors cursor-not-allowed opacity-40 flex flex-col items-center justify-center text-white group relative hover:bg-white/5"
-                    title="多角度生成 (Beta 迭代中)">
+                <!-- 3. 九宮格鏡頭構圖 (Beta Active) -->
+                <div id="sidebar-tool-3" class="sidebar-tool-btn w-full aspect-square rounded-xl bg-transparent transition-colors cursor-pointer flex flex-col items-center justify-center text-white/50 group relative hover:bg-white/10 hover:text-white"
+                    title="九宮格鏡頭構圖" onclick="setActiveTool(3)">
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4">
                         </path>
                     </svg>
+                    <span class="text-[7px] font-bold tracking-widest text-white/30 absolute bottom-1.5">9-GRID</span>
                 </div>
                 <!-- 4. 指定材質替換 (Inactive) -->
                 <div class="w-full aspect-square rounded-xl bg-transparent transition-colors cursor-not-allowed opacity-40 flex flex-col items-center justify-center text-white group relative hover:bg-white/5"
@@ -261,6 +263,7 @@
                             d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01">
                         </path>
                     </svg>
+                    <span class="text-[7px] font-bold tracking-widest text-white/30 absolute bottom-1.5">SOON</span>
                 </div>
             </div>
         </aside>
@@ -331,6 +334,9 @@
                 </div>
 
                 <div class="mt-auto w-full flex flex-col items-center relative z-20 shrink-0 gap-3">
+
+                    <!-- 工具提示橫幅 (Tool 2/3 顯示) -->
+                    <div id="tool-hint-banner" class="hidden w-full rounded-lg px-3 py-2.5 text-[11px] leading-relaxed"></div>
 
                     <!-- 摺疊進階設定區塊 (Advanced Settings Accordion) -->
                     <details
@@ -403,6 +409,17 @@
                                 <textarea id="user-prompt-input" rows="2" data-i18n="prompt_ph"
                                     class="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[12px] text-white/90 focus:outline-none focus:border-[#dc2626]/70 focus:ring-1 focus:ring-[#dc2626]/50 transition-all placeholder-white/20 resize-none custom-scrollbar mb-3 font-light tracking-wide shadow-inner"
                                     placeholder="e.g. Leather sofa, wooden floor, warm lighting..."></textarea>
+
+                                <!-- 工具 3：鏡頭風格選擇（預設隱藏） -->
+                                <div id="shot-style-selector" class="hidden w-full flex flex-col mb-3">
+                                    <label class="text-[11px] font-semibold tracking-wider text-white/50 mb-2 uppercase">鏡頭風格 Shot Style</label>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="industrial">硬朗工業</span>
+                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="natural">柔和自然</span>
+                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="dramatic">戲劇張力</span>
+                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="minimal">極簡留白</span>
+                                    </div>
+                                </div>
 
                                 <!-- Material Tags -->
                                 <div class="flex flex-wrap gap-1.5" id="material-tags">
@@ -630,7 +647,7 @@
                     </div>
                     <p class="text-[11px] text-white/50 mb-6 flex-1">200 Credits.<br><br>Equivalent to 10 standard
                         renders. Perfect for emergencies.</p>
-                    <button onclick="window.openCheckout(99999)"
+                    <button onclick="window.openCheckout(LS_VARIANTS.TOPUP)"
                         class="w-full py-2.5 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 text-[11px] font-bold tracking-widest transition-all">BUY
                         NOW</button>
                 </div>
@@ -660,7 +677,7 @@
                                     d="M5 13l4 4L19 7"></path>
                             </svg>High Priority Queue</li>
                     </ul>
-                    <button onclick="window.openCheckout(12345)"
+                    <button onclick="window.openCheckout(LS_VARIANTS.STARTER)"
                         class="w-full py-2.5 rounded bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[11px] font-bold tracking-widest transition-all">SUBSCRIBE</button>
                 </div>
 
@@ -693,7 +710,7 @@
                                     d="M5 13l4 4L19 7"></path>
                             </svg>Commercial License</li>
                     </ul>
-                    <button onclick="window.openCheckout(12346)"
+                    <button onclick="window.openCheckout(LS_VARIANTS.PRO)"
                         class="w-full py-3 rounded bg-[#dc2626] hover:bg-[#ef4444] text-white text-[11px] font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(220,38,38,0.4)]">UPGRADE
                         NOW</button>
                 </div>
@@ -723,7 +740,7 @@
                                     d="M5 13l4 4L19 7"></path>
                             </svg>Team API Access</li>
                     </ul>
-                    <button onclick="window.openCheckout(12347)"
+                    <button onclick="window.openCheckout(LS_VARIANTS.STUDIO)"
                         class="w-full py-2.5 rounded bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[11px] font-bold tracking-widest transition-all">SUBSCRIBE</button>
                 </div>
 
@@ -731,9 +748,89 @@
         </div>
     </div>
 
+    <!-- 遮罩換裝彈窗 (Swap Modal) -->
+    <div id="swap-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden flex items-center justify-center">
+        <div class="relative w-[900px] max-w-[96vw] max-h-[90vh] bg-[#0f0f12] border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
+                <div>
+                    <h2 class="text-[15px] font-bold text-white tracking-widest">FURNITURE SWAP</h2>
+                    <p class="text-[11px] text-white/40 mt-0.5">在渲染圖上塗抹遮罩，指定替換區域</p>
+                </div>
+                <button id="btn-close-swap" class="text-white/40 hover:text-white bg-white/5 hover:bg-white/10 rounded-full p-2 transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="flex gap-0 flex-1 min-h-0 overflow-hidden">
+                <!-- Left: Canvas 塗抹區 -->
+                <div class="flex-1 flex flex-col bg-black/60 relative min-w-0">
+                    <div class="flex items-center gap-3 px-4 py-2.5 border-b border-white/5 shrink-0 bg-black/40">
+                        <span class="text-[10px] text-white/50 font-semibold uppercase tracking-widest">塗抹要替換的區域</span>
+                        <div class="flex items-center gap-2 ml-auto">
+                            <span class="text-[10px] text-white/40">刷子大小</span>
+                            <input id="swap-brush-size" type="range" min="5" max="80" value="30" class="w-20 accent-[#dc2626]">
+                            <span id="swap-brush-size-label" class="text-[10px] text-white/60 w-6 text-right">30</span>
+                        </div>
+                        <button id="btn-clear-mask" class="text-[10px] px-3 py-1 rounded border border-white/20 text-white/60 hover:text-white hover:border-white/50 transition-all font-medium uppercase tracking-wider">清除</button>
+                    </div>
+                    <div class="flex-1 relative flex items-center justify-center overflow-hidden p-3">
+                        <div class="relative inline-block" id="swap-canvas-container">
+                            <img id="swap-base-image" class="block max-w-full max-h-[calc(90vh-200px)] rounded-lg" src="" alt="Rendered scene">
+                            <canvas id="swap-mask-canvas" class="absolute inset-0 rounded-lg cursor-crosshair opacity-70" style="touch-action:none;"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: 參數設定 -->
+                <div class="w-[280px] shrink-0 flex flex-col border-l border-white/10 bg-[#0c0c0e]">
+                    <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+                        <!-- 參考圖 URL -->
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">參考圖片 Reference</label>
+                            <input id="swap-reference-url" type="text" placeholder="貼上圖片 URL..." class="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-white/90 focus:outline-none focus:border-[#dc2626]/70 placeholder-white/20">
+                            <p class="text-[10px] text-white/30">AI 將依照參考圖的風格替換遮罩區域</p>
+                        </div>
+                        <!-- 替換說明 -->
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">替換指令 Prompt</label>
+                            <textarea id="swap-prompt-input" rows="3" placeholder="e.g. Nordic style linen sofa, warm wood legs..." class="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-white/90 focus:outline-none focus:border-[#dc2626]/70 placeholder-white/20 resize-none"></textarea>
+                        </div>
+                        <!-- 家具快速 Tags -->
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">快速標籤</label>
+                            <div class="flex flex-wrap gap-1">
+                                <span class="swap-item-tag text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 cursor-pointer transition-all select-none" data-tag="sofa">Sofa</span>
+                                <span class="swap-item-tag text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 cursor-pointer transition-all select-none" data-tag="armchair">Armchair</span>
+                                <span class="swap-item-tag text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 cursor-pointer transition-all select-none" data-tag="dining table">Dining Table</span>
+                                <span class="swap-item-tag text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 cursor-pointer transition-all select-none" data-tag="bed frame">Bed</span>
+                                <span class="swap-item-tag text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 cursor-pointer transition-all select-none" data-tag="floor lamp">Lamp</span>
+                                <span class="swap-item-tag text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 cursor-pointer transition-all select-none" data-tag="coffee table">Coffee Table</span>
+                                <span class="swap-item-tag text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 cursor-pointer transition-all select-none" data-tag="wardrobe">Wardrobe</span>
+                                <span class="swap-item-tag text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 cursor-pointer transition-all select-none" data-tag="curtains">Curtains</span>
+                                <span class="swap-item-tag text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 cursor-pointer transition-all select-none" data-tag="rug">Rug</span>
+                            </div>
+                        </div>
+                        <!-- 費用提示 -->
+                        <div class="bg-white/[0.03] border border-white/5 rounded-lg p-3 text-[10px] text-white/30 leading-relaxed">
+                            ⚠️ 換裝功能即將開放，目前需要先配置 Coze Inpainting 工作流。
+                        </div>
+                    </div>
+                    <!-- 執行按鈕 -->
+                    <div class="p-4 border-t border-white/10 shrink-0">
+                        <button id="btn-execute-swap" class="w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-3 rounded-xl font-bold text-[13px] tracking-widest shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                            執行替換 SWAP
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 引入外部邏輯腳本 (強制加上 ?v=1.2.0 擊破 CEF 瀏覽器快取) -->
     <script src="i18n.js?v=1.2.0"></script>
-    <script src="app.js?v=1.2.2"></script>
+    <script src="app.js?v=1.3.0"></script>
 </body>
 
 </html>

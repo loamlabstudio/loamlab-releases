@@ -45,7 +45,10 @@ const UI_LANG = {
         'render_progress': '渲染進度',
         'render_failed': '渲染失敗',
         'points_refunded': '點數已退還',
-        'error_label': '錯誤'
+        'error_label': '錯誤',
+        'save_dir_empty': '尚未設定 (點擊選擇資料夾)',
+        'preview_select_hint': '請在右側勾選欲預覽的場景...',
+        'preview_storyboard_hint': '繪製場景故事板中...'
     },
     'en-US': {
         'title': 'LoamLab Camera',
@@ -93,7 +96,10 @@ const UI_LANG = {
         'render_progress': 'Rendering',
         'render_failed': 'Render Failed',
         'points_refunded': 'Points Refunded',
-        'error_label': 'Error'
+        'error_label': 'Error',
+        'save_dir_empty': 'Not set (click to choose folder)',
+        'preview_select_hint': 'Check scenes on the right to preview...',
+        'preview_storyboard_hint': 'Drawing scene storyboard...'
     },
     'zh-CN': {
         'title': '野人相机 (LoamLab Camera)',
@@ -141,7 +147,10 @@ const UI_LANG = {
         'render_progress': '渲染进度',
         'render_failed': '渲染失败',
         'points_refunded': '点数已退还',
-        'error_label': '错误'
+        'error_label': '错误',
+        'save_dir_empty': '尚未设定 (点击选择文件夹)',
+        'preview_select_hint': '请在右侧勾选欲预览的场景...',
+        'preview_storyboard_hint': '绘制场景故事板中...'
     },
     'es-ES': {
         'title': 'LoamLab Cámara',
@@ -182,7 +191,17 @@ const UI_LANG = {
         'tool_ai_render': 'Render Realista',
         'tool_furniture': 'Reemplazo Mueble',
         'tool_multi_angle': 'Multi Ángulo',
-        'tool_material': 'Reemplazo Material'
+        'tool_material': 'Reemplazo Material',
+        'update_latest': '¡El sistema está actualizado!',
+        'export_done': 'Todas las escenas enviadas. Renderizando...',
+        'render_all_done': '¡Todos los renders completados!',
+        'render_progress': 'Renderizando',
+        'render_failed': 'Fallo al renderizar',
+        'points_refunded': 'Puntos reembolsados',
+        'error_label': 'Error',
+        'save_dir_empty': 'No configurado (clic para elegir carpeta)',
+        'preview_select_hint': 'Marque escenas a la derecha para previsualizar...',
+        'preview_storyboard_hint': 'Dibujando storyboard de escenas...'
     },
     'pt-BR': {
         'title': 'Câmera LoamLab',
@@ -223,7 +242,17 @@ const UI_LANG = {
         'tool_ai_render': 'Render Realista',
         'tool_furniture': 'Troca de Móvel',
         'tool_multi_angle': 'Múltiplos Ângulos',
-        'tool_material': 'Troca de Material'
+        'tool_material': 'Troca de Material',
+        'update_latest': 'O sistema está atualizado!',
+        'export_done': 'Todas as cenas enviadas. Renderizando...',
+        'render_all_done': 'Todos os renders concluídos!',
+        'render_progress': 'Renderizando',
+        'render_failed': 'Falha ao renderizar',
+        'points_refunded': 'Pontos reembolsados',
+        'error_label': 'Erro',
+        'save_dir_empty': 'Não definido (clique para escolher pasta)',
+        'preview_select_hint': 'Marque cenas à direita para visualizar...',
+        'preview_storyboard_hint': 'Desenhando storyboard das cenas...'
     },
     'ja-JP': {
         'title': '野人カメラ (LoamLab Camera)',
@@ -264,7 +293,17 @@ const UI_LANG = {
         'tool_ai_render': 'リアルレンダー',
         'tool_furniture': '指定家具を置換',
         'tool_multi_angle': '多角生成',
-        'tool_material': '指定材質を置換'
+        'tool_material': '指定材質を置換',
+        'update_latest': 'システムは最新バージョンです！',
+        'export_done': '全シーン送信完了。クラウドでレンダリング中...',
+        'render_all_done': '全レンダリング完了！',
+        'render_progress': 'レンダリング中',
+        'render_failed': 'レンダリング失敗',
+        'points_refunded': 'ポイント返還済み',
+        'error_label': 'エラー',
+        'save_dir_empty': '未設定 (クリックしてフォルダを選択)',
+        'preview_select_hint': '右側でシーンにチェックしてプレビュー...',
+        'preview_storyboard_hint': 'シーンのストーリーボードを描画中...'
     }
 };
 

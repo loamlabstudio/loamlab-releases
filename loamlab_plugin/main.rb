@@ -17,9 +17,10 @@ module LoamLab
       end
 
       # HTML Dialog 基本設定
+      is_dev = (LoamLab::BUILD_TYPE == "dev")
       options = {
-        :dialog_title => "LoamLab AI Renderer",
-        :preferences_key => "com.loamlab.airenderer",
+        :dialog_title => is_dev ? "LoamLab AI Renderer [DEV]" : "LoamLab AI Renderer",
+        :preferences_key => is_dev ? "com.loamlab.airenderer.dev" : "com.loamlab.airenderer",
         :scrollable => true,
         :resizable => true,
         :width => 1200,
@@ -56,6 +57,7 @@ module LoamLab
           status: 'success',
           version: LoamLab::VERSION,
           api_base: LoamLab::API_BASE_URL,
+          build_type: LoamLab::BUILD_TYPE,
           lang: 'en-US',
           scenes: self.get_scene_names,
           save_path: save_path,
@@ -137,7 +139,7 @@ module LoamLab
       # 4. [Prod] 自動更新: 向伺服器檢查版號，若有新版則彈窗提示安裝
       dialog.add_action_callback("auto_update") do |action_context, params|
         # 傳入目前的版號與 dialog 物件交由 Updater 處理
-        current_version = "1.1.1" # 這裡寫死或由全域變數提供
+        current_version = LoamLab::VERSION
         LoamLabPlugin::Updater.check_for_updates(dialog, current_version)
       end
 
@@ -325,7 +327,7 @@ module LoamLab
 
       current_page = model.pages.selected_page
       
-      # 記錄並隱藏干擾元素 (安全寫法)
+      # 記錄並隱藏干擾元素
       safe_keys = ['DrawHidden', 'DrawHiddenObjects', 'DisplaySketchAxes', 'DisplayInstanceAxes']
       original_states = {}
       safe_keys.each do |k|
@@ -338,72 +340,66 @@ module LoamLab
         end
       end
 
-      total = scenes_to_render.length
       temp_dir = ENV['TEMP'] || ENV['TMP'] || 'C:/Temp'
-      
-      # 全域專案存檔資訊提取 (強制 UTF-8 防止 ASCII-8BIT 組合當機)
       project_name = (model.title.empty? ? "未命名專案" : model.title).to_s.dup.force_encoding("UTF-8")
       save_path = model.get_attribute("LoamLabAI", "save_path", "").to_s.dup.force_encoding("UTF-8")
       timestamp = Time.now.strftime("%Y%m%d_%H%M%S")
 
-      scenes_to_render.each_with_index do |scene_raw, index|
+      # --- [非阻塞佇列實作] ---
+      # 將場景清單轉化為一個可切片處理的佇列
+      queue = scenes_to_render.dup
+      total_count = queue.length
+      
+      # 定義內部的逐一處理邏輯
+      process_chain = proc do |index|
+        if queue.empty?
+          # 佇列結束，恢復狀態
+          UI.start_timer(0.5, false) do
+            dialog.execute_script("window.receiveFromRuby({status: 'export_done'})")
+            original_states.each { |k, v| model.rendering_options[k] = v rescue nil }
+            model.pages.selected_page = current_page if current_page
+            puts "[LoamLab] 批量導出排程已全部送出。"
+          end
+          next
+        end
+
+        scene_raw = queue.shift
         scene_name = scene_raw.to_s.dup.force_encoding("UTF-8")
         page = model.pages[scene_raw]
-        next unless page
-
-        # 切換場景 (強制無過渡動畫，確保順暢截出)
-        model.pages.selected_page = page
         
-        temp_img_path = File.join(temp_dir, "loamlab_render_#{index}_#{Time.now.to_i}.jpg")
-
-        begin
-          # 計算最接近的標準長寬比，餵給 Coze 的 Nano Banana 2
-          view = model.active_view
-          vp_width = view.vpwidth.to_f
-          vp_height = view.vpheight.to_f
-          ratio_val = vp_height > 0 ? (vp_width / vp_height) : (16.0 / 9.0)
+        if page
+          # 1. 切換場景
+          model.pages.selected_page = page
           
-          supported_ratios = {
-            "16:9" => 16.0/9.0, "9:16" => 9.0/16.0,
-            "4:3" => 4.0/3.0, "3:4" => 3.0/4.0,
-            "3:2" => 3.0/2.0, "2:3" => 2.0/3.0,
-            "1:1" => 1.0, "21:9" => 21.0/9.0
-          }
-          closest_ratio = supported_ratios.min_by { |k, v| (v - ratio_val).abs }[0]
+          # 2. 產出暫存檔與備份 (此處 UI 可能會微卡，但因為是單張處理，結束後會交還主控權)
+          temp_img_path = File.join(temp_dir, "loamlab_render_#{index}_#{Time.now.to_i}.jpg")
           
-          # 匯出實體圖片作為 Coze 圖床之上傳素材 (壓縮尺寸與品質，避免產生超過 WAF 限制的巨型 Base64)
-          model.active_view.write_image(temp_img_path, 1280, 720, true, 0.6)
-          
-          safe_project_name = project_name.gsub(/[:*?"<>|\/\\]/, "_")
-          safe_scene_name = scene_name.gsub(/[:*?"<>|\/\\]/, "_")
-          
-          # ★ 自動備份機制：直接複製已截好的暫存圖（避免再次呼叫 write_image 阻塞主執行緒）
-          if !save_path.empty? && File.directory?(save_path)
-            before_name = "#{timestamp}_#{safe_project_name}_#{safe_scene_name}_原圖.jpg"
-            before_img_path = File.join(save_path, before_name)
-            require 'fileutils'
-            FileUtils.cp(temp_img_path, before_img_path)
-            puts "[LoamLab] 自動備份渲染前截圖: #{before_img_path}"
-          end
-          
-          dialog.execute_script("window.receiveFromRuby({status: 'uploading'})")
-
-          # ★ 使用 Sketchup::Http::Request (OS WinHTTP 網路棧，自動處理 SSL 憑證，不卡主執行緒)
           begin
+            view = model.active_view
+            ratio_val = view.vpheight > 0 ? (view.vpwidth.to_f / view.vpheight) : (16.0 / 9.0)
+            supported_ratios = { "16:9"=>1.77, "9:16"=>0.56, "4:3"=>1.33, "3:4"=>0.75, "3:2"=>1.5, "2:3"=>0.66, "1:1"=>1.0, "21:9"=>2.33 }
+            closest_ratio = supported_ratios.min_by { |k, v| (v - ratio_val).abs }[0]
+
+            view.write_image(temp_img_path, 1280, 720, true, 0.6)
+            
+            # 自動備份
+            if !save_path.empty? && File.directory?(save_path)
+              safe_project_name = project_name.gsub(/[:*?"<>|\/\\]/, "_")
+              safe_scene_name = scene_name.gsub(/[:*?"<>|\/\\]/, "_")
+              before_name = "#{timestamp}_#{safe_project_name}_#{safe_scene_name}_原圖.jpg"
+              require 'fileutils'
+              FileUtils.cp(temp_img_path, File.join(save_path, before_name)) rescue nil
+            end
+
+            # 3. 執行 Base64 與發送 (最耗主執行緒時間的環節)
             img_data = File.read(temp_img_path, mode: 'rb')
-            require 'base64'
             data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
-
+            
             user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
-            clean_prompt = user_prompt.to_s.dup.force_encoding("UTF-8").scrub("?")
-            clean_resolution = resolution.to_s.dup.force_encoding("UTF-8").scrub("")
-
             request_body = JSON.dump({
               parameters: {
-                "image"        => [data_uri],
-                "user_prompt"  => clean_prompt,
-                "resolution"   => clean_resolution,
-                "aspect_ratio" => closest_ratio
+                "image" => [data_uri], "user_prompt" => user_prompt, 
+                "resolution" => resolution, "aspect_ratio" => closest_ratio
               }
             })
 
@@ -411,50 +407,34 @@ module LoamLab
             req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email }
             req.body = request_body
 
-            captured_scene  = scene_name
-            captured_dialog = dialog
-
+            captured_scene = scene_name
             req.start do |_, response|
-              result = begin
+              begin
                 data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
-                if data['code'] == 0 && data['url']
-                  { status: 'render_success', scene_name: captured_scene, url: data['url'] }
-                else
+                result = (data['code'] == 0 && data['url']) ?
+                  { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'] } :
                   { status: 'render_failed', message: data['msg'] || "HTTP #{response.status_code}", points_refunded: data['points_refunded'] }
-                end
               rescue => e
-                { status: 'render_failed', message: "回應解析失敗: #{e.message}" }
+                result = { status: 'render_failed', message: "解析失敗: #{e.message}" }
               end
-
-              encoded = Base64.strict_encode64(result.to_json)
-              # ★ 必須切回主執行緒才能呼叫 execute_script，否則 SketchUp 會當機
-              UI.start_timer(0, false) do
-                captured_dialog.execute_script("window.receiveFromRubyBase64('#{encoded}')")
-              end
+              UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
             end
 
-            puts "[LoamLab] Sketchup::Http 請求已送出: #{scene_name}"
+            puts "[LoamLab] 第 #{index+1}/#{total_count} 個場景請求中: #{scene_name}"
 
           rescue => e
-            dialog.execute_script("window.receiveFromRuby(#{({ status: 'render_failed', message: e.message }).to_json})")
+            puts "[LoamLab] 導出 #{scene_name} 發生錯誤: #{e.message}"
           ensure
             File.delete(temp_img_path) if File.exist?(temp_img_path)
           end
-        rescue => e
-           UI.messagebox("Batch Export Error: #{e.message}")
         end
+
+        # ★ 重要關鍵：透過 0.1 秒的計時器呼叫下一個，讓 SketchUp 有時間處理 UI 訊息與防止 Not Responding
+        UI.start_timer(0.1, false) { process_chain.call(index + 1) }
       end
 
-      dialog.execute_script("window.receiveFromRuby({status: 'export_done'})")
-
-      # 恢復原始視角與顯示設定
-      original_states.each do |k, v|
-        begin
-          model.rendering_options[k] = v
-        rescue
-        end
-      end
-      model.pages.selected_page = current_page if current_page
+      # 啟動鏈式呼叫
+      process_chain.call(0)
     end
     
     # 新增選單項目

@@ -49,11 +49,11 @@ export default async function handler(req, res) {
         userPayload.parameters.prompt = rawPrompt;       // 相容 Coze workflow 宣告的必填欄位
     }
 
-    // 動態解析消耗點數 (從 Payload 預判)
+    // 動態解析消耗點數 (從 resolution 欄位判斷，大小寫皆相容)
+    const resVal = (userPayload.parameters?.resolution || '').toLowerCase();
     let cost = 15; // 預設 1K
-    const payloadStr = JSON.stringify(userPayload);
-    if (payloadStr.includes('4K')) cost = 25;
-    else if (payloadStr.includes('2K')) cost = 20;
+    if (resVal.includes('4k')) cost = 25;
+    else if (resVal.includes('2k')) cost = 20;
 
     // 2. 查詢帳戶點數
     let { data: user, error: dbErr } = await supabase
@@ -115,10 +115,11 @@ export default async function handler(req, res) {
 
     // ★ 修復：用 try/catch 包裹交易紀錄，避免因 transactions 表不存在而崩潰主流程
     try {
+        const txType = cost === 25 ? 'RENDER_4K' : (cost === 20 ? 'RENDER_2K' : 'RENDER_1K');
         await supabase.from('transactions').insert([{
             user_email: userEmail,
             amount: -cost,
-            transaction_type: payloadStr.includes('4K') ? 'RENDER_4K' : (payloadStr.includes('2K') ? 'RENDER_2K' : 'RENDER_1K')
+            transaction_type: txType
         }]);
     } catch (txErr) {
         console.warn('[交易日誌] 紀錄失敗（不中斷主流程）:', txErr.message);
@@ -187,7 +188,7 @@ export default async function handler(req, res) {
 
         const finalUrl = parseUrlFromSse(sseText);
         if (finalUrl) {
-            return res.status(200).json({ code: 0, url: finalUrl });
+            return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: monthlyPoints + lifetimePoints });
         } else {
             await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
             try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL' }]); } catch(e) {}

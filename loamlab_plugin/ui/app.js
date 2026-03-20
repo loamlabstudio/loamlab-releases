@@ -4,6 +4,22 @@ let currentPct = 0;
 let totalScenesToRender = 0;
 let finishedScenesCount = 0;
 
+// 動態更新渲染按鈕上的預計點數消耗
+function updateCostPreview() {
+    const costLabel = document.getElementById('render-cost-preview');
+    if (!costLabel) return;
+    const resRadio = document.querySelector('input[name="resolution"]:checked');
+    const costPerScene = resRadio ? parseInt(resRadio.getAttribute('data-cost') || '15', 10) : 15;
+    const checkboxes = document.querySelectorAll('input[name="scene"]:checked');
+    const count = checkboxes.length;
+    if (count === 0) {
+        costLabel.textContent = `· ${costPerScene} pts/scene`;
+    } else {
+        costLabel.textContent = `· ${count * costPerScene} pts`;
+    }
+    costLabel.classList.remove('hidden');
+}
+
 function finalizeRenderUI() {
     stopRenderTimer();
     updateProgressUI('Done!', 100);
@@ -156,7 +172,7 @@ window.receiveFromRuby = function (data) {
             if (placeholderEl) {
                 placeholderEl.classList.remove('hidden');
                 const textSpan = placeholderEl.querySelector('#placeholder-text');
-                if (textSpan) textSpan.textContent = "請在右側勾選欲預覽的場景...";
+                if (textSpan) textSpan.textContent = (UI_LANG[currentLang] || UI_LANG['en-US'])['preview_select_hint'];
             }
         }
     } else if (data.status === 'export_done') {
@@ -166,6 +182,12 @@ window.receiveFromRuby = function (data) {
     } else if (data.status === 'render_success') {
         finishedScenesCount++;
         const langObj = UI_LANG[currentLang];
+
+        // 自動更新點數餘額 (後端回傳 points_remaining)
+        if (data.points_remaining !== undefined) {
+            const pb = document.getElementById('point-balance');
+            if (pb) pb.textContent = data.points_remaining;
+        }
 
         if (finishedScenesCount >= totalScenesToRender) {
             const langObj4 = UI_LANG[currentLang];
@@ -309,7 +331,8 @@ function renderScenesList(scenes) {
     // 為場景加入點擊即預覽的監聽事件
     const inputs = container.querySelectorAll('input[name="scene"]');
     inputs.forEach(input => {
-        input.addEventListener('change', (e) => {
+        input.addEventListener('change', () => {
+            updateCostPreview();
             const checkboxes = document.querySelectorAll('input[name="scene"]:checked');
             const selectedScenes = Array.from(checkboxes).map(cb => cb.value);
             if (window.sketchup) {
@@ -318,7 +341,7 @@ function renderScenesList(scenes) {
                 const gridEl = document.getElementById('preview-grid');
                 if (placeholderEl && (!gridEl || gridEl.classList.contains('hidden'))) {
                     const textSpan = placeholderEl.querySelector('#placeholder-text');
-                    if (textSpan) textSpan.textContent = '繪製場景故事板中...';
+                    if (textSpan) textSpan.textContent = (UI_LANG[currentLang] || UI_LANG['en-US'])['preview_storyboard_hint'];
                 }
                 setTimeout(() => sketchup.sync_preview({ scenes: selectedScenes }), 50);
             }
@@ -366,8 +389,12 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // 原本綁定在 devLogo 的除錯事件會因為 class name (text-[15px]) 
-    // 不小心抓到 btn-render 裡面的 span，導致雙重觸發。我已將其徹底移除。
+    // 解析度切換時更新按鈕點數預覽
+    document.querySelectorAll('input[name="resolution"]').forEach(radio => {
+        radio.addEventListener('change', updateCostPreview);
+    });
+    // 初始化時立即顯示預設成本
+    updateCostPreview();
 
     // 材質標籤點擊事件 (組合提示詞迴圈)
     const textPrompt = document.getElementById('user-prompt-input');
@@ -517,7 +544,7 @@ window.updateSaveDir = function (path) {
             display.textContent = path;
             display.title = path;
         } else {
-            const emptyHint = '尚未設定 (點擊選擇資料夾)';
+            const emptyHint = (UI_LANG[currentLang] || UI_LANG['en-US'])['save_dir_empty'];
             display.textContent = emptyHint;
             display.title = emptyHint;
         }
@@ -633,8 +660,9 @@ window.fetchUserPoints = function (email) {
                 alert('[LoamLab] /api/user 回傳了資料但沒有 points 欄位: ' + JSON.stringify(data));
             }
         }).catch(e => {
-            console.error('[LoamLab] fetchUserPoints failed:', e);
-            alert('[LoamLab] 點數載入失敗！\n網址：' + targetUrl + '\n原因：' + e.message + '\n\n請截圖回報這個訊息。');
+            console.error('[LoamLab] fetchUserPoints failed:', targetUrl, e);
+            const pb = document.getElementById('point-balance');
+            if (pb) pb.textContent = 'ERR';
         });
 }
 

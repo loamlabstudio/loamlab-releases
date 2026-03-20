@@ -237,7 +237,7 @@
                 </div>
                 <!-- 2. 指定家具替換 (Inactive) -->
                 <div class="w-full aspect-square rounded-xl bg-transparent transition-colors cursor-not-allowed opacity-40 flex flex-col items-center justify-center text-white group relative hover:bg-white/5"
-                    title="指定家具替換 (即將推出)">
+                    title="指定家具替換 (Beta 迭代中)">
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
@@ -246,7 +246,7 @@
                 </div>
                 <!-- 3. 多角度生成 (Inactive) -->
                 <div class="w-full aspect-square rounded-xl bg-transparent transition-colors cursor-not-allowed opacity-40 flex flex-col items-center justify-center text-white group relative hover:bg-white/5"
-                    title="多角度生成 (即將推出)">
+                    title="多角度生成 (Beta 迭代中)">
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4">
@@ -255,7 +255,7 @@
                 </div>
                 <!-- 4. 指定材質替換 (Inactive) -->
                 <div class="w-full aspect-square rounded-xl bg-transparent transition-colors cursor-not-allowed opacity-40 flex flex-col items-center justify-center text-white group relative hover:bg-white/5"
-                    title="指定材質替換 (即將推出)">
+                    title="指定材質替換 (Beta 迭代中)">
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01">
@@ -366,9 +366,8 @@
                                             class="peer hidden" checked>
                                         <div class="text-center py-2 flex flex-col items-center justify-center bg-black/50 border border-[var(--border-white)] rounded-lg peer-checked:bg-[var(--accent-red)]/20 peer-checked:border-[var(--accent-red)]/60 transition-all hover:bg-white/5"
                                             data-i18n="res_1k">
-                                            <span
-                                                class="text-[11px] font-semibold tracking-wider text-white/80 peer-checked:text-[var(--accent-red-hover)]">1K
-                                                (Fast)</span>
+                                            <span class="text-[11px] font-semibold tracking-wider text-white/80 peer-checked:text-[var(--accent-red-hover)]">1K (Fast)</span>
+                                            <span class="text-[9px] text-white/35 mt-0.5 font-mono">15 pts</span>
                                         </div>
                                     </label>
                                     <label class="cursor-pointer flex-1 relative group/res">
@@ -376,9 +375,8 @@
                                             class="peer hidden">
                                         <div class="text-center py-2 flex flex-col items-center justify-center bg-black/50 border border-white/10 rounded-lg peer-checked:bg-[#dc2626]/20 peer-checked:border-[#dc2626]/60 transition-all hover:bg-white/5"
                                             data-i18n="res_2k">
-                                            <span
-                                                class="text-[11px] font-semibold tracking-wider text-white/80 peer-checked:text-[#ef4444]">2K
-                                                (Pro)</span>
+                                            <span class="text-[11px] font-semibold tracking-wider text-white/80 peer-checked:text-[#ef4444]">2K (Pro)</span>
+                                            <span class="text-[9px] text-white/35 mt-0.5 font-mono">20 pts</span>
                                         </div>
                                     </label>
                                     <label class="cursor-pointer flex-1 relative group/res">
@@ -386,9 +384,8 @@
                                             class="peer hidden">
                                         <div class="text-center py-2 flex flex-col items-center justify-center bg-black/50 border border-white/10 rounded-lg peer-checked:bg-[#dc2626]/20 peer-checked:border-[#dc2626]/60 transition-all hover:bg-white/5"
                                             data-i18n="res_4k">
-                                            <span
-                                                class="text-[11px] font-semibold tracking-wider text-white/80 peer-checked:text-[#ef4444]">4K
-                                                (Ultra)</span>
+                                            <span class="text-[11px] font-semibold tracking-wider text-white/80 peer-checked:text-[#ef4444]">4K (Ultra)</span>
+                                            <span class="text-[9px] text-white/35 mt-0.5 font-mono">25 pts</span>
                                         </div>
                                     </label>
                                 </div>
@@ -469,6 +466,7 @@
                         data-i18n="btn_render">
                         <span class="relative z-10 flex items-center justify-center gap-2 drop-shadow-md">
                             開始渲染 Start Engine
+                            <span id="render-cost-preview" class="text-[10px] font-mono text-white/60 bg-black/30 px-1.5 py-0.5 rounded hidden"></span>
                             <svg class="w-4 h-4 ml-1 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M13 10V3L4 14h7v7l9-11h-7z"></path>

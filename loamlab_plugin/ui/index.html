@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoamLab Camera</title>
+    <!-- 引入 Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Apple-like 字體 Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* LoamLab Brand Colors */
+            --accent-red: #dc2626;
+            --accent-red-hover: #ef4444;
+            --accent-gold: #f59e0b;
+            --bg-dark: #09090b;
+            --panel-bg: rgba(30, 30, 30, 0.65);
+            --panel-bg-solid: #141417;
+            --border-white: rgba(255, 255, 255, 0.1);
+            --text-main: #f5f5f5;
+            --text-zinc-500: #71717a;
+            --text-zinc-400: #a1a1aa;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+        }
+
+        /* 隱藏原生捲軸但保持滾動 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* 毛玻璃共用特效 */
+        .glass-panel {
+            background: rgba(30, 30, 30, 0.65);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        /* Premium 深邃漸層背景 */
+        .bg-gradient-premium {
+            background: radial-gradient(circle at 15% 50%, rgba(30, 27, 36, 1) 0%, rgba(9, 9, 11, 1) 100%);
+        }
+
+        /* Apple-style 高質感渲染動畫 */
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
+        .rendering-pulse {
+            animation: renderPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes renderPulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 20px rgba(220, 38, 38, 0.25);
+                border-color: rgba(239, 68, 68, 0.3);
+            }
+
+            50% {
+                box-shadow: 0 0 45px rgba(220, 38, 38, 0.5);
+                border-color: rgba(239, 68, 68, 0.8);
+            }
+        }
+
+        /* 掃描線掃過畫面的特效 */
+        @keyframes scan {
+            0% {
+                top: -10%;
+                opacity: 0;
+            }
+
+            10% {
+                opacity: 1;
+            }
+
+            90% {
+                opacity: 1;
+            }
+
+            100% {
+                top: 110%;
+                opacity: 0;
+            }
+        }
+
+        .scanning-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(220, 38, 38, 0.8), transparent);
+            box-shadow: 0 0 10px rgba(220, 38, 38, 0.5);
+            animation: scan 3s linear infinite;
+            z-index: 50;
+            pointer-events: none;
+            display: none;
+        }
+
+        .is-rendering .scanning-line {
+            display: block;
+        }
+    </style>
+</head>
+
+<body
+    class="text-[#f5f5f5] h-screen flex flex-col overflow-hidden bg-[var(--bg-dark)] selection:bg-[var(--accent-red)]/30 selection:text-white">
+    <!-- Header (Apple 導覽列風格) -->
+    <header
+        class="w-full flex items-center justify-between px-6 py-0 bg-black/80 z-20 sticky top-0 border-b border-[var(--border-white)] h-[60px] backdrop-blur-md">
+        <!-- 左側：語言與 Logo -->
+        <div class="flex items-center gap-4">
+            <!-- Language Switcher -->
+            <select id="lang-select"
+                class="bg-transparent border-none focus:ring-0 focus:outline-none text-white/50 hover:text-white transition-colors text-[11px] uppercase tracking-wider cursor-pointer appearance-none text-right pr-4 relative font-semibold">
+                <option value="en-US" class="bg-[#1a1a1a]">US English</option>
+                <option value="zh-TW" class="bg-[#1a1a1a]">TW 繁體中文</option>
+                <option value="zh-CN" class="bg-[#1a1a1a]">CN 简体中文</option>
+                <option value="es-ES" class="bg-[#1a1a1a]">ES Español</option>
+                <option value="pt-BR" class="bg-[#1a1a1a]">BR Português</option>
+                <option value="ja-JP" class="bg-[#1a1a1a]">JP 日本語</option>
+            </select>
+
+            <div class="h-4 w-[1px] bg-white/10 hidden md:block mx-1"></div>
+
+            <!-- Brand Logo -->
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                     onclick="window.open('https://www.instagram.com/loamlab_barbarian', '_blank')"
+                     title="Follow us on Instagram">
+                    <img src="./assets/logo.png" alt="Logo"
+                        class="w-full h-full object-contain filter drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">
+                </div>
+                <span class="font-bold text-white tracking-widest text-[16px]">LoamLab <span
+                        class="text-white/40 font-normal">Camera</span></span>
+            </div>
+        </div>
+
+        <!-- 右側：功能列 -->
+        <div class="flex items-center gap-5 text-sm text-white/60 font-medium">
+
+            <!-- Beta Feedback Button -->
+            <button onclick="window.open('mailto:loamlabstudio@gmail.com?subject=LoamLab%20Camera%20Feedback&body=Hi%2C%20I%20have%20feedback%20about%20LoamLab%20Camera...', '_blank')"
+                class="text-rose-400/80 hover:text-rose-300 transition-colors flex items-center gap-1.5 focus:outline-none relative group">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z">
+                    </path>
+                </svg>
+                <span class="text-[11px] font-bold tracking-wider">Beta Feedback</span>
+            </button>
+
+            <div class="h-4 w-[1px] bg-white/20 mx-1"></div>
+
+            <!-- Check Update Button -->
+            <button id="btn-check-update"
+                class="hover:text-white transition-colors flex items-center gap-1.5 focus:outline-none relative group">
+                <svg class="w-4 h-4 opacity-70 group-hover:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4">
+                    </path>
+                </svg>
+                <span data-i18n="check_update" class="text-[11px] font-semibold tracking-wider">Check Updates</span>
+            </button>
+
+            <div class="h-4 w-[1px] bg-white/20 mx-1"></div>
+
+            <!-- Auth & Points Block -->
+            <div class="flex items-center gap-4">
+                <!-- Invite & Earn Button -->
+                <div class="flex flex-col md:flex-row items-center justify-center gap-2 cursor-pointer hover:bg-white/5 py-1.5 px-3 rounded border border-transparent hover:border-white/10 transition-colors group hidden"
+                    title="邀請好友得 200 點" id="btn-show-referral">
+                    <span class="text-white/40 tracking-wider text-[13px] font-semibold drop-shadow-md">🎟️</span>
+                    <span
+                        class="font-bold text-white/90 tracking-widest text-[10px] uppercase hidden md:block">Invite</span>
+                </div>
+
+                <div class="h-4 w-[1px] bg-white/10 hidden md:block"></div>
+
+                <div class="flex items-center gap-2 cursor-pointer hover:bg-white/5 py-1.5 px-3 rounded border border-transparent hover:border-white/10 transition-colors group"
+                    title="查看與升級方案" id="btn-show-pricing">
+                    <span class="text-white/40 tracking-wider text-[11px] font-semibold">Points:</span>
+                    <span id="point-balance"
+                        class="font-bold text-white/90 font-mono tracking-widest drop-shadow-sm text-xs">--</span>
+                </div>
+
+                <div class="flex items-center gap-2 cursor-pointer group hover:bg-white/5 px-2 py-1.5 -mr-1 rounded border border-transparent hover:border-white/10 transition-all"
+                    title="Google 登入" id="btn-login">
+                    <span
+                        class="text-[11px] font-bold text-white/70 group-hover:text-white transition-colors tracking-wide"
+                        data-i18n="login">Log In</span>
+                    <div
+                        class="w-6 h-6 rounded-full bg-gradient-to-tr from-gray-600 to-gray-400 flex items-center justify-center shadow-[inset_0_2px_4px_rgba(255,255,255,0.3)] group-hover:shadow-[0_0_8px_rgba(255,255,255,0.2)]">
+                        <span class="text-white font-bold text-[10px] drop-shadow-md">G</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 佈局容器 (Sidebar + Main) -->
+    <div class="flex-1 flex overflow-hidden relative">
+
+        <!-- 左側邊欄 (Sidebar) 改為極簡圖示版本 -->
+        <aside
+            class="w-[84px] bg-[#0c0c0e] border-r border-[var(--border-white)] flex flex-col items-center py-6 gap-6 z-10 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.5)]">
+            <div class="flex flex-col gap-4 w-full px-3">
+                <!-- 1. 真實渲染 (Active) -->
+                <div class="w-full aspect-square rounded-xl bg-white/10 transition-colors cursor-pointer flex flex-col items-center justify-center text-white group relative overflow-hidden shadow-sm border border-white/20 hover:bg-white/20"
+                    title="真實渲染">
+                    <div class="absolute inset-x-0 top-0 h-1 bg-[var(--accent-red)]"></div>
+                    <svg class="w-6 h-6 mb-1 text-[var(--accent-red)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+                        </path>
+                    </svg>
+                </div>
+                <!-- 2. 指定家具替換 (Inactive) -->
+                <div class="w-full aspect-square rounded-xl bg-transparent transition-colors cursor-not-allowed opacity-40 flex flex-col items-center justify-center text-white group relative hover:bg-white/5"
+                    title="指定家具替換 (即將推出)">
+                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
+                        </path>
+                    </svg>
+                </div>
+                <!-- 3. 多角度生成 (Inactive) -->
+                <div class="w-full aspect-square rounded-xl bg-transparent transition-colors cursor-not-allowed opacity-40 flex flex-col items-center justify-center text-white group relative hover:bg-white/5"
+                    title="多角度生成 (即將推出)">
+                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4">
+                        </path>
+                    </svg>
+                </div>
+                <!-- 4. 指定材質替換 (Inactive) -->
+                <div class="w-full aspect-square rounded-xl bg-transparent transition-colors cursor-not-allowed opacity-40 flex flex-col items-center justify-center text-white group relative hover:bg-white/5"
+                    title="指定材質替換 (即將推出)">
+                    <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01">
+                        </path>
+                    </svg>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content 區域 -->
+        <!-- Main Content 區域 (左大右小) -->
+        <main id="app" class="flex-1 flex p-6 gap-6 overflow-hidden relative w-full">
+
+            <!-- 左側預覽區 (Viewport) -->
+            <div
+                class="flex-1 bg-black/60 rounded-[16px] relative overflow-hidden flex flex-col shadow-inner border border-white/5">
+                <!-- Live Preview Area -->
+                <div class="relative w-full h-full flex flex-col items-center justify-center bg-[#09090b] pt-14 pb-4 transition-all duration-700"
+                    id="main-preview-area">
+
+                    <!-- Apple Style 掃描線特效 (隱藏直到渲染開始) -->
+                    <div class="scanning-line"></div>
+
+                    <!-- Grid Container (JS Generated Cards) -->
+                    <div id="preview-grid"
+                        class="w-full h-full px-6 grid gap-5 overflow-y-auto hidden custom-scrollbar pb-6 content-start items-start relative z-10">
+                    </div>
+
+                    <!-- 佔位符 -->
+                    <div id="preview-placeholder"
+                        class="absolute inset-0 flex flex-col items-center justify-center text-white/20 z-0 pointer-events-none">
+                        <svg class="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                                d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z">
+                            </path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                                d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        <a href="https://www.loamlab.com/feedback-beta" target="_blank" class="nav-item text-sm tracking-widest font-medium"
+                            data-i18n="status_waiting">正在等待 RUBY 核心連線...</a>
+                    </div>
+
+                    <!-- 頂部浮動操作列 -->
+                    <div
+                        class="absolute top-0 inset-x-0 h-14 flex justify-between items-center px-6 bg-gradient-to-b from-black/80 to-transparent z-10 pointer-events-none">
+                        <span class="text-xs font-semibold tracking-wider text-white/70 shadow-sm"
+                            data-i18n="view_preview">視圖預覽 Preview</span>
+                        <span id="btn-sync-preview"
+                            class="pointer-events-auto text-xs text-white bg-black/40 hover:bg-[#dc2626] border border-white/10 px-4 py-2 rounded-full font-medium transition-all cursor-pointer flex items-center gap-2 backdrop-blur-md shadow-lg"
+                            data-i18n="sync_screen">
+                            <span class="w-2 h-2 rounded-full bg-[#dc2626] animate-pulse"></span>
+                            同步畫面 Sync
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右側控制面板 (Controller Panel) -->
+            <div
+                class="w-[380px] bg-[var(--panel-bg-solid)] rounded-[16px] flex flex-col p-6 shadow-2xl relative z-10 border border-[var(--border-white)]">
+                <div class="mb-6 flex flex-col items-start w-full">
+                    <h1 class="text-xl font-semibold tracking-tight mb-2 text-white/90 drop-shadow-sm"
+                        data-i18n="title">場景渲染控制器</h1>
+                    <p id="status-text" class="text-white/40 text-[11px] font-medium" data-i18n="status_waiting">正在等待
+                        Ruby 核心連線...</p>
+                </div>
+
+                <div id="scenes-container"
+                    class="w-full flex-1 flex flex-col min-h-0 bg-black/30 border border-white/[0.04] rounded-xl shadow-[inset_0_2px_15px_rgba(0,0,0,0.5)] mb-4 p-1.5 transition-all overflow-hidden relative">
+                    <!-- JS 動態寫入場景清單 -->
+                    <div class="flex items-center justify-center h-full text-white/30 text-sm font-light tracking-wide">
+                        載入中...</div>
+                </div>
+
+                <div class="mt-auto w-full flex flex-col items-center relative z-20 shrink-0 gap-3">
+
+                    <!-- 摺疊進階設定區塊 (Advanced Settings Accordion) -->
+                    <details
+                        class="group w-full bg-white/[0.02] border border-white/[0.03] rounded-xl overflow-hidden shrink-0 transition-all hover:border-white/10">
+                        <summary
+                            class="flex items-center justify-between p-3.5 cursor-pointer hover:bg-white/[0.04] transition-colors select-none font-medium text-sm text-white/80 list-none [&::-webkit-details-marker]:hidden">
+                            <div class="flex items-center gap-2">
+                                <svg class="w-4 h-4 text-white/40" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4">
+                                    </path>
+                                </svg>
+                                <span class="text-[12px] tracking-wider uppercase font-semibold">進階渲染設定</span>
+                            </div>
+                            <!-- 折疊箭頭圖示 -->
+                            <svg class="w-4 h-4 text-white/40 transform transition-transform group-open:rotate-180"
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </summary>
+
+                        <div class="px-4 pb-4 pt-1 flex flex-col gap-5 border-t border-white/[0.05]">
+
+                            <!-- Resolution Selector -->
+                            <div class="w-full flex flex-col pt-2">
+                                <label class="text-[11px] font-semibold tracking-wider text-white/50 mb-2"
+                                    data-i18n="resolution_label">解析度 (Resolution)</label>
+                                <div class="flex gap-2" id="resolution-selector">
+                                    <label class="cursor-pointer flex-1 relative group/res">
+                                        <input type="radio" name="resolution" value="1k" data-cost="15"
+                                            class="peer hidden" checked>
+                                        <div class="text-center py-2 flex flex-col items-center justify-center bg-black/50 border border-[var(--border-white)] rounded-lg peer-checked:bg-[var(--accent-red)]/20 peer-checked:border-[var(--accent-red)]/60 transition-all hover:bg-white/5"
+                                            data-i18n="res_1k">
+                                            <span
+                                                class="text-[11px] font-semibold tracking-wider text-white/80 peer-checked:text-[var(--accent-red-hover)]">1K
+                                                (Fast)</span>
+                                        </div>
+                                    </label>
+                                    <label class="cursor-pointer flex-1 relative group/res">
+                                        <input type="radio" name="resolution" value="2k" data-cost="20"
+                                            class="peer hidden">
+                                        <div class="text-center py-2 flex flex-col items-center justify-center bg-black/50 border border-white/10 rounded-lg peer-checked:bg-[#dc2626]/20 peer-checked:border-[#dc2626]/60 transition-all hover:bg-white/5"
+                                            data-i18n="res_2k">
+                                            <span
+                                                class="text-[11px] font-semibold tracking-wider text-white/80 peer-checked:text-[#ef4444]">2K
+                                                (Pro)</span>
+                                        </div>
+                                    </label>
+                                    <label class="cursor-pointer flex-1 relative group/res">
+                                        <input type="radio" name="resolution" value="4k" data-cost="25"
+                                            class="peer hidden">
+                                        <div class="text-center py-2 flex flex-col items-center justify-center bg-black/50 border border-white/10 rounded-lg peer-checked:bg-[#dc2626]/20 peer-checked:border-[#dc2626]/60 transition-all hover:bg-white/5"
+                                            data-i18n="res_4k">
+                                            <span
+                                                class="text-[11px] font-semibold tracking-wider text-white/80 peer-checked:text-[#ef4444]">4K
+                                                (Ultra)</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Prompt & Tags Area -->
+                            <div class="w-full flex flex-col">
+                                <label
+                                    class="text-[11px] font-semibold tracking-wider text-white/50 mb-2 flex justify-between items-center"
+                                    data-i18n="prompt_label">
+                                    <span class="uppercase" data-i18n="prompt_label">附加提示詞 (Optional)</span>
+                                    <span class="text-[10px] text-white/30 font-medium tracking-normal"
+                                        title="打上圖片上的具體材料，如果在SU已有賦予或不需要指定則可空白。">ℹ️ 無特殊指示可留空</span>
+                                </label>
+                                <textarea id="user-prompt-input" rows="2" data-i18n="prompt_ph"
+                                    class="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[12px] text-white/90 focus:outline-none focus:border-[#dc2626]/70 focus:ring-1 focus:ring-[#dc2626]/50 transition-all placeholder-white/20 resize-none custom-scrollbar mb-3 font-light tracking-wide shadow-inner"
+                                    placeholder="e.g. Leather sofa, wooden floor, warm lighting..."></textarea>
+
+                                <!-- Material Tags -->
+                                <div class="flex flex-wrap gap-1.5" id="material-tags">
+                                    <span
+                                        class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none"
+                                        data-tag="wood material">Wood</span>
+                                    <span
+                                        class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none"
+                                        data-tag="clear glass">Glass</span>
+                                    <span
+                                        class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none"
+                                        data-tag="concrete texture">Concrete</span>
+                                    <span
+                                        class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none"
+                                        data-tag="marble texture">Marble</span>
+                                    <span
+                                        class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none"
+                                        data-tag="metallic finish">Metal</span>
+                                    <span
+                                        class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none"
+                                        data-tag="fabric material">Fabric</span>
+                                    <span
+                                        class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none"
+                                        data-tag="leather material">Leather</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </details>
+
+                    <!-- Output Directory (Mini version) -->
+                    <div
+                        class="w-full flex items-center justify-between gap-2 border border-white/5 rounded-lg p-1 transition-all group/dir">
+                        <div class="flex items-center gap-2 overflow-hidden pl-2">
+                            <span
+                                class="text-[10px] text-white/40 uppercase font-semibold whitespace-nowrap hidden xl:block">目錄</span>
+                            <div id="save-dir-display"
+                                class="text-[11px] text-white/50 font-mono truncate cursor-pointer group-hover/dir:text-white/80 transition-colors bg-transparent border-none appearance-none outline-none"
+                                title="尚未設定 (點擊選擇資料夾)">
+                                D:/專案/預設輸出/
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <span class="text-[9px] text-[#dc2626] font-semibold tracking-widest px-1">自動存檔 AUTO
+                                SAVE</span>
+                            <button id="btn-choose-dir"
+                                class="bg-white/5 hover:bg-white/20 border border-white/10 text-white rounded p-1.5 transition-colors active:scale-95"
+                                title="選擇資料夾">
+                                <svg class="w-3.5 h-3.5 text-white/70" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z">
+                                    </path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button id="btn-render"
+                        class="relative overflow-hidden w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-4 mt-2 rounded-[14px] font-bold shadow-[0_0_20px_rgba(220,38,38,0.35)] hover:shadow-[0_0_35px_rgba(220,38,38,0.6)] transition-all duration-300 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0 text-[15px] tracking-widest border border-red-500/40 outline-none"
+                        data-i18n="btn_render">
+                        <span class="relative z-10 flex items-center justify-center gap-2 drop-shadow-md">
+                            開始渲染 Start Engine
+                            <svg class="w-4 h-4 ml-1 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                        </span>
+                    </button>
+                    <!-- Apple-style 進度條佔位 -->
+                    <div id="progress-wrapper"
+                        class="w-full mt-4 hidden opacity-0 transition-opacity duration-700 ease-in-out">
+                        <div
+                            class="flex justify-between items-end text-[10px] uppercase tracking-widest font-medium text-white/50 mb-2 px-1">
+                            <span id="progress-text" class="animate-pulse flex items-center gap-1.5"><span
+                                    class="w-1.5 h-1.5 rounded-full bg-[#dc2626]"></span>Analyzing Scene...</span>
+                            <span id="progress-percent" class="text-white/80 font-bold text-[11px]">0%</span>
+                        </div>
+                        <div
+                            class="w-full bg-black/60 rounded-full h-1.5 overflow-hidden backdrop-blur-md border border-white/5 shadow-inner">
+                            <div id="progress-bar"
+                                class="h-full transition-all duration-700 ease-out relative shadow-[0_0_15px_#dc2626] bg-gradient-to-r from-[#dc2626] to-[#ff4d4d] rounded-full"
+                                style="width: 0%">
+                                <!-- 微光劃過動畫 -->
+                                <div class="absolute inset-0 bg-white/30"
+                                    style="animation: shimmer 1.5s infinite linear;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 登入與帳號管理彈窗 (Login Modal) -->
+    <div id="login-modal"
+        class="fixed inset-0 z-50 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+        <!-- 背景遮罩 -->
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm modal-overlay" id="login-modal-overlay"></div>
+
+        <!-- 彈窗內容 -->
+        <div class="relative w-[360px] glass-panel rounded-2xl p-8 shadow-2xl transform scale-95 transition-transform duration-300 border border-white/10 bg-[#09090b]/90 text-center"
+            id="login-modal-content">
+            <button class="absolute top-4 right-4 text-white/40 hover:text-white transition-colors focus:outline-none"
+                id="btn-close-modal">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                    </path>
+                </svg>
+            </button>
+
+            <div class="flex flex-col items-center justify-center">
+                <div
+                    class="mb-6 border-4 border-white/5 border-t-[#4285F4] rounded-full w-12 h-12 animate-spin shadow-lg">
+                </div>
+                <h2 class="text-xl font-bold text-white tracking-wide mb-2" data-i18n="login_polling">等待授權中...</h2>
+                <p class="text-[12px] text-white/50 mb-6" data-i18n="login_polling_sub">系統已經為您打開外部瀏覽器。<br>請在網頁上完成 Google
+                    登入，完成後此視窗將自動關閉。</p>
+
+                <!-- Google 標誌點綴 -->
+                <svg class="w-8 h-8 opacity-30 mx-auto" viewBox="0 0 24 24">
+                    <path
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        fill="#4285F4" />
+                    <path
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        fill="#34A853" />
+                    <path
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                        fill="#FBBC05" />
+                    <path
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        fill="#EA4335" />
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- 邀請碼分享區塊 (Referral Modal) -->
+    <div id="referral-modal"
+        class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <!-- Modal Content -->
+        <div class="bg-[#0f0f12] border border-white/10 rounded-2xl w-[500px] max-w-[90vw] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.8)] flex flex-col relative overflow-hidden transform scale-95 transition-transform duration-300"
+            id="referral-modal-content">
+
+            <button id="btn-close-referral"
+                class="absolute top-5 right-5 text-white/50 hover:text-white bg-white/5 hover:bg-white/10 rounded-full p-2 transition-all shadow-sm">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                    </path>
+                </svg>
+            </button>
+
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-white tracking-widest mb-2 px-6">INVITE & EARN</h2>
+                <p class="text-white/50 text-[12px] tracking-wide">邀請同行好友首次訂閱任何付費方案，<br>雙方將自動獲得 <span
+                        class="text-[#dc2626] font-bold">200 Credits</span> 獎勵！</p>
+            </div>
+
+            <!-- 分享代碼區塊 -->
+            <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 mb-5 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                <p class="text-white/60 text-[11px] uppercase font-semibold tracking-wider mb-2">您的專屬推薦碼 Your Code:</p>
+                <div class="flex items-center gap-3">
+                    <div id="my-referral-code"
+                        class="flex-1 bg-black border border-white/20 rounded-lg p-3 text-center text-white font-mono text-xl tracking-[0.2em] font-bold cursor-text select-all">
+                        ------</div>
+                    <button id="btn-copy-referral"
+                        class="px-5 py-3 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">COPY</button>
+                </div>
+            </div>
+
+            <!-- 填碼區塊 -->
+            <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                <p class="text-white/60 text-[11px] uppercase font-semibold tracking-wider mb-2">綁定推薦人 Enter Inviter's
+                    Code:</p>
+                <div class="flex items-center gap-3" id="referral-input-area">
+                    <input type="text" id="input-referral-code"
+                        class="flex-1 bg-black border border-white/10 rounded-lg p-3 text-white font-mono text-center text-lg tracking-widest uppercase focus:outline-none focus:border-[#dc2626]/50 transition-all placeholder-white/20"
+                        placeholder="Enter 6-digit code">
+                    <button id="btn-submit-referral"
+                        class="px-5 py-3 rounded-lg bg-[#dc2626] hover:bg-[#ef4444] border border-[#ef4444]/50 text-white text-[12px] font-bold transition-all shrink-0 shadow-[0_0_15px_rgba(220,38,38,0.3)] border-b-2 border-b-[#991b1b] active:border-b-[#dc2626] active:border-b-0 active:translate-y-[2px]">CLAIM</button>
+                </div>
+                <div id="referral-bind-status"
+                    class="hidden mt-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg py-3 text-center text-[12px] text-emerald-400 font-medium">
+                    ✨ 您已成功綁定推薦人：<span id="bound-referrer-code"
+                        class="font-mono font-bold text-white tracking-wider"></span></div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 訂閱方案 / 錢包模態框 (Pricing Modal) -->
+    <div id="pricing-modal"
+        class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <!-- Modal Content -->
+        <div class="bg-[#0f0f12] border border-white/10 rounded-2xl w-[900px] max-w-[90vw] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.8)] flex flex-col relative overflow-hidden transform scale-95 transition-transform duration-300"
+            id="pricing-modal-content">
+
+            <button id="btn-close-pricing"
+                class="absolute top-5 right-5 text-white/50 hover:text-white bg-white/5 hover:bg-white/10 rounded-full p-2 transition-all shadow-sm">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                    </path>
+                </svg>
+            </button>
+
+            <div class="text-center mb-8">
+                <h2 class="text-2xl font-bold text-white tracking-widest mb-2 px-10">LOAMLAB CAMERA UPGRADE STRATEGY
+                </h2>
+                <p class="text-white/50 text-sm tracking-wide">Choose the perfect plan for your architectural
+                    pipeline.<br><span class="text-[#dc2626]">Standard 2K render costs 20 Credits.</span></p>
+            </div>
+
+            <!-- Pricing Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+
+                <!-- 1. Top-up -->
+                <div
+                    class="bg-[#141418] border border-white/5 rounded-xl p-5 flex flex-col hover:border-white/20 transition-all shadow-inner">
+                    <h3 class="text-white/60 font-semibold tracking-wider text-sm mb-1 uppercase">Top-up</h3>
+                    <div class="flex items-end gap-1 mb-4">
+                        <span class="text-2xl font-bold text-white">$18</span>
+                        <span class="text-[10px] text-white/40 mb-1">/Beta Sale</span>
+                    </div>
+                    <p class="text-[11px] text-white/50 mb-6 flex-1">200 Credits.<br><br>Equivalent to 10 standard
+                        renders. Perfect for emergencies.</p>
+                    <button onclick="window.openCheckout(99999)"
+                        class="w-full py-2.5 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 text-[11px] font-bold tracking-widest transition-all">BUY
+                        NOW</button>
+                </div>
+
+                <!-- 2. Starter -->
+                <div
+                    class="bg-[#18181d] border border-white/10 rounded-xl p-5 flex flex-col hover:border-white/30 transition-all relative group shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                    <h3 class="text-white/80 font-semibold tracking-wider text-sm mb-1 uppercase">Starter</h3>
+                    <div class="flex items-end gap-1 mb-4 border-b border-white/5 pb-4">
+                        <span class="text-3xl font-bold text-white">$24</span>
+                        <span class="text-[10px] text-white/40 mb-1.5">/mo (Beta)</span>
+                    </div>
+                    <ul class="text-[12px] text-white/60 mb-6 flex-1 space-y-3 pt-1">
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg><span class="text-white font-medium">300 Credits</span></li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg>15 Standard Renders</li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg>High Priority Queue</li>
+                    </ul>
+                    <button onclick="window.openCheckout(12345)"
+                        class="w-full py-2.5 rounded bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[11px] font-bold tracking-widest transition-all">SUBSCRIBE</button>
+                </div>
+
+                <!-- 3. Pro (Hero) -->
+                <div
+                    class="bg-gradient-to-b from-[#2a1012] to-[#140809] border border-[#dc2626]/50 rounded-xl p-5 flex flex-col shadow-[0_0_30px_rgba(220,38,38,0.15)] relative transform md:-translate-y-2 z-10">
+                    <div
+                        class="absolute top-0 right-0 bg-[#dc2626] text-white text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase">
+                        Most Popular</div>
+                    <h3 class="text-[#fca5a5] font-semibold tracking-wider text-sm mb-1 uppercase drop-shadow-sm">Pro
+                    </h3>
+                    <div class="flex items-end gap-1 mb-4 border-b border-[#dc2626]/20 pb-4">
+                        <span class="text-4xl font-bold text-white">$52</span>
+                        <span class="text-[10px] text-white/40 mb-1.5">/mo (Beta)</span>
+                    </div>
+                    <ul class="text-[12px] text-white/70 mb-6 flex-1 space-y-3 pt-1">
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-[#f87171]" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg><span class="text-white font-bold tracking-wide">2,000 Credits</span></li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-[#f87171]" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg>100 Standard Renders</li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-[#f87171]" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg>Commercial License</li>
+                    </ul>
+                    <button onclick="window.openCheckout(12346)"
+                        class="w-full py-3 rounded bg-[#dc2626] hover:bg-[#ef4444] text-white text-[11px] font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(220,38,38,0.4)]">UPGRADE
+                        NOW</button>
+                </div>
+
+                <!-- 4. Studio -->
+                <div
+                    class="bg-[#18181d] border border-white/10 rounded-xl p-5 flex flex-col hover:border-white/30 transition-all shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                    <h3 class="text-white/80 font-semibold tracking-wider text-sm mb-1 uppercase">Studio</h3>
+                    <div class="flex items-end gap-1 mb-4 border-b border-white/5 pb-4">
+                        <span class="text-3xl font-bold text-white">$139</span>
+                        <span class="text-[10px] text-white/40 mb-1.5">/mo (Beta)</span>
+                    </div>
+                    <ul class="text-[12px] text-white/60 mb-6 flex-1 space-y-3 pt-1">
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg><span class="text-white font-medium">9,000 Credits</span></li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg>450 Standard Renders</li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg>Team API Access</li>
+                    </ul>
+                    <button onclick="window.openCheckout(12347)"
+                        class="w-full py-2.5 rounded bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[11px] font-bold tracking-widest transition-all">SUBSCRIBE</button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入外部邏輯腳本 (強制加上 ?v=1.2.0 擊破 CEF 瀏覽器快取) -->
+    <script src="i18n.js?v=1.2.0"></script>
+    <script src="app.js?v=1.2.2"></script>
+</body>
+
+</html>

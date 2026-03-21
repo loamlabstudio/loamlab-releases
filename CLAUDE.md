@@ -171,6 +171,24 @@ When a task is claimed, update status in `AGENTS_SYNC.md` from `[PENDING]` → `
 
 ---
 
+## 文件同步規則（Doc Sync Protocol）
+
+每次改動完成後，**必須主動詢問**是否需要同步更新相關文件。不需要自動寫入，詢問後由用戶確認再執行。
+
+| 改動類型 | 需同步的文件 |
+|---------|------------|
+| 點數定價、新人贈點、扣款邏輯 | `POINTS_SYSTEM.md` |
+| 新功能上線、工具啟用、Phase 推進 | `PRODUCT_PLAN.md` / `roadmap.md` |
+| 版本號更新、Release 發布 | `AGENTS_CHECKLIST.md`（`CURRENT_VERSION`）、`version.js` |
+| 後端 API 新增/修改端點 | `CLAUDE.md`（Architecture 章節） |
+| 付費/結帳/Webhook 邏輯 | `Summon_Billing.md` / `Summon_Fintech.md` |
+| 環境變數新增或移除 | `CLAUDE.md`（Environment Variables 章節） |
+
+**觸發時機**：每次 commit 後，檢查上表，若有對應項目，結尾加一句：
+> 「此次改動涉及 [文件名]，是否需要同步更新？」
+
+---
+
 ## Key Constraints
 
 - **Backend uses Node.js 18+ native `fetch`** — do NOT add `node-fetch` require (causes CJS/ESM conflict); `node-fetch` remains in `package.json` as legacy but must never be `require()`'d

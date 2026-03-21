@@ -52,7 +52,7 @@ export default function handler(req, res) {
                         .upsert({ id: sessionId, email: email, status: 'success' });
                         
                     // 同步確保此用戶在 users 資料庫中存在 (Beta 試運營：分配初始 10 點)
-                    await client.from('users').upsert({ email: email, points: 10 }, { onConflict: 'email', ignoreDuplicates: true });
+                    await client.from('users').upsert({ email: email, points: 60 }, { onConflict: 'email', ignoreDuplicates: true });
                     
                     if (dbErr) {
                          document.getElementById('status-text').innerText = "存取狀態庫失敗：" + dbErr.message;

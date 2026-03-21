@@ -8,41 +8,41 @@ module LoamLabPlugin
     class << self
 
       # ─── Step 1：檢查有無新版本 ───────────────────────────────────
+      # 使用 Sketchup::Http::Request（主執行緒非同步），避免 Thread.new + UI.start_timer 的不穩定問題
       def check_for_updates(dialog, current_version)
         puts "[Updater] 檢查更新，目前版本：#{current_version}"
 
-        Thread.new do
+        url = "#{::LoamLab::API_BASE_URL}/api/version"
+        req = Sketchup::Http::Request.new(url, Sketchup::Http::GET)
+
+        req.start do |_request, response|
           begin
-            uri  = URI("#{::LoamLab::API_BASE_URL}/api/version")
-            http = Net::HTTP.new(uri.hostname, uri.port)
-            http.use_ssl      = (uri.scheme == 'https')
-            http.open_timeout = 8
-            http.read_timeout = 8
-
-            response = http.request(Net::HTTP::Get.new(uri))
-
-            unless response.is_a?(Net::HTTPSuccess)
-              send_to_js(dialog, status: 'update_error', msg: "伺服器回傳 #{response.code}")
+            unless response.status_code == 200
+              send_to_js(dialog, status: 'update_error', msg: "伺服器回傳 #{response.status_code}")
               next
             end
 
-            data           = JSON.parse(response.body)
+            data           = JSON.parse(response.body.to_s.force_encoding('UTF-8').scrub('?'))
             latest_version = data["latest_version"].to_s
             notes          = data["release_notes"].to_s
-            url            = data["download_url"].to_s
+            dl_url         = data["download_url"].to_s
 
             if version_newer?(latest_version, current_version)
               send_to_js(dialog, status: 'update_available',
-                                 version: latest_version, notes: notes, url: url)
+                                 version: latest_version, notes: notes, url: dl_url)
             else
               send_to_js(dialog, status: 'update_latest', version: current_version)
             end
 
           rescue => e
-            puts "[Updater] 連線失敗：#{e.message}"
-            send_to_js(dialog, status: 'update_error', msg: '無法連接更新伺服器，請確認網路後再試')
+            puts "[Updater] 解析回應失敗：#{e.message}"
+            send_to_js(dialog, status: 'update_error', msg: '更新伺服器回應異常，請稍後再試')
           end
         end
+
+      rescue => e
+        puts "[Updater] 無法建立請求：#{e.message}"
+        send_to_js(dialog, status: 'update_error', msg: '無法連接更新伺服器，請確認網路後再試')
       end
 
       # ─── Step 2：下載並覆蓋安裝（由 JS 確認後呼叫）────────────────
@@ -84,12 +84,13 @@ module LoamLabPlugin
                 dialog.execute_script("window.location.reload()")
               end
             else
-              send_to_js(dialog, status: 'update_error', msg: '解壓縮失敗，請重試或手動下載安裝')
+              UI.start_timer(0, false) { send_to_js(dialog, status: 'update_error', msg: '解壓縮失敗，請重試或手動下載安裝') }
             end
 
           rescue => e
             puts "[Updater] 下載/安裝失敗：#{e.message}"
-            send_to_js(dialog, status: 'update_error', msg: "安裝失敗：#{e.message}")
+            err_msg = e.message
+            UI.start_timer(0, false) { send_to_js(dialog, status: 'update_error', msg: "安裝失敗：#{err_msg}") }
           end
         end
       end
@@ -107,9 +108,7 @@ module LoamLabPlugin
       end
 
       def send_to_js(dialog, payload)
-        UI.start_timer(0.05, false) do
-          dialog.execute_script("window.receiveFromRuby(#{JSON.generate(payload)})")
-        end
+        dialog.execute_script("window.receiveFromRuby(#{JSON.generate(payload)})")
       end
 
     end

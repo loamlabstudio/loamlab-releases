@@ -6,6 +6,6 @@ export default function handler(req, res) {
     return res.status(200).json({
         latest_version: "1.2.0-beta",
         release_notes: "公測首發：開啟『工具1：真實渲染』。其餘 AI 工具正加緊迭代中，敬請期待！",
-        download_url: "https://github.com/loamlabstudio/loamlab-camera-backend/releases/download/v1.2.0-beta/loamlab_plugin.rbz"
+        download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.2.0-beta/loamlab_plugin.rbz"
     });
 }

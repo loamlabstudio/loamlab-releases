@@ -18,7 +18,7 @@ $OUT_ZIP = "$ROOT\loamlab_plugin.zip"
 
 # GitHub Releases 的下載連結模板 (請確認 Repo 名稱正確)
 $GITHUB_USER = "loamlabstudio"
-$GITHUB_REPO = "loamlab-camera-backend"
+$GITHUB_REPO = "loamlab-releases"
 $DOWNLOAD_URL = "https://github.com/$GITHUB_USER/$GITHUB_REPO/releases/download/v$version/loamlab_plugin.rbz"
 
 Write-Host ""

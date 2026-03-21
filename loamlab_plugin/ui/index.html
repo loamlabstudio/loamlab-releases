@@ -872,6 +872,31 @@
         </div>
     </div>
 
+    <!-- 更新狀態 Toast（update_latest / update_error / update_downloading） -->
+    <div id="update-toast"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-5 py-3 rounded-2xl bg-[#18181b]/95 border border-white/10 shadow-2xl backdrop-blur-md transition-all duration-500 opacity-0 translate-y-4 pointer-events-none">
+        <span id="update-toast-msg" class="text-[12px] text-white/80"></span>
+    </div>
+
+    <!-- 有新版本時的確認橫幅 -->
+    <div id="update-banner" data-url=""
+        class="hidden fixed bottom-0 left-0 right-0 z-[99] flex items-center justify-between gap-3 px-5 py-3 bg-[#09090b]/95 border-t border-amber-500/20 backdrop-blur-md">
+        <div class="flex flex-col">
+            <span class="text-[12px] font-semibold text-amber-300">🆕 發現新版本 <span id="update-banner-version"></span></span>
+            <span id="update-banner-notes" class="text-[11px] text-white/40 truncate max-w-[260px]"></span>
+        </div>
+        <div class="flex gap-2 shrink-0">
+            <button onclick="document.getElementById('update-banner').classList.add('hidden')"
+                class="text-[11px] px-3 py-1.5 rounded-lg border border-white/10 text-white/40 hover:text-white/70 transition-colors">
+                稍後
+            </button>
+            <button onclick="executeUpdate(document.getElementById('update-banner').getAttribute('data-url'))"
+                class="text-[11px] px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 transition-colors font-semibold">
+                立即更新
+            </button>
+        </div>
+    </div>
+
     <!-- 歡迎 Toast -->
     <div id="welcome-toast"
         class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-5 py-3 rounded-2xl bg-[#18181b]/95 border border-white/10 shadow-2xl backdrop-blur-md transition-all duration-500 opacity-0 translate-y-4 pointer-events-none">

@@ -136,11 +136,20 @@ module LoamLab
         dialog.execute_script("window.location.reload();")
       end
 
-      # 4. [Prod] 自動更新: 向伺服器檢查版號，若有新版則彈窗提示安裝
+      # 4. [Prod] 自動更新: 向伺服器檢查版號，若有新版則透過 JS 通知
       dialog.add_action_callback("auto_update") do |action_context, params|
-        # 傳入目前的版號與 dialog 物件交由 Updater 處理
         current_version = LoamLab::VERSION
         LoamLabPlugin::Updater.check_for_updates(dialog, current_version)
+      end
+
+      # 4b. [Prod] 執行安裝更新: 接收 JS 確認後實際下載並覆蓋插件
+      dialog.add_action_callback("execute_update") do |action_context, params|
+        url = params.is_a?(Hash) ? params["url"] : nil
+        if url && !url.empty?
+          LoamLabPlugin::Updater.download_and_install(dialog, url)
+        else
+          dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status: 'update_error', msg: '無效的下載連結'})})")
+        end
       end
 
       # 3.5 [第一性原理除錯]: 空載 API 直連測試

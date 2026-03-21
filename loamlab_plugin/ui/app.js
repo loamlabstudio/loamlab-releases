@@ -256,9 +256,21 @@ window.receiveFromRuby = function (data) {
     } else if (data.status === 'uploading') {
         statusText.textContent = langObj['status_uploading'] || '正在建構魔法...';
         // 進度由 startRenderTimer 控制
+    } else if (data.status === 'update_latest') {
+        stopUpdateSpinner();
+        showUpdateToast(`✅ 已是最新版本 (v${data.version})`);
+    } else if (data.status === 'update_available') {
+        stopUpdateSpinner();
+        showUpdateBanner(data.version, data.notes, data.url);
+    } else if (data.status === 'update_downloading') {
+        showUpdateToast('⬇️ 下載更新中，請稍候...');
+    } else if (data.status === 'update_error') {
+        stopUpdateSpinner();
+        showUpdateToast(`⚠️ ${data.msg || '更新失敗'}`);
     } else if (data.status === 'update_checked') {
-        const langObj2 = UI_LANG[currentLang];
-        alert(langObj2['update_latest'] || 'System is up to date!');
+        // legacy fallback
+        stopUpdateSpinner();
+        showUpdateToast('✅ 已是最新版本');
     } else if (data.status === 'preview_updated') {
         const gridEl = document.getElementById('preview-grid');
         const placeholderEl = document.getElementById('preview-placeholder');
@@ -878,6 +890,41 @@ function showWelcomeToast() {
     setTimeout(() => {
         toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
     }, 5000);
+}
+
+function stopUpdateSpinner() {
+    const btn = document.getElementById('btn-check-update');
+    if (!btn) return;
+    const svg = btn.querySelector('svg');
+    if (svg) svg.classList.remove('animate-spin');
+}
+
+function showUpdateToast(msg) {
+    const toast = document.getElementById('update-toast');
+    if (!toast) return;
+    toast.querySelector('#update-toast-msg').textContent = msg;
+    toast.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+    clearTimeout(window._updateToastTimer);
+    window._updateToastTimer = setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
+    }, 4000);
+}
+
+function showUpdateBanner(version, notes, url) {
+    const banner = document.getElementById('update-banner');
+    if (!banner) return;
+    banner.querySelector('#update-banner-version').textContent = `v${version}`;
+    banner.querySelector('#update-banner-notes').textContent = notes;
+    banner.setAttribute('data-url', url);
+    banner.classList.remove('hidden');
+}
+
+function executeUpdate(url) {
+    document.getElementById('update-banner')?.classList.add('hidden');
+    showUpdateToast('⬇️ 下載更新中，請稍候...');
+    if (window.sketchup) {
+        sketchup.execute_update({ url });
+    }
 }
 
 function openLoginModal() {

@@ -18,8 +18,9 @@ module LoamLab
   end
 
   # 鐣跺墠铏熺⒓ (閫ｅ嫊 updater 鐗堟湰姣斿皪姗熷埗)
-  VERSION = '1.2.2-beta'
+  VERSION = '1.2.3-beta'
 end
+
 
 
 

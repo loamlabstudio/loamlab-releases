@@ -4,8 +4,8 @@ export default function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cache-Control', 'no-cache');
     return res.status(200).json({
-        latest_version: "1.2.2-beta",
-        release_notes: "修復新人只送 10 點 bug、修復更新檢查無回應、修復 OAuth 登入跳 localhost",
-        download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.2.2-beta/loamlab_plugin.rbz"
+        latest_version: "1.2.3-beta",
+        release_notes: "關閉工具 2/3 入口、介面優化",
+        download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.2.3-beta/loamlab_plugin.rbz"
     });
 }

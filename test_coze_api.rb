@@ -7,7 +7,7 @@ require 'json'
 # 目的：跳開 SketchUp 複雜環境，直接用最純粹的 Ruby 叩門
 # ==========================================
 
-COZE_PAT = "pat_fRWcYMWTolnSr3rte9dInKOaXvKn6EAqRmIcEpJYdxTuNmOf9Ku6aZnK7KH8nxPo"
+COZE_PAT = ENV['COZE_PAT'] || raise("請設定環境變數 COZE_PAT，勿將 PAT 直接寫入代碼")
 WORKFLOW_ID = "7612576046118010896"
 BOT_ID = "7613595096965382149"
 

@@ -149,7 +149,7 @@ module LoamLab
         require 'uri'
         require 'json'
 
-        pat = "pat_fRWcYMWTolnSr3rte9dInKOaXvKn6EAqRmIcEpJYdxTuNmOf9Ku6aZnK7KH8nxPo"
+        pat = ENV['COZE_PAT'].to_s  # 僅供本機除錯，透過環境變數注入，勿 hardcode
         # 直接使用絕對正確的 Workflow ID，不再依賴外界傳入的舊變數
         wid = "7613251981235208197"
         

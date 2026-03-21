@@ -149,7 +149,7 @@ export default async function handler(req, res) {
             } else {
                 // 備用：尝試 ImgBB （如果 freeimage 失敗）
                 const formData2 = new FormData();
-                formData2.append('key', process.env.IMGBB_API_KEY || '0b9c6a79883833d78da47f6314cfa856');
+                formData2.append('key', process.env.IMGBB_API_KEY);
                 formData2.append('image', base64Data);
                 const imgbbRes = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: formData2 });
                 const imgbbData = await imgbbRes.json();

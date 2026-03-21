@@ -2,7 +2,7 @@ require 'net/http'
 require 'uri'
 require 'json'
 
-COZE_PAT = "pat_fRWcYMWTolnSr3rte9dInKOaXvKn6EAqRmIcEpJYdxTuNmOf9Ku6aZnK7KH8nxPo"
+COZE_PAT = ENV['COZE_PAT'] || raise("請設定環境變數 COZE_PAT，勿將 PAT 直接寫入代碼")
 WORKFLOW_ID = "7613251981235208197" # 從使用者的 debug URL 中抓出的真實工作流 ID
 
 uri = URI("https://api.coze.com/v1/workflow/stream_run")

@@ -860,6 +860,7 @@ window.fetchUserPoints = function (email) {
             console.log('[LoamLab] user data:', data);
             if (data && data.points !== undefined) {
                 window.updateLoginUI(email, data.points, data.referral_code, data.referred_by);
+                if (data.is_new_user) showWelcomeToast();
             } else {
                 alert('[LoamLab] /api/user 回傳了資料但沒有 points 欄位: ' + JSON.stringify(data));
             }
@@ -868,6 +869,15 @@ window.fetchUserPoints = function (email) {
             const pb = document.getElementById('point-balance');
             if (pb) pb.textContent = 'ERR';
         });
+}
+
+function showWelcomeToast() {
+    const toast = document.getElementById('welcome-toast');
+    if (!toast) return;
+    toast.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+    setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
+    }, 5000);
 }
 
 function openLoginModal() {

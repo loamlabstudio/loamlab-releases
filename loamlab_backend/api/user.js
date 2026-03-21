@@ -26,14 +26,14 @@ export default async function handler(req, res) {
 
         // [Beta 試運營] 自動註冊邏輯：如果用戶不存在，則直接建立
         // ★ 冪等性說明：利用 Supabase users.email 的 UNIQUE 限制，即便發生並發請求，
-        // 資料庫也會擋掉重複的 Email 寫入，確保一人僅能領取一次 10 點。
+        // 資料庫也會擋掉重複的 Email 寫入，確保一人僅能領取一次 60 點。
         if (error && error.code === 'PGRST116') { // PGRST116 是單筆查詢查無資料的代碼
             const newReferralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
             const { data: newUser, error: insertError } = await supabase
                 .from('users')
                 .insert([{
                     email: email,
-                    points: 10,  // Beta 試運營初始贈送 10 點
+                    points: 60,  // 公測新人禮：60 點（3 張 2K 渲染）
                     referral_code: newReferralCode
                 }])
                 .select()

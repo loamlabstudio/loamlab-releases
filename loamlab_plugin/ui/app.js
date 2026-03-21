@@ -573,6 +573,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 渲染按鈕綁定與額度攔截 (Paywall)
     document.getElementById('btn-render').addEventListener('click', () => {
+        // 未登入攔截：直接開啟登入流程，不發送任何請求
+        if (!window.loamlabUserEmail) {
+            openLoginModal();
+            return;
+        }
+
         const checkboxes = document.querySelectorAll('input[name="scene"]:checked');
         const selectedScenes = Array.from(checkboxes).map(cb => cb.value);
         const userPrompt = textPrompt ? textPrompt.value.trim() : "";

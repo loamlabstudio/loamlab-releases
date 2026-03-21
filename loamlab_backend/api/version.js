@@ -4,8 +4,8 @@ export default function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cache-Control', 'no-cache');
     return res.status(200).json({
-        latest_version: "1.2.0-beta",
-        release_notes: "公測首發：開啟『工具1：真實渲染』。其餘 AI 工具正加緊迭代中，敬請期待！",
-        download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.2.0-beta/loamlab_plugin.rbz"
+        latest_version: "1.2.1-beta",
+        release_notes: "修復檢查更新無反應、新人送 60 點、版本號顯示優化",
+        download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.2.1-beta/loamlab_plugin.rbz"
     });
 }

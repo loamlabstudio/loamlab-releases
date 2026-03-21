@@ -4,6 +4,11 @@
 
 ---
 
+## 0. 新人禮 (Signup Bonus)
+- **公測期間新人禮**：`60 點`（剛好 3 張 2K 渲染）
+- **實作位置**：`loamlab_backend/api/user.js` — 首次登入自動建帳號時寫入
+- **冪等性保證**：依賴 Supabase `users.email UNIQUE` 限制，並發請求只有一次能成功插入
+
 ## 1. 點數消耗規則 (Credit Consumption Engine)
 當用戶點擊 `Start Engine` 時，Vercel 後端會根據傳入的 `resolution` (解析度) 變數，進行點數扣除。
 
@@ -16,6 +21,11 @@
 
 ## 2. 定價與套餐結構 (Pricing & Subscription Plans)
 這些套餐應於 LemonSqueezy 或 Stripe 後台建立對應商品，並將 Webhook 對接至 Vercel，用於使用者付款後自動增加庫存。
+
+### Beta 折扣碼
+- **代碼**：`LOAM_BETA_30`（7折，30% off）
+- **使用場景**：結帳時自動帶入 LemonSqueezy URL，透過 `?checkout[discount_code]=LOAM_BETA_30` 預填
+- **Beta 用戶身份**：公測期付費用戶標記為 Beta Tester，享有首年或永久折扣承諾
 
 ### 單次購買包 (Top-up) - [Beta 7折優惠]
 - **售價**: `$18` (原價 `$25`，約 `NT$ 570`)

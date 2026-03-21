@@ -907,6 +907,7 @@ function showWelcomeToast() {
 }
 
 function stopUpdateSpinner() {
+    clearTimeout(window._updateSpinnerTimeout);
     const btn = document.getElementById('btn-check-update');
     if (!btn) return;
     const svg = btn.querySelector('svg');
@@ -1178,6 +1179,11 @@ if (btnCheckUpdate) {
         if (window.sketchup) {
             window._silentUpdateCheck = false;
             sketchup.auto_update({});
+            // 10 秒兜底：如果 Ruby 沒回應就自動停止
+            window._updateSpinnerTimeout = setTimeout(() => {
+                stopUpdateSpinner();
+                showUpdateToast('⚠️ 無法連接伺服器，請稍後再試');
+            }, 10000);
         } else {
             console.log("Auto update triggered (Local Mock)");
             setTimeout(() => { if (svg) svg.classList.remove('animate-spin'); }, 1000);

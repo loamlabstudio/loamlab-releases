@@ -172,16 +172,21 @@
 
             <div class="h-4 w-[1px] bg-white/20 mx-1"></div>
 
-            <!-- Check Update Button -->
-            <button id="btn-check-update"
-                class="hover:text-white transition-colors flex items-center gap-1.5 focus:outline-none relative group">
-                <svg class="w-4 h-4 opacity-70 group-hover:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4">
-                    </path>
-                </svg>
-                <span data-i18n="check_update" class="text-[11px] font-semibold tracking-wider">Check Updates</span>
-            </button>
+            <!-- Version + Check Update Button -->
+            <div class="flex items-center gap-2">
+                <span id="current-version-label" class="text-[10px] text-white/30 tracking-wide font-mono"></span>
+                <button id="btn-check-update"
+                    class="hover:text-white transition-colors flex items-center gap-1.5 focus:outline-none relative group">
+                    <!-- 有新版時顯示的紅點 -->
+                    <span id="update-dot" class="hidden absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4">
+                        </path>
+                    </svg>
+                    <span data-i18n="check_update" class="text-[11px] font-semibold tracking-wider">Check Updates</span>
+                </button>
+            </div>
 
             <div class="h-4 w-[1px] bg-white/20 mx-1"></div>
 

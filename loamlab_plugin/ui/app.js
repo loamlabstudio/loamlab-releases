@@ -236,6 +236,16 @@ window.receiveFromRuby = function (data) {
         statusText.classList.replace('text-gray-400', 'text-green-500');
         renderScenesList(data.scenes);
 
+        // Header 顯示版本號
+        const versionLabel = document.getElementById('current-version-label');
+        if (versionLabel && data.version) versionLabel.textContent = `v${data.version}`;
+
+        // 啟動時靜默自動檢查（有新版才提示，已是最新不打擾）
+        if (window.sketchup) {
+            window._silentUpdateCheck = true;
+            setTimeout(() => sketchup.auto_update({}), 2000);
+        }
+
         // 初始化時主動請求第一張預覽圖
         if (window.sketchup) {
             setTimeout(() => { sketchup.sync_preview({}); }, 200);
@@ -258,9 +268,13 @@ window.receiveFromRuby = function (data) {
         // 進度由 startRenderTimer 控制
     } else if (data.status === 'update_latest') {
         stopUpdateSpinner();
-        showUpdateToast(`✅ 已是最新版本 (v${data.version})`);
+        // 靜默自動檢查時不顯示 toast，手動點擊才提示
+        if (!window._silentUpdateCheck) showUpdateToast(`✅ 已是最新版本 (v${data.version})`);
+        window._silentUpdateCheck = false;
     } else if (data.status === 'update_available') {
         stopUpdateSpinner();
+        window._silentUpdateCheck = false;
+        document.getElementById('update-dot')?.classList.remove('hidden');
         showUpdateBanner(data.version, data.notes, data.url);
     } else if (data.status === 'update_downloading') {
         showUpdateToast('⬇️ 下載更新中，請稍候...');
@@ -1162,6 +1176,7 @@ if (btnCheckUpdate) {
         if (svg) svg.classList.add('animate-spin');
 
         if (window.sketchup) {
+            window._silentUpdateCheck = false;
             sketchup.auto_update({});
         } else {
             console.log("Auto update triggered (Local Mock)");

@@ -160,7 +160,7 @@
         <div class="flex items-center gap-5 text-sm text-white/60 font-medium">
 
             <!-- Beta Feedback Button -->
-            <button onclick="window.open('mailto:loamlabstudio@gmail.com?subject=LoamLab%20Camera%20Feedback&body=Hi%2C%20I%20have%20feedback%20about%20LoamLab%20Camera...', '_blank')"
+            <button onclick="openFeedbackModal()"
                 class="text-rose-400/80 hover:text-rose-300 transition-colors flex items-center gap-1.5 focus:outline-none relative group">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
@@ -207,6 +207,9 @@
                     <span class="text-white/40 tracking-wider text-[11px] font-semibold">Points:</span>
                     <span id="point-balance"
                         class="font-bold text-white/90 font-mono tracking-widest drop-shadow-sm text-xs">--</span>
+                    <button id="btn-refresh-points" title="Refresh balance"
+                        onclick="event.stopPropagation();if(window.loamlabUserEmail){window.fetchUserPoints(window.loamlabUserEmail);}"
+                        style="background:none;border:none;cursor:pointer;font-size:11px;color:rgba(255,255,255,0.4);padding:0 2px;line-height:1;" class="hover:text-white/80 transition-colors">↺</button>
                 </div>
 
                 <div class="flex items-center gap-2 cursor-pointer group hover:bg-white/5 px-2 py-1.5 -mr-1 rounded border border-transparent hover:border-white/10 transition-all"
@@ -355,7 +358,7 @@
                                         d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4">
                                     </path>
                                 </svg>
-                                <span class="text-[12px] tracking-wider uppercase font-semibold">進階渲染設定</span>
+                                <span class="text-[12px] tracking-wider uppercase font-semibold" data-i18n="advanced_settings">進階渲染設定</span>
                             </div>
                             <!-- 折疊箭頭圖示 -->
                             <svg class="w-4 h-4 text-white/40 transform transition-transform group-open:rotate-180"
@@ -417,12 +420,12 @@
 
                                 <!-- 工具 3：鏡頭風格選擇（預設隱藏） -->
                                 <div id="shot-style-selector" class="hidden w-full flex flex-col mb-3">
-                                    <label class="text-[11px] font-semibold tracking-wider text-white/50 mb-2 uppercase">鏡頭風格 Shot Style</label>
+                                    <label class="text-[11px] font-semibold tracking-wider text-white/50 mb-2 uppercase"><span data-i18n="shot_style_label">鏡頭風格</span></label>
                                     <div class="flex flex-wrap gap-1.5">
-                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="industrial">硬朗工業</span>
-                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="natural">柔和自然</span>
-                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="dramatic">戲劇張力</span>
-                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="minimal">極簡留白</span>
+                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="industrial" data-i18n="shot_industrial">硬朗工業</span>
+                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="natural" data-i18n="shot_natural">柔和自然</span>
+                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="dramatic" data-i18n="shot_dramatic">戲劇張力</span>
+                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="minimal" data-i18n="shot_minimal">極簡留白</span>
                                     </div>
                                 </div>
 
@@ -468,8 +471,7 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-1.5 shrink-0">
-                            <span class="text-[9px] text-[#dc2626] font-semibold tracking-widest px-1">自動存檔 AUTO
-                                SAVE</span>
+                            <span class="text-[9px] text-[#dc2626] font-semibold tracking-widest px-1" data-i18n="auto_save">自動存檔 AUTO SAVE</span>
                             <button id="btn-choose-dir"
                                 class="bg-white/5 hover:bg-white/20 border border-white/10 text-white rounded p-1.5 transition-colors active:scale-95"
                                 title="選擇資料夾">
@@ -582,8 +584,7 @@
 
             <div class="text-center mb-6">
                 <h2 class="text-2xl font-bold text-white tracking-widest mb-2 px-6">INVITE & EARN</h2>
-                <p class="text-white/50 text-[12px] tracking-wide">邀請同行好友首次訂閱任何付費方案，<br>雙方將自動獲得 <span
-                        class="text-[#dc2626] font-bold">200 Credits</span> 獎勵！</p>
+                <p class="text-white/50 text-[12px] tracking-wide">好友輸入邀請碼並完成<strong class="text-white/80">第一張算圖</strong>後，雙方立即得獎。<br>您獲得 <span class="text-[#dc2626] font-bold">300 點</span>，好友獲得 <span class="text-amber-400 font-bold">100 點</span>（永久點數，不過期）。</p>
             </div>
 
             <!-- 分享代碼區塊 -->
@@ -607,12 +608,12 @@
                         class="flex-1 bg-black border border-white/10 rounded-lg p-3 text-white font-mono text-center text-lg tracking-widest uppercase focus:outline-none focus:border-[#dc2626]/50 transition-all placeholder-white/20"
                         placeholder="Enter 6-digit code">
                     <button id="btn-submit-referral"
-                        class="px-5 py-3 rounded-lg bg-[#dc2626] hover:bg-[#ef4444] border border-[#ef4444]/50 text-white text-[12px] font-bold transition-all shrink-0 shadow-[0_0_15px_rgba(220,38,38,0.3)] border-b-2 border-b-[#991b1b] active:border-b-[#dc2626] active:border-b-0 active:translate-y-[2px]">CLAIM</button>
+                        class="px-5 py-3 rounded-lg bg-[#dc2626] hover:bg-[#ef4444] border border-[#ef4444]/50 text-white text-[12px] font-bold transition-all shrink-0 shadow-[0_0_15px_rgba(220,38,38,0.3)] border-b-2 border-b-[#991b1b] active:border-b-[#dc2626] active:border-b-0 active:translate-y-[2px]">BIND</button>
                 </div>
                 <div id="referral-bind-status"
-                    class="hidden mt-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg py-3 text-center text-[12px] text-emerald-400 font-medium">
-                    ✨ 您已成功綁定推薦人：<span id="bound-referrer-code"
-                        class="font-mono font-bold text-white tracking-wider"></span></div>
+                    class="hidden mt-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg py-3 px-4 text-center text-[12px] text-emerald-400 font-medium space-y-1">
+                    <div>✨ 邀請碼已記錄！邀請人：<span id="bound-referrer-code" class="font-mono font-bold text-white tracking-wider"></span></div>
+                    <div class="text-white/40">完成第一張算圖後，100 點將自動發放至您的永久點數。</div></div>
             </div>
 
         </div>
@@ -634,117 +635,82 @@
             </button>
 
             <div class="text-center mb-8">
-                <h2 class="text-2xl font-bold text-white tracking-widest mb-2 px-10">LOAMLAB CAMERA UPGRADE STRATEGY
-                </h2>
-                <p class="text-white/50 text-sm tracking-wide">Choose the perfect plan for your architectural
-                    pipeline.<br><span class="text-[#dc2626]">Standard 2K render costs 20 Credits.</span></p>
+                <h2 class="text-2xl font-bold text-white tracking-widest mb-2 px-10" data-i18n="pricing_title">LOAMLAB CAMERA UPGRADE STRATEGY</h2>
+                <p class="text-white/50 text-sm tracking-wide" data-i18n="pricing_subtitle">Choose the perfect plan for your architectural pipeline.</p>
+                <p class="text-[#dc2626] text-xs mt-1" data-i18n="pricing_cost_hint">Standard 2K render costs 20 Credits.</p>
             </div>
 
             <!-- Pricing Grid -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
 
                 <!-- 1. Top-up -->
-                <div
-                    class="bg-[#141418] border border-white/5 rounded-xl p-5 flex flex-col hover:border-white/20 transition-all shadow-inner">
+                <div class="bg-[#141418] border border-white/5 rounded-xl p-5 flex flex-col hover:border-white/20 transition-all shadow-inner">
                     <h3 class="text-white/60 font-semibold tracking-wider text-sm mb-1 uppercase">Top-up</h3>
                     <div class="flex items-end gap-1 mb-4">
                         <span class="text-2xl font-bold text-white">$18</span>
                         <span class="text-[10px] text-white/40 mb-1">/Beta Sale</span>
                     </div>
-                    <p class="text-[11px] text-white/50 mb-6 flex-1">200 Credits.<br><br>Equivalent to 10 standard
-                        renders. Perfect for emergencies.</p>
+                    <ul class="text-[11px] text-white/50 mb-1 flex-1 space-y-2.5">
+                        <li class="flex items-center gap-2"><svg class="w-3 h-3 text-white/40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>200 Permanent Credits</li>
+                        <li class="flex items-center gap-2"><svg class="w-3 h-3 text-white/40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Up to 2K Resolution</li>
+                        <li class="flex items-center gap-2"><svg class="w-3 h-3 text-white/40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>1 Device</li>
+                        <li class="flex items-center gap-2 text-white/25"><svg class="w-3 h-3 text-white/20 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>No Commercial Use</li>
+                    </ul>
+                    <p class="text-[11px] text-white/40 mb-5 mt-3" data-plan-cost="topup">2K ≈ $1.80</p>
                     <button onclick="window.openCheckout(LS_VARIANTS.TOPUP)"
-                        class="w-full py-2.5 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 text-[11px] font-bold tracking-widest transition-all">BUY
-                        NOW</button>
+                        class="w-full py-2.5 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 text-[11px] font-bold tracking-widest transition-all">BUY NOW</button>
                 </div>
 
                 <!-- 2. Starter -->
-                <div
-                    class="bg-[#18181d] border border-white/10 rounded-xl p-5 flex flex-col hover:border-white/30 transition-all relative group shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 flex flex-col hover:border-white/30 transition-all relative group shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
                     <h3 class="text-white/80 font-semibold tracking-wider text-sm mb-1 uppercase">Starter</h3>
                     <div class="flex items-end gap-1 mb-4 border-b border-white/5 pb-4">
                         <span class="text-3xl font-bold text-white">$24</span>
                         <span class="text-[10px] text-white/40 mb-1.5">/mo (Beta)</span>
                     </div>
-                    <ul class="text-[12px] text-white/60 mb-6 flex-1 space-y-3 pt-1">
-                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80" fill="none"
-                                stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M5 13l4 4L19 7"></path>
-                            </svg><span class="text-white font-medium">300 Credits</span></li>
-                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80" fill="none"
-                                stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M5 13l4 4L19 7"></path>
-                            </svg>15 Standard Renders</li>
-                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80" fill="none"
-                                stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M5 13l4 4L19 7"></path>
-                            </svg>High Priority Queue</li>
+                    <ul class="text-[12px] text-white/60 mb-6 flex-1 space-y-2.5 pt-1">
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span class="text-white font-medium">300 Monthly Credits</span></li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Up to 2K Resolution</li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>1 Device</li>
+                        <li class="flex items-center gap-2 text-white/35"><svg class="w-3.5 h-3.5 text-white/25 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>No Commercial Use</li>
+                        <li class="flex items-center gap-2 text-emerald-400/70 font-medium text-[11px]" data-plan-cost="starter">2K ≈ $1.60</li>
                     </ul>
                     <button onclick="window.openCheckout(LS_VARIANTS.STARTER)"
                         class="w-full py-2.5 rounded bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[11px] font-bold tracking-widest transition-all">SUBSCRIBE</button>
                 </div>
 
                 <!-- 3. Pro (Hero) -->
-                <div
-                    class="bg-gradient-to-b from-[#2a1012] to-[#140809] border border-[#dc2626]/50 rounded-xl p-5 flex flex-col shadow-[0_0_30px_rgba(220,38,38,0.15)] relative transform md:-translate-y-2 z-10">
-                    <div
-                        class="absolute top-0 right-0 bg-[#dc2626] text-white text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase">
-                        Most Popular</div>
-                    <h3 class="text-[#fca5a5] font-semibold tracking-wider text-sm mb-1 uppercase drop-shadow-sm">Pro
-                    </h3>
+                <div class="bg-gradient-to-b from-[#2a1012] to-[#140809] border border-[#dc2626]/50 rounded-xl p-5 flex flex-col shadow-[0_0_30px_rgba(220,38,38,0.15)] relative transform md:-translate-y-2 z-10">
+                    <div class="absolute top-0 right-0 bg-[#dc2626] text-white text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase">Most Popular</div>
+                    <h3 class="text-[#fca5a5] font-semibold tracking-wider text-sm mb-1 uppercase drop-shadow-sm">Pro</h3>
                     <div class="flex items-end gap-1 mb-4 border-b border-[#dc2626]/20 pb-4">
                         <span class="text-4xl font-bold text-white">$52</span>
                         <span class="text-[10px] text-white/40 mb-1.5">/mo (Beta)</span>
                     </div>
-                    <ul class="text-[12px] text-white/70 mb-6 flex-1 space-y-3 pt-1">
-                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-[#f87171]" fill="none"
-                                stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M5 13l4 4L19 7"></path>
-                            </svg><span class="text-white font-bold tracking-wide">2,000 Credits</span></li>
-                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-[#f87171]" fill="none"
-                                stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M5 13l4 4L19 7"></path>
-                            </svg>100 Standard Renders</li>
-                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-[#f87171]" fill="none"
-                                stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M5 13l4 4L19 7"></path>
-                            </svg>Commercial License</li>
+                    <ul class="text-[12px] text-white/70 mb-6 flex-1 space-y-2.5 pt-1">
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-[#f87171] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span class="text-white font-bold tracking-wide">2,000 Monthly Credits</span></li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-[#f87171] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span class="text-white font-semibold">4K Resolution Unlocked</span></li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-[#f87171] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>2 Devices Simultaneously</li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-[#f87171] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Commercial License</li>
+                        <li class="flex items-center gap-2 text-[#f87171] font-bold text-[11px]" data-plan-cost="pro">2K ≈ $0.52</li>
                     </ul>
                     <button onclick="window.openCheckout(LS_VARIANTS.PRO)"
-                        class="w-full py-3 rounded bg-[#dc2626] hover:bg-[#ef4444] text-white text-[11px] font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(220,38,38,0.4)]">UPGRADE
-                        NOW</button>
+                        class="w-full py-3 rounded bg-[#dc2626] hover:bg-[#ef4444] text-white text-[11px] font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(220,38,38,0.4)]">UPGRADE NOW</button>
                 </div>
 
                 <!-- 4. Studio -->
-                <div
-                    class="bg-[#18181d] border border-white/10 rounded-xl p-5 flex flex-col hover:border-white/30 transition-all shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 flex flex-col hover:border-white/30 transition-all shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
                     <h3 class="text-white/80 font-semibold tracking-wider text-sm mb-1 uppercase">Studio</h3>
                     <div class="flex items-end gap-1 mb-4 border-b border-white/5 pb-4">
                         <span class="text-3xl font-bold text-white">$139</span>
                         <span class="text-[10px] text-white/40 mb-1.5">/mo (Beta)</span>
                     </div>
-                    <ul class="text-[12px] text-white/60 mb-6 flex-1 space-y-3 pt-1">
-                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80" fill="none"
-                                stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M5 13l4 4L19 7"></path>
-                            </svg><span class="text-white font-medium">9,000 Credits</span></li>
-                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80" fill="none"
-                                stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M5 13l4 4L19 7"></path>
-                            </svg>450 Standard Renders</li>
-                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80" fill="none"
-                                stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M5 13l4 4L19 7"></path>
-                            </svg>Team API Access</li>
+                    <ul class="text-[12px] text-white/60 mb-6 flex-1 space-y-2.5 pt-1">
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span class="text-white font-medium">9,000 Monthly Credits</span></li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span class="text-white font-semibold">4K Resolution Unlocked</span></li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>5 Devices Simultaneously</li>
+                        <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Commercial License</li>
+                        <li class="flex items-center gap-2 text-emerald-400/70 font-medium text-[11px]" data-plan-cost="studio">2K ≈ $0.31</li>
                     </ul>
                     <button onclick="window.openCheckout(LS_VARIANTS.STUDIO)"
                         class="w-full py-2.5 rounded bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[11px] font-bold tracking-widest transition-all">SUBSCRIBE</button>
@@ -838,45 +804,6 @@
     <script src="i18n.js?v=1.2.0"></script>
     <script src="app.js?v=1.3.0"></script>
     <!-- Referral Modal (邀請彈窗) -->
-    <div id="referral-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm hidden animate-fade-in">
-        <div class="bg-[#121214] border border-white/10 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div class="px-6 py-5 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
-                <h3 class="text-white font-bold tracking-widest text-sm uppercase">🎟️ 邀請獎勵計畫</h3>
-                <button onclick="document.getElementById('referral-modal').classList.add('hidden')" class="text-white/40 hover:text-white transition-colors">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-            </div>
-            
-            <div class="p-6 space-y-8">
-                <!-- 區塊 1: 我的邀請碼 -->
-                <div class="space-y-3">
-                    <p class="text-[10px] text-white/40 font-bold uppercase tracking-[0.2em]">分享您的邀請碼</p>
-                    <div class="flex gap-2">
-                        <div id="my-referral-code" class="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white font-mono font-bold tracking-[0.3em] text-center text-lg">
-                            ------
-                        </div>
-                        <button id="btn-copy-code" class="bg-white/10 hover:bg-white text-white hover:text-black px-4 rounded-lg transition-all active:scale-95 font-bold text-xs">COPY</button>
-                    </div>
-                    <p class="text-[10px] text-amber-400/60 leading-relaxed">好友註冊並算圖後，您將獲贈 <span class="text-amber-300 font-bold">200 點</span>，好友獲贈 <span class="text-amber-300 font-bold">50 點</span>。</p>
-                </div>
-
-                <div class="h-[1px] bg-white/5 w-full"></div>
-
-                <!-- 區塊 2: 輸入邀請碼 -->
-                <div class="space-y-4" id="redeem-section">
-                    <p class="text-[10px] text-white/40 font-bold uppercase tracking-[0.2em]">輸入好友邀請碼</p>
-                    <input type="text" id="input-referral-code" maxlength="6" class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white font-mono font-bold tracking-[0.3em] text-center focus:outline-none focus:border-amber-500/50 transition-colors uppercase placeholder:text-white/10" placeholder="邀請碼">
-                    <button id="btn-redeem-code" class="w-full py-3.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold rounded-lg shadow-lg active:scale-[0.98] transition-all text-xs tracking-widest uppercase">立即兌換獎勵</button>
-                </div>
-
-                <div id="redeem-success-msg" class="hidden py-4 text-center space-y-2">
-                    <div class="text-green-400 text-2xl">✓</div>
-                    <p class="text-xs text-white/80 font-medium">獎勵已成功發放至您的帳戶</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- 更新狀態 Toast（update_latest / update_error / update_downloading） -->
     <div id="update-toast"
         class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-5 py-3 rounded-2xl bg-[#18181b]/95 border border-white/10 shadow-2xl backdrop-blur-md transition-all duration-500 opacity-0 translate-y-4 pointer-events-none">
@@ -909,6 +836,36 @@
         <div class="flex flex-col">
             <span class="text-[13px] font-semibold text-white">歡迎加入 LoamLab！</span>
             <span class="text-[11px] text-white/50">已贈送 <span class="text-amber-400 font-bold">60 點</span>，可渲染 3 張 2K 圖，立即試試！</span>
+        </div>
+    </div>
+
+    <!-- Feedback Modal -->
+    <div id="feedback-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div class="feedback-modal-box scale-95 opacity-0 transition-all duration-200 w-80 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl p-5 flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+                <span class="text-[13px] font-semibold text-white/80 tracking-wide" data-i18n="feedback_modal_title">意見反饋</span>
+                <button id="feedback-cancel-btn" class="text-white/30 hover:text-white/60 transition-colors text-lg leading-none">✕</button>
+            </div>
+            <div class="flex flex-col gap-1.5">
+                <label class="text-[10px] text-white/40 uppercase tracking-widest" data-i18n="feedback_modal_type">反饋類型</label>
+                <select id="feedback-type-select" class="bg-white/5 border border-white/10 rounded-lg text-white/70 text-[12px] px-3 py-2 focus:outline-none focus:border-white/25">
+                    <option value="feature" data-i18n="feedback_type_feature">功能建議</option>
+                    <option value="quality" data-i18n="feedback_type_quality">渲染品質</option>
+                    <option value="bug" data-i18n="feedback_type_bug">Bug 回報</option>
+                    <option value="other" data-i18n="feedback_type_other">其他</option>
+                </select>
+            </div>
+            <div class="flex flex-col gap-1.5">
+                <textarea id="feedback-content-input" rows="4"
+                    class="bg-white/5 border border-white/10 rounded-lg text-white/70 text-[12px] px-3 py-2 resize-none focus:outline-none focus:border-white/25 placeholder-white/20"
+                    data-i18n="feedback_placeholder" placeholder="請描述您的問題或建議..."></textarea>
+            </div>
+            <div class="flex gap-2 justify-end">
+                <button id="feedback-cancel-btn2" onclick="closeFeedbackModal()"
+                    class="text-[11px] px-3 py-1.5 rounded-lg border border-white/10 text-white/40 hover:text-white/60 hover:border-white/20 transition-all" data-i18n="feedback_cancel">取消</button>
+                <button id="feedback-send-btn" onclick="sendFeedbackModal()"
+                    class="text-[11px] px-3 py-1.5 rounded-lg bg-rose-500/20 border border-rose-500/30 text-rose-300 hover:bg-rose-500/30 transition-all" data-i18n="feedback_send">送出</button>
+            </div>
         </div>
     </div>
 

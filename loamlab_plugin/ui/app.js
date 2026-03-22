@@ -62,22 +62,24 @@ function setActiveTool(n) {
         rebuildMaterialTags();
         if (promptInput) promptInput.placeholder = (UI_LANG[currentLang] || UI_LANG['en-US'])['prompt_ph'];
     } else if (n === 2) {
-        if (titleEl) titleEl.textContent = '家具換裝 Furniture Swap';
+        const lang2 = UI_LANG[currentLang] || UI_LANG['en-US'];
+        if (titleEl) titleEl.textContent = lang2['tool_furniture'];
         if (hintBanner) {
             hintBanner.className = 'w-full rounded-lg px-3 py-2.5 text-[11px] leading-relaxed bg-amber-500/10 border border-amber-500/20 text-amber-200/70';
-            hintBanner.textContent = '💡 在 SU 中用方塊代理家具位置，選好場景後渲染，AI 將依家具類型替換方塊。渲染完成後可點擊卡片上的 SWAP 按鈕進行局部替換。';
+            hintBanner.textContent = lang2['tool_furniture_hint'];
         }
         rebuildFurnitureTags();
-        if (promptInput) promptInput.placeholder = 'e.g. Nordic style, warm wood tone, minimalist...';
+        if (promptInput) promptInput.placeholder = lang2['tool_furniture_ph'];
     } else if (n === 3) {
-        if (titleEl) titleEl.textContent = '九宮格鏡頭 9-Grid Shots';
+        const lang3 = UI_LANG[currentLang] || UI_LANG['en-US'];
+        if (titleEl) titleEl.textContent = lang3['tool_multi_angle'];
         if (hintBanner) {
             hintBanner.className = 'w-full rounded-lg px-3 py-2.5 text-[11px] leading-relaxed bg-blue-500/10 border border-blue-500/20 text-blue-200/70';
-            hintBanner.textContent = '📸 AI 輸出一張包含 9 個不同鏡頭角度的九宮格構圖大圖。選擇鏡頭風格後渲染即可。';
+            hintBanner.textContent = lang3['tool_ninegrid_hint'];
         }
         if (shotStyleSelector) shotStyleSelector.classList.remove('hidden');
         if (materialTagsDiv) materialTagsDiv.classList.add('hidden');
-        if (promptInput) promptInput.placeholder = 'e.g. high-end residential, warm sunset mood...';
+        if (promptInput) promptInput.placeholder = lang3['tool_ninegrid_ph'];
     }
 
     updateCostPreview();
@@ -173,7 +175,8 @@ function startRenderTimer() {
     if (renderTimer) clearInterval(renderTimer);
     currentPct = 0;
     showProgressBar();
-    updateProgressUI('Analyzing...', currentPct);
+    const progressLang = UI_LANG[currentLang] || UI_LANG['en-US'];
+    updateProgressUI(progressLang['progress_analyzing'], currentPct);
 
     renderTimer = setInterval(() => {
         if (currentPct < 50) {
@@ -184,10 +187,11 @@ function startRenderTimer() {
             currentPct += Math.random() * 0.1;
         }
 
-        let msg = 'Uploading...';
-        if (currentPct > 15) msg = 'AI Rendering (Usually 60~120s)...';
-        if (currentPct > 60) msg = 'Refining Details...';
-        if (currentPct > 85) msg = 'Almost There...';
+        const pl = UI_LANG[currentLang] || UI_LANG['en-US'];
+        let msg = pl['progress_uploading'];
+        if (currentPct > 15) msg = pl['progress_rendering'];
+        if (currentPct > 60) msg = pl['progress_refining'];
+        if (currentPct > 85) msg = pl['progress_almost'];
 
         updateProgressUI(msg, Math.floor(currentPct));
     }, 800);
@@ -195,6 +199,12 @@ function startRenderTimer() {
 
 function stopRenderTimer() {
     if (renderTimer) clearInterval(renderTimer);
+}
+
+// 場景名稱翻譯：Ruby 傳來的固定中文 key 對應 i18n
+function translateSceneName(name) {
+    if (name === '當前即時視角') return (UI_LANG[currentLang] || UI_LANG['en-US'])['live_viewport_scene'] || name;
+    return name;
 }
 
 // 全域方法，用以接收來自 Ruby 的 JSON 資料
@@ -319,7 +329,7 @@ window.receiveFromRuby = function (data) {
                             <img src="${item.image_data}" class="w-full h-full object-cover opacity-60 transition-opacity duration-500 group-hover/card:opacity-100">
                         </div>
                         <div class="px-4 py-3 flex justify-between items-center bg-black/50 backdrop-blur-xl absolute bottom-0 w-full z-20 border-t border-white/[0.05]">
-                            <span class="text-[12px] font-semibold text-white/90 tracking-widest truncate pr-2 drop-shadow-md">${item.scene}</span>
+                            <span class="text-[12px] font-semibold text-white/90 tracking-widest truncate pr-2 drop-shadow-md" data-scene="${item.scene}">${translateSceneName(item.scene)}</span>
                             <span class="text-[9px] text-white bg-[#dc2626] px-2.5 py-1 rounded shadow-md flex-shrink-0 font-bold uppercase tracking-widest">Ready</span>
                         </div>
                     `;
@@ -373,7 +383,7 @@ window.receiveFromRuby = function (data) {
                 // 尋找卡片內的標題是不是符合
                 const cards = gridEl.querySelectorAll('div > span.truncate');
                 cards.forEach(span => {
-                    if (span.textContent === targetScene) {
+                    if ((span.getAttribute('data-scene') || span.textContent) === targetScene) {
                         const card = span.closest('.flex-col');
                         const imgContainer = card.querySelector('div.aspect-video');
                         if (imgContainer) {
@@ -435,6 +445,55 @@ window.receiveFromRuby = function (data) {
                                 };
                                 btnContainer.appendChild(swapBtn);
                             }
+
+                            // SHARE 按鈕（已登入且有邀請碼才顯示）
+                            if (window.loamlabUserReferralCode) {
+                                const shareBtn = document.createElement('button');
+                                shareBtn.className = "text-[9px] px-2.5 py-1 rounded border border-green-500/30 text-green-300/80 hover:bg-green-500/20 hover:text-green-200 hover:border-green-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm";
+                                shareBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg> SHARE`;
+                                shareBtn.onclick = (e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(window.loamlabUserReferralCode).then(() => {
+                                        showUpdateToast(`\uD83C\uDF9F\uFE0F 邀請碼 ${window.loamlabUserReferralCode} 已複製！好友首次算圖後您得 300 點，好友得 100 點`);
+                                    });
+                                };
+                                btnContainer.appendChild(shareBtn);
+                            }
+                        }
+
+                        // Rating Bar（需有 transaction_id）
+                        const transactionId = data.transaction_id;
+                        if (transactionId) {
+                            const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
+                            const ratingBar = document.createElement('div');
+                            ratingBar.className = "rating-bar flex items-center gap-1.5 mt-1.5 ml-0.5";
+                            ratingBar.innerHTML = `
+                                <span class="text-[9px] text-white/30 mr-0.5">${lang['feedback_rate_q'] || 'How was this?'}</span>
+                                <button class="rate-up text-[9px] px-2 py-0.5 rounded border border-white/15 text-white/50 hover:border-green-500/40 hover:text-green-300 transition-all">👍 ${lang['feedback_thumbs_up'] || 'Great'}</button>
+                                <button class="rate-down text-[9px] px-2 py-0.5 rounded border border-white/15 text-white/50 hover:border-rose-500/40 hover:text-rose-300 transition-all">👎 ${lang['feedback_thumbs_down'] || 'Not satisfied'}</button>
+                            `;
+                            const submitRating = (rating, tags = []) => {
+                                submitFeedback({ type: 'rating', rating, tags, transaction_id: transactionId });
+                                ratingBar.innerHTML = `<span class="text-[9px] text-green-400/60">${lang['feedback_thanks'] || 'Thanks!'}</span>`;
+                            };
+                            ratingBar.querySelector('.rate-up').onclick = () => submitRating(5);
+                            ratingBar.querySelector('.rate-down').onclick = () => {
+                                ratingBar.innerHTML = `
+                                    <div class="flex flex-wrap gap-1.5 items-center">
+                                        <span class="text-[9px] text-white/40">${lang['feedback_why'] || 'What went wrong?'}</span>
+                                        <label class="flex items-center gap-1 text-[9px] text-white/50 cursor-pointer"><input type="checkbox" class="tag-cb" value="style_wrong"> ${lang['feedback_tag_style'] || 'Wrong style'}</label>
+                                        <label class="flex items-center gap-1 text-[9px] text-white/50 cursor-pointer"><input type="checkbox" class="tag-cb" value="detail_missing"> ${lang['feedback_tag_detail'] || 'Missing details'}</label>
+                                        <label class="flex items-center gap-1 text-[9px] text-white/50 cursor-pointer"><input type="checkbox" class="tag-cb" value="color_off"> ${lang['feedback_tag_color'] || 'Color issues'}</label>
+                                        <label class="flex items-center gap-1 text-[9px] text-white/50 cursor-pointer"><input type="checkbox" class="tag-cb" value="other"> ${lang['feedback_tag_other'] || 'Other'}</label>
+                                        <button class="tag-submit text-[9px] px-2 py-0.5 rounded bg-rose-500/15 border border-rose-500/25 text-rose-300 hover:bg-rose-500/25 transition-all">${lang['feedback_submit'] || 'Submit'}</button>
+                                    </div>
+                                `;
+                                ratingBar.querySelector('.tag-submit').onclick = () => {
+                                    const selectedTags = [...ratingBar.querySelectorAll('.tag-cb:checked')].map(cb => cb.value);
+                                    submitRating(1, selectedTags);
+                                };
+                            };
+                            card.appendChild(ratingBar);
                         }
                     }
                 });
@@ -442,6 +501,10 @@ window.receiveFromRuby = function (data) {
         }
     } else if (data.status === 'render_failed') {
         finishedScenesCount++;
+        // 解析度方案限制 → 自動開啟定價牆
+        if (data.error === 'resolution_limit') {
+            if (typeof openPricingModal === 'function') openPricingModal();
+        }
         const langObj5 = UI_LANG[currentLang];
         let failMsg = data.message || langObj5['render_failed'] || 'Render Failed';
         if (data.points_refunded) {
@@ -451,6 +514,23 @@ window.receiveFromRuby = function (data) {
         statusText.classList.replace('text-green-500', 'text-[#dc2626]');
         statusText.classList.replace('text-amber-400', 'text-[#dc2626]');
         statusText.classList.replace('text-red-400', 'text-[#dc2626]');
+
+        // 錯誤回報按鈕（複用或新建）
+        let reportBtn = document.getElementById('render-error-report-btn');
+        if (!reportBtn) {
+            reportBtn = document.createElement('button');
+            reportBtn.id = 'render-error-report-btn';
+            reportBtn.className = "text-[9px] mt-1 px-2 py-0.5 rounded border border-white/15 text-white/40 hover:border-rose-500/40 hover:text-rose-300 transition-all";
+            statusText.parentNode.insertBefore(reportBtn, statusText.nextSibling);
+        }
+        reportBtn.textContent = langObj5['feedback_report_error'] || 'Report Issue';
+        reportBtn.disabled = false;
+        reportBtn.classList.remove('hidden');
+        reportBtn.onclick = () => {
+            submitFeedback({ type: 'error_report', content: failMsg, metadata: { error_code: data.error || 'unknown' } });
+            reportBtn.textContent = langObj5['feedback_reported'] || 'Reported, thanks';
+            reportBtn.disabled = true;
+        };
 
         if (finishedScenesCount >= totalScenesToRender) {
             finalizeRenderUI();
@@ -735,7 +815,7 @@ if (btnSync) {
             const gridEl = document.getElementById('preview-grid');
             if (placeholderEl && (!gridEl || gridEl.classList.contains('hidden'))) {
                 const textSpan = placeholderEl.querySelector('#placeholder-text');
-                if (textSpan) textSpan.textContent = '擷取即時視角中...';
+                if (textSpan) textSpan.textContent = (UI_LANG[currentLang] || UI_LANG['en-US'])['syncing_viewport'];
             }
 
             setTimeout(() => {
@@ -778,6 +858,7 @@ const pricingModalContent = document.getElementById('pricing-modal-content');
 
 function openPricingModal() {
     pricingModal.classList.remove('hidden');
+    updatePlanCostLabels(currentLang);
     setTimeout(() => {
         pricingModal.classList.remove('opacity-0');
         pricingModalContent.classList.remove('scale-95');
@@ -798,15 +879,90 @@ let authPollTimer = null;
 let API_BASE = "https://loamlab-camera-backend.vercel.app";
 
 // =========================================================
+// 反饋系統 (Feedback System)
+// =========================================================
+function submitFeedback({ type, rating, content, tags, transaction_id, metadata }) {
+    const body = { type, rating, content, tags, transaction_id, metadata };
+    const headers = { 'Content-Type': 'application/json' };
+    if (window.loamlabUserEmail) headers['X-User-Email'] = window.loamlabUserEmail;
+    fetch(`${API_BASE}/api/feedback`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body)
+    }).catch(e => console.warn('[LoamLab Feedback]', e));
+}
+
+function openFeedbackModal() {
+    const modal = document.getElementById('feedback-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.querySelector('.feedback-modal-box')?.classList.remove('scale-95', 'opacity-0'), 10);
+    }
+}
+
+function closeFeedbackModal() {
+    const modal = document.getElementById('feedback-modal');
+    if (!modal) return;
+    const box = modal.querySelector('.feedback-modal-box');
+    if (box) { box.classList.add('scale-95', 'opacity-0'); }
+    setTimeout(() => modal.classList.add('hidden'), 200);
+}
+
+window.openFeedbackModal = openFeedbackModal;
+window.closeFeedbackModal = closeFeedbackModal;
+
+window.sendFeedbackModal = function() {
+    const modal = document.getElementById('feedback-modal');
+    if (!modal) return;
+    const type = modal.querySelector('#feedback-type-select')?.value || 'general';
+    const content = modal.querySelector('#feedback-content-input')?.value?.trim() || '';
+    if (!content) return;
+    submitFeedback({ type, content });
+    const box = modal.querySelector('.feedback-modal-box');
+    if (box) box.innerHTML = `<div class="text-center py-8 text-white/60 text-sm">${(UI_LANG[currentLang] || UI_LANG['en-US'])['feedback_sent'] || 'Thank you!'}</div>`;
+    setTimeout(closeFeedbackModal, 1500);
+};
+
+// =========================================================
 // LemonSqueezy Variant IDs & Beta 折扣碼
 // ★ 請至 LemonSqueezy 後台 Products > Variants 取得真實 ID 後更新此處
+// =========================================================
+// 幣種成本參考（各方案每張 2K 渲染成本）
+// =========================================================
+const COST_CURRENCY = {
+    'zh-TW': { symbol: 'NT$', rate: 33 },
+    'zh-CN': { symbol: '¥', rate: 7.3 },
+    'en-US': { symbol: '$', rate: 1 },
+    'es-ES': { symbol: '€', rate: 0.93 },
+    'pt-BR': { symbol: 'R$', rate: 5.1 },
+    'ja-JP': { symbol: '¥', rate: 150 },
+};
+// 各方案 2K 渲染成本（USD）：方案金額 ÷ Credits 數量 × 20 pts
+const PLAN_RENDER_COST_USD = {
+    topup: 1.80,  // $18 / 200 pts × 20
+    starter: 1.60,  // $24 / 300 pts × 20
+    pro: 0.52,  // $52 / 2000 pts × 20
+    studio: 0.31,  // $139 / 9000 pts × 20
+};
+
+function updatePlanCostLabels(lang) {
+    const currency = COST_CURRENCY[lang] || COST_CURRENCY['en-US'];
+    document.querySelectorAll('[data-plan-cost]').forEach(el => {
+        const plan = el.getAttribute('data-plan-cost');
+        const usd = PLAN_RENDER_COST_USD[plan];
+        if (!usd) return;
+        const localCost = (usd * currency.rate).toFixed(currency.rate >= 10 ? 0 : 2);
+        el.textContent = `2K ≈ ${currency.symbol}${localCost}`;
+    });
+}
+
 // ★ webhook.js 的 VARIANT_* 常數必須與此同步
 // =========================================================
 const LS_VARIANTS = {
-    TOPUP:   99999,   // ← 替換為 Top-up Variant ID
-    STARTER: 12345,   // ← 替換為 Starter Variant ID
-    PRO:     12346,   // ← 替換為 Pro Variant ID
-    STUDIO:  12347    // ← 替換為 Studio Variant ID
+    TOPUP: 1432023,   // ← 替換為 Top-up Variant ID
+    STARTER: 1432194,   // ← 替換為 Starter Variant ID
+    PRO: 1432198,   // ← 替換為 Pro Variant ID
+    STUDIO: 1432205    // ← 替換為 Studio Variant ID
 };
 const BETA_DISCOUNT_CODE = 'LOAM_BETA_30';
 
@@ -836,6 +992,7 @@ window.updateLoginUI = function (email, points, refCode, referredBy) {
         }
 
         if (btnRef) btnRef.classList.remove('hidden');
+        window.loamlabUserReferralCode = refCode || null;
         if (refCode) {
             const domMyCode = document.getElementById('my-referral-code');
             if (domMyCode) domMyCode.textContent = refCode;
@@ -886,7 +1043,16 @@ window.fetchUserPoints = function (email) {
             console.log('[LoamLab] user data:', data);
             if (data && data.points !== undefined) {
                 window.updateLoginUI(email, data.points, data.referral_code, data.referred_by);
-                if (data.is_new_user) showWelcomeToast();
+                if (data.is_new_user) {
+                    showWelcomeToast();
+                    // 新用戶且尚未綁定邀請碼 → 1.5 秒後自動開 modal，提示輸入好友邀請碼
+                    if (!data.referred_by) {
+                        setTimeout(() => {
+                            openReferralModal();
+                            document.getElementById('input-referral-code')?.focus();
+                        }, 1500);
+                    }
+                }
             } else {
                 alert('[LoamLab] /api/user 回傳了資料但沒有 points 欄位: ' + JSON.stringify(data));
             }
@@ -969,6 +1135,27 @@ window.openCheckout = function (variantId) {
     } else {
         window.open(finalUrl, '_blank');
     }
+
+    // 支付後輪詢：偵測到點數增加即更新顯示
+    const balanceBefore = parseInt(document.getElementById('point-balance').textContent) || 0;
+    let pollCount = 0;
+    const paymentPollTimer = setInterval(async () => {
+        pollCount++;
+        if (pollCount > 100) { clearInterval(paymentPollTimer); return; }
+        try {
+            const r = await fetch(`${API_BASE}/api/user`, {
+                headers: { 'X-User-Email': window.loamlabUserEmail }
+            });
+            const d = await r.json();
+            if (d.points > balanceBefore) {
+                clearInterval(paymentPollTimer);
+                const pb = document.getElementById('point-balance');
+                pb.textContent = d.points;
+                pb.style.color = '#4ade80';
+                setTimeout(() => { pb.style.color = ''; }, 2000);
+            }
+        } catch(e) {}
+    }, 3000);
 }
 
 
@@ -1020,8 +1207,13 @@ function startOAuthFlow() {
                 if (window.sketchup) {
                     sketchup.save_email(data.email);
                 }
-                window.fetchUserPoints(data.email); // 讓點數、邀請碼一併抓取刷新
+                window.fetchUserPoints(data.email);
                 closeLoginModal();
+            } else if (data.status === 'device_limit') {
+                clearInterval(authPollTimer);
+                closeLoginModal();
+                alert(`Device limit reached.\n${data.message}\n\nUpgrade your plan to connect more devices.`);
+                if (typeof openPricingModal === 'function') openPricingModal();
             }
         } catch (e) {
             console.error("Polling error:", e);

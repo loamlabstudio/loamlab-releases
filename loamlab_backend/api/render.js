@@ -8,7 +8,7 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Email');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Email, X-Plugin-Version');
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
@@ -32,11 +32,12 @@ export default async function handler(req, res) {
         return res.status(500).json({ code: -1, msg: `伺服器設定不完整：Vercel 說他找不到這幾把鑰匙 ${missing.join(', ')}。請確認已 Redeploy 過。` });
     }
 
-    // 從 Header 取得 SketchUp 用戶信箱
+    // 從 Header 取得 SketchUp 用戶信箱與插件版本
     const userEmail = req.headers['x-user-email'];
     if (!userEmail) {
         return res.status(401).json({ code: -1, msg: '請求被拒絕：未提供使用者信箱 (X-User-Email)' });
     }
+    const pluginVersion = req.headers['x-plugin-version'] || null;
 
     // 建立 Supabase 資料庫連線
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -55,10 +56,10 @@ export default async function handler(req, res) {
     if (resVal.includes('4k')) cost = 25;
     else if (resVal.includes('2k')) cost = 20;
 
-    // 2. 查詢帳戶點數
+    // 2. 查詢帳戶點數與方案等級
     let { data: user, error: dbErr } = await supabase
         .from('users')
-        .select('points, lifetime_points')
+        .select('points, lifetime_points, referred_by, referral_rewarded, subscription_plan')
         .eq('email', userEmail)
         .single();
 
@@ -85,6 +86,19 @@ export default async function handler(req, res) {
 
     if (!user) {
         return res.status(403).json({ code: -1, msg: '帳戶不存在且自動註冊失敗。' });
+    }
+
+    // 解析度特權檢查：Starter / Top-up / 無訂閱 → 最高 2K
+    const PLAN_MAX_RES = { starter: '2k', pro: '4k', studio: '4k' };
+    const userPlan = user.subscription_plan || null;
+    const maxRes = PLAN_MAX_RES[userPlan] ?? '2k';
+    if (resVal.includes('4k') && maxRes === '2k') {
+        return res.status(403).json({
+            code: -1,
+            error: 'resolution_limit',
+            msg: '4K renders require a Pro or Studio plan. Please upgrade.',
+            points_refunded: false
+        });
     }
 
     let monthlyPoints = user.points || 0;
@@ -114,13 +128,16 @@ export default async function handler(req, res) {
     }
 
     // ★ 修復：用 try/catch 包裹交易紀錄，避免因 transactions 表不存在而崩潰主流程
+    let transactionId = null;
     try {
         const txType = cost === 25 ? 'RENDER_4K' : (cost === 20 ? 'RENDER_2K' : 'RENDER_1K');
-        await supabase.from('transactions').insert([{
+        const { data: txData } = await supabase.from('transactions').insert([{
             user_email: userEmail,
             amount: -cost,
-            transaction_type: txType
-        }]);
+            transaction_type: txType,
+            metadata: { plugin_version: pluginVersion, resolution: resVal }
+        }]).select('id').single();
+        if (txData) transactionId = txData.id;
     } catch (txErr) {
         console.warn('[交易日誌] 紀錄失敗（不中斷主流程）:', txErr.message);
     }
@@ -188,7 +205,34 @@ export default async function handler(req, res) {
 
         const finalUrl = parseUrlFromSse(sseText);
         if (finalUrl) {
-            return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: monthlyPoints + lifetimePoints });
+            // Referral 首次算圖獎勵：B +100 / A +300，發放後設 referral_rewarded = true 防重複
+            let referralBonusB = 0;
+            try {
+                if (user.referred_by && user.referral_rewarded === false) {
+                    const REWARD_B = 100;
+                    const REWARD_A = 300;
+                    await supabase.from('users')
+                        .update({ lifetime_points: lifetimePoints + REWARD_B, referral_rewarded: true })
+                        .eq('email', userEmail);
+                    referralBonusB = REWARD_B;
+                    const { data: inviter } = await supabase.from('users')
+                        .select('lifetime_points').eq('email', user.referred_by).single();
+                    if (inviter) {
+                        await supabase.from('users')
+                            .update({ lifetime_points: (inviter.lifetime_points || 0) + REWARD_A })
+                            .eq('email', user.referred_by);
+                    }
+                    try {
+                        await supabase.from('transactions').insert([
+                            { user_email: userEmail, amount: REWARD_B, transaction_type: 'REFERRAL_REWARD_B' },
+                            { user_email: user.referred_by, amount: REWARD_A, transaction_type: 'REFERRAL_REWARD_A' }
+                        ]);
+                    } catch(e) {}
+                }
+            } catch (refErr) {
+                console.warn('[Referral] 獎勵發放失敗（不影響渲染結果）:', refErr.message);
+            }
+            return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: monthlyPoints + lifetimePoints + referralBonusB, transaction_id: transactionId });
         } else {
             await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
             try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL' }]); } catch(e) {}

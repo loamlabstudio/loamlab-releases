@@ -413,7 +413,7 @@ module LoamLab
             })
 
             req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
-            req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email }
+            req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
             req.body = request_body
 
             captured_scene = scene_name
@@ -421,8 +421,8 @@ module LoamLab
               begin
                 data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
                 result = (data['code'] == 0 && data['url']) ?
-                  { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'] } :
-                  { status: 'render_failed', message: data['msg'] || "HTTP #{response.status_code}", points_refunded: data['points_refunded'] }
+                  { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
+                  { status: 'render_failed', message: data['msg'] || "HTTP #{response.status_code}", points_refunded: data['points_refunded'], error: data['error'] }
               rescue => e
                 result = { status: 'render_failed', message: "解析失敗: #{e.message}" }
               end

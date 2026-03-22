@@ -4,6 +4,7 @@
   "description": "LoamLab Serverless Proxy for Coze with Point Deduction",
   "dependencies": {
     "@supabase/supabase-js": "^2.99.2",
-    "node-fetch": "^2.6.7"
+    "node-fetch": "^2.6.7",
+    "nodemailer": "^6.9.9"
   }
 }

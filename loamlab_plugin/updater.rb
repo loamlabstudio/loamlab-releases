@@ -55,9 +55,11 @@ module LoamLabPlugin
             tmp = (ENV['TEMP'] || ENV['TMP'] || 'C:/Temp').gsub('\\', '/')
             zip_path = "#{tmp}/loamlab_update_#{Time.now.to_i}.zip"
 
-            # 下載（open-uri 自動處理 redirect）
-            require 'open-uri'
-            File.open(zip_path, 'wb') { |f| f.write URI.open(url, 'rb').read }
+            # 用 PowerShell 下載（原生處理 HTTPS 302 redirect + SSL，避免 Ruby open-uri 相容性問題）
+            zip_win_dl = zip_path.gsub('/', '\\')
+            dl_ok = system("powershell -ExecutionPolicy Bypass -Command " \
+                           "\"Invoke-WebRequest -Uri '#{url}' -OutFile '#{zip_win_dl}'\"")
+            raise '下載失敗，請稍後再試或手動下載' unless dl_ok && File.exist?(zip_path)
             puts "[Updater] 下載完成：#{zip_path}"
 
             # 插件根目錄（loamlab_plugin/ 的上一層 = SketchUp Plugins/）

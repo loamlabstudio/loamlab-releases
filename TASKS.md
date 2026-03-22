@@ -32,8 +32,8 @@
 
 > 所有 `[DONE]` 的任務在這裡等待 merge 到 main，然後統一 build + release。
 
-- [x] T04 — 邀請碼/裂變重構（main）— 待 deploy `vercel --prod` + SketchUp 熱重載驗收
-- [x] T05 — 反饋系統（main）— 待：① Supabase 執行新 SQL 段落 ② `vercel --prod` ③ SketchUp 熱重載驗收
+- [x] T04 — 邀請碼/裂變重構（main）— ✅ 已部署 vercel --prod（2026-03-22）
+- [x] T05 — 反饋系統（main）— ✅ 已部署 vercel --prod（2026-03-22）；Gmail 通知已上線；待：① Supabase 執行新 SQL 段落 ② SketchUp 熱重載驗收
 
 ---
 

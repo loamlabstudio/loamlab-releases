@@ -111,7 +111,7 @@ Write-Host "   Title: LoamLab v$version" -ForegroundColor White
 Write-Host "   Notes: $notes" -ForegroundColor White
 Write-Host "   File:  $OUT_RBZ" -ForegroundColor White
 Write-Host ""
-Write-Host "   ⚠️  確保 GitHub Release 的 .rbz 上傳完成後，auto-update 才會生效" -ForegroundColor Yellow
+Write-Host "   [!] 確保 GitHub Release 的 .rbz 上傳完成後，auto-update 才會生效" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "=============================================" -ForegroundColor Green
 Write-Host "  Release v$version 準備完成！" -ForegroundColor Green

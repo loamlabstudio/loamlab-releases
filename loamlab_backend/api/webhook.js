@@ -7,7 +7,7 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY || ''; // 應該使用 Service
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // LemonSqueezy 的自訂 Webhook Secret (用來驗證是不是真的從官方發送過來的)
-const WEBHOOK_SECRET = process.env.LEMON_WEBHOOK_SECRET || 'your_lemon_squeezy_secret';
+const WEBHOOK_SECRET = process.env.LEMONSQUEEZY_WEBHOOK_SECRET || process.env.LEMON_WEBHOOK_SECRET || '';
 
 // Vercel 設定：停用自動解析 JSON 格式，以便 getRawBody 讀取原始 HMAC 簽章 Buffer
 export const config = {
@@ -102,21 +102,24 @@ export default async function handler(req, res) {
 
             if (pointsToAdd > 0) {
                 // 先查詢使用者是否已存在，以及他背後的綁定關聯
-                const { data: user, error: userError } = await supabase
+                const { data: user } = await supabase
                     .from('users')
-                    .select('points, lifetime_points')
+                    .select('points, lifetime_points, referred_by, referral_rewarded')
                     .eq('email', customerEmail)
                     .single();
 
                 if (user) {
                     // 雙軌錢包：訂閱方案刷新 points（月費），單購累加 lifetime_points（永久）
+                    // 升級訂閱時，將舊月費剩餘點數 carry over 到 lifetime_points，不讓用戶損失
+                    let carryOver = isSubscription ? (user.points || 0) : 0;
                     let newPoints = isSubscription ? pointsToAdd : user.points;
-                    let newLifetimePoints = (user.lifetime_points || 0) + (isSubscription ? 0 : pointsToAdd);
+                    let newLifetimePoints = (user.lifetime_points || 0) + carryOver + (isSubscription ? 0 : pointsToAdd);
 
                     const updatePayload = {
                         points: newPoints,
                         lifetime_points: newLifetimePoints,
                         is_beta_tester: true,
+                        last_topup_at: new Date().toISOString(),
                     };
                     // Top-up 不覆蓋現有訂閱等級；訂閱升級時才更新
                     if (planName !== null) updatePayload.subscription_plan = planName;
@@ -136,6 +139,11 @@ export default async function handler(req, res) {
 
                     console.log(`[🚀金流] 成功為 ${customerEmail} 充值！月費餘額：${newPoints}, 永久餘額: ${newLifetimePoints}`);
 
+                    // Referral 200+200：首次訂閱購買時觸發
+                    if (isSubscription && user.referred_by && !user.referral_rewarded) {
+                        await triggerReferralReward(customerEmail, user.referred_by);
+                    }
+
                 } else {
                     // 不存在 -> 直接建立新使用者並給予點數
                     let initPoints = isSubscription ? pointsToAdd : 0;
@@ -147,7 +155,8 @@ export default async function handler(req, res) {
                             points: initPoints,
                             lifetime_points: initLifetime,
                             is_beta_tester: true,
-                            subscription_plan: planName
+                            subscription_plan: planName,
+                            last_topup_at: new Date().toISOString(),
                         }]);
 
                     // 紀錄充值交易（含 order_id 防重複）
@@ -158,7 +167,54 @@ export default async function handler(req, res) {
                         order_id: orderId || null
                     }]);
                     console.log(`[🚀金流] 新建用戶 ${customerEmail} 並充值！月費 ${initPoints}, 永久 ${initLifetime} 點。`);
+                    // 新建用戶無 referred_by，不觸發 referral
                 }
+            }
+
+        } else if (eventName === 'subscription_payment_success') {
+            // 訂閱月費自動續費 → 按用戶現有方案重置月費點數
+            const customerEmail = orderData.user_email;
+            const subscriptionId = event.data?.id?.toString();
+
+            if (!customerEmail) {
+                console.warn('[⚠️續費] 缺少 user_email，跳過');
+                return res.status(200).json({ status: 'success' });
+            }
+
+            // 冪等性：同一筆訂閱發票不重複充值
+            if (subscriptionId) {
+                const { data: existingTx } = await supabase
+                    .from('transactions')
+                    .select('id')
+                    .eq('order_id', `sub_${subscriptionId}`)
+                    .maybeSingle();
+                if (existingTx) {
+                    console.log(`[🔁冪等] 訂閱發票 ${subscriptionId} 已處理過，跳過`);
+                    return res.status(200).json({ ok: true, skipped: true });
+                }
+            }
+
+            // 查詢用戶現有訂閱方案
+            const { data: user } = await supabase
+                .from('users')
+                .select('subscription_plan')
+                .eq('email', customerEmail)
+                .single();
+
+            const PLAN_POINTS = { starter: 300, pro: 2000, studio: 9000 };
+            const renewPoints = PLAN_POINTS[user?.subscription_plan];
+
+            if (renewPoints) {
+                await supabase.from('users').update({ points: renewPoints, last_topup_at: new Date().toISOString() }).eq('email', customerEmail);
+                await supabase.from('transactions').insert([{
+                    user_email: customerEmail,
+                    amount: renewPoints,
+                    transaction_type: 'TOPUP_RENEWAL',
+                    order_id: subscriptionId ? `sub_${subscriptionId}` : null
+                }]);
+                console.log(`[🔄續費] ${customerEmail} 方案 ${user.subscription_plan} 重置 ${renewPoints} 點`);
+            } else {
+                console.warn(`[⚠️續費] ${customerEmail} 無訂閱方案記錄，跳過`);
             }
         }
 
@@ -168,6 +224,45 @@ export default async function handler(req, res) {
     } catch (error) {
         console.error('Webhook Error:', error);
         return res.status(500).json({ error: 'Internal Server Error' });
+    }
+}
+
+// Referral 200+200 獎勵：給 referee 和 referrer 各 +200 lifetime_points
+async function triggerReferralReward(refereeEmail, referralCode) {
+    try {
+        // 找到 referrer
+        const { data: referrer } = await supabase
+            .from('users')
+            .select('email, lifetime_points')
+            .eq('referral_code', referralCode)
+            .single();
+
+        if (!referrer) {
+            console.warn(`[邀請碼] 找不到 referrer（code: ${referralCode}）`);
+            return;
+        }
+
+        // 給 referee +200 lifetime_points，標記 referral_rewarded
+        const { data: referee } = await supabase.from('users').select('lifetime_points').eq('email', refereeEmail).single();
+        await supabase.from('users').update({
+            lifetime_points: (referee?.lifetime_points || 0) + 200,
+            referral_rewarded: true,
+        }).eq('email', refereeEmail);
+
+        // 給 referrer +200 lifetime_points
+        await supabase.from('users').update({
+            lifetime_points: (referrer.lifetime_points || 0) + 200,
+        }).eq('email', referrer.email);
+
+        // 記錄交易
+        await supabase.from('transactions').insert([
+            { user_email: refereeEmail, amount: 200, transaction_type: 'REFERRAL_BONUS_REFEREE' },
+            { user_email: referrer.email, amount: 200, transaction_type: 'REFERRAL_BONUS_REFERRER' },
+        ]);
+
+        console.log(`[🎁邀請碼] ${refereeEmail} ↔ ${referrer.email} 各 +200 lifetime_points`);
+    } catch (err) {
+        console.error('[邀請碼] 獎勵發放失敗：', err);
     }
 }
 

@@ -91,7 +91,9 @@ const UI_LANG = {
         'feedback_placeholder': '請描述您的問題或建議...',
         'feedback_cancel': '取消',
         'feedback_send': '送出',
-        'feedback_sent': '感謝您的反饋！'
+        'feedback_sent': '感謝您的反饋！',
+        'already_subscribed': '您已訂閱此方案。如需升級或管理訂閱，請至訂閱中心。',
+        'manage_subscription': '管理訂閱 →'
     },
     'en-US': {
         'title': 'LoamLab Camera',
@@ -185,7 +187,9 @@ const UI_LANG = {
         'feedback_placeholder': 'Describe your issue or suggestion...',
         'feedback_cancel': 'Cancel',
         'feedback_send': 'Send',
-        'feedback_sent': 'Thank you for your feedback!'
+        'feedback_sent': 'Thank you for your feedback!',
+        'already_subscribed': 'You are already on this plan. Visit the customer portal to manage your subscription.',
+        'manage_subscription': 'Manage Subscription →'
     },
     'zh-CN': {
         'title': '野人相机 (LoamLab Camera)',
@@ -279,7 +283,9 @@ const UI_LANG = {
         'feedback_placeholder': '请描述您的问题或建议...',
         'feedback_cancel': '取消',
         'feedback_send': '提交',
-        'feedback_sent': '感谢您的反馈！'
+        'feedback_sent': '感谢您的反馈！',
+        'already_subscribed': '您已订阅此方案。如需管理订阅，请前往订阅中心。',
+        'manage_subscription': '管理订阅 →'
     },
     'es-ES': {
         'title': 'LoamLab Cámara',
@@ -373,7 +379,9 @@ const UI_LANG = {
         'feedback_placeholder': 'Describe tu problema o sugerencia...',
         'feedback_cancel': 'Cancelar',
         'feedback_send': 'Enviar',
-        'feedback_sent': '¡Gracias por tus comentarios!'
+        'feedback_sent': '¡Gracias por tus comentarios!',
+        'already_subscribed': 'Ya estás suscrito a este plan. Visita el portal de clientes para gestionar tu suscripción.',
+        'manage_subscription': 'Gestionar Suscripción →'
     },
     'pt-BR': {
         'title': 'Câmera LoamLab',
@@ -467,7 +475,9 @@ const UI_LANG = {
         'feedback_placeholder': 'Descreva seu problema ou sugestão...',
         'feedback_cancel': 'Cancelar',
         'feedback_send': 'Enviar',
-        'feedback_sent': 'Obrigado pelo seu feedback!'
+        'feedback_sent': 'Obrigado pelo seu feedback!',
+        'already_subscribed': 'Você já assina este plano. Acesse o portal do cliente para gerenciar sua assinatura.',
+        'manage_subscription': 'Gerenciar Assinatura →'
     },
     'ja-JP': {
         'title': '野人カメラ (LoamLab Camera)',
@@ -561,7 +571,9 @@ const UI_LANG = {
         'feedback_placeholder': '問題や提案を説明してください...',
         'feedback_cancel': 'キャンセル',
         'feedback_send': '送信',
-        'feedback_sent': 'フィードバックありがとうございます！'
+        'feedback_sent': 'フィードバックありがとうございます！',
+        'already_subscribed': 'すでにこのプランをご利用中です。サブスクリプションの管理はカスタマーポータルからどうぞ。',
+        'manage_subscription': 'サブスクリプションを管理 →'
     }
 };
 

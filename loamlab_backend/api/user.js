@@ -20,7 +20,7 @@ export default async function handler(req, res) {
         const supabase = createClient(supabaseUrl, supabaseKey);
         let { data, error } = await supabase
             .from('users')
-            .select('points, lifetime_points, referral_code, referred_by')
+            .select('points, lifetime_points, referral_code, referred_by, subscription_plan, last_topup_at')
             .eq('email', email)
             .single();
 
@@ -51,6 +51,8 @@ export default async function handler(req, res) {
             code: 0,
             email,
             points: data ? (data.points || 0) + (data.lifetime_points || 0) : 0,
+            subscription_plan: data ? (data.subscription_plan || null) : null,
+            last_topup_at: data ? (data.last_topup_at || null) : null,
             referral_code: data ? data.referral_code : null,
             referred_by: data ? data.referred_by : null,
             is_new_user: error && error.code === 'PGRST116' ? true : false

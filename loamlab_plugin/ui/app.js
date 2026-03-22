@@ -856,9 +856,37 @@ const loginModalContent = document.getElementById('login-modal-content');
 const pricingModal = document.getElementById('pricing-modal');
 const pricingModalContent = document.getElementById('pricing-modal-content');
 
+function refreshPricingModalBadge() {
+    const plan = window.loamlabSubscriptionPlan;
+    const planBtnMap = { starter: 'btn-plan-starter', pro: 'btn-plan-pro', studio: 'btn-plan-studio' };
+    const originalText = { 'btn-plan-topup': 'BUY NOW', 'btn-plan-starter': 'SUBSCRIBE', 'btn-plan-pro': 'UPGRADE NOW', 'btn-plan-studio': 'SUBSCRIBE' };
+
+    // 重設所有按鈕
+    Object.entries(originalText).forEach(([id, txt]) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.disabled = false;
+        btn.textContent = txt;
+        btn.style.opacity = '';
+        btn.style.cursor = '';
+    });
+
+    // 高亮當前方案
+    if (plan && planBtnMap[plan]) {
+        const activeBtn = document.getElementById(planBtnMap[plan]);
+        if (activeBtn) {
+            activeBtn.disabled = true;
+            activeBtn.textContent = '✓ CURRENT PLAN';
+            activeBtn.style.opacity = '0.6';
+            activeBtn.style.cursor = 'not-allowed';
+        }
+    }
+}
+
 function openPricingModal() {
     pricingModal.classList.remove('hidden');
     updatePlanCostLabels(currentLang);
+    refreshPricingModalBadge();
     setTimeout(() => {
         pricingModal.classList.remove('opacity-0');
         pricingModalContent.classList.remove('scale-95');
@@ -1042,6 +1070,8 @@ window.fetchUserPoints = function (email) {
         .then(data => {
             console.log('[LoamLab] user data:', data);
             if (data && data.points !== undefined) {
+                window.loamlabSubscriptionPlan = data.subscription_plan || null;
+                window.loamlabLastTopupAt = data.last_topup_at || null;
                 window.updateLoginUI(email, data.points, data.referral_code, data.referred_by);
                 if (data.is_new_user) {
                     showWelcomeToast();
@@ -1126,6 +1156,15 @@ window.openCheckout = function (variantId) {
         openLoginModal();
         return;
     }
+
+    // 已訂閱相同方案 guard（防止誤觸重複購買）
+    const planMap = { [LS_VARIANTS.STARTER]: 'starter', [LS_VARIANTS.PRO]: 'pro', [LS_VARIANTS.STUDIO]: 'studio' };
+    const targetPlan = planMap[variantId];
+    if (targetPlan && window.loamlabSubscriptionPlan === targetPlan) {
+        alert(i18n('already_subscribed'));
+        return;
+    }
+
     // LemonSqueezy 支援透過 ?checkout[email]= 來預填並鎖死結帳信箱，加上 custom 以供 Webhook 辨識防錯
     const storeUrl = "https://loamlabstudio.lemonsqueezy.com/checkout/buy/";
     const finalUrl = `${storeUrl}${variantId}?checkout[email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[custom][user_email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[discount_code]=${BETA_DISCOUNT_CODE}`;
@@ -1136,8 +1175,8 @@ window.openCheckout = function (variantId) {
         window.open(finalUrl, '_blank');
     }
 
-    // 支付後輪詢：偵測到點數增加即更新顯示
-    const balanceBefore = parseInt(document.getElementById('point-balance').textContent) || 0;
+    // 支付後輪詢：用 last_topup_at 時間戳偵測充值成功（解決同值無法偵測的問題）
+    const topupBefore = window.loamlabLastTopupAt;
     let pollCount = 0;
     const paymentPollTimer = setInterval(async () => {
         pollCount++;
@@ -1147,12 +1186,15 @@ window.openCheckout = function (variantId) {
                 headers: { 'X-User-Email': window.loamlabUserEmail }
             });
             const d = await r.json();
-            if (d.points > balanceBefore) {
+            if (d.last_topup_at && d.last_topup_at !== topupBefore) {
                 clearInterval(paymentPollTimer);
+                window.loamlabSubscriptionPlan = d.subscription_plan || null;
+                window.loamlabLastTopupAt = d.last_topup_at;
                 const pb = document.getElementById('point-balance');
                 pb.textContent = d.points;
                 pb.style.color = '#4ade80';
                 setTimeout(() => { pb.style.color = ''; }, 2000);
+                refreshPricingModalBadge();
             }
         } catch(e) {}
     }, 3000);

@@ -1,4 +1,4 @@
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
     // CORS 允許 SketchUp 輪詢
@@ -35,17 +35,39 @@ export default async function handler(req, res) {
     }
 
     if (data.status === 'success') {
-        // 成功！順便幫它查詢最新點數一併傳回
+        // 查詢用戶資料（點數 + 方案等級）
         const { data: userData } = await supabase
             .from('users')
-            .select('points')
+            .select('points, lifetime_points, subscription_plan')
             .eq('email', data.email)
             .single();
+
+        // 裝置數限制檢查
+        const PLAN_MAX_DEVICES = { starter: 1, pro: 2, studio: 5 };
+        const userPlan = userData?.subscription_plan || null;
+        const maxDevices = PLAN_MAX_DEVICES[userPlan] ?? 1;
+
+        const { count } = await supabase
+            .from('auth_sessions')
+            .select('id', { count: 'exact', head: true })
+            .eq('email', data.email)
+            .eq('status', 'success')
+            .gt('expires_at', new Date().toISOString());
+
+        if (count >= maxDevices) {
+            return res.status(200).json({
+                status: 'device_limit',
+                max_devices: maxDevices,
+                current_plan: userPlan,
+                message: `Your plan allows ${maxDevices} active device(s). Please log out from another device or upgrade your plan.`
+            });
+        }
 
         return res.status(200).json({
             status: 'success',
             email: data.email,
-            points: userData ? userData.points : 0
+            points: userData ? (userData.points || 0) + (userData.lifetime_points || 0) : 0,
+            subscription_plan: userData?.subscription_plan || null
         });
     }
 

@@ -105,4 +105,4 @@ CREATE TABLE IF NOT EXISTS public.feedback (
   created_at     TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "Enable all access for service role" ON public.feedback FOR ALL USING (true);
+CREATE POLICY "Enable all access for service role" ON public.feedback FOR ALL USING (true);

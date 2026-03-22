@@ -844,15 +844,15 @@
         <div class="feedback-modal-box scale-95 opacity-0 transition-all duration-200 w-80 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl p-5 flex flex-col gap-4">
             <div class="flex items-center justify-between">
                 <span class="text-[13px] font-semibold text-white/80 tracking-wide" data-i18n="feedback_modal_title">意見反饋</span>
-                <button id="feedback-cancel-btn" class="text-white/30 hover:text-white/60 transition-colors text-lg leading-none">✕</button>
+                <button onclick="closeFeedbackModal()" class="text-white/30 hover:text-white/60 transition-colors text-lg leading-none">✕</button>
             </div>
             <div class="flex flex-col gap-1.5">
                 <label class="text-[10px] text-white/40 uppercase tracking-widest" data-i18n="feedback_modal_type">反饋類型</label>
-                <select id="feedback-type-select" class="bg-white/5 border border-white/10 rounded-lg text-white/70 text-[12px] px-3 py-2 focus:outline-none focus:border-white/25">
-                    <option value="feature" data-i18n="feedback_type_feature">功能建議</option>
-                    <option value="quality" data-i18n="feedback_type_quality">渲染品質</option>
-                    <option value="bug" data-i18n="feedback_type_bug">Bug 回報</option>
-                    <option value="other" data-i18n="feedback_type_other">其他</option>
+                <select id="feedback-type-select" class="bg-[#2a2a2a] border border-white/10 rounded-lg text-white/70 text-[12px] px-3 py-2 focus:outline-none focus:border-white/25">
+                    <option value="feature" style="background:#2a2a2a;color:#ffffffb3" data-i18n="feedback_type_feature">功能建議</option>
+                    <option value="quality" style="background:#2a2a2a;color:#ffffffb3" data-i18n="feedback_type_quality">渲染品質</option>
+                    <option value="bug" style="background:#2a2a2a;color:#ffffffb3" data-i18n="feedback_type_bug">Bug 回報</option>
+                    <option value="other" style="background:#2a2a2a;color:#ffffffb3" data-i18n="feedback_type_other">其他</option>
                 </select>
             </div>
             <div class="flex flex-col gap-1.5">

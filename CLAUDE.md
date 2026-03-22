@@ -154,20 +154,27 @@ GET https://loamlabbackend.vercel.app/api/fix_anomalies?key=<ADMIN_KEY>
 
 ---
 
-## Development Workflow (AI Agent Protocol)
+## Multi-Agent 協作協議（每個新 Session 必讀）
 
-This project uses a multi-agent coordination system. At the start of each session:
+**開 session 三步：**
+1. 讀 `TASKS.md` — 確認沒有衝突的 `[ACTIVE]` 任務
+2. 認領或新增一個任務，改狀態為 `[ACTIVE]`，填 branch 名
+3. **只碰自己任務欄位列出的檔案**
 
-1. Read `AGENTS_CHECKLIST.md` — confirm `CURRENT_VERSION` and `PATH_MAPPING`
-2. Read `AGENTS_SYNC.md` — check `🚩 總隊長令` (Commander's orders) and update your `[HEARTBEAT]`
-3. Check source files for `@Task` comments — these are emergency fix directives
+**完成三步：**
+1. commit 到自己的 branch
+2. 把 `TASKS.md` 的狀態改為 `[DONE]`
+3. 在「整合佇列」加一行，等待 merge
 
-**Auto-role by file path:**
-- `loamlab_plugin/` → Plugin/UI role (Ruby/JS)
-- `loamlab_backend/` → Backend/Payment role (Node.js/API)
-- `render.js` or render tests → Rendering quality role
-
-When a task is claimed, update status in `AGENTS_SYNC.md` from `[PENDING]` → `[WORKING]`. After completion, write evidence and mark `@Orchestrator 請求巡檢`.
+**模組 → 檔案範圍速查：**
+| 模組 | 負責檔案 |
+|---|---|
+| 支付 | `loamlab_backend/api/webhook.js`, `loamlab_plugin/ui/app.js`（LS_VARIANTS 部分） |
+| 渲染後端 | `loamlab_backend/api/render.js` |
+| 用戶/點數 | `loamlab_backend/api/user.js`, `loamlab_backend/api/referral.js` |
+| Plugin UI | `loamlab_plugin/ui/app.js`, `loamlab_plugin/ui/index.html`, `loamlab_plugin/ui/i18n.js` |
+| Plugin 核心 | `loamlab_plugin/main.rb`, `loamlab_plugin/coze_api.rb` |
+| 版本/更新 | `loamlab_plugin/updater.rb`, `loamlab_backend/api/version.js` |
 
 ---
 

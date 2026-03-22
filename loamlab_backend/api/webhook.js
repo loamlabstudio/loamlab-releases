@@ -53,6 +53,20 @@ export default async function handler(req, res) {
         if (eventName === 'order_created') {
             const customerEmail = orderData.user_email;
             const variantId = orderData.first_order_item.variant_id; // 商品 ID
+            const orderId = event.data?.id?.toString();               // 訂單唯一 ID
+
+            // P0-3 冪等性：防止 LemonSqueezy 重試時重複充值
+            if (orderId) {
+                const { data: existingTx } = await supabase
+                    .from('transactions')
+                    .select('id')
+                    .eq('order_id', orderId)
+                    .maybeSingle();
+                if (existingTx) {
+                    console.log(`[🔁冪等] 訂單 ${orderId} 已處理過，跳過`);
+                    return res.status(200).json({ ok: true, skipped: true });
+                }
+            }
 
             let pointsToAdd = 0;   // ★ 修正：使用 let 宣告，避免變數污染
             let isSubscription = false;
@@ -61,30 +75,36 @@ export default async function handler(req, res) {
             // ★ Variant IDs — 請至 LemonSqueezy 後台 Products > Variants 取得真實 ID
             //   同步更新 app.js 的 LS_VARIANTS 物件（兩邊必須對齊）
             // ============================================================
-            const VARIANT_TOPUP   = 99999;  // ← 同步 LS_VARIANTS.TOPUP
-            const VARIANT_STARTER = 12345;  // ← 同步 LS_VARIANTS.STARTER
-            const VARIANT_PRO     = 12346;  // ← 同步 LS_VARIANTS.PRO
-            const VARIANT_STUDIO  = 12347;  // ← 同步 LS_VARIANTS.STUDIO
+            const VARIANT_TOPUP = 1432023;  // ← 同步 LS_VARIANTS.TOPUP
+            const VARIANT_STARTER = 1432194;  // ← 同步 LS_VARIANTS.STARTER
+            const VARIANT_PRO = 1432198;  // ← 同步 LS_VARIANTS.PRO
+            const VARIANT_STUDIO = 1432205;  // ← 同步 LS_VARIANTS.STUDIO
 
-            if (variantId === VARIANT_STARTER) {        // Starter $35 / NT$1,120
-                pointsToAdd = 300;                      // 月費點數 (寫入 points)
+            let planName = null; // 訂閱方案等級
+
+            if (variantId === VARIANT_STARTER) {        // Starter $24 / mo
+                pointsToAdd = 300;
                 isSubscription = true;
-            } else if (variantId === VARIANT_PRO) {     // Pro $75 / NT$2,400
-                pointsToAdd = 2000;                     // 月費點數 (寫入 points)
+                planName = 'starter';
+            } else if (variantId === VARIANT_PRO) {     // Pro $52 / mo
+                pointsToAdd = 2000;
                 isSubscription = true;
-            } else if (variantId === VARIANT_STUDIO) {  // Studio $199 / NT$6,368
-                pointsToAdd = 9000;                     // 月費點數 (寫入 points)
+                planName = 'pro';
+            } else if (variantId === VARIANT_STUDIO) {  // Studio $139 / mo
+                pointsToAdd = 9000;
                 isSubscription = true;
-            } else if (variantId === VARIANT_TOPUP) {   // Top-up $25 / NT$800
-                pointsToAdd = 200;                      // 永久點數 (寫入 lifetime_points)
+                planName = 'studio';
+            } else if (variantId === VARIANT_TOPUP) {   // Top-up $18 一次
+                pointsToAdd = 200;
                 isSubscription = false;
+                planName = null; // Top-up 不改變訂閱等級
             }
 
             if (pointsToAdd > 0) {
                 // 先查詢使用者是否已存在，以及他背後的綁定關聯
                 const { data: user, error: userError } = await supabase
                     .from('users')
-                    .select('points, lifetime_points, referred_by, referral_rewarded')
+                    .select('points, lifetime_points')
                     .eq('email', customerEmail)
                     .single();
 
@@ -93,45 +113,28 @@ export default async function handler(req, res) {
                     let newPoints = isSubscription ? pointsToAdd : user.points;
                     let newLifetimePoints = (user.lifetime_points || 0) + (isSubscription ? 0 : pointsToAdd);
 
-                    let shouldRewardRef = false;
-
-                    // 【Phase 17 邀請碼裂變雙贏】首次訂閱才觸發：新用戶 +200 永久點
-                    if (user.referred_by && !user.referral_rewarded && isSubscription) {
-                        newLifetimePoints += 200; // 新用戶額外獲得 200 點永久積分
-                        shouldRewardRef = true;
-                    }
+                    const updatePayload = {
+                        points: newPoints,
+                        lifetime_points: newLifetimePoints,
+                        is_beta_tester: true,
+                    };
+                    // Top-up 不覆蓋現有訂閱等級；訂閱升級時才更新
+                    if (planName !== null) updatePayload.subscription_plan = planName;
 
                     await supabase
                         .from('users')
-                        .update({
-                            points: newPoints,
-                            lifetime_points: newLifetimePoints,
-                            referral_rewarded: shouldRewardRef ? true : user.referral_rewarded,
-                            is_beta_tester: true
-                        })
+                        .update(updatePayload)
                         .eq('email', customerEmail);
 
-                    // [New] 紀錄充值交易
+                    // 紀錄充值交易（含 order_id 防重複）
                     await supabase.from('transactions').insert([{
                         user_email: customerEmail,
                         amount: pointsToAdd,
-                        transaction_type: isSubscription ? 'TOPUP_SUBSCRIPTION' : 'TOPUP_SINGLE'
+                        transaction_type: isSubscription ? 'TOPUP_SUBSCRIPTION' : 'TOPUP_SINGLE',
+                        order_id: orderId || null
                     }]);
 
                     console.log(`[🚀金流] 成功為 ${customerEmail} 充值！月費餘額：${newPoints}, 永久餘額: ${newLifetimePoints}`);
-
-                    // 無聲派發推薦人紅利
-                    if (shouldRewardRef) {
-                        try {
-                            const { data: inviter } = await supabase.from('users').select('lifetime_points').eq('referral_code', user.referred_by).single();
-                            if (inviter) {
-                                await supabase.from('users').update({ lifetime_points: (inviter.lifetime_points || 0) + 200 }).eq('referral_code', user.referred_by);
-                                console.log(`[🎟️裂變紅利] 成功發送首購分成 200 點給幕後推手代碼: ${user.referred_by}`);
-                            }
-                        } catch (e) {
-                            console.error('[🎟️裂變紅利] 發送推薦人點數失敗:', e);
-                        }
-                    }
 
                 } else {
                     // 不存在 -> 直接建立新使用者並給予點數
@@ -139,13 +142,20 @@ export default async function handler(req, res) {
                     let initLifetime = isSubscription ? 0 : pointsToAdd;
                     await supabase
                         .from('users')
-                        .insert([{ email: customerEmail, points: initPoints, lifetime_points: initLifetime }]);
+                        .insert([{
+                            email: customerEmail,
+                            points: initPoints,
+                            lifetime_points: initLifetime,
+                            is_beta_tester: true,
+                            subscription_plan: planName
+                        }]);
 
-                    // [New] 紀錄充值交易 (新用戶)
+                    // 紀錄充值交易（含 order_id 防重複）
                     await supabase.from('transactions').insert([{
                         user_email: customerEmail,
                         amount: pointsToAdd,
-                        transaction_type: isSubscription ? 'TOPUP_SUBSCRIPTION' : 'TOPUP_SINGLE'
+                        transaction_type: isSubscription ? 'TOPUP_SUBSCRIPTION' : 'TOPUP_SINGLE',
+                        order_id: orderId || null
                     }]);
                     console.log(`[🚀金流] 新建用戶 ${customerEmail} 並充值！月費 ${initPoints}, 永久 ${initLifetime} 點。`);
                 }

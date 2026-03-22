@@ -28,53 +28,24 @@ export default async function handler(req, res) {
         // 2. 檢查邀請碼所屬用戶 (A)
         const { data: inviter, error: inviterErr } = await supabase
             .from('users')
-            .select('id, email, points')
+            .select('id, email')
             .eq('referral_code', code.toUpperCase())
             .single();
 
         if (inviterErr || !inviter) return res.status(404).json({ code: -1, msg: '無效的邀請碼' });
         if (inviter.email === email) return res.status(400).json({ code: -1, msg: '不能輸入自己的邀請碼' });
 
-        // 3. 獎勵邏輯 (B 領 50, A 領 200)
-        // 為了簡單起見，這裡使用連續更新。高併發下建議使用 RPC 存儲流程。
-        const REWARD_A = 200;
-        const REWARD_B = 50;
-
-        // 更新 B (自己)
+        // 3. 純綁定：記錄邀請人，獎勵在 B 首次算圖後由 render.js 觸發
         const { error: updateBErr } = await supabase
             .from('users')
-            .update({ 
-                referred_by: inviter.email,
-                points: (me.points || 0) + REWARD_B 
-            })
+            .update({ referred_by: inviter.email, referral_rewarded: false })
             .eq('email', email);
 
         if (updateBErr) throw updateBErr;
 
-        // 更新 A (邀請人)
-        const { error: updateAErr } = await supabase.rpc('increment_points', { 
-            row_id: inviter.id, 
-            amount: REWARD_A 
-        });
-        
-        // 如果 RPC 不存在，則回退到普通更新 (建議在 SQL 配置中加上此 RPC)
-        if (updateAErr) {
-            await supabase
-                .from('users')
-                .update({ points: (inviter.points || 0) + REWARD_A })
-                .eq('id', inviter.id);
-        }
-
-        // 紀錄交易日誌
-        await supabase.from('transactions').insert([
-            { user_email: email, amount: REWARD_B, transaction_type: 'REFERRAL_REWARD_B' },
-            { user_email: inviter.email, amount: REWARD_A, transaction_type: 'REFERRAL_REWARD_A' }
-        ]);
-
-        return res.status(200).json({ 
-            code: 0, 
-            msg: `成功！您獲得了 ${REWARD_B} 點，邀請人獲贈 ${REWARD_A} 點。`,
-            new_points: (me.points || 0) + REWARD_B
+        return res.status(200).json({
+            code: 0,
+            msg: '邀請碼已記錄！完成第一張算圖後，100 點將自動到帳，您的邀請人同時獲得 300 點。'
         });
 
     } catch (err) {

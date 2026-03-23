@@ -24,6 +24,13 @@ export default async function handler(req, res) {
             .eq('email', email)
             .single();
 
+        // 查詢成功邀請數（此人作為邀請人，且受邀者已完成首次渲染）
+        const { count: referralSuccessCount } = await supabase
+            .from('users')
+            .select('id', { count: 'exact', head: true })
+            .eq('referred_by', email)
+            .eq('referral_rewarded', true);
+
         // [Beta 試運營] 自動註冊邏輯：如果用戶不存在，則直接建立
         // ★ 冪等性說明：利用 Supabase users.email 的 UNIQUE 限制，即便發生並發請求，
         // 資料庫也會擋掉重複的 Email 寫入，確保一人僅能領取一次 60 點。
@@ -55,6 +62,7 @@ export default async function handler(req, res) {
             last_topup_at: data ? (data.last_topup_at || null) : null,
             referral_code: data ? data.referral_code : null,
             referred_by: data ? data.referred_by : null,
+            referral_success_count: referralSuccessCount || 0,
             is_new_user: error && error.code === 'PGRST116' ? true : false
         });
     } catch (e) {

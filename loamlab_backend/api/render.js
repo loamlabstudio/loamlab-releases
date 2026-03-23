@@ -70,7 +70,7 @@ export default async function handler(req, res) {
             .from('users')
             .insert([{
                 email: userEmail,
-                points: 10,
+                points: 60,
                 referral_code: newReferralCode
             }])
             .select()

@@ -119,6 +119,7 @@ Write-Host "   Notes: $notes" -ForegroundColor White
 Write-Host "   File:  $OUT_RBZ" -ForegroundColor White
 Write-Host ""
 Write-Host "   [!] 確保 GitHub Release 的 .rbz 上傳完成後，auto-update 才會生效" -ForegroundColor Yellow
+Write-Host "   [!] 不要勾選 'Pre-release'，否則邀請分享連結 /releases/latest/ 會失效" -ForegroundColor Red
 Write-Host ""
 Write-Host "=============================================" -ForegroundColor Green
 Write-Host "  Release v$version 準備完成！" -ForegroundColor Green

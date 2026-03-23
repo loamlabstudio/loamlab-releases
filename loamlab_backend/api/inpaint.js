@@ -1,7 +1,7 @@
-// inpaint.js — Material / Furniture Inpainting via Fal.ai Flux Fill
+// inpaint.js — Material / Furniture Inpainting via Fal.ai Flux Dev Inpainting
 // Phase 2: Full implementation
-// Flow: upload mask → Fal.ai Flux Pro Fill → return composited URL
-// Fal.ai handles pixel-perfect preservation of non-masked areas natively.
+// Flow: upload mask [+ ref image] → Fal.ai flux-general/inpainting → return result URL
+// Supports optional reference_image_base64 for reference-guided replacement.
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
     const userEmail = req.headers['x-user-email'];
     if (!userEmail) return res.status(401).json({ code: -1, msg: 'Missing X-User-Email header' });
 
-    const { image_url, mask_base64, prompt = '' } = req.body || {};
+    const { image_url, mask_base64, prompt = '', reference_image_base64 = null } = req.body || {};
     if (!image_url || !mask_base64) {
         return res.status(400).json({ code: -1, msg: 'Missing image_url or mask_base64' });
     }
@@ -132,7 +132,18 @@ export default async function handler(req, res) {
             return res.status(500).json({ code: -1, msg: 'Mask upload failed', points_refunded: true });
         }
 
-        // Call Fal.ai Flux Pro Fill (inpainting)
+        // Upload reference image if provided
+        let referenceImageUrl = null;
+        if (reference_image_base64) {
+            try {
+                referenceImageUrl = await uploadBase64(reference_image_base64, IMGBB_API_KEY);
+            } catch (e) {
+                await refund('REF_IMAGE_UPLOAD_FAIL');
+                return res.status(500).json({ code: -1, msg: 'Reference image upload failed', points_refunded: true });
+            }
+        }
+
+        // Call Fal.ai Flux Dev Inpainting
         // white mask = area to fill, black = area to preserve
         const falPayload = {
             image_url,
@@ -140,10 +151,14 @@ export default async function handler(req, res) {
             prompt: prompt || 'Replace the material in the marked area. Match the lighting, shadows, and perspective of the surrounding scene exactly.',
             num_inference_steps: 28,
             guidance_scale: 3.5,
-            output_format: 'jpeg'
+            output_format: 'jpeg',
+            ...(referenceImageUrl && {
+                reference_image_url: referenceImageUrl,
+                reference_strength: 0.7
+            })
         };
 
-        const falRes = await fetch('https://fal.run/fal-ai/flux-pro/v1/fill', {
+        const falRes = await fetch('https://fal.run/fal-ai/flux-general/inpainting', {
             method: 'POST',
             headers: {
                 'Authorization': `Key ${FAL_API_KEY}`,
@@ -170,7 +185,8 @@ export default async function handler(req, res) {
             code: 0,
             url: resultUrl,
             points_deducted: COST,
-            points_remaining: monthlyPoints + lifetimePoints
+            points_remaining: monthlyPoints + lifetimePoints,
+            has_reference: !!referenceImageUrl
         });
 
     } catch (err) {

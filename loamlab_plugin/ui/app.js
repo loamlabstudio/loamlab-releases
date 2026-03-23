@@ -21,12 +21,36 @@ const SHOT_MODIFIERS = {
     minimal: "Clean white walls, extreme negative space, calm and serene minimalist atmosphere, neutral palette. "
 };
 
-const TOOL_FURNITURE_TAGS = [
-    { label: '沙發', tag: 'sofa' }, { label: '單椅', tag: 'armchair' },
-    { label: '餐桌椅', tag: 'dining table and chairs' }, { label: '床組', tag: 'bed frame with mattress' },
-    { label: '衣櫃', tag: 'wardrobe' }, { label: '書桌', tag: 'desk' },
-    { label: '落地燈', tag: 'floor lamp' }, { label: '茶几', tag: 'coffee table' }
-];
+// 軟硬裝 Tag 群組資料（唯一來源，新增 tag 只改這裡）
+const SWAP_TAG_GROUPS = {
+    soft: {
+        label: '軟裝',
+        tags: [
+            { label: '沙發', tag: 'sofa' },
+            { label: '單椅', tag: 'armchair' },
+            { label: '餐桌椅', tag: 'dining table and chairs' },
+            { label: '床組', tag: 'bed frame with mattress' },
+            { label: '衣櫃', tag: 'wardrobe' },
+            { label: '書桌', tag: 'desk' },
+            { label: '落地燈', tag: 'floor lamp' },
+            { label: '茶几', tag: 'coffee table' },
+            { label: '窗簾', tag: 'curtains' },
+            { label: '地毯', tag: 'rug' },
+        ]
+    },
+    hard: {
+        label: '硬裝',
+        tags: [
+            { label: '磁磚', tag: 'ceramic tiles' },
+            { label: '木地板', tag: 'wood flooring' },
+            { label: '牆漆', tag: 'wall paint' },
+            { label: '石材', tag: 'stone surface' },
+            { label: '壁紙', tag: 'wallpaper' },
+            { label: '混凝土', tag: 'concrete wall' },
+            { label: '大理石', tag: 'marble floor' },
+        ]
+    }
+};
 
 function setActiveTool(n) {
     currentActiveTool = n;
@@ -105,9 +129,38 @@ function rebuildFurnitureTags() {
     const container = document.getElementById('material-tags');
     if (!container) return;
     const cls = 'text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-amber-500/20 text-amber-200/60 hover:text-amber-100 hover:bg-amber-500/10 hover:border-amber-400/40 cursor-pointer transition-all active:scale-95 tracking-wide select-none';
-    container.innerHTML = TOOL_FURNITURE_TAGS.map(t => `<span class="${cls}" data-tag="${t.tag}">${t.label}</span>`).join('');
+    container.innerHTML = SWAP_TAG_GROUPS.soft.tags.map(t => `<span class="${cls}" data-tag="${t.tag}">${t.label}</span>`).join('');
     container.querySelectorAll('span[data-tag]').forEach(span => {
         span.addEventListener('click', () => appendToPrompt(span.getAttribute('data-tag')));
+    });
+}
+
+// Swap Modal：資料驅動渲染 tag 群組（唯一的 tag 渲染入口）
+function renderSwapTags(groupKey) {
+    const container = document.getElementById('swap-tags-container');
+    if (!container) return;
+    const group = SWAP_TAG_GROUPS[groupKey];
+    if (!group) return;
+
+    const tagCls = 'text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 cursor-pointer transition-all select-none';
+    container.innerHTML = group.tags.map(t =>
+        `<span class="${tagCls}" data-tag="${t.tag}">${t.label}</span>`
+    ).join('');
+    container.querySelectorAll('[data-tag]').forEach(span => {
+        span.addEventListener('click', () => {
+            const input = document.getElementById('swap-prompt-input');
+            if (!input) return;
+            const val = span.getAttribute('data-tag');
+            input.value = (input.value.trim() ? input.value.trim() + ', ' : '') + val;
+        });
+    });
+
+    // 更新群組按鈕 active 狀態
+    document.querySelectorAll('.tag-group-btn[data-group]').forEach(btn => {
+        const active = btn.dataset.group === groupKey;
+        btn.className = `tag-group-btn text-[9px] px-1.5 py-0.5 rounded border transition-all ${
+            active ? 'border-amber-500/40 text-amber-300/70' : 'border-white/10 text-white/30 hover:text-white/60'
+        }`;
     });
 }
 
@@ -577,7 +630,7 @@ function renderScenesList(scenes) {
 
     const html = scenes.map(scene => `
         <label class="flex items-center space-x-3 my-2.5 p-3.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] transition-all cursor-pointer border border-white/5 hover:border-white/20 group shadow-sm">
-            <input type="checkbox" name="scene" value="${scene}" checked class="appearance-none w-5 h-5 rounded hover:bg-white/20 bg-black/40 border border-white/20 checked:bg-[#dc2626] checked:border-[#dc2626] transition-colors relative check-tick flex-shrink-0 shadow-inner">
+            <input type="checkbox" name="scene" value="${scene}" class="appearance-none w-5 h-5 rounded hover:bg-white/20 bg-black/40 border border-white/20 checked:bg-[#dc2626] checked:border-[#dc2626] transition-colors relative check-tick flex-shrink-0 shadow-inner">
             <span class="text-[14px] font-semibold text-white/80 group-hover:text-white transition-colors tracking-wide">${scene}</span>
         </label>
     `).join('');
@@ -598,12 +651,27 @@ function renderScenesList(scenes) {
         </style>
         <div class="flex justify-between items-center mb-0 px-2 pt-2 pb-2 border-b border-white/5 shrink-0">
             <h3 class="text-[11px] font-bold text-white/60 tracking-wider uppercase" data-i18n="scene_select">Select Perspectives</h3>
-            <span id="scene-count-label" data-count="${scenes.length}" class="text-[9px] text-white font-bold tracking-widest bg-[#dc2626] px-2.5 py-1 rounded-full shadow-md">Total ${scenes.length} Scenes</span>
+            <div class="flex items-center gap-2">
+                <button id="btn-select-all-scenes" class="text-[9px] text-white/40 hover:text-white/80 tracking-widest transition-colors">全選</button>
+                <span id="scene-count-label" data-count="${scenes.length}" class="text-[9px] text-white font-bold tracking-widest bg-[#dc2626] px-2.5 py-1 rounded-full shadow-md">Total ${scenes.length} Scenes</span>
+            </div>
         </div>
         <div class="flex-1 min-h-0 overflow-y-auto px-1 pt-1 custom-scrollbar w-full relative" id="scene-scroll-area">
             ${html}
         </div>
     `;
+
+    // 全選 / 全不選 切換
+    const btnSelectAll = container.querySelector('#btn-select-all-scenes');
+    if (btnSelectAll) {
+        btnSelectAll.addEventListener('click', () => {
+            const allInputs = container.querySelectorAll('input[name="scene"]');
+            const allChecked = Array.from(allInputs).every(cb => cb.checked);
+            allInputs.forEach(cb => { cb.checked = !allChecked; });
+            btnSelectAll.textContent = allChecked ? '全選' : '全不選';
+            updateCostPreview();
+        });
+    }
 
     // 為場景加入點擊即預覽的監聽事件
     const inputs = container.querySelectorAll('input[name="scene"]');
@@ -825,16 +893,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('btn-clear-mask')?.addEventListener('click', clearSwapMask);
     document.getElementById('btn-execute-swap')?.addEventListener('click', executeSwap);
 
-    // Swap Modal 快捷 Tags → 附加到 swap-prompt-input
-    document.querySelectorAll('.swap-item-tag').forEach(tag => {
-        tag.addEventListener('click', () => {
-            const input = document.getElementById('swap-prompt-input');
-            if (!input) return;
-            const val = tag.getAttribute('data-tag');
-            const cur = input.value.trim();
-            input.value = cur ? (cur.endsWith(',') ? cur + ' ' + val : cur + ', ' + val) : val;
-        });
-    });
+    // Swap Modal Tag 群組：資料驅動初始化（預設顯示軟裝）
+    renderSwapTags('soft');
 });
 
 // 同步預覽畫面事件
@@ -892,6 +952,21 @@ const loginModalContent = document.getElementById('login-modal-content');
 
 const pricingModal = document.getElementById('pricing-modal');
 const pricingModalContent = document.getElementById('pricing-modal-content');
+
+function updatePlanBadge(plan) {
+    const badge = document.getElementById('plan-badge');
+    if (!badge) return;
+    if (plan === 'pro') {
+        badge.textContent = 'PRO';
+        badge.className = 'text-[10px] font-bold tracking-[0.2em] text-amber-400/80';
+    } else if (plan === 'studio') {
+        badge.textContent = 'STUDIO';
+        badge.className = 'text-[10px] font-bold tracking-[0.2em] text-violet-300/70';
+    } else {
+        badge.textContent = 'Points:';
+        badge.className = 'text-white/40 tracking-wider text-[11px] font-semibold';
+    }
+}
 
 function refreshPricingModalBadge() {
     const plan = window.loamlabSubscriptionPlan;
@@ -1131,6 +1206,7 @@ window.fetchUserPoints = function (email) {
             if (data && data.points !== undefined) {
                 window.loamlabSubscriptionPlan = data.subscription_plan || null;
                 window.loamlabLastTopupAt = data.last_topup_at || null;
+                updatePlanBadge(window.loamlabSubscriptionPlan);
                 window.updateLoginUI(email, data.points, data.referral_code, data.referred_by);
 
                 // 邀請人到帳 Toast：比對上次快取的成功邀請數，有增加就通知
@@ -1229,16 +1305,14 @@ function openSharePlatform(platform) {
     if (!code) return;
     const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
     const text = (lang['share_text'] || '邀請碼 {code}').replace('{code}', code);
-    const encoded = encodeURIComponent(text);
-    // 使用 app URL scheme，透過 Ruby UI.openURL 觸發 OS 路由到本機 App
-    const url = platform === 'line'
-        ? `line://msg/text/${encoded}`
-        : `whatsapp://send/?text=${encoded}`;
-    if (window.sketchup) {
-        sketchup.open_browser(url);
-    } else {
-        window.open(url, '_blank');
-    }
+    const hint = platform === 'line'
+        ? (lang['share_copied_line'] || '✓ 已複製！開啟 LINE 貼給好友')
+        : (lang['share_copied_wa'] || '✓ 已複製！開啟 WhatsApp 貼給好友');
+    navigator.clipboard.writeText(text).then(() => {
+        showUpdateToast(hint);
+    }).catch(() => {
+        showUpdateToast('✓ ' + (lang['share_text_copied'] || '訊息已複製'));
+    });
 }
 
 // Invite Modal LINE/WA 按鈕
@@ -1304,7 +1378,7 @@ function openLoginModal() {
 // 結帳並跳轉 LemonSqueezy
 window.openCheckout = function (variantId) {
     if (!window.loamlabUserEmail) {
-        alert("請先登入 Google 帳號再進行儲值。\nPlease log in first before purchasing credits.");
+        showUpdateToast('⚠️ 請先登入 Google 帳號再進行儲值');
         openLoginModal();
         return;
     }
@@ -1313,7 +1387,7 @@ window.openCheckout = function (variantId) {
     const planMap = { [LS_VARIANTS.STARTER]: 'starter', [LS_VARIANTS.PRO]: 'pro', [LS_VARIANTS.STUDIO]: 'studio' };
     const targetPlan = planMap[variantId];
     if (targetPlan && window.loamlabSubscriptionPlan === targetPlan) {
-        alert(i18n('already_subscribed'));
+        showUpdateToast('✓ ' + i18n('already_subscribed'));
         return;
     }
 
@@ -1327,12 +1401,21 @@ window.openCheckout = function (variantId) {
         window.open(finalUrl, '_blank');
     }
 
+    // 關閉 Modal，顯示等待提示
+    closePricingModal();
+    showUpdateToast('🔄 瀏覽器已開啟付款頁面，完成付款後將自動入帳...');
+
     // 支付後輪詢：用 last_topup_at 時間戳偵測充值成功（解決同值無法偵測的問題）
     const topupBefore = window.loamlabLastTopupAt;
+    const pointsBefore = parseInt(document.getElementById('point-balance').textContent) || 0;
     let pollCount = 0;
     const paymentPollTimer = setInterval(async () => {
         pollCount++;
-        if (pollCount > 100) { clearInterval(paymentPollTimer); return; }
+        if (pollCount > 100) {
+            clearInterval(paymentPollTimer);
+            showUpdateToast('⚠️ 驗證超時，如已付款請稍後重新整理，或聯繫支援');
+            return;
+        }
         try {
             const r = await fetch(`${API_BASE}/api/user`, {
                 headers: { 'X-User-Email': window.loamlabUserEmail }
@@ -1342,10 +1425,12 @@ window.openCheckout = function (variantId) {
                 clearInterval(paymentPollTimer);
                 window.loamlabSubscriptionPlan = d.subscription_plan || null;
                 window.loamlabLastTopupAt = d.last_topup_at;
-                const pb = document.getElementById('point-balance');
-                pb.textContent = d.points;
-                pb.style.color = '#4ade80';
-                setTimeout(() => { pb.style.color = ''; }, 2000);
+                updatePlanBadge(window.loamlabSubscriptionPlan);
+                const newPoints = d.points || 0;
+                document.getElementById('point-balance').textContent = newPoints;
+                const delta = newPoints - pointsBefore;
+                const deltaStr = delta > 0 ? `+${delta} 點` : '';
+                showUpdateToast(`🎉 付款成功！${deltaStr} 已入帳，目前共 ${newPoints} 點`);
                 refreshPricingModalBadge();
             }
         } catch(e) {}
@@ -1797,6 +1882,7 @@ let swapIsDrawing = false;
 let swapCanvas = null;
 let swapCtx = null;
 let swapRenderedUrl = null;
+let swapRefImageBase64 = null;
 
 function openSwapModal(sketchupImgSrc, renderedImgUrl) {
     swapRenderedUrl = renderedImgUrl;
@@ -1915,6 +2001,37 @@ function closeSwapModal() {
     if (!modal) return;
     modal.classList.add('opacity-0');
     setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
+    clearRefImage();
+}
+
+function onRefImageSelected(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        swapRefImageBase64 = e.target.result;
+        const thumb = document.getElementById('swap-ref-thumb');
+        const preview = document.getElementById('swap-ref-preview');
+        const labelEl = document.getElementById('swap-ref-label');
+        if (thumb) thumb.src = swapRefImageBase64;
+        if (preview) preview.classList.remove('hidden');
+        if (labelEl) labelEl.textContent = file.name.length > 14 ? file.name.slice(0, 12) + '…' : file.name;
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearRefImage() {
+    swapRefImageBase64 = null;
+    const fileInput = document.getElementById('swap-reference-file');
+    const preview = document.getElementById('swap-ref-preview');
+    const labelEl = document.getElementById('swap-ref-label');
+    if (fileInput) fileInput.value = '';
+    if (preview) preview.classList.add('hidden');
+    if (labelEl) labelEl.textContent = '上傳參考圖片';
+}
+
+function setTagGroup(groupKey) {
+    renderSwapTags(groupKey);
 }
 
 function clearSwapMask() {
@@ -1962,7 +2079,7 @@ async function executeSwap() {
                 'Content-Type': 'application/json',
                 'X-User-Email': window.loamlabUserEmail
             },
-            body: JSON.stringify({ image_url: swapRenderedUrl, mask_base64: maskBase64, prompt })
+            body: JSON.stringify({ image_url: swapRenderedUrl, mask_base64: maskBase64, prompt, ...(swapRefImageBase64 && { reference_image_base64: swapRefImageBase64 }) })
         });
         const result = await resp.json();
         if (result.code === 0 && result.url) {

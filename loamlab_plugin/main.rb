@@ -108,12 +108,13 @@ module LoamLab
         scenes_to_render = params["scenes"] || []
         user_prompt = (params["prompt"] || "").to_s.dup.force_encoding("UTF-8")
         resolution = params["resolution"] || "1k"
-        
+        tool = (params["tool"] || 1).to_i
+
         dialog.execute_script("window.receiveFromRuby({status: 'rendering'})")
-        
+
         # 延遲一點執行，避免阻塞前端 UI 動畫
         UI.start_timer(0.1, false) do
-            self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution)
+            self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution, tool)
         end
       end
 
@@ -394,7 +395,7 @@ module LoamLab
     end
 
     # 批量導出指定的場景為實體檔案並上傳 Coze
-    def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k")
+    def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1)
       model = Sketchup.active_model
       return unless model
 
@@ -470,8 +471,9 @@ module LoamLab
             
             user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
             request_body = JSON.dump({
+              tool: tool,
               parameters: {
-                "image" => [data_uri], "user_prompt" => user_prompt, 
+                "image" => [data_uri], "user_prompt" => user_prompt,
                 "resolution" => resolution, "aspect_ratio" => closest_ratio
               }
             })

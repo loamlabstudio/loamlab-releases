@@ -838,7 +838,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (window.sketchup) {
-            sketchup.render_scene({ scenes: selectedScenes, prompt: finalPrompt, resolution: resolution, expected_cost: totalCost });
+            sketchup.render_scene({ scenes: selectedScenes, prompt: finalPrompt, resolution: resolution, expected_cost: totalCost, tool: currentActiveTool });
         } else {
             console.log('Simulating render req for:', selectedScenes, 'Prompt:', userPrompt, 'Res:', resolution, 'Cost:', totalCost);
             // 本地模擬扣款特效
@@ -1311,14 +1311,14 @@ function openSharePlatform(platform) {
     const code = window.loamlabUserReferralCode;
     if (!code) return;
     const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
-    const text = (lang['share_text'] || '邀請碼 {code}').replace('{code}', code);
+    const inviteUrl = `https://loamlabbackend.vercel.app/api/invite?ref=${code}`;
     const hint = platform === 'line'
-        ? (lang['share_copied_line'] || '✓ 已複製！開啟 LINE 貼給好友')
-        : (lang['share_copied_wa'] || '✓ 已複製！開啟 WhatsApp 貼給好友');
-    navigator.clipboard.writeText(text).then(() => {
+        ? (lang['share_copied_line'] || '✓ 連結已複製，貼到 LINE 傳給好友')
+        : (lang['share_copied_wa'] || '✓ 連結已複製，貼到 WhatsApp 傳給好友');
+    navigator.clipboard.writeText(inviteUrl).then(() => {
         showUpdateToast(hint);
     }).catch(() => {
-        showUpdateToast('✓ ' + (lang['share_text_copied'] || '訊息已複製'));
+        showUpdateToast('✓ ' + (lang['share_link_copied'] || '邀請連結已複製'));
     });
 }
 

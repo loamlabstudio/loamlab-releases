@@ -21,6 +21,7 @@ export default async function handler(req, res) {
     // 環境變數
     const COZE_PAT = process.env.COZE_PAT;
     const WORKFLOW_ID = process.env.WORKFLOW_ID || "7613251981235208197";
+    const NINEGRID_WORKFLOW_ID = process.env.NINEGRID_WORKFLOW_ID || null;
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
 
@@ -42,6 +43,8 @@ export default async function handler(req, res) {
     // 建立 Supabase 資料庫連線
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
     const userPayload = req.body;
+    const activeTool = userPayload.tool || 1;
+    const activeWorkflowId = (activeTool === 3 && NINEGRID_WORKFLOW_ID) ? NINEGRID_WORKFLOW_ID : WORKFLOW_ID;
 
     // 整理 payload：統一 prompt 欄位，相容新版 JS (傳 user_prompt) 與舊版 Ruby (傳 prompt)
     if (userPayload.parameters) {
@@ -188,7 +191,7 @@ export default async function handler(req, res) {
         const cozeResponse = await fetch('https://api.coze.com/v1/workflow/stream_run', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${COZE_PAT}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ workflow_id: WORKFLOW_ID, parameters: userPayload.parameters })
+            body: JSON.stringify({ workflow_id: activeWorkflowId, parameters: userPayload.parameters })
         });
 
         if (!cozeResponse.ok) {

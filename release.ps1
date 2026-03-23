@@ -40,6 +40,14 @@ if (Test-Path $OUT_RBZ) { Remove-Item $OUT_RBZ -Force }
 
 $configOriginal = Get-Content $CONFIG -Raw
 
+# Pre-flight：確認 config.rb 是 dev 狀態才允許發布
+if ($configOriginal -notmatch 'BUILD_TYPE = "dev"') {
+    Write-Host ""
+    Write-Host "[ERROR] config.rb 的 BUILD_TYPE 不是 dev，請先確認開發環境狀態後再執行發布。" -ForegroundColor Red
+    Write-Host "        目前值：$(($configOriginal | Select-String 'BUILD_TYPE').Line.Trim())" -ForegroundColor Red
+    exit 1
+}
+
 $configRelease = $configOriginal `
     -replace 'BUILD_TYPE = "dev"',          'BUILD_TYPE = "release"' `
     -replace 'ENV_MODE = "development"',     'ENV_MODE = "production"' `
@@ -50,10 +58,9 @@ Set-Content -Path $CONFIG -Value $configRelease -Encoding UTF8
 $itemsToCompress = @("$ROOT\loamlab_plugin.rb", "$ROOT\loamlab_plugin")
 Compress-Archive -Path $itemsToCompress -DestinationPath $OUT_ZIP -Force
 
-# 還原 BUILD_TYPE 與 ENV_MODE，但保留新版號
+# 還原 BUILD_TYPE，保留新版號；ENV_MODE 維持 production（恆定值，不還原）
 $configDev = $configRelease `
-    -replace 'BUILD_TYPE = "release"',  'BUILD_TYPE = "dev"' `
-    -replace 'ENV_MODE = "production"', 'ENV_MODE = "development"'
+    -replace 'BUILD_TYPE = "release"', 'BUILD_TYPE = "dev"'
 
 Set-Content -Path $CONFIG -Value $configDev -Encoding UTF8
 

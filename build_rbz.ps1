@@ -18,8 +18,9 @@ Write-Host "[Deploy] BUILD_TYPE → release" -ForegroundColor Cyan
 $itemsToCompress = @("$sourceDir\loamlab_plugin.rb", "$sourceDir\loamlab_plugin")
 Compress-Archive -Path $itemsToCompress -DestinationPath $outZip -Force
 
-# ★ 打包完畢後還原為 dev 模式
-Set-Content -Path $configFile -Value $configContent -Encoding UTF8
+# ★ 打包完畢後明確還原為 dev 模式（不依賴原始快照，硬編碼保證結果恆為 dev）
+$restoredContent = $prodContent -replace 'BUILD_TYPE = "release"', 'BUILD_TYPE = "dev"'
+Set-Content -Path $configFile -Value $restoredContent -Encoding UTF8
 Write-Host "[Deploy] BUILD_TYPE restored to dev" -ForegroundColor Cyan
 
 Rename-Item -Path $outZip -NewName "loamlab_plugin.rbz" -Force

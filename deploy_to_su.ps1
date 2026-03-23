@@ -1,6 +1,6 @@
 # This script copies the development files to SketchUp's plugin folder
 # For SketchUp 2024 on Windows. Adjust the version year if different.
-$sourceDir = "c:\Users\qingwen\.gemini\antigravity\playground\luminescent-einstein"
+$sourceDir = "c:\Users\qingwen\.gemini\antigravity\workspaces\土窟設計su渲染插件"
 $appData = [System.Environment]::GetFolderPath('ApplicationData')
 $suPluginDir = "$appData\SketchUp\SketchUp 2024\SketchUp\Plugins"
 

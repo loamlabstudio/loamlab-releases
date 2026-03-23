@@ -32,13 +32,16 @@ SketchUp Plugin (Ruby + HTML/JS)  ──POST──►  Vercel Backend (Node.js) 
 - **`loamlab_plugin.rb`** — Entry point loaded by SketchUp
 
 ### Backend Side (`loamlab_backend/api/`)
-- **`render.js`** — Core: deduct points (waterfall: monthly `points` → `lifetime_points`), upload image to freeimage.host (fallback: ImgBB), call Coze stream API, return SSE stream; refunds on any failure
+- **`render.js`** — Core: deduct points (waterfall: monthly `points` → `lifetime_points`), upload image to freeimage.host (fallback: ImgBB), call Coze stream API, return SSE stream; refunds on any failure; grants referral rewards on first render (new user B +100 / referrer A +300)
 - **`user.js`** — Fetch user profile; auto-registers new users with 10-point signup bonus
-- **`webhook.js`** — LemonSqueezy webhook (HMAC-SHA256 on `X-Signature` header); maps variant IDs to point values; handles referral rewards (200+200); must disable bodyParser for raw body access
+- **`webhook.js`** — LemonSqueezy webhook (HMAC-SHA256 on `X-Signature` header); maps variant IDs to point values; must disable bodyParser for raw body access
 - **`referral.js`** — Generate/validate referral codes
 - **`stats.js`** — System-wide totals (users, points issued)
 - **`version.js`** — Returns `latest_version`, `release_notes`, `download_url`; updated by `release.ps1` before each release
 - **`fix_anomalies.js`** — Admin-only endpoint (requires `ADMIN_KEY` query param in production) to fix negative point balances in DB
+- **`feedback.js`** — Collect render ratings (👍/👎) and negative-feedback tags; one-click error report; records `plugin_version` and `transaction_id`
+- **`materials.js`** — Material library cloud CRUD (GET/POST/DELETE); per-item limit by subscription plan (free: 20 / Pro+: 200)
+- **`inpaint.js`** — Local re-render (inpainting); accepts base64 mask + rendered image, calls Fal.ai API, returns swapped result
 - **`auth/`** — OAuth login (`login.js`) → callback (`callback.js`) → session polling (`poll.js`); poll also generates `referral_code` for new users
 
 ### Database (Supabase)
@@ -51,7 +54,7 @@ Key tables:
 ### Points Pricing
 - 1K render: 15 pts | 2K: 20 pts | 4K: 25 pts
 - Signup bonus: 10 pts
-- Referral bonus (first purchase): 200 pts to both referrer and referee
+- Referral bonus (first render): new user B +100 pts / referrer A +300 pts
 
 ---
 
@@ -191,8 +194,9 @@ GET https://loamlabbackend.vercel.app/api/fix_anomalies?key=<ADMIN_KEY>
 | 付費/結帳/Webhook 邏輯 | `Summon_Billing.md` / `Summon_Fintech.md` |
 | 環境變數新增或移除 | `CLAUDE.md`（Environment Variables 章節） |
 
-**觸發時機**：每次 commit 後，檢查上表，若有對應項目，結尾加一句：
-> 「此次改動涉及 [文件名]，是否需要同步更新？」
+**觸發時機**：每次 commit 後，對照上表自動判斷：
+- 改動類型**明確匹配**表中條目 → 直接執行同步，commit message 末尾標注「已同步 [文件名]」
+- 改動類型**跨多個條目或範圍不明確** → 才詢問：「此次改動可能涉及 [文件名1] / [文件名2]，請確認是否同步」
 
 ---
 

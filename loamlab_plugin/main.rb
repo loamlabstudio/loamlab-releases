@@ -300,7 +300,7 @@ module LoamLab
 
         model     = Sketchup.active_model
         save_path = model.get_attribute("LoamLabAI", "save_path", "").to_s.dup.force_encoding("UTF-8")
-        next unless !save_path.empty? && File.directory?(save_path)
+        next if save_path.empty? || !File.directory?(save_path)
 
         begin
           require 'open-uri'
@@ -333,7 +333,7 @@ module LoamLab
         model     = Sketchup.active_model
         save_path = model.get_attribute("LoamLabAI", "save_path", "").to_s.dup.force_encoding("UTF-8")
 
-        unless !save_path.empty? && File.directory?(save_path)
+        if save_path.empty? || !File.directory?(save_path)
           payload = { action: 'historyList', files: [] }.to_json
           dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(payload)}')")
           next

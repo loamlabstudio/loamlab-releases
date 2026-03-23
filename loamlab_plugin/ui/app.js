@@ -357,8 +357,6 @@ window.receiveFromRuby = function (data) {
         statusText.classList.replace('text-red-400', 'text-amber-400');
     } else if (data.status === 'render_success') {
         finishedScenesCount++;
-        const langObj = UI_LANG[currentLang];
-
         // 自動更新點數餘額 (後端回傳 points_remaining)
         if (data.points_remaining !== undefined) {
             const pb = document.getElementById('point-balance');
@@ -743,7 +741,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const allSceneCheckboxes = document.querySelectorAll('input[name="scene"]');
             const langObj = UI_LANG[currentLang] || UI_LANG['zh-TW'];
             if (allSceneCheckboxes.length === 0) {
-                showUpdateToast('⚠️ ' + (langObj['alert_no_scene_setup'] || '此模型尚未建立任何場景！請在 SketchUp 中點選「視窗 → 場景」新增場景。').split('\n')[0]);
+                showUpdateToast('⚠️ ' + (langObj['alert_no_scene_setup'] || '此模型尚未建立任何場景！請在 SketchUp 中點選「視窗 → 場景」新增場景。'));
             } else {
                 showUpdateToast('⚠️ ' + (langObj['alert_no_scene'] || '請至少勾選一個場景進行渲染！'));
             }
@@ -1890,14 +1888,11 @@ function renderMaterialLibrary() {
             <button class="mat-del-btn absolute top-0.5 right-0.5 w-4 h-4 bg-red-600/80 hover:bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center z-10 opacity-0 group-hover:opacity-100 transition-opacity" data-id="${m.id}" title="刪除">×</button>
         </div>
     `).join('');
-    grid.querySelectorAll('.material-tile').forEach(tile => {
-        tile.addEventListener('click', () => selectMaterialTile(tile));
-    });
-    grid.querySelectorAll('.mat-del-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            deleteMaterial(btn.getAttribute('data-id'));
-        });
+    grid.addEventListener('click', (e) => {
+        const delBtn = e.target.closest('.mat-del-btn');
+        if (delBtn) { e.stopPropagation(); deleteMaterial(delBtn.getAttribute('data-id')); return; }
+        const tile = e.target.closest('.material-tile');
+        if (tile) selectMaterialTile(tile);
     });
 }
 

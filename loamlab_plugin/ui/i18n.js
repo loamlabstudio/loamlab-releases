@@ -100,12 +100,17 @@ const UI_LANG = {
         'already_subscribed': '您已訂閱此方案。如需升級或管理訂閱，請至訂閱中心。',
         'manage_subscription': '管理訂閱 →',
         'share_text': '我在用 LoamLab 幫 SketchUp 做 AI 渲染，效果很讚！\n輸入我的邀請碼 {code}，完成第一張算圖你得 100 點 🎁',
+        'share_copied_line': '✓ 已複製！開啟 LINE 貼給好友',
+        'share_copied_wa': '✓ 已複製！開啟 WhatsApp 貼給好友',
         'referral_toast': '🎉 你的朋友完成了首次算圖，+300 點已到帳！',
+        'resolution_label': '解析度 (Resolution)',
+        'login_polling': '等待授權中...',
+        'login_polling_sub': '系統已為您開啟外部瀏覽器，請在網頁完成 Google 登入，完成後此視窗將自動關閉。',
         'res_4k_hint': '4K 需要 Pro 或 Studio 方案',
         'res_4k_upgrade': '升級解鎖',
         'history_title': '渲染歷史',
-        'history_empty': '尚無渲染紀錄',
-        'history_download': '下載',
+        'history_empty': '尚無渲染紀錄（存檔目錄需先設定）',
+        'history_download': '開啟資料夾',
         'history_rerender': '帶入設定'
     },
     'en-US': {
@@ -209,12 +214,17 @@ const UI_LANG = {
         'already_subscribed': 'You are already on this plan. Visit the customer portal to manage your subscription.',
         'manage_subscription': 'Manage Subscription →',
         'share_text': 'I\'m using LoamLab for AI rendering in SketchUp — results are amazing!\nEnter my invite code {code} to get 100 pts on your first render 🎁',
+        'share_copied_line': '✓ Copied! Paste it in LINE to share',
+        'share_copied_wa': '✓ Copied! Paste it in WhatsApp to share',
         'referral_toast': '🎉 Your friend completed their first render — +300 pts have been added to your account!',
+        'resolution_label': 'Resolution',
+        'login_polling': 'Waiting for authorization...',
+        'login_polling_sub': 'We\'ve opened your browser. Please complete Google login — this window will close automatically.',
         'res_4k_hint': '4K requires Pro or Studio plan',
         'res_4k_upgrade': 'Upgrade to unlock',
         'history_title': 'Render History',
-        'history_empty': 'No renders yet',
-        'history_download': 'Download',
+        'history_empty': 'No renders yet (set a save folder first)',
+        'history_download': 'Open Folder',
         'history_rerender': 'Use Settings'
     },
     'zh-CN': {
@@ -255,9 +265,15 @@ const UI_LANG = {
         'tag_fabric': '布料',
         'tag_leather': '皮革',
         'tool_ai_render': '真实渲染',
-        'tool_furniture': '指定家具替换',
+        'tool_furniture': '材质替换',
         'tool_multi_angle': '多角度生成',
         'tool_material': '指定材质替换',
+        'extract_material': '提取材质',
+        'material_library': '素材库',
+        'swap_executing': '替换中...',
+        'swap_done': '材质替换完成！',
+        'share_copied_line': '✓ 已复制！打开 LINE 粘贴给好友',
+        'share_copied_wa': '✓ 已复制！打开 WhatsApp 粘贴给好友',
         'update_latest': '系统检查完毕：当前已是最新版本！',
         'export_done': '所有场景已发送，云端并行渲染中...',
         'render_all_done': '所有 AI 渲染已全部完成！',
@@ -314,12 +330,17 @@ const UI_LANG = {
         'already_subscribed': '您已订阅此方案。如需管理订阅，请前往订阅中心。',
         'manage_subscription': '管理订阅 →',
         'share_text': '我在用 LoamLab 帮 SketchUp 做 AI 渲染，效果很赞！\n输入我的邀请码 {code}，完成第一张渲染你得 100 点 🎁',
+        'share_copied_line': '✓ 已复制！打开 LINE 粘贴给好友',
+        'share_copied_wa': '✓ 已复制！打开 WhatsApp 粘贴给好友',
         'referral_toast': '🎉 你的朋友完成了首次渲染，+300 点已到账！',
+        'resolution_label': '分辨率',
+        'login_polling': '等待授权中...',
+        'login_polling_sub': '系统已为您打开外部浏览器，请在网页完成 Google 登录，完成后此窗口将自动关闭。',
         'res_4k_hint': '4K 需要 Pro 或 Studio 方案',
         'res_4k_upgrade': '升级解锁',
         'history_title': '渲染历史',
-        'history_empty': '暂无渲染记录',
-        'history_download': '下载',
+        'history_empty': '暂无渲染记录（请先设置存档目录）',
+        'history_download': '打开文件夹',
         'history_rerender': '带入设置'
     },
     'es-ES': {
@@ -363,6 +384,12 @@ const UI_LANG = {
         'tool_furniture': 'Reemplazo Mueble',
         'tool_multi_angle': 'Multi Ángulo',
         'tool_material': 'Reemplazo Material',
+        'extract_material': 'Extract',
+        'material_library': 'Material Library',
+        'swap_executing': 'Processing...',
+        'swap_done': 'Swap complete!',
+        'share_copied_line': '✓ Copied! Paste it in LINE to share',
+        'share_copied_wa': '✓ Copied! Paste it in WhatsApp to share',
         'update_latest': '¡El sistema está actualizado!',
         'export_done': 'Todas las escenas enviadas. Renderizando...',
         'render_all_done': '¡Todos los renders completados!',
@@ -420,11 +447,14 @@ const UI_LANG = {
         'manage_subscription': 'Gestionar Suscripción →',
         'share_text': '¡Estoy usando LoamLab para renderizado AI en SketchUp, los resultados son increíbles!\nUsa mi código de invitación {code} para obtener 100 puntos en tu primer render 🎁',
         'referral_toast': '🎉 ¡Tu amigo completó su primer render! +300 puntos han sido añadidos a tu cuenta.',
+        'resolution_label': 'Resolución',
+        'login_polling': 'Esperando autorización...',
+        'login_polling_sub': 'Hemos abierto tu navegador. Completa el inicio de sesión con Google — esta ventana se cerrará automáticamente.',
         'res_4k_hint': '4K requiere plan Pro o Studio',
         'res_4k_upgrade': 'Actualizar para desbloquear',
         'history_title': 'Historial de Renders',
         'history_empty': 'Sin renders aún',
-        'history_download': 'Descargar',
+        'history_download': 'Abrir Carpeta',
         'history_rerender': 'Usar ajustes'
     },
     'pt-BR': {
@@ -468,6 +498,12 @@ const UI_LANG = {
         'tool_furniture': 'Troca de Móvel',
         'tool_multi_angle': 'Múltiplos Ângulos',
         'tool_material': 'Troca de Material',
+        'extract_material': 'Extract',
+        'material_library': 'Material Library',
+        'swap_executing': 'Processing...',
+        'swap_done': 'Swap complete!',
+        'share_copied_line': '✓ Copied! Paste it in LINE to share',
+        'share_copied_wa': '✓ Copied! Paste it in WhatsApp to share',
         'update_latest': 'O sistema está atualizado!',
         'export_done': 'Todas as cenas enviadas. Renderizando...',
         'render_all_done': 'Todos os renders concluídos!',
@@ -525,11 +561,14 @@ const UI_LANG = {
         'manage_subscription': 'Gerenciar Assinatura →',
         'share_text': 'Estou usando o LoamLab para renderização AI no SketchUp — os resultados são incríveis!\nUse meu código de convite {code} para ganhar 100 pts no seu primeiro render 🎁',
         'referral_toast': '🎉 Seu amigo completou o primeiro render — +300 pts adicionados à sua conta!',
+        'resolution_label': 'Resolução',
+        'login_polling': 'Aguardando autorização...',
+        'login_polling_sub': 'Abrimos seu navegador. Conclua o login com o Google — esta janela fechará automaticamente.',
         'res_4k_hint': '4K requer plano Pro ou Studio',
         'res_4k_upgrade': 'Atualizar para desbloquear',
         'history_title': 'Histórico de Renders',
         'history_empty': 'Nenhum render ainda',
-        'history_download': 'Baixar',
+        'history_download': 'Abrir Pasta',
         'history_rerender': 'Usar configurações'
     },
     'ja-JP': {
@@ -570,9 +609,15 @@ const UI_LANG = {
         'tag_fabric': '布・ファブリック',
         'tag_leather': 'レザー',
         'tool_ai_render': 'リアルレンダー',
-        'tool_furniture': '指定家具を置換',
+        'tool_furniture': '材質置換',
         'tool_multi_angle': '多角生成',
         'tool_material': '指定材質を置換',
+        'extract_material': 'Extract',
+        'material_library': 'Material Library',
+        'swap_executing': '置換中...',
+        'swap_done': '材質置換完了！',
+        'share_copied_line': '✓ コピーしました！LINEで友達に送ってください',
+        'share_copied_wa': '✓ コピーしました！WhatsAppで友達に送ってください',
         'update_latest': 'システムは最新バージョンです！',
         'export_done': '全シーン送信完了。クラウドでレンダリング中...',
         'render_all_done': '全レンダリング完了！',
@@ -630,14 +675,27 @@ const UI_LANG = {
         'manage_subscription': 'サブスクリプションを管理 →',
         'share_text': 'LoamLab で SketchUp の AI レンダリングをしています。結果が素晴らしいです！\n招待コード {code} を使って最初のレンダーを完了すると 100 ポイントもらえます 🎁',
         'referral_toast': '🎉 友達が初回レンダーを完了しました！+300 ポイントがアカウントに追加されました。',
+        'resolution_label': '解像度',
+        'login_polling': '認証を待っています...',
+        'login_polling_sub': 'ブラウザを開きました。Google ログインを完了してください — 完了後にこのウィンドウは自動的に閉じます。',
         'res_4k_hint': '4K は Pro または Studio プランが必要です',
         'res_4k_upgrade': 'アップグレードして解放',
         'history_title': 'レンダー履歴',
         'history_empty': 'まだレンダーがありません',
-        'history_download': 'ダウンロード',
+        'history_download': 'フォルダを開く',
         'history_rerender': '設定を使用'
     }
 };
+
+// ── DEV 驗證：只在開發版執行，列出缺漏 key ──────────────────────────
+// 在 SketchUp Ruby Console 觀察輸出即可確認所有語言同步
+if (typeof window !== 'undefined' && document.title && document.title.includes('[DEV]')) {
+    const _baseKeys = Object.keys(UI_LANG['en-US']);
+    Object.keys(UI_LANG).forEach(lang => {
+        const missing = _baseKeys.filter(k => !(k in UI_LANG[lang]));
+        if (missing.length) console.warn(`[i18n] ${lang} missing (${missing.length}): ${missing.join(', ')}`);
+    });
+}
 
 let currentLang = 'en-US';
 

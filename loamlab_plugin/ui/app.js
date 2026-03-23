@@ -1,3 +1,10 @@
+// i18n helper — 自動 fallback: 當前語言 → en-US → key 名稱（便於 debug）
+function t(key) {
+    return (UI_LANG[currentLang] || UI_LANG['en-US'])[key]
+        ?? UI_LANG['en-US'][key]
+        ?? key;
+}
+
 // 實時進度條計時器與背景列隊計數器
 let renderTimer = null;
 let currentPct = 0;

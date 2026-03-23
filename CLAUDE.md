@@ -181,6 +181,31 @@ GET https://loamlabbackend.vercel.app/api/fix_anomalies?key=<ADMIN_KEY>
 
 ---
 
+## i18n 規則（新增 UI 字串必讀）
+
+每次新增 UI 字串，**必須同時補全所有 6 種語言**：
+`zh-TW` / `en-US` / `zh-CN` / `es-ES` / `pt-BR` / `ja-JP`
+
+**操作步驟：**
+1. 在 `loamlab_plugin/ui/i18n.js` 的 6 個語言物件中同時加入同一個 key
+2. 若無法翻譯，**複製 `en-US` 值作為佔位符** — 絕對不可只加 zh-TW 或 en-US 後就 commit
+3. 在 `app.js` 中使用 `t('key')` helper（自動 fallback 到 en-US，避免 undefined）
+4. 切換 DEV 版插件，開啟 SketchUp Ruby Console，確認**無 `[i18n] missing` 警告**
+
+**驗證指令（瀏覽器 console 可執行）：**
+```javascript
+Object.keys(UI_LANG).forEach(l => {
+    const missing = Object.keys(UI_LANG['en-US']).filter(k => !(k in UI_LANG[l]));
+    if (missing.length) console.warn(l, 'missing:', missing);
+});
+```
+
+**禁止行為：**
+- 在 JS/HTML 中直接 hardcode 中文字串（使用 `t('key')` 代替）
+- 在有子元素的 div 上使用 `data-i18n`（會被 textContent 覆蓋掉子元素）
+
+---
+
 ## 文件同步規則（Doc Sync Protocol）
 
 每次改動完成後，**必須主動詢問**是否需要同步更新相關文件。不需要自動寫入，詢問後由用戶確認再執行。

@@ -217,7 +217,7 @@ window.receiveFromRuby = function (data) {
         return;
     }
     if (data.action === 'historyList') {
-        renderHistoryGrid(data.files || [], data.save_path || '');
+        renderHistoryGrid(data.files || []);
         return;
     }
 
@@ -1178,7 +1178,7 @@ function openHistoryModal() {
     }
 }
 
-function renderHistoryGrid(files, savePath) {
+function renderHistoryGrid(files) {
     const grid = document.getElementById('history-grid');
     if (!grid) return;
     const lang = UI_LANG[currentLang] || UI_LANG['en-US'];

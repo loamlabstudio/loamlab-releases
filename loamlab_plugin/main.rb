@@ -289,7 +289,70 @@ module LoamLab
         end
       end
 
-      # 5. 自動開啟儲存路徑 (算圖完成後觸發)
+      # 5. AI 渲染結果自動存檔 → save_path + 更新 loamlab_history.json
+      dialog.add_action_callback("auto_save_render") do |action_context, params|
+        url    = params["url"]
+        scene  = (params["scene"]      || "render").to_s.dup.force_encoding("UTF-8")
+        res    = (params["resolution"] || "2k").to_s
+        prompt = (params["prompt"]     || "").to_s.dup.force_encoding("UTF-8")
+
+        next unless url
+
+        model     = Sketchup.active_model
+        save_path = model.get_attribute("LoamLabAI", "save_path", "").to_s.dup.force_encoding("UTF-8")
+        next unless !save_path.empty? && File.directory?(save_path)
+
+        begin
+          require 'open-uri'
+          require 'fileutils'
+          require 'json'
+
+          timestamp  = Time.now.strftime("%Y%m%d_%H%M%S")
+          safe_scene = scene.gsub(/[:*?"<>|\/\\]/, "_")[0, 30]
+          filename   = "loamlab_#{timestamp}_#{res}_#{safe_scene}_AI.jpg"
+          full_path  = File.join(save_path, filename)
+
+          File.open(full_path, "wb") { |f| URI.open(url) { |img| f.write(img.read) } }
+
+          # 更新 JSON 歷史索引（最多保留 20 筆）
+          index_path = File.join(save_path, "loamlab_history.json")
+          history = File.exist?(index_path) ? (JSON.parse(File.read(index_path, encoding: 'UTF-8')) rescue []) : []
+          history.unshift({ "filename" => filename, "scene" => scene, "resolution" => res,
+                            "prompt" => prompt, "timestamp" => timestamp })
+          history = history[0, 20]
+          File.write(index_path, JSON.generate(history), encoding: 'UTF-8')
+
+          puts "[LoamLab] auto_save_render: #{filename}"
+        rescue => e
+          puts "[LoamLab] auto_save_render failed: #{e.message}"
+        end
+      end
+
+      # 6. 列出已儲存的渲染歷史（讀取 loamlab_history.json）
+      dialog.add_action_callback("list_saved_renders") do |action_context, params|
+        model     = Sketchup.active_model
+        save_path = model.get_attribute("LoamLabAI", "save_path", "").to_s.dup.force_encoding("UTF-8")
+
+        unless !save_path.empty? && File.directory?(save_path)
+          payload = { action: 'historyList', files: [] }.to_json
+          dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(payload)}')")
+          next
+        end
+
+        begin
+          require 'json'
+          index_path = File.join(save_path, "loamlab_history.json")
+          history = File.exist?(index_path) ? (JSON.parse(File.read(index_path, encoding: 'UTF-8')) rescue []) : []
+          payload = { action: 'historyList', files: history }.to_json
+          dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(payload)}')")
+        rescue => e
+          payload = { action: 'historyList', files: [] }.to_json
+          dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(payload)}')")
+          puts "[LoamLab] list_saved_renders error: #{e.message}"
+        end
+      end
+
+      # 7. 自動開啟儲存路徑 (算圖完成後觸發)
       dialog.add_action_callback("open_save_dir") do |action_context, params|
         model = Sketchup.active_model
         save_path = model.get_attribute("LoamLabAI", "save_path", "")

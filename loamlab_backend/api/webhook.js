@@ -7,7 +7,7 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY || ''; // 應該使用 Service
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // LemonSqueezy 的自訂 Webhook Secret (用來驗證是不是真的從官方發送過來的)
-const WEBHOOK_SECRET = process.env.LEMONSQUEEZY_WEBHOOK_SECRET || process.env.LEMON_WEBHOOK_SECRET || '';
+const WEBHOOK_SECRET = process.env.LEMONSQUEEZY_WEBHOOK_SECRET || '';
 
 // Vercel 設定：停用自動解析 JSON 格式，以便 getRawBody 讀取原始 HMAC 簽章 Buffer
 export const config = {
@@ -139,10 +139,6 @@ export default async function handler(req, res) {
 
                     console.log(`[🚀金流] 成功為 ${customerEmail} 充值！月費餘額：${newPoints}, 永久餘額: ${newLifetimePoints}`);
 
-                    // Referral 200+200：首次訂閱購買時觸發
-                    if (isSubscription && user.referred_by && !user.referral_rewarded) {
-                        await triggerReferralReward(customerEmail, user.referred_by);
-                    }
 
                 } else {
                     // 不存在 -> 直接建立新使用者並給予點數
@@ -227,44 +223,6 @@ export default async function handler(req, res) {
     }
 }
 
-// Referral 200+200 獎勵：給 referee 和 referrer 各 +200 lifetime_points
-async function triggerReferralReward(refereeEmail, referralCode) {
-    try {
-        // 找到 referrer
-        const { data: referrer } = await supabase
-            .from('users')
-            .select('email, lifetime_points')
-            .eq('referral_code', referralCode)
-            .single();
-
-        if (!referrer) {
-            console.warn(`[邀請碼] 找不到 referrer（code: ${referralCode}）`);
-            return;
-        }
-
-        // 給 referee +200 lifetime_points，標記 referral_rewarded
-        const { data: referee } = await supabase.from('users').select('lifetime_points').eq('email', refereeEmail).single();
-        await supabase.from('users').update({
-            lifetime_points: (referee?.lifetime_points || 0) + 200,
-            referral_rewarded: true,
-        }).eq('email', refereeEmail);
-
-        // 給 referrer +200 lifetime_points
-        await supabase.from('users').update({
-            lifetime_points: (referrer.lifetime_points || 0) + 200,
-        }).eq('email', referrer.email);
-
-        // 記錄交易
-        await supabase.from('transactions').insert([
-            { user_email: refereeEmail, amount: 200, transaction_type: 'REFERRAL_BONUS_REFEREE' },
-            { user_email: referrer.email, amount: 200, transaction_type: 'REFERRAL_BONUS_REFERRER' },
-        ]);
-
-        console.log(`[🎁邀請碼] ${refereeEmail} ↔ ${referrer.email} 各 +200 lifetime_points`);
-    } catch (err) {
-        console.error('[邀請碼] 獎勵發放失敗：', err);
-    }
-}
 
 // 輔助函數：供 Next.js / Vercel 正確擷取 Raw Body
 // 注意：在某些 Vercel 版本中，如果使用了 bodyParser，這段可能會失效。

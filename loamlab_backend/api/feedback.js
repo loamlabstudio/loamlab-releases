@@ -60,7 +60,7 @@ async function sendEmailNotification({ type, rating, content, tags, transaction_
     const resolution = metadata?.resolution || '—';
     const errorCode = metadata?.error_code || '—';
 
-    const subject = `[LoamLab Camera 野人相機反饋] ${TYPE_LABEL[type] || type}${rating ? ` ${ratingStr}` : ''}`;
+    const subject = `[LoamLab AI Renderer 反饋] ${TYPE_LABEL[type] || type}${rating ? ` ${ratingStr}` : ''}`;
     const text = [
         `類型：${TYPE_LABEL[type] || type}`,
         `評分：${ratingStr}`,

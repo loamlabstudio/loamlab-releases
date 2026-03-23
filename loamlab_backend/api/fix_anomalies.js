@@ -1,9 +1,8 @@
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-    // 簡單的安全檢查 (可透過環境變數或密鑰)
     const { key } = req.query;
-    if (key !== process.env.ADMIN_KEY && process.env.NODE_ENV === 'production') {
+    if (!process.env.ADMIN_KEY || key !== process.env.ADMIN_KEY) {
         return res.status(403).json({ code: -1, msg: 'Forbidden' });
     }
 

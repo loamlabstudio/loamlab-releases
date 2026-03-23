@@ -203,9 +203,10 @@ module LoamLab
         if chosen_dir
           begin
              # 建立基於語言與日期的專業資料夾結構
+             require 'fileutils'
              date_str = Time.now.strftime("%Y-%m-%d")
              target_dir = File.join(chosen_dir, "LoamLab_Renders_#{lang}", date_str)
-             Dir.mkdir(target_dir) unless File.exist?(target_dir)
+             FileUtils.mkdir_p(target_dir)
              
              # 安全化檔案名稱，避免非法字元
              safe_prompt = prompt[0..20].gsub(/[^a-zA-Z0-9_\u4e00-\u9fa5]/, '_')

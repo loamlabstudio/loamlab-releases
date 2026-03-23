@@ -216,6 +216,10 @@ window.receiveFromRuby = function (data) {
         window.updateSaveDir(data.path);
         return;
     }
+    if (data.action === 'historyList') {
+        renderHistoryGrid(data.files || [], data.save_path || '');
+        return;
+    }
 
     const statusText = document.getElementById('status-text');
     const langObj = UI_LANG[currentLang];
@@ -378,21 +382,15 @@ window.receiveFromRuby = function (data) {
         const targetUrl = data.url;
 
         if (targetScene && targetUrl) {
-            // 儲存渲染歷史到 localStorage
-            (function(url, scene) {
-                const KEY = 'loamlab_render_history';
-                const hist = JSON.parse(localStorage.getItem(KEY) || '[]');
-                hist.unshift({
-                    id: Date.now().toString(),
-                    scene_name: scene,
-                    rendered_url: url,
-                    prompt: document.getElementById('user-prompt-input')?.value || '',
+            // AI 渲染結果自動存檔（Ruby 下載圖片 → save_path + 更新 JSON 索引）
+            if (window.sketchup) {
+                sketchup.auto_save_render({
+                    url: targetUrl,
+                    scene: targetScene,
                     resolution: document.querySelector('input[name="resolution"]:checked')?.value || '2k',
-                    timestamp: new Date().toISOString()
+                    prompt: document.getElementById('user-prompt-input')?.value || ''
                 });
-                if (hist.length > 20) hist.pop();
-                localStorage.setItem(KEY, JSON.stringify(hist));
-            })(targetUrl, targetScene);
+            }
 
             const gridEl = document.getElementById('preview-grid');
             if (gridEl) {
@@ -581,7 +579,7 @@ function renderScenesList(scenes) {
 
     const html = scenes.map(scene => `
         <label class="flex items-center space-x-3 my-2.5 p-3.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] transition-all cursor-pointer border border-white/5 hover:border-white/20 group shadow-sm">
-            <input type="checkbox" name="scene" value="${scene}" class="appearance-none w-5 h-5 rounded hover:bg-white/20 bg-black/40 border border-white/20 checked:bg-[#dc2626] checked:border-[#dc2626] transition-colors relative check-tick flex-shrink-0 shadow-inner">
+            <input type="checkbox" name="scene" value="${scene}" checked class="appearance-none w-5 h-5 rounded hover:bg-white/20 bg-black/40 border border-white/20 checked:bg-[#dc2626] checked:border-[#dc2626] transition-colors relative check-tick flex-shrink-0 shadow-inner">
             <span class="text-[14px] font-semibold text-white/80 group-hover:text-white transition-colors tracking-wide">${scene}</span>
         </label>
     `).join('');
@@ -745,9 +743,9 @@ document.addEventListener("DOMContentLoaded", () => {
             const allSceneCheckboxes = document.querySelectorAll('input[name="scene"]');
             const langObj = UI_LANG[currentLang] || UI_LANG['zh-TW'];
             if (allSceneCheckboxes.length === 0) {
-                alert(langObj['alert_no_scene_setup'] || '此模型尚未建立任何場景！\n請在 SketchUp 中點選「視窗 → 場景」，新增至少一個場景後再算圖。');
+                showUpdateToast('⚠️ ' + (langObj['alert_no_scene_setup'] || '此模型尚未建立任何場景！請在 SketchUp 中點選「視窗 → 場景」新增場景。').split('\n')[0]);
             } else {
-                alert(langObj['alert_no_scene'] || '請至少勾選一個場景進行渲染！');
+                showUpdateToast('⚠️ ' + (langObj['alert_no_scene'] || '請至少勾選一個場景進行渲染！'));
             }
             return;
         }
@@ -1169,41 +1167,51 @@ window.fetchUserPoints = function (email) {
 function openHistoryModal() {
     const modal = document.getElementById('history-modal');
     if (!modal) return;
-    const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
-    const KEY = 'loamlab_render_history';
-    const hist = JSON.parse(localStorage.getItem(KEY) || '[]');
+    const grid = document.getElementById('history-grid');
+    if (grid) grid.innerHTML = '<div class="text-center text-white/30 text-[12px] py-10">⏳</div>';
+    modal.classList.remove('hidden');
+    if (window.sketchup) {
+        sketchup.list_saved_renders({});
+    } else {
+        const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
+        if (grid) grid.innerHTML = `<div class="text-center text-white/30 text-[12px] py-10">${lang['history_empty'] || 'No renders yet'}</div>`;
+    }
+}
+
+function renderHistoryGrid(files, savePath) {
     const grid = document.getElementById('history-grid');
     if (!grid) return;
-    if (hist.length === 0) {
-        grid.innerHTML = `<div class="col-span-3 text-center text-white/30 text-[12px] py-10">${lang['history_empty'] || 'No renders yet'}</div>`;
-    } else {
-        grid.innerHTML = hist.map(entry => {
-            const date = new Date(entry.timestamp).toLocaleDateString();
-            const promptSnippet = entry.prompt ? entry.prompt.slice(0, 30) + (entry.prompt.length > 30 ? '…' : '') : '';
-            return `
-            <div class="flex flex-col gap-1.5 bg-white/5 rounded-xl overflow-hidden border border-white/8 hover:border-white/15 transition-colors">
-                <div class="aspect-video w-full overflow-hidden bg-black cursor-pointer" onclick="window.open('${entry.rendered_url}','_blank')">
-                    <img src="${entry.rendered_url}" class="w-full h-full object-cover hover:scale-105 transition-transform duration-500" loading="lazy">
-                </div>
-                <div class="px-2 pb-1 flex flex-col gap-0.5">
-                    <span class="text-[10px] text-white/60 font-medium truncate">${entry.scene_name || '—'}</span>
-                    <span class="text-[9px] text-white/30 truncate">${promptSnippet}</span>
-                    <span class="text-[9px] text-white/20 font-mono">${entry.resolution?.toUpperCase() || '—'} · ${date}</span>
-                    <div class="flex gap-1.5 mt-1">
-                        <button onclick="window.open('${entry.rendered_url}','_blank')"
-                            class="flex-1 text-[9px] py-1 rounded border border-white/15 text-white/50 hover:bg-white/10 hover:text-white/80 transition-all">
-                            ${lang['history_download'] || 'Download'}
-                        </button>
-                        <button onclick="applyHistorySettings(${JSON.stringify(entry).replace(/"/g, '&quot;')})"
-                            class="flex-1 text-[9px] py-1 rounded border border-amber-500/25 text-amber-300/70 hover:bg-amber-500/15 hover:text-amber-200 transition-all">
-                            ${lang['history_rerender'] || 'Use Settings'}
-                        </button>
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
+    const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
+    if (!files || files.length === 0) {
+        grid.innerHTML = `<div class="text-center text-white/30 text-[12px] py-10">${lang['history_empty'] || 'No renders yet (set a save folder first)'}</div>`;
+        return;
     }
-    modal.classList.remove('hidden');
+    window._historyFiles = files;
+    grid.innerHTML = files.map((e, i) => {
+        const date = (e.timestamp || '').replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, '$1/$2/$3 $4:$5');
+        const promptSnippet = (e.prompt || '').slice(0, 50) + ((e.prompt || '').length > 50 ? '…' : '');
+        return `
+        <div class="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3 border border-white/8 hover:border-white/15 transition-colors">
+            <div class="flex-1 min-w-0 flex flex-col gap-0.5">
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-white/75 font-medium truncate">${e.scene || '—'}</span>
+                    <span class="text-[9px] text-white/30 font-mono shrink-0">${(e.resolution || '').toUpperCase()}</span>
+                    <span class="text-[9px] text-white/25 shrink-0">${date}</span>
+                </div>
+                ${promptSnippet ? `<span class="text-[9px] text-white/35 truncate">${promptSnippet}</span>` : ''}
+            </div>
+            <div class="flex gap-1.5 shrink-0">
+                <button onclick="window.sketchup && sketchup.open_save_dir({})"
+                    class="text-[9px] px-2.5 py-1.5 rounded border border-white/15 text-white/45 hover:bg-white/10 hover:text-white/70 transition-all">
+                    ${lang['history_download'] || 'Open Folder'}
+                </button>
+                <button onclick="applyHistorySettings(window._historyFiles[${i}])"
+                    class="text-[9px] px-2.5 py-1.5 rounded border border-amber-500/25 text-amber-300/65 hover:bg-amber-500/15 hover:text-amber-200 transition-all">
+                    ${lang['history_rerender'] || 'Use Settings'}
+                </button>
+            </div>
+        </div>`;
+    }).join('');
 }
 
 function closeHistoryModal() {
@@ -1597,10 +1605,83 @@ if (btnDevReload) {
 
 function saveMaterial(name, thumbnailBase64) {
     const KEY = 'loamlab_materials';
+    const isPaid = window.loamlabSubscriptionPlan === 'pro' || window.loamlabSubscriptionPlan === 'studio';
+    const maxItems = isPaid ? 200 : 20;
+    const item = { id: Date.now().toString(), name, thumbnail: thumbnailBase64, created_at: new Date().toISOString() };
     const materials = JSON.parse(localStorage.getItem(KEY) || '[]');
-    materials.unshift({ id: Date.now().toString(), name, thumbnail: thumbnailBase64, created_at: new Date().toISOString() });
-    if (materials.length > 20) materials.pop(); // 上限 20 筆，FIFO
+    materials.unshift(item);
+    if (materials.length > maxItems) materials.pop();
     localStorage.setItem(KEY, JSON.stringify(materials));
+    if (window.loamlabUserEmail) {
+        fetch(`${API_BASE}/api/materials`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-User-Email': window.loamlabUserEmail },
+            body: JSON.stringify({ id: item.id, name: item.name, thumbnail: item.thumbnail })
+        }).catch(() => {});
+    }
+}
+
+function deleteMaterial(id) {
+    const KEY = 'loamlab_materials';
+    const materials = JSON.parse(localStorage.getItem(KEY) || '[]');
+    localStorage.setItem(KEY, JSON.stringify(materials.filter(m => m.id !== id)));
+    renderMaterialLibrary();
+    if (window.loamlabUserEmail) {
+        fetch(`${API_BASE}/api/materials?id=${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+            headers: { 'X-User-Email': window.loamlabUserEmail }
+        }).catch(() => {});
+    }
+}
+
+async function syncMaterialsFromCloud(email) {
+    try {
+        const res = await fetch(`${API_BASE}/api/materials`, { headers: { 'X-User-Email': email } });
+        const data = await res.json();
+        if (data.code === 0 && Array.isArray(data.materials) && data.materials.length > 0) {
+            localStorage.setItem('loamlab_materials', JSON.stringify(data.materials));
+            renderMaterialLibrary();
+        }
+    } catch (_) {}
+}
+
+function translateMaterialPrompt(text) {
+    if (!text) return text;
+    const dict = {
+        '木紋地板': 'seamless wood grain floor texture',
+        '大理石': 'marble stone texture',
+        '混凝土': 'raw concrete texture',
+        '水泥': 'concrete material',
+        '磚牆': 'exposed brick wall',
+        '磚塊': 'brick texture',
+        '石材': 'natural stone texture',
+        '金屬': 'metal texture',
+        '不銹鋼': 'brushed stainless steel',
+        '皮革': 'leather texture',
+        '布料': 'fabric texture',
+        '絨布': 'velvet fabric',
+        '地毯': 'carpet texture',
+        '瓷磚': 'ceramic tile',
+        '玻璃': 'glass material',
+        '藤編': 'rattan woven texture',
+        '塑料': 'plastic material',
+        '木頭': 'wood texture',
+        '白色': 'white',
+        '黑色': 'black',
+        '灰色': 'gray',
+        '米色': 'beige',
+        '深色': 'dark',
+        '淺色': 'light',
+        '牆面': 'wall surface',
+        '地板': 'floor',
+        '天花板': 'ceiling',
+        '沙發': 'sofa',
+        '椅子': 'chair',
+        '桌子': 'table'
+    };
+    let result = text;
+    for (const [zh, en] of Object.entries(dict)) result = result.replaceAll(zh, en);
+    return result;
 }
 
 function startExtractMode(imgUrl) {
@@ -1767,12 +1848,12 @@ function openSwapModal(sketchupImgSrc, renderedImgUrl) {
         };
 
         swapCanvas.addEventListener('mousedown', (e) => { swapIsDrawing = true; const p = getPos(e); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); });
-        swapCanvas.addEventListener('mousemove', (e) => { if (!swapIsDrawing) return; const p = getPos(e); swapCtx.lineTo(p.x, p.y); swapCtx.stroke(); });
+        swapCanvas.addEventListener('mousemove', (e) => { if (!swapIsDrawing) return; const p = getPos(e); swapCtx.lineTo(p.x, p.y); swapCtx.stroke(); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); });
         swapCanvas.addEventListener('mouseup', () => { swapIsDrawing = false; });
         swapCanvas.addEventListener('mouseleave', () => { swapIsDrawing = false; });
 
         swapCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); swapIsDrawing = true; const p = getPos(e); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); }, { passive: false });
-        swapCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (!swapIsDrawing) return; const p = getPos(e); swapCtx.lineTo(p.x, p.y); swapCtx.stroke(); }, { passive: false });
+        swapCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (!swapIsDrawing) return; const p = getPos(e); swapCtx.lineTo(p.x, p.y); swapCtx.stroke(); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); }, { passive: false });
         swapCanvas.addEventListener('touchend', () => { swapIsDrawing = false; });
     }
 
@@ -1784,6 +1865,8 @@ function openSwapModal(sketchupImgSrc, renderedImgUrl) {
     // 初始化素材庫面板
     selectedMaterialName = null;
     renderMaterialLibrary();
+    // 背景同步雲端（不阻塞 UI，完成後自動刷新網格）
+    if (window.loamlabUserEmail) syncMaterialsFromCloud(window.loamlabUserEmail);
 }
 
 let selectedMaterialName = null;
@@ -1799,15 +1882,22 @@ function renderMaterialLibrary() {
         return;
     }
     grid.innerHTML = materials.map(m => `
-        <div class="material-tile relative cursor-pointer rounded overflow-hidden border-2 border-transparent hover:border-sky-400/60 transition-all"
+        <div class="material-tile group relative cursor-pointer rounded overflow-hidden border-2 border-transparent hover:border-sky-400/60 transition-all"
              data-id="${m.id}" data-name="${m.name.replace(/"/g, '&quot;')}" title="${m.name.replace(/"/g, '&quot;')}">
             <img src="${m.thumbnail}" class="w-full aspect-square object-cover bg-white/5" draggable="false">
             <div class="absolute bottom-0 left-0 right-0 bg-black/70 text-[8px] text-white/70 px-1 py-0.5 truncate leading-tight">${m.name}</div>
-            <div class="material-selected-dot hidden absolute top-1 right-1 w-3 h-3 bg-sky-400 rounded-full shadow"></div>
+            <div class="material-selected-dot hidden absolute top-1 left-1 w-3 h-3 bg-sky-400 rounded-full shadow"></div>
+            <button class="mat-del-btn absolute top-0.5 right-0.5 w-4 h-4 bg-red-600/80 hover:bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center z-10 opacity-0 group-hover:opacity-100 transition-opacity" data-id="${m.id}" title="刪除">×</button>
         </div>
     `).join('');
     grid.querySelectorAll('.material-tile').forEach(tile => {
         tile.addEventListener('click', () => selectMaterialTile(tile));
+    });
+    grid.querySelectorAll('.mat-del-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteMaterial(btn.getAttribute('data-id'));
+        });
     });
 }
 
@@ -1840,7 +1930,7 @@ function clearSwapMask() {
 
 async function executeSwap() {
     const btn = document.getElementById('btn-execute-swap');
-    const prompt = document.getElementById('swap-prompt-input')?.value.trim() || '';
+    const prompt = translateMaterialPrompt(document.getElementById('swap-prompt-input')?.value.trim() || '');
 
     if (!swapCanvas || !swapRenderedUrl) return;
     if (!window.loamlabUserEmail) {
@@ -1881,13 +1971,14 @@ async function executeSwap() {
         });
         const result = await resp.json();
         if (result.code === 0 && result.url) {
+            const cardLabel = document.getElementById('swap-prompt-input')?.value.trim() || 'Inpaint Result';
             closeSwapModal();
             // 更新點數顯示
             if (result.points_remaining !== undefined) {
                 const pb = document.getElementById('point-balance');
                 if (pb) pb.textContent = result.points_remaining;
             }
-            appendInpaintResultCard(result.url);
+            appendInpaintResultCard(result.url, cardLabel);
             showUpdateToast('材質替換完成！');
         } else {
             showUpdateToast(result.msg || '替換失敗，請稍後再試');
@@ -1899,30 +1990,58 @@ async function executeSwap() {
     }
 }
 
-function appendInpaintResultCard(url) {
+function appendInpaintResultCard(url, promptText = 'Inpaint Result') {
     const gridEl = document.getElementById('preview-grid');
     if (!gridEl) return;
     const placeholder = document.getElementById('preview-placeholder');
     if (placeholder) placeholder.classList.add('hidden');
 
-    const promptText = document.getElementById('swap-prompt-input')?.value || 'inpaint';
+    const btnClass = "text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black transition-all font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 cursor-pointer";
     const card = document.createElement('div');
     card.className = 'relative flex flex-col rounded-xl overflow-hidden border border-sky-500/20 bg-black/60 group/card';
-    card.innerHTML = `
-        <div class="relative overflow-hidden">
-            <div class="absolute top-2 left-2 bg-sky-500 text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest uppercase">SWAPPED</div>
-            <img src="${url}" class="w-full object-cover block cursor-zoom-in" onclick="window.open('${url}','_blank')" draggable="false">
-        </div>
-        <div class="px-4 py-3 flex justify-between items-center bg-black/50 border-t border-white/5">
-            <span class="text-[11px] font-semibold text-white/80 tracking-widest truncate max-w-[120px]" title="${promptText.replace(/"/g,'&quot;')}">Inpaint Result</span>
-            <button onclick="if(window.sketchup)sketchup.save_image({url:'${url}',prompt:'inpaint',lang:currentLang})"
-                    class="text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black transition-all font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> SAVE
-            </button>
-        </div>
+
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'relative overflow-hidden';
+    imgWrap.innerHTML = `
+        <div class="absolute top-2 left-2 bg-sky-500 text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest uppercase">SWAPPED</div>
+        <img src="${url}" class="w-full object-cover block cursor-zoom-in" onclick="window.open('${url}','_blank')" draggable="false">
     `;
+
+    const footer = document.createElement('div');
+    footer.className = 'px-3 py-2 flex justify-between items-center bg-black/50 border-t border-white/5 gap-1';
+
+    const label = document.createElement('span');
+    label.className = 'text-[11px] font-semibold text-white/80 tracking-widest truncate max-w-[80px]';
+    label.title = promptText;
+    label.textContent = promptText.slice(0, 20) || 'SWAPPED';
+
+    const btnContainer = document.createElement('div');
+    btnContainer.className = 'flex gap-1 flex-shrink-0';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = btnClass;
+    saveBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> SAVE`;
+    saveBtn.onclick = () => { if (window.sketchup) sketchup.save_image({ url, prompt: promptText, lang: currentLang }); };
+
+    const swapBtn = document.createElement('button');
+    swapBtn.className = btnClass;
+    swapBtn.textContent = 'SWAP';
+    swapBtn.onclick = (e) => { e.stopPropagation(); openSwapModal(url, url); };
+
+    const extractBtn = document.createElement('button');
+    extractBtn.className = "text-[9px] px-2.5 py-1 rounded border border-sky-500/30 text-sky-300/80 hover:bg-sky-500/20 hover:text-sky-200 transition-all font-medium uppercase tracking-widest active:scale-90 cursor-pointer";
+    extractBtn.textContent = 'EXTRACT';
+    extractBtn.onclick = (e) => { e.stopPropagation(); startExtractMode(url); };
+
+    btnContainer.appendChild(saveBtn);
+    btnContainer.appendChild(swapBtn);
+    btnContainer.appendChild(extractBtn);
+    footer.appendChild(label);
+    footer.appendChild(btnContainer);
+    card.appendChild(imgWrap);
+    card.appendChild(footer);
     gridEl.prepend(card);
-    // 更新 grid 欄數
+
     const count = gridEl.querySelectorAll('.group\\/card').length;
     gridEl.className = gridEl.className.replace(/grid-cols-\d/, '');
     gridEl.classList.add(count >= 3 ? 'grid-cols-3' : count === 2 ? 'grid-cols-2' : 'grid-cols-1');

@@ -1311,14 +1311,14 @@ function openSharePlatform(platform) {
     const code = window.loamlabUserReferralCode;
     if (!code) return;
     const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
-    const inviteUrl = `https://loamlabbackend.vercel.app/api/invite?ref=${code}`;
+    const text = (lang['share_text'] || '邀請碼 {code}').replace('{code}', code);
     const hint = platform === 'line'
-        ? (lang['share_copied_line'] || '✓ 連結已複製，貼到 LINE 傳給好友')
-        : (lang['share_copied_wa'] || '✓ 連結已複製，貼到 WhatsApp 傳給好友');
-    navigator.clipboard.writeText(inviteUrl).then(() => {
+        ? (lang['share_copied_line'] || '✓ 已複製，開啟 LINE 貼給好友')
+        : (lang['share_copied_wa'] || '✓ 已複製，開啟 WhatsApp 貼給好友');
+    navigator.clipboard.writeText(text).then(() => {
         showUpdateToast(hint);
     }).catch(() => {
-        showUpdateToast('✓ ' + (lang['share_link_copied'] || '邀請連結已複製'));
+        showUpdateToast('✓ 訊息已複製');
     });
 }
 

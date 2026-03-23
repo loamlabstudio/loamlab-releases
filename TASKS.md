@@ -23,7 +23,7 @@
 | T05 | 反饋系統 | 建立完整反饋收集系統：feedback table + API、渲染後 Rating Bar（👍/👎 + 差評標籤）、錯誤一鍵回報、Beta Feedback modal 替換 mailto、render.js 記錄 plugin_version/transaction_id | `loamlab_backend/supabase_setup.sql`, `loamlab_backend/api/feedback.js`, `loamlab_backend/api/render.js`, `loamlab_plugin/main.rb`, `loamlab_plugin/ui/app.js`, `loamlab_plugin/ui/i18n.js`, `loamlab_plugin/ui/index.html` | `[DONE]` | `main` |
 | T06 | 素材庫/SWAP | Phase 1-2 全部落地：F1~F4 + 筆刷效能 + 雲端同步 + 分級上限 + Prompt 翻譯 + inpaint result card 補全 SWAP/EXTRACT 迭代按鈕 | `loamlab_plugin/ui/app.js`, `loamlab_backend/api/materials.js`, `ROADMAP.md` | `[DONE]` | `main` |
 | T07 | 反饋系統驗收 | Supabase 執行 feedback table 新 SQL 段落 + SketchUp 熱重載驗收（Rating Bar 顯示、錯誤回報按鈕） | `loamlab_backend/supabase_setup.sql`（執行，不改代碼） | `[OPEN]` | — |
-| T08 | Plugin UI | 工具 3 九宮格鏡頭：UI 骨架（Shot Style 選擇器 + 九宮格 Loading 佔位）+ Coze Workflow 串接 | `loamlab_plugin/ui/app.js`, `loamlab_backend/api/render.js` | `[OPEN]` | — |
+| T08 | Plugin UI | 工具 3 九宮格鏡頭：UI 骨架（Shot Style 選擇器 + 九宮格 Loading 佔位）+ Coze Workflow 串接 | `loamlab_plugin/ui/app.js`, `loamlab_backend/api/render.js` | `[DONE]` | `main` |
 | T09 | 渲染後端 | 工具 2 局部換裝：In-painting 後端整合（Fal.ai flux-pro/v1/fill）+ 點擊座標格式（x_ratio/y_ratio）驗證 | `loamlab_backend/api/render.js`, `loamlab_plugin/ui/app.js` | `[DONE]` | `main` |
 | T15 | Plugin UI / 後端 | 工具 2 升級：換用 Fal.ai flux-general/inpainting（支援 reference_image_url）+ 參考圖本機上傳 + 軟硬裝 tag 群組資料驅動化（SWAP_TAG_GROUPS） | `loamlab_backend/api/inpaint.js`, `loamlab_plugin/ui/app.js`, `loamlab_plugin/ui/index.html` | `[DONE]` | `main` |
 | T10 | Plugin UI | UX 修復：儲存多層目錄自動建立（FileUtils.mkdir_p）+ 場景預設全選 + 消除 native alert → showUpdateToast | `loamlab_plugin/main.rb`, `loamlab_plugin/ui/app.js` | `[DONE]` | `main` |

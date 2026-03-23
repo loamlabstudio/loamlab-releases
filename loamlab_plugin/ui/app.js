@@ -294,6 +294,8 @@ window.receiveFromRuby = function (data) {
             badge.textContent = 'DEV';
             badge.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);background:#dc2626;color:white;font-size:10px;font-weight:900;padding:2px 12px;border-radius:4px;z-index:9999;letter-spacing:3px;pointer-events:none;box-shadow:0 0 12px rgba(220,38,38,0.6);';
             document.body.appendChild(badge);
+            // Dev 模式：顯示所有開發中工具
+            document.querySelectorAll('.dev-only-tool').forEach(el => el.classList.remove('hidden'));
         }
         const langStr = data.lang || 'en-US';
         document.getElementById('lang-select').value = langStr;
@@ -774,7 +776,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 textPrompt.value = currentVal + appendText;
 
                 // 視覺回饋: 讓標籤閃爍一下
-                const ogClass = tag.className;
                 tag.classList.add('bg-white/30', 'text-white', 'border-white/50');
                 setTimeout(() => {
                     tag.classList.remove('bg-white/30', 'text-white', 'border-white/50');
@@ -1891,7 +1892,7 @@ let swapCtx = null;
 let swapRenderedUrl = null;
 let swapRefImageBase64 = null;
 
-function openSwapModal(sketchupImgSrc, renderedImgUrl) {
+function openSwapModal(_sketchupImgSrc, renderedImgUrl) {
     swapRenderedUrl = renderedImgUrl;
     const modal = document.getElementById('swap-modal');
     if (!modal) return;

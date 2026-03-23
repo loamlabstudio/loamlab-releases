@@ -378,6 +378,22 @@ window.receiveFromRuby = function (data) {
         const targetUrl = data.url;
 
         if (targetScene && targetUrl) {
+            // 儲存渲染歷史到 localStorage
+            (function(url, scene) {
+                const KEY = 'loamlab_render_history';
+                const hist = JSON.parse(localStorage.getItem(KEY) || '[]');
+                hist.unshift({
+                    id: Date.now().toString(),
+                    scene_name: scene,
+                    rendered_url: url,
+                    prompt: document.getElementById('user-prompt-input')?.value || '',
+                    resolution: document.querySelector('input[name="resolution"]:checked')?.value || '2k',
+                    timestamp: new Date().toISOString()
+                });
+                if (hist.length > 20) hist.pop();
+                localStorage.setItem(KEY, JSON.stringify(hist));
+            })(targetUrl, targetScene);
+
             const gridEl = document.getElementById('preview-grid');
             if (gridEl) {
                 // 尋找卡片內的標題是不是符合
@@ -444,20 +460,31 @@ window.receiveFromRuby = function (data) {
                                     openSwapModal(originalImgSrc, targetUrl);
                                 };
                                 btnContainer.appendChild(swapBtn);
+
+                                // EXTRACT 按鈕 — 從渲染圖框選材質存入素材庫
+                                const extractBtn = document.createElement('button');
+                                extractBtn.className = "text-[9px] px-2.5 py-1 rounded border border-sky-500/30 text-sky-300/80 hover:bg-sky-500/20 hover:text-sky-200 hover:border-sky-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm";
+                                extractBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> EXTRACT`;
+                                extractBtn.onclick = (e) => {
+                                    e.stopPropagation();
+                                    startExtractMode(targetUrl);
+                                };
+                                btnContainer.appendChild(extractBtn);
                             }
 
-                            // SHARE 按鈕（已登入且有邀請碼才顯示）
+                            // SHARE 按鈕（已登入且有邀請碼才顯示，直接顯示 LINE / WA）
                             if (window.loamlabUserReferralCode) {
-                                const shareBtn = document.createElement('button');
-                                shareBtn.className = "text-[9px] px-2.5 py-1 rounded border border-green-500/30 text-green-300/80 hover:bg-green-500/20 hover:text-green-200 hover:border-green-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm";
-                                shareBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg> SHARE`;
-                                shareBtn.onclick = (e) => {
-                                    e.stopPropagation();
-                                    navigator.clipboard.writeText(window.loamlabUserReferralCode).then(() => {
-                                        showUpdateToast(`\uD83C\uDF9F\uFE0F 邀請碼 ${window.loamlabUserReferralCode} 已複製！好友首次算圖後您得 300 點，好友得 100 點`);
-                                    });
-                                };
-                                btnContainer.appendChild(shareBtn);
+                                const shareBtnClass = "text-[9px] px-2.5 py-1 rounded border border-green-500/30 text-green-300/80 hover:bg-green-500/20 hover:text-green-200 hover:border-green-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest active:scale-90 shadow-sm";
+                                const lineBtn = document.createElement('button');
+                                lineBtn.className = shareBtnClass;
+                                lineBtn.textContent = 'LINE';
+                                lineBtn.onclick = (e) => { e.stopPropagation(); openSharePlatform('line'); };
+                                const waBtn = document.createElement('button');
+                                waBtn.className = shareBtnClass;
+                                waBtn.textContent = 'WA';
+                                waBtn.onclick = (e) => { e.stopPropagation(); openSharePlatform('wa'); };
+                                btnContainer.appendChild(lineBtn);
+                                btnContainer.appendChild(waBtn);
                             }
                         }
 
@@ -643,9 +670,17 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // 解析度切換時更新按鈕點數預覽
+    // 解析度切換時更新按鈕點數預覽，並顯示 4K 方案限制提示
     document.querySelectorAll('input[name="resolution"]').forEach(radio => {
-        radio.addEventListener('change', updateCostPreview);
+        radio.addEventListener('change', () => {
+            updateCostPreview();
+            const hint = document.getElementById('res-4k-hint');
+            if (!hint) return;
+            const is4k = radio.value === '4k' && radio.checked;
+            const plan = window.loamlabSubscriptionPlan;
+            const canUse4k = plan === 'pro' || plan === 'studio';
+            hint.classList.toggle('hidden', !(is4k && !canUse4k));
+        });
     });
     // 初始化時立即顯示預設成本
     updateCostPreview();
@@ -707,7 +742,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const costPerScene = resRadio ? parseInt(resRadio.getAttribute('data-cost') || "15", 10) : 15;
 
         if (selectedScenes.length === 0) {
-            alert(UI_LANG[currentLang]['alert_no_scene'] || '請先選擇一個場景喔！');
+            const allSceneCheckboxes = document.querySelectorAll('input[name="scene"]');
+            const langObj = UI_LANG[currentLang] || UI_LANG['zh-TW'];
+            if (allSceneCheckboxes.length === 0) {
+                alert(langObj['alert_no_scene_setup'] || '此模型尚未建立任何場景！\n請在 SketchUp 中點選「視窗 → 場景」，新增至少一個場景後再算圖。');
+            } else {
+                alert(langObj['alert_no_scene'] || '請至少勾選一個場景進行渲染！');
+            }
             return;
         }
 
@@ -887,6 +928,7 @@ function openPricingModal() {
     pricingModal.classList.remove('hidden');
     updatePlanCostLabels(currentLang);
     refreshPricingModalBadge();
+    applyBetaDiscountDisplay();
     setTimeout(() => {
         pricingModal.classList.remove('opacity-0');
         pricingModalContent.classList.remove('scale-95');
@@ -965,12 +1007,12 @@ const COST_CURRENCY = {
     'pt-BR': { symbol: 'R$', rate: 5.1 },
     'ja-JP': { symbol: '¥', rate: 150 },
 };
-// 各方案 2K 渲染成本（USD）：方案金額 ÷ Credits 數量 × 20 pts
+// 各方案 2K 渲染實際成本（USD，已含公測 -30% 折扣）
 const PLAN_RENDER_COST_USD = {
-    topup: 1.80,  // $18 / 200 pts × 20
-    starter: 1.60,  // $24 / 300 pts × 20
-    pro: 0.52,  // $52 / 2000 pts × 20
-    studio: 0.31,  // $139 / 9000 pts × 20
+    topup: 1.26,    // $18 × 0.7 / 200 pts × 20
+    starter: 1.12,  // $24 × 0.7 / 300 pts × 20
+    pro: 0.36,      // $52 × 0.7 / 2000 pts × 20
+    studio: 0.22,   // $139 × 0.7 / 9000 pts × 20
 };
 
 function updatePlanCostLabels(lang) {
@@ -993,6 +1035,27 @@ const LS_VARIANTS = {
     STUDIO: 1432205    // ← 替換為 Studio Variant ID
 };
 const BETA_DISCOUNT_CODE = 'LOAM_BETA_30';
+const BETA_DISCOUNT_RATE = 0.70; // 公測 -30% 折扣
+
+function applyBetaDiscountDisplay() {
+    document.querySelectorAll('[data-original-price]').forEach(container => {
+        const original = parseFloat(container.getAttribute('data-original-price'));
+        const period = container.getAttribute('data-price-period') || 'mo';
+        const discounted = Math.round(original * BETA_DISCOUNT_RATE);
+        const periodLabel = period === 'one-time' ? '/one-time' : '/mo';
+        container.innerHTML = `
+            <div class="flex flex-col gap-0.5">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-[12px] text-white/30 line-through">$${original}</span>
+                    <span class="text-[9px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-bold tracking-wider">-30% BETA</span>
+                </div>
+                <div class="flex items-end gap-1">
+                    <span class="text-3xl font-bold text-white">$${discounted}</span>
+                    <span class="text-[10px] text-white/40 mb-1.5">${periodLabel}</span>
+                </div>
+            </div>`;
+    });
+}
 
 window.updateLoginUI = function (email, points, refCode, referredBy) {
     const btnLogin = document.getElementById('btn-login');
@@ -1073,6 +1136,16 @@ window.fetchUserPoints = function (email) {
                 window.loamlabSubscriptionPlan = data.subscription_plan || null;
                 window.loamlabLastTopupAt = data.last_topup_at || null;
                 window.updateLoginUI(email, data.points, data.referral_code, data.referred_by);
+
+                // 邀請人到帳 Toast：比對上次快取的成功邀請數，有增加就通知
+                const newRefCount = data.referral_success_count || 0;
+                const prevRefCount = parseInt(localStorage.getItem('loamlab_referral_count') || '-1');
+                if (prevRefCount >= 0 && newRefCount > prevRefCount) {
+                    const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
+                    setTimeout(() => showUpdateToast(lang['referral_toast'] || '🎉 你的朋友完成了首次算圖，+300 點已到帳！'), 800);
+                }
+                localStorage.setItem('loamlab_referral_count', newRefCount);
+
                 if (data.is_new_user) {
                     showWelcomeToast();
                     // 新用戶且尚未綁定邀請碼 → 1.5 秒後自動開 modal，提示輸入好友邀請碼
@@ -1092,6 +1165,79 @@ window.fetchUserPoints = function (email) {
             if (pb) pb.textContent = 'ERR';
         });
 }
+
+function openHistoryModal() {
+    const modal = document.getElementById('history-modal');
+    if (!modal) return;
+    const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
+    const KEY = 'loamlab_render_history';
+    const hist = JSON.parse(localStorage.getItem(KEY) || '[]');
+    const grid = document.getElementById('history-grid');
+    if (!grid) return;
+    if (hist.length === 0) {
+        grid.innerHTML = `<div class="col-span-3 text-center text-white/30 text-[12px] py-10">${lang['history_empty'] || 'No renders yet'}</div>`;
+    } else {
+        grid.innerHTML = hist.map(entry => {
+            const date = new Date(entry.timestamp).toLocaleDateString();
+            const promptSnippet = entry.prompt ? entry.prompt.slice(0, 30) + (entry.prompt.length > 30 ? '…' : '') : '';
+            return `
+            <div class="flex flex-col gap-1.5 bg-white/5 rounded-xl overflow-hidden border border-white/8 hover:border-white/15 transition-colors">
+                <div class="aspect-video w-full overflow-hidden bg-black cursor-pointer" onclick="window.open('${entry.rendered_url}','_blank')">
+                    <img src="${entry.rendered_url}" class="w-full h-full object-cover hover:scale-105 transition-transform duration-500" loading="lazy">
+                </div>
+                <div class="px-2 pb-1 flex flex-col gap-0.5">
+                    <span class="text-[10px] text-white/60 font-medium truncate">${entry.scene_name || '—'}</span>
+                    <span class="text-[9px] text-white/30 truncate">${promptSnippet}</span>
+                    <span class="text-[9px] text-white/20 font-mono">${entry.resolution?.toUpperCase() || '—'} · ${date}</span>
+                    <div class="flex gap-1.5 mt-1">
+                        <button onclick="window.open('${entry.rendered_url}','_blank')"
+                            class="flex-1 text-[9px] py-1 rounded border border-white/15 text-white/50 hover:bg-white/10 hover:text-white/80 transition-all">
+                            ${lang['history_download'] || 'Download'}
+                        </button>
+                        <button onclick="applyHistorySettings(${JSON.stringify(entry).replace(/"/g, '&quot;')})"
+                            class="flex-1 text-[9px] py-1 rounded border border-amber-500/25 text-amber-300/70 hover:bg-amber-500/15 hover:text-amber-200 transition-all">
+                            ${lang['history_rerender'] || 'Use Settings'}
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    modal.classList.remove('hidden');
+}
+
+function closeHistoryModal() {
+    document.getElementById('history-modal')?.classList.add('hidden');
+}
+
+function applyHistorySettings(entry) {
+    const promptEl = document.getElementById('user-prompt-input');
+    if (promptEl) promptEl.value = entry.prompt || '';
+    const radios = document.querySelectorAll('input[name="resolution"]');
+    radios.forEach(r => { r.checked = (r.value === entry.resolution); });
+    closeHistoryModal();
+}
+
+function openSharePlatform(platform) {
+    const code = window.loamlabUserReferralCode;
+    if (!code) return;
+    const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
+    const text = (lang['share_text'] || '邀請碼 {code}').replace('{code}', code);
+    const encoded = encodeURIComponent(text);
+    // 使用 app URL scheme，透過 Ruby UI.openURL 觸發 OS 路由到本機 App
+    const url = platform === 'line'
+        ? `line://msg/text/${encoded}`
+        : `whatsapp://send/?text=${encoded}`;
+    if (window.sketchup) {
+        sketchup.open_browser(url);
+    } else {
+        window.open(url, '_blank');
+    }
+}
+
+// Invite Modal LINE/WA 按鈕
+document.getElementById('btn-share-line-referral')?.addEventListener('click', () => openSharePlatform('line'));
+document.getElementById('btn-share-wa-referral')?.addEventListener('click', () => openSharePlatform('wa'));
 
 function showWelcomeToast() {
     const toast = document.getElementById('welcome-toast');
@@ -1336,6 +1482,13 @@ function closeReferralModal() {
     }
 }
 
+const btnHistory = document.getElementById('btn-history');
+if (btnHistory) btnHistory.addEventListener('click', openHistoryModal);
+const btnCloseHistory = document.getElementById('btn-close-history');
+if (btnCloseHistory) btnCloseHistory.addEventListener('click', closeHistoryModal);
+const historyModalEl = document.getElementById('history-modal');
+if (historyModalEl) historyModalEl.addEventListener('click', (e) => { if (e.target === historyModalEl) closeHistoryModal(); });
+
 const btnShowReferral = document.getElementById('btn-show-referral');
 if (btnShowReferral) btnShowReferral.addEventListener('click', openReferralModal);
 
@@ -1438,6 +1591,127 @@ if (btnDevReload) {
 }
 
 // =========================================================
+// =========================================================
+// 素材庫 — Material Library (localStorage)
+// =========================================================
+
+function saveMaterial(name, thumbnailBase64) {
+    const KEY = 'loamlab_materials';
+    const materials = JSON.parse(localStorage.getItem(KEY) || '[]');
+    materials.unshift({ id: Date.now().toString(), name, thumbnail: thumbnailBase64, created_at: new Date().toISOString() });
+    if (materials.length > 20) materials.pop(); // 上限 20 筆，FIFO
+    localStorage.setItem(KEY, JSON.stringify(materials));
+}
+
+function startExtractMode(imgUrl) {
+    // 全螢幕 overlay，讓用戶框選材質區域
+    const overlay = document.createElement('div');
+    overlay.id = 'extract-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;';
+    overlay.innerHTML = `
+        <p style="color:rgba(255,255,255,0.6);font-size:11px;letter-spacing:.1em;text-transform:uppercase;pointer-events:none;">拖拉框選要提取的材質區域　ESC 取消</p>
+        <div style="position:relative;display:inline-block;" id="extract-img-wrap">
+            <img id="extract-img" src="${imgUrl}" crossorigin="anonymous" style="max-width:90vw;max-height:80vh;display:block;border-radius:8px;" draggable="false">
+            <div id="extract-rect" style="position:absolute;border:2px dashed rgba(56,189,248,0.9);background:rgba(56,189,248,0.08);pointer-events:none;display:none;"></div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const img = overlay.querySelector('#extract-img');
+    const rectEl = overlay.querySelector('#extract-rect');
+    let startX = 0, startY = 0, drawing = false;
+
+    const getImgRect = () => img.getBoundingClientRect();
+
+    overlay.addEventListener('mousedown', (e) => {
+        if (e.target === overlay || !img.complete) return;
+        const r = getImgRect();
+        startX = e.clientX - r.left;
+        startY = e.clientY - r.top;
+        drawing = true;
+        rectEl.style.cssText += `;display:block;left:${startX}px;top:${startY}px;width:0;height:0;`;
+    });
+
+    overlay.addEventListener('mousemove', (e) => {
+        if (!drawing) return;
+        const r = getImgRect();
+        const cx = e.clientX - r.left;
+        const cy = e.clientY - r.top;
+        const x = Math.min(startX, cx), y = Math.min(startY, cy);
+        const w = Math.abs(cx - startX), h = Math.abs(cy - startY);
+        rectEl.style.left = x + 'px'; rectEl.style.top = y + 'px';
+        rectEl.style.width = w + 'px'; rectEl.style.height = h + 'px';
+    });
+
+    overlay.addEventListener('mouseup', (e) => {
+        if (!drawing) return;
+        drawing = false;
+        const r = getImgRect();
+        const cx = e.clientX - r.left;
+        const cy = e.clientY - r.top;
+        const x = Math.min(startX, cx), y = Math.min(startY, cy);
+        const w = Math.abs(cx - startX), h = Math.abs(cy - startY);
+        if (w < 10 || h < 10) return; // 太小忽略
+        confirmExtract(imgUrl, { x, y, w, h, imgW: r.width, imgH: r.height });
+    });
+
+    document.addEventListener('keydown', function escHandler(e) {
+        if (e.key === 'Escape') {
+            overlay.remove();
+            document.removeEventListener('keydown', escHandler);
+        }
+    });
+}
+
+function confirmExtract(imgUrl, rect) {
+    const name = window.prompt('為此材質命名：', '未命名材質');
+    if (!name) { document.getElementById('extract-overlay')?.remove(); return; }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+        // 計算實際像素座標（rect 是 CSS 像素，需換算到圖片原始尺寸）
+        const scaleX = img.naturalWidth / rect.imgW;
+        const scaleY = img.naturalHeight / rect.imgH;
+        const px = rect.x * scaleX, py = rect.y * scaleY;
+        const pw = rect.w * scaleX, ph = rect.h * scaleY;
+
+        // 裁切並縮至長邊 128px
+        const maxEdge = 128;
+        const scale = Math.min(maxEdge / pw, maxEdge / ph, 1);
+        const tw = Math.round(pw * scale), th = Math.round(ph * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = tw; canvas.height = th;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, px, py, pw, ph, 0, 0, tw, th);
+        const thumbnail = canvas.toDataURL('image/jpeg', 0.82);
+
+        saveMaterial(name.trim(), thumbnail);
+        document.getElementById('extract-overlay')?.remove();
+        showUpdateToast('材質已存入，請在素材庫選取後塗遮罩執行替換');
+        openSwapModal(imgUrl, imgUrl);
+    };
+    img.onerror = () => {
+        // CORS 失敗：用純色佔位縮圖
+        const canvas = document.createElement('canvas');
+        canvas.width = 64; canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(0, 0, 64, 64);
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.font = '9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(name.slice(0, 8), 32, 36);
+        const thumbnail = canvas.toDataURL('image/png');
+        saveMaterial(name.trim(), thumbnail);
+        document.getElementById('extract-overlay')?.remove();
+        showUpdateToast('材質已存入，請在素材庫選取後塗遮罩執行替換');
+        openSwapModal(imgUrl, imgUrl);
+    };
+    img.src = imgUrl;
+}
+
+// =========================================================
 // SWAP Modal — 遮罩替換彈窗
 // =========================================================
 let swapIsDrawing = false;
@@ -1477,8 +1751,9 @@ function openSwapModal(sketchupImgSrc, renderedImgUrl) {
     const promptInput = document.getElementById('swap-prompt-input');
     if (promptInput) promptInput.value = '';
 
-    // 顯示 modal
+    // 顯示 modal（主動加 flex，避免 hidden/flex 同存的 Tailwind 衝突）
     modal.classList.remove('hidden');
+    modal.classList.add('flex');
     setTimeout(() => modal.classList.remove('opacity-0'), 10);
 
     // 綁定刷子繪製事件（避免重複綁定）
@@ -1505,13 +1780,56 @@ function openSwapModal(sketchupImgSrc, renderedImgUrl) {
     document.getElementById('swap-brush-size')?.addEventListener('input', (e) => {
         if (swapCtx) swapCtx.lineWidth = parseInt(e.target.value, 10);
     });
+
+    // 初始化素材庫面板
+    selectedMaterialName = null;
+    renderMaterialLibrary();
+}
+
+let selectedMaterialName = null;
+
+function renderMaterialLibrary() {
+    const grid = document.getElementById('material-library-grid');
+    const countEl = document.getElementById('material-count');
+    if (!grid) return;
+    const materials = JSON.parse(localStorage.getItem('loamlab_materials') || '[]');
+    if (countEl) countEl.textContent = `${materials.length} items`;
+    if (materials.length === 0) {
+        grid.innerHTML = '<p class="col-span-3 text-[10px] text-white/20 text-center py-4 leading-relaxed">尚無素材<br>在渲染圖上點 EXTRACT 提取</p>';
+        return;
+    }
+    grid.innerHTML = materials.map(m => `
+        <div class="material-tile relative cursor-pointer rounded overflow-hidden border-2 border-transparent hover:border-sky-400/60 transition-all"
+             data-id="${m.id}" data-name="${m.name.replace(/"/g, '&quot;')}" title="${m.name.replace(/"/g, '&quot;')}">
+            <img src="${m.thumbnail}" class="w-full aspect-square object-cover bg-white/5" draggable="false">
+            <div class="absolute bottom-0 left-0 right-0 bg-black/70 text-[8px] text-white/70 px-1 py-0.5 truncate leading-tight">${m.name}</div>
+            <div class="material-selected-dot hidden absolute top-1 right-1 w-3 h-3 bg-sky-400 rounded-full shadow"></div>
+        </div>
+    `).join('');
+    grid.querySelectorAll('.material-tile').forEach(tile => {
+        tile.addEventListener('click', () => selectMaterialTile(tile));
+    });
+}
+
+function selectMaterialTile(tile) {
+    document.querySelectorAll('.material-tile').forEach(t => {
+        t.classList.remove('border-sky-400/60');
+        t.querySelector('.material-selected-dot')?.classList.add('hidden');
+    });
+    tile.classList.add('border-sky-400/60');
+    tile.querySelector('.material-selected-dot')?.classList.remove('hidden');
+    selectedMaterialName = tile.getAttribute('data-name');
+    const promptInput = document.getElementById('swap-prompt-input');
+    if (promptInput && !promptInput.value.trim()) {
+        promptInput.value = selectedMaterialName;
+    }
 }
 
 function closeSwapModal() {
     const modal = document.getElementById('swap-modal');
     if (!modal) return;
     modal.classList.add('opacity-0');
-    setTimeout(() => modal.classList.add('hidden'), 300);
+    setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
 }
 
 function clearSwapMask() {
@@ -1522,10 +1840,13 @@ function clearSwapMask() {
 
 async function executeSwap() {
     const btn = document.getElementById('btn-execute-swap');
-    const refUrl = document.getElementById('swap-reference-url')?.value.trim() || '';
     const prompt = document.getElementById('swap-prompt-input')?.value.trim() || '';
 
     if (!swapCanvas || !swapRenderedUrl) return;
+    if (!window.loamlabUserEmail) {
+        showUpdateToast('請先登入再使用替換功能');
+        return;
+    }
 
     // 將遮罩 canvas 匯出為 base64 PNG（黑底白遮罩格式）
     const maskCanvas = document.createElement('canvas');
@@ -1537,7 +1858,7 @@ async function executeSwap() {
     mCtx.globalCompositeOperation = 'destination-out';
     mCtx.drawImage(swapCanvas, 0, 0);
     mCtx.globalCompositeOperation = 'source-over';
-    // 反轉：白色為遮罩區域
+    // 反轉：白色為遮罩區域（Fal.ai 規範：白=填充區域）
     const maskData = mCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
     for (let i = 0; i < maskData.data.length; i += 4) {
         maskData.data[i] = 255 - maskData.data[i];
@@ -1547,25 +1868,62 @@ async function executeSwap() {
     mCtx.putImageData(maskData, 0, 0);
     const maskBase64 = maskCanvas.toDataURL('image/png');
 
-    if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="animate-pulse">處理中...</span>'; }
 
     try {
         const resp = await fetch(`${API_BASE}/api/inpaint`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image_url: swapRenderedUrl, mask_base64: maskBase64, reference_url: refUrl, prompt })
+            headers: {
+                'Content-Type': 'application/json',
+                'X-User-Email': window.loamlabUserEmail
+            },
+            body: JSON.stringify({ image_url: swapRenderedUrl, mask_base64: maskBase64, prompt })
         });
         const result = await resp.json();
         if (result.code === 0 && result.url) {
-            // 替換成功：關閉 modal 並顯示提示
             closeSwapModal();
-            alert('Swap complete! Result: ' + result.url);
+            // 更新點數顯示
+            if (result.points_remaining !== undefined) {
+                const pb = document.getElementById('point-balance');
+                if (pb) pb.textContent = result.points_remaining;
+            }
+            appendInpaintResultCard(result.url);
+            showUpdateToast('材質替換完成！');
         } else {
-            alert(result.msg || 'Furniture swap is coming in the next update.');
+            showUpdateToast(result.msg || '替換失敗，請稍後再試');
         }
     } catch (err) {
-        alert('Swap coming soon — backend not yet configured.');
+        showUpdateToast('網路錯誤，請稍後再試');
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'Execute SWAP'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = '⚡ Execute SWAP'; }
     }
+}
+
+function appendInpaintResultCard(url) {
+    const gridEl = document.getElementById('preview-grid');
+    if (!gridEl) return;
+    const placeholder = document.getElementById('preview-placeholder');
+    if (placeholder) placeholder.classList.add('hidden');
+
+    const promptText = document.getElementById('swap-prompt-input')?.value || 'inpaint';
+    const card = document.createElement('div');
+    card.className = 'relative flex flex-col rounded-xl overflow-hidden border border-sky-500/20 bg-black/60 group/card';
+    card.innerHTML = `
+        <div class="relative overflow-hidden">
+            <div class="absolute top-2 left-2 bg-sky-500 text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest uppercase">SWAPPED</div>
+            <img src="${url}" class="w-full object-cover block cursor-zoom-in" onclick="window.open('${url}','_blank')" draggable="false">
+        </div>
+        <div class="px-4 py-3 flex justify-between items-center bg-black/50 border-t border-white/5">
+            <span class="text-[11px] font-semibold text-white/80 tracking-widest truncate max-w-[120px]" title="${promptText.replace(/"/g,'&quot;')}">Inpaint Result</span>
+            <button onclick="if(window.sketchup)sketchup.save_image({url:'${url}',prompt:'inpaint',lang:currentLang})"
+                    class="text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black transition-all font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> SAVE
+            </button>
+        </div>
+    `;
+    gridEl.prepend(card);
+    // 更新 grid 欄數
+    const count = gridEl.querySelectorAll('.group\\/card').length;
+    gridEl.className = gridEl.className.replace(/grid-cols-\d/, '');
+    gridEl.classList.add(count >= 3 ? 'grid-cols-3' : count === 2 ? 'grid-cols-2' : 'grid-cols-1');
 }

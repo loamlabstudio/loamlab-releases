@@ -172,6 +172,17 @@
 
             <div class="h-4 w-[1px] bg-white/20 mx-1"></div>
 
+            <!-- Render History Button -->
+            <button id="btn-history" title="Render History"
+                class="hover:text-white transition-colors flex items-center gap-1.5 focus:outline-none relative group">
+                <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span class="text-[11px] font-semibold tracking-wider" data-i18n="history_title">History</span>
+            </button>
+
+            <div class="h-4 w-[1px] bg-white/20 mx-1"></div>
+
             <!-- Version + Check Update Button -->
             <div class="flex items-center gap-2">
                 <span id="current-version-label" class="text-[10px] text-white/30 tracking-wide font-mono"></span>
@@ -403,6 +414,12 @@
                                         </div>
                                     </label>
                                 </div>
+                                <!-- 4K 方案限制提示（僅在選 4K 且非 Pro/Studio 時顯示） -->
+                                <div id="res-4k-hint" class="hidden mt-2 flex items-center gap-1.5 text-[10px] text-amber-400/80">
+                                    <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+                                    <span data-i18n="res_4k_hint">4K 需要 Pro 或 Studio 方案</span>
+                                    <button onclick="openPricingModal()" class="ml-auto text-[10px] text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors" data-i18n="res_4k_upgrade">升級解鎖</button>
+                                </div>
                             </div>
 
                             <!-- Prompt & Tags Area -->
@@ -596,6 +613,10 @@
                         ------</div>
                     <button id="btn-copy-referral"
                         class="px-5 py-3 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">COPY</button>
+                    <button id="btn-share-line-referral"
+                        class="px-4 py-3 rounded-lg bg-[#00B900]/15 hover:bg-[#00B900]/30 border border-[#00B900]/40 text-[#4ade4a] text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">LINE</button>
+                    <button id="btn-share-wa-referral"
+                        class="px-4 py-3 rounded-lg bg-[#25D366]/15 hover:bg-[#25D366]/30 border border-[#25D366]/40 text-[#4ade80] text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">WA</button>
                 </div>
             </div>
 
@@ -638,6 +659,9 @@
                 <h2 class="text-2xl font-bold text-white tracking-widest mb-2 px-10" data-i18n="pricing_title">LOAMLAB CAMERA UPGRADE STRATEGY</h2>
                 <p class="text-white/50 text-sm tracking-wide" data-i18n="pricing_subtitle">Choose the perfect plan for your architectural pipeline.</p>
                 <p class="text-[#dc2626] text-xs mt-1" data-i18n="pricing_cost_hint">Standard 2K render costs 20 Credits.</p>
+                <div class="inline-flex items-center gap-2 mt-3 px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/25">
+                    <span class="text-green-400 text-[11px] font-semibold tracking-wide">🎉 公測限時特惠 — 全方案 -30%，結帳自動套用</span>
+                </div>
             </div>
 
             <!-- Pricing Grid -->
@@ -646,7 +670,7 @@
                 <!-- 1. Top-up -->
                 <div class="bg-[#141418] border border-white/5 rounded-xl p-5 flex flex-col hover:border-white/20 transition-all shadow-inner">
                     <h3 class="text-white/60 font-semibold tracking-wider text-sm mb-1 uppercase">Top-up</h3>
-                    <div class="flex items-end gap-1 mb-4">
+                    <div class="flex items-end gap-1 mb-4" data-original-price="18" data-price-period="one-time">
                         <span class="text-2xl font-bold text-white">$18</span>
                         <span class="text-[10px] text-white/40 mb-1">/Beta Sale</span>
                     </div>
@@ -664,7 +688,7 @@
                 <!-- 2. Starter -->
                 <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 flex flex-col hover:border-white/30 transition-all relative group shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
                     <h3 class="text-white/80 font-semibold tracking-wider text-sm mb-1 uppercase">Starter</h3>
-                    <div class="flex items-end gap-1 mb-4 border-b border-white/5 pb-4">
+                    <div class="flex items-end gap-1 mb-4 border-b border-white/5 pb-4" data-original-price="24" data-price-period="mo">
                         <span class="text-3xl font-bold text-white">$24</span>
                         <span class="text-[10px] text-white/40 mb-1.5">/mo (Beta)</span>
                     </div>
@@ -683,7 +707,7 @@
                 <div class="bg-gradient-to-b from-[#2a1012] to-[#140809] border border-[#dc2626]/50 rounded-xl p-5 flex flex-col shadow-[0_0_30px_rgba(220,38,38,0.15)] relative transform md:-translate-y-2 z-10">
                     <div class="absolute top-0 right-0 bg-[#dc2626] text-white text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase">Most Popular</div>
                     <h3 class="text-[#fca5a5] font-semibold tracking-wider text-sm mb-1 uppercase drop-shadow-sm">Pro</h3>
-                    <div class="flex items-end gap-1 mb-4 border-b border-[#dc2626]/20 pb-4">
+                    <div class="flex items-end gap-1 mb-4 border-b border-[#dc2626]/20 pb-4" data-original-price="52" data-price-period="mo">
                         <span class="text-4xl font-bold text-white">$52</span>
                         <span class="text-[10px] text-white/40 mb-1.5">/mo (Beta)</span>
                     </div>
@@ -701,7 +725,7 @@
                 <!-- 4. Studio -->
                 <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 flex flex-col hover:border-white/30 transition-all shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
                     <h3 class="text-white/80 font-semibold tracking-wider text-sm mb-1 uppercase">Studio</h3>
-                    <div class="flex items-end gap-1 mb-4 border-b border-white/5 pb-4">
+                    <div class="flex items-end gap-1 mb-4 border-b border-white/5 pb-4" data-original-price="139" data-price-period="mo">
                         <span class="text-3xl font-bold text-white">$139</span>
                         <span class="text-[10px] text-white/40 mb-1.5">/mo (Beta)</span>
                     </div>
@@ -728,7 +752,7 @@
     </div>
 
     <!-- 遮罩換裝彈窗 (Swap Modal) -->
-    <div id="swap-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden flex items-center justify-center">
+    <div id="swap-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden items-center justify-center">
         <div class="relative w-[900px] max-w-[96vw] max-h-[90vh] bg-[#0f0f12] border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden">
             <!-- Header -->
             <div class="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
@@ -765,18 +789,28 @@
                 <!-- Right: 參數設定 -->
                 <div class="w-[280px] shrink-0 flex flex-col border-l border-white/10 bg-[#0c0c0e]">
                     <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+                        <!-- 素材庫 -->
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex items-center justify-between">
+                                <label class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">素材庫 Library</label>
+                                <span class="text-[9px] text-white/25" id="material-count">0 items</span>
+                            </div>
+                            <div id="material-library-grid" class="grid grid-cols-3 gap-1.5 max-h-[144px] overflow-y-auto rounded-lg"></div>
+                            <p class="text-[10px] text-white/25">點選材質自動帶入指令　在渲染圖點 EXTRACT 提取</p>
+                        </div>
+                        <div class="border-t border-white/5"></div>
                         <!-- 參考圖 URL -->
                         <div class="flex flex-col gap-1.5">
                             <label class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">參考圖片 Reference</label>
-                            <input id="swap-reference-url" type="text" placeholder="貼上圖片 URL..." class="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-white/90 focus:outline-none focus:border-[#dc2626]/70 placeholder-white/20">
+                            <input id="swap-reference-url" type="text" placeholder="貼上圖片 URL（選填）..." class="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-white/90 focus:outline-none focus:border-[#dc2626]/70 placeholder-white/20">
                             <p class="text-[10px] text-white/30">AI 將依照參考圖的風格替換遮罩區域</p>
                         </div>
                         <!-- 替換說明 -->
                         <div class="flex flex-col gap-1.5">
                             <label class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">替換指令 Prompt</label>
-                            <textarea id="swap-prompt-input" rows="3" placeholder="e.g. Nordic style linen sofa, warm wood legs..." class="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-white/90 focus:outline-none focus:border-[#dc2626]/70 placeholder-white/20 resize-none"></textarea>
+                            <textarea id="swap-prompt-input" rows="3" placeholder="e.g. rough concrete wall texture, grey..." class="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-white/90 focus:outline-none focus:border-[#dc2626]/70 placeholder-white/20 resize-none"></textarea>
                         </div>
-                        <!-- 家具快速 Tags -->
+                        <!-- 快速標籤 -->
                         <div class="flex flex-col gap-1.5">
                             <label class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">快速標籤</label>
                             <div class="flex flex-wrap gap-1">
@@ -793,13 +827,13 @@
                         </div>
                         <!-- 費用提示 -->
                         <div class="bg-white/[0.03] border border-white/5 rounded-lg p-3 text-[10px] text-white/30 leading-relaxed">
-                            ⚠️ 換裝功能即將開放，目前需要先配置 Coze Inpainting 工作流。
+                            消耗 <span class="text-white/60 font-bold">10 pts</span>　由 Fal.ai Flux Fill 驅動，光影自動符合場景
                         </div>
                     </div>
                     <!-- 執行按鈕 -->
                     <div class="p-4 border-t border-white/10 shrink-0">
-                        <button id="btn-execute-swap" class="w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-3 rounded-xl font-bold text-[13px] tracking-widest shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                            執行替換 SWAP
+                        <button id="btn-execute-swap" onclick="executeSwap()" class="w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-3 rounded-xl font-bold text-[13px] tracking-widest shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] transition-all active:scale-[0.98]">
+                            ⚡ Execute SWAP
                         </button>
                     </div>
                 </div>
@@ -847,6 +881,19 @@
     </div>
 
     <!-- Feedback Modal -->
+    <!-- Render History Modal -->
+    <div id="history-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div class="w-[580px] max-w-[95vw] bg-[#0f0f12] border border-white/10 rounded-2xl shadow-2xl p-6 flex flex-col gap-4 relative" style="max-height:80vh;">
+            <div class="flex items-center justify-between shrink-0">
+                <span class="text-[13px] font-bold text-white/80 tracking-widest uppercase" data-i18n="history_title">Render History</span>
+                <button id="btn-close-history" class="text-white/30 hover:text-white/60 transition-colors text-lg leading-none">✕</button>
+            </div>
+            <div id="history-grid" class="grid grid-cols-3 gap-3 overflow-y-auto no-scrollbar" style="max-height:60vh;">
+                <!-- 動態生成 -->
+            </div>
+        </div>
+    </div>
+
     <div id="feedback-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
         <div class="feedback-modal-box scale-95 opacity-0 transition-all duration-200 w-80 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl p-5 flex flex-col gap-4">
             <div class="flex items-center justify-between">

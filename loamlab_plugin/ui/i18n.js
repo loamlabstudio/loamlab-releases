@@ -110,8 +110,7 @@ const UI_LANG = {
         'res_4k_upgrade': '升級解鎖',
         'history_title': '渲染歷史',
         'history_empty': '尚無渲染紀錄（存檔目錄需先設定）',
-        'history_download': '開啟資料夾',
-        'history_rerender': '帶入設定'
+        'history_rerender': '重用設定'
     },
     'en-US': {
         'title': 'LoamLab Camera',
@@ -224,8 +223,7 @@ const UI_LANG = {
         'res_4k_upgrade': 'Upgrade to unlock',
         'history_title': 'Render History',
         'history_empty': 'No renders yet (set a save folder first)',
-        'history_download': 'Open Folder',
-        'history_rerender': 'Use Settings'
+        'history_rerender': 'Re-use'
     },
     'zh-CN': {
         'title': '野人相机 (LoamLab Camera)',
@@ -340,8 +338,7 @@ const UI_LANG = {
         'res_4k_upgrade': '升级解锁',
         'history_title': '渲染历史',
         'history_empty': '暂无渲染记录（请先设置存档目录）',
-        'history_download': '打开文件夹',
-        'history_rerender': '带入设置'
+        'history_rerender': '重用设置'
     },
     'es-ES': {
         'title': 'LoamLab Cámara',
@@ -454,8 +451,7 @@ const UI_LANG = {
         'res_4k_upgrade': 'Actualizar para desbloquear',
         'history_title': 'Historial de Renders',
         'history_empty': 'Sin renders aún',
-        'history_download': 'Abrir Carpeta',
-        'history_rerender': 'Usar ajustes'
+        'history_rerender': 'Reutilizar'
     },
     'pt-BR': {
         'title': 'Câmera LoamLab',
@@ -568,8 +564,7 @@ const UI_LANG = {
         'res_4k_upgrade': 'Atualizar para desbloquear',
         'history_title': 'Histórico de Renders',
         'history_empty': 'Nenhum render ainda',
-        'history_download': 'Abrir Pasta',
-        'history_rerender': 'Usar configurações'
+        'history_rerender': 'Reutilizar'
     },
     'ja-JP': {
         'title': '野人カメラ (LoamLab Camera)',
@@ -682,8 +677,7 @@ const UI_LANG = {
         'res_4k_upgrade': 'アップグレードして解放',
         'history_title': 'レンダー履歴',
         'history_empty': 'まだレンダーがありません',
-        'history_download': 'フォルダを開く',
-        'history_rerender': '設定を使用'
+        'history_rerender': '設定を再利用'
     }
 };
 

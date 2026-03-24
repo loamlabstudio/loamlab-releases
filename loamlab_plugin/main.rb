@@ -339,7 +339,12 @@ module LoamLab
           history = []
           if !save_path.empty? && File.directory?(save_path)
             index_path = File.join(save_path, "loamlab_history.json")
-            history = File.exist?(index_path) ? (JSON.parse(File.read(index_path, encoding: 'UTF-8')) rescue []) : []
+            raw = File.exist?(index_path) ? (JSON.parse(File.read(index_path, encoding: 'UTF-8')) rescue []) : []
+            # 附加 file_url（本地 file:// 路徑，供 JS img src 直接讀取，不走外部 HTTP）
+            history = raw.map do |entry|
+              file_url = "file:///#{File.join(save_path, entry['filename'].to_s).gsub('\\', '/')}"
+              entry.merge('file_url' => file_url)
+            end
           end
 
           payload = { action: 'historyList', files: history }.to_json

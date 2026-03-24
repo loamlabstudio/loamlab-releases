@@ -323,9 +323,9 @@ module LoamLab
 
           history = []
           if !save_path.empty? && File.directory?(save_path)
-            # 掃描資料夾內所有 jpg（含大小寫），依修改時間由新到舊排序
-            raw = Dir.glob(File.join(save_path, "*.jpg")) + Dir.glob(File.join(save_path, "*.JPG"))
-            files = raw.uniq.sort_by { |f| -File.mtime(f).to_i }
+            # 只掃描 AI 渲染結果（命名慣例：loamlab_*_AI.jpg）
+            # 原始 SketchUp 截圖命名為 *_原圖.jpg，不納入
+            files = Dir.glob(File.join(save_path, "loamlab_*_AI.jpg")).sort_by { |f| -File.mtime(f).to_i }
             history = files.first(30).map do |f|
               fname = File.basename(f)
               # 格式：loamlab_YYYYMMDD_HHMMSS_RES_SCENE_AI.jpg

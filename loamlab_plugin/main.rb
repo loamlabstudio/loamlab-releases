@@ -306,7 +306,7 @@ module LoamLab
           require 'open-uri'
           timestamp  = Time.now.strftime("%Y%m%d_%H%M%S")
           safe_scene = scene.gsub(/[:*?"<>|\/\\]/, "_")[0, 30]
-          filename   = "#{timestamp}_#{res}_#{safe_scene}_AI.jpg"
+          filename   = "#{timestamp}_#{res}_#{safe_scene}_loamlab_camera.jpg"
           full_path  = File.join(save_path, filename)
           File.open(full_path, "wb") { |f| URI.open(url) { |img| f.write(img.read) } }
           puts "[LoamLab] auto_save_render: #{filename}"
@@ -323,13 +323,13 @@ module LoamLab
 
           history = []
           if !save_path.empty? && File.directory?(save_path)
-            # 只掃描 AI 渲染結果（命名慣例：YYYYMMDD_HHMMSS_RES_SCENE_AI.jpg）
+            # 只掃描 AI 渲染結果（命名慣例：YYYYMMDD_HHMMSS_RES_SCENE_loamlab_camera.jpg）
             # 原始 SketchUp 截圖命名為 *_原圖.jpg，不納入
-            files = Dir.glob(File.join(save_path, "*_AI.jpg")).sort_by { |f| -File.mtime(f).to_i }
+            files = Dir.glob(File.join(save_path, "*_loamlab_camera.jpg")).sort_by { |f| -File.mtime(f).to_i }
             history = files.first(30).map do |f|
               fname = File.basename(f)
-              # 格式：YYYYMMDD_HHMMSS_RES_SCENE_AI.jpg
-              m = fname.match(/^(\d{8})_(\d{6})_(\w+?)_(.+)_AI\.jpg$/)
+              # 格式：YYYYMMDD_HHMMSS_RES_SCENE_loamlab_camera.jpg
+              m = fname.match(/^(\d{8})_(\d{6})_(\w+?)_(.+)_loamlab_camera\.jpg$/)
               if m
                 ts   = "#{m[1]}_#{m[2]}"
                 res  = m[3]

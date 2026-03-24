@@ -290,12 +290,11 @@ module LoamLab
         end
       end
 
-      # 5. AI 渲染結果自動存檔 → save_path + 更新 loamlab_history.json
+      # 5. AI 渲染結果自動存檔 → 下載圖片到 save_path
       dialog.add_action_callback("auto_save_render") do |action_context, params|
         url    = params["url"]
         scene  = (params["scene"]      || "render").to_s.dup.force_encoding("UTF-8")
         res    = (params["resolution"] || "2k").to_s
-        prompt = (params["prompt"]     || "").to_s.dup.force_encoding("UTF-8")
 
         next unless url
 
@@ -305,45 +304,42 @@ module LoamLab
 
         begin
           require 'open-uri'
-          require 'fileutils'
-          require 'json'
-
           timestamp  = Time.now.strftime("%Y%m%d_%H%M%S")
           safe_scene = scene.gsub(/[:*?"<>|\/\\]/, "_")[0, 30]
           filename   = "loamlab_#{timestamp}_#{res}_#{safe_scene}_AI.jpg"
           full_path  = File.join(save_path, filename)
-
           File.open(full_path, "wb") { |f| URI.open(url) { |img| f.write(img.read) } }
-
-          # 更新 JSON 歷史索引（最多保留 20 筆）
-          index_path = File.join(save_path, "loamlab_history.json")
-          history = File.exist?(index_path) ? (JSON.parse(File.read(index_path, encoding: 'UTF-8')) rescue []) : []
-          history.unshift({ "filename" => filename, "scene" => scene, "resolution" => res,
-                            "prompt" => prompt, "timestamp" => timestamp })
-          history = history[0, 20]
-          File.write(index_path, JSON.generate(history), encoding: 'UTF-8')
-
           puts "[LoamLab] auto_save_render: #{filename}"
         rescue => e
           puts "[LoamLab] auto_save_render failed: #{e.message}"
         end
       end
 
-      # 6. 列出已儲存的渲染歷史（讀取 loamlab_history.json）
+      # 6. 列出已儲存的渲染歷史（直接掃描 save_path 資料夾，從檔名解析 metadata）
       dialog.add_action_callback("list_saved_renders") do |action_context, params|
         begin
-          require 'json'
           model     = Sketchup.active_model
           save_path = model.get_attribute("LoamLabAI", "save_path", "").to_s.dup.force_encoding("UTF-8")
 
           history = []
           if !save_path.empty? && File.directory?(save_path)
-            index_path = File.join(save_path, "loamlab_history.json")
-            raw = File.exist?(index_path) ? (JSON.parse(File.read(index_path, encoding: 'UTF-8')) rescue []) : []
-            # 附加 file_url（本地 file:// 路徑，供 JS img src 直接讀取，不走外部 HTTP）
-            history = raw.map do |entry|
-              file_url = "file:///#{File.join(save_path, entry['filename'].to_s).gsub('\\', '/')}"
-              entry.merge('file_url' => file_url)
+            # 掃描所有 loamlab_*_AI.jpg，依修改時間由新到舊排序
+            files = Dir.glob(File.join(save_path, "loamlab_*_AI.jpg")).sort_by { |f| -File.mtime(f).to_i }
+            history = files.first(30).map do |f|
+              fname = File.basename(f)
+              # 格式：loamlab_YYYYMMDD_HHMMSS_RES_SCENE_AI.jpg
+              m = fname.match(/^loamlab_(\d{8})_(\d{6})_(\w+?)_(.+)_AI\.jpg$/)
+              if m
+                ts   = "#{m[1]}_#{m[2]}"
+                res  = m[3]
+                scene = m[4].gsub('_', ' ')
+              else
+                ts = File.mtime(f).strftime("%Y%m%d_%H%M%S")
+                res = ''; scene = fname
+              end
+              file_url = "file:///#{f.gsub('\\', '/')}"
+              { 'filename' => fname, 'scene' => scene, 'resolution' => res,
+                'timestamp' => ts, 'file_url' => file_url }
             end
           end
 

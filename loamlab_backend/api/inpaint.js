@@ -54,9 +54,9 @@ export default async function handler(req, res) {
     const userEmail = req.headers['x-user-email'];
     if (!userEmail) return res.status(401).json({ code: -1, msg: 'Missing X-User-Email header' });
 
-    const { image_url, mask_base64, prompt = '', reference_image_base64 = null } = req.body || {};
-    if (!image_url || !mask_base64) {
-        return res.status(400).json({ code: -1, msg: 'Missing image_url or mask_base64' });
+    const { image_url, image_base64, mask_base64, prompt = '', reference_image_base64 = null } = req.body || {};
+    if ((!image_url && !image_base64) || !mask_base64) {
+        return res.status(400).json({ code: -1, msg: 'Missing image_url (or image_base64) or mask_base64' });
     }
 
     const COST = 10;
@@ -123,6 +123,17 @@ export default async function handler(req, res) {
     };
 
     try {
+        // 若前端傳來 base64（本地 file:/// 圖），先上傳至公開 host 取得 URL
+        let resolvedImageUrl = image_url;
+        if (!resolvedImageUrl && image_base64) {
+            try {
+                resolvedImageUrl = await uploadBase64(image_base64, IMGBB_API_KEY);
+            } catch (e) {
+                await refund('BASE_IMAGE_UPLOAD_FAIL');
+                return res.status(500).json({ code: -1, msg: 'Base image upload failed', points_refunded: true });
+            }
+        }
+
         // Upload mask to public URL (Fal.ai requires URL, not base64)
         let maskUrl;
         try {
@@ -146,7 +157,7 @@ export default async function handler(req, res) {
         // Call Fal.ai Flux Dev Inpainting
         // white mask = area to fill, black = area to preserve
         const falPayload = {
-            image_url,
+            image_url: resolvedImageUrl,
             mask_url: maskUrl,
             prompt: prompt || 'Replace the material in the marked area. Match the lighting, shadows, and perspective of the surrounding scene exactly.',
             num_inference_steps: 28,

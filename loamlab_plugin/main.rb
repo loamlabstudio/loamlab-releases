@@ -108,13 +108,15 @@ module LoamLab
         scenes_to_render = params["scenes"] || []
         user_prompt = (params["prompt"] || "").to_s.dup.force_encoding("UTF-8")
         resolution = params["resolution"] || "1k"
-        tool = (params["tool"] || 1).to_i
+        tool             = (params["tool"] || 1).to_i
+        base_image_url   = (params["base_image_url"] || "").to_s
+        base_image_scene = (params["base_image_scene"] || "底圖").to_s.dup.force_encoding("UTF-8")
 
         dialog.execute_script("window.receiveFromRuby({status: 'rendering'})")
 
         # 延遲一點執行，避免阻塞前端 UI 動畫
         UI.start_timer(0.1, false) do
-            self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution, tool)
+            self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution, tool, base_image_url, base_image_scene)
         end
       end
 
@@ -395,9 +397,42 @@ module LoamLab
     end
 
     # 批量導出指定的場景為實體檔案並上傳 Coze
-    def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1)
+    def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1, base_image_url="", base_image_scene="底圖")
       model = Sketchup.active_model
       return unless model
+
+      # 工具 2/3 底圖模式：直接讀本地圖檔送 Coze，跳過 SketchUp 截圖
+      if !base_image_url.empty? && base_image_url.start_with?("file:///")
+        begin
+          local_path = base_image_url.sub("file:///", "").gsub("/", File::SEPARATOR)
+          img_data   = File.read(local_path, mode: 'rb')
+          data_uri   = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
+          user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+          request_body = JSON.dump({
+            tool: tool,
+            parameters: { "image" => [data_uri], "user_prompt" => user_prompt, "resolution" => resolution, "aspect_ratio" => "16:9" }
+          })
+          req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
+          req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
+          req.body = request_body
+          captured_scene = base_image_scene
+          req.start do |_, response|
+            begin
+              data   = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
+              result = (data['code'] == 0 && data['url']) ?
+                { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
+                { status: 'render_failed', message: data['msg'] || "HTTP #{response.status_code}" }
+            rescue => e
+              result = { status: 'render_failed', message: "解析失敗: #{e.message}" }
+            end
+            UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
+          end
+          UI.start_timer(0.1, false) { dialog.execute_script("window.receiveFromRuby({status: 'export_done'})") }
+        rescue => e
+          dialog.execute_script("window.receiveFromRuby(#{JSON.generate({ status: 'render_failed', message: "底圖讀取失敗: #{e.message}" })})")
+        end
+        return
+      end
 
       current_page = model.pages.selected_page
       

@@ -16,6 +16,7 @@ let finishedScenesCount = 0;
 // =========================================================
 let currentActiveTool = 1;
 let selectedShotStyle = 'dramatic';
+let _baseImageEntry = null; // 工具 2/3/4：從歷史選取的底圖
 
 const PROXY_PREFIX = "This interior design scene contains simple geometric proxy shapes (boxes/blocks/cylinders) representing furniture placeholders. Replace each proxy with a realistic, high-quality piece of furniture of the indicated type while preserving its exact position, scale, and spatial relationship. ";
 
@@ -111,7 +112,22 @@ function setActiveTool(n) {
         if (shotStyleSelector) shotStyleSelector.classList.remove('hidden');
         if (materialTagsDiv) materialTagsDiv.classList.add('hidden');
         if (promptInput) promptInput.placeholder = lang3['tool_ninegrid_ph'];
+    } else if (n === 4) {
+        const lang4 = UI_LANG[currentLang] || UI_LANG['en-US'];
+        if (titleEl) titleEl.textContent = lang4['tool_swap'] || 'Material SWAP';
+        if (hintBanner) {
+            hintBanner.className = 'w-full rounded-lg px-3 py-2.5 text-[11px] leading-relaxed bg-purple-500/10 border border-purple-500/20 text-purple-200/70';
+            hintBanner.textContent = lang4['tool_swap_hint'] || '';
+            hintBanner.classList.remove('hidden');
+        }
+        if (materialTagsDiv) materialTagsDiv.classList.add('hidden');
+        if (promptInput) promptInput.placeholder = 'e.g. marble texture, oak wood floor...';
     }
+
+    // 底圖選擇器：工具 2/3/4 顯示，工具 1 隱藏
+    const picker = document.getElementById('base-image-picker');
+    if (picker) picker.classList.toggle('hidden', n === 1);
+    clearBaseImageSelection();
 
     updateCostPreview();
 }
@@ -792,6 +808,24 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        const langObj = UI_LANG[currentLang] || UI_LANG['zh-TW'];
+
+        // 工具 4 (Material SWAP): 直接開 SWAP modal，不走 Coze 渲染
+        if (currentActiveTool === 4) {
+            if (!_baseImageEntry) {
+                showUpdateToast('⚠️ ' + (langObj['base_image_required'] || '請先從歷史選擇一張底圖'));
+                return;
+            }
+            openSwapModal(null, _baseImageEntry.file_url);
+            return;
+        }
+
+        // 工具 2/3：必須先選擇底圖
+        if ((currentActiveTool === 2 || currentActiveTool === 3) && !_baseImageEntry) {
+            showUpdateToast('⚠️ ' + (langObj['base_image_required'] || '請先從歷史選擇一張底圖'));
+            return;
+        }
+
         const checkboxes = document.querySelectorAll('input[name="scene"]:checked');
         const selectedScenes = Array.from(checkboxes).map(cb => cb.value);
         const userPrompt = textPrompt ? textPrompt.value.trim() : "";
@@ -804,8 +838,11 @@ document.addEventListener("DOMContentLoaded", () => {
             finalPrompt = NINEGRID_PREFIX + SHOT_MODIFIERS[selectedShotStyle] + userPrompt;
         }
 
+        // 工具 2/3 有底圖時：以底圖取代 SketchUp 截圖，不需選場景
+        const usingBaseImage = _baseImageEntry && (currentActiveTool === 2 || currentActiveTool === 3);
+
         // 重置多重算圖計數器
-        totalScenesToRender = selectedScenes.length;
+        totalScenesToRender = usingBaseImage ? 1 : selectedScenes.length;
         finishedScenesCount = 0;
 
         // 取得使用者選擇的解析度與消耗點數
@@ -813,9 +850,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const resolution = resRadio ? resRadio.value : "1k";
         const costPerScene = resRadio ? parseInt(resRadio.getAttribute('data-cost') || "15", 10) : 15;
 
-        if (selectedScenes.length === 0) {
+        if (!usingBaseImage && selectedScenes.length === 0) {
             const allSceneCheckboxes = document.querySelectorAll('input[name="scene"]');
-            const langObj = UI_LANG[currentLang] || UI_LANG['zh-TW'];
             if (allSceneCheckboxes.length === 0) {
                 showUpdateToast('⚠️ ' + (langObj['alert_no_scene_setup'] || '此模型尚未建立任何場景！請在 SketchUp 中點選「視窗 → 場景」新增場景。'));
             } else {
@@ -825,21 +861,30 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // 計算總花費
-        const totalCost = selectedScenes.length * costPerScene;
+        const totalCost = usingBaseImage ? costPerScene : selectedScenes.length * costPerScene;
 
         // 取得目前點數 (透過 DOM)
         const pointStr = document.getElementById('point-balance').innerText;
         const currentPoints = parseInt(pointStr, 10); // 若為 NaN (如 '...') 則不阻擋
 
-        // 額度不足防線：只在點數「確實已載入且不足」時才阻擋
-        // 若 currentPoints 是 NaN (點數還在載入中)，跳過前端檢查讓 Vercel 後端決定
+        // 額度不足防線
         if (!isNaN(currentPoints) && totalCost > currentPoints) {
             if (typeof openPricingModal === 'function') openPricingModal();
-            return; // 阻擋送出，保護算力
+            return;
         }
 
         if (window.sketchup) {
-            sketchup.render_scene({ scenes: selectedScenes, prompt: finalPrompt, resolution: resolution, expected_cost: totalCost, tool: currentActiveTool });
+            sketchup.render_scene({
+                scenes: usingBaseImage ? [] : selectedScenes,
+                prompt: finalPrompt,
+                resolution,
+                expected_cost: totalCost,
+                tool: currentActiveTool,
+                ...(usingBaseImage && {
+                    base_image_url: _baseImageEntry.file_url,
+                    base_image_scene: _baseImageEntry.scene || '底圖'
+                })
+            });
         } else {
             console.log('Simulating render req for:', selectedScenes, 'Prompt:', userPrompt, 'Res:', resolution, 'Cost:', totalCost);
             // 本地模擬扣款特效
@@ -851,20 +896,20 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // 資料夾按鈕（綠色圖示）= 永遠開路徑選擇器（可更改路徑）
-    // 路徑文字顯示區（藍色）= 點擊直接開啟資料夾
+    // 資料夾按鈕（綠色圖示）= 開啟資料夾
+    // 路徑文字顯示區（藍色）= 點擊更改路徑
     const btnChooseDir = document.getElementById('btn-choose-dir');
     const saveDirDisplay = document.getElementById('save-dir-display');
     if (btnChooseDir) {
         btnChooseDir.addEventListener('click', (e) => {
             e.preventDefault();
-            if (window.sketchup) sketchup.choose_save_dir({});
+            if (window.sketchup) sketchup.open_save_dir({});
         });
     }
     if (saveDirDisplay) {
         saveDirDisplay.addEventListener('click', (e) => {
             e.preventDefault();
-            if (window.sketchup) sketchup.open_save_dir({});
+            if (window.sketchup) sketchup.choose_save_dir({});
         });
     }
 
@@ -1279,11 +1324,16 @@ function renderHistoryGrid(files) {
                     : `<div class="w-full h-full flex items-center justify-center text-white/20 text-[10px]">No Preview</div>`
                 }
                 <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3">
-                    <button onclick="applyHistorySettings(window._historyFiles[${i}])"
-                        class="text-[10px] px-4 py-1.5 rounded-full bg-amber-500/90 hover:bg-amber-400 text-black font-bold tracking-wider transition-all shadow-lg">
-                        ${lang['history_rerender'] || '重用設定'}
-                    </button>
-                </div>
+                    ${window._historyPickMode
+                        ? `<button onclick="pickBaseImage(window._historyFiles[${i}])"
+                            class="text-[10px] px-4 py-1.5 rounded-full bg-green-500/90 hover:bg-green-400 text-black font-bold tracking-wider transition-all shadow-lg">
+                            ✓ 選為底圖
+                           </button>`
+                        : `<button onclick="applyHistorySettings(window._historyFiles[${i}])"
+                            class="text-[10px] px-4 py-1.5 rounded-full bg-amber-500/90 hover:bg-amber-400 text-black font-bold tracking-wider transition-all shadow-lg">
+                            ${lang['history_rerender'] || '重用設定'}
+                           </button>`
+                    }</div>
             </div>
             <div class="px-3 py-2 flex flex-col gap-0.5">
                 <div class="flex items-center gap-1.5">
@@ -1300,7 +1350,41 @@ function renderHistoryGrid(files) {
 }
 
 function closeHistoryModal() {
+    window._historyPickMode = false;
     document.getElementById('history-modal')?.classList.add('hidden');
+}
+
+// 底圖選取模式：從 History 選一張圖作為工具 2/3/4 的底圖
+function openHistoryModalForPick() {
+    window._historyPickMode = true;
+    openHistoryModal();
+}
+
+function pickBaseImage(entry) {
+    _baseImageEntry = entry;
+    window._historyPickMode = false;
+    const thumb = document.getElementById('base-image-thumb');
+    const empty = document.getElementById('base-image-empty');
+    const filled = document.getElementById('base-image-filled');
+    const meta = document.getElementById('base-image-meta');
+    if (thumb) thumb.src = entry.file_url || '';
+    if (empty) empty.classList.add('hidden');
+    if (filled) filled.classList.remove('hidden');
+    if (meta) {
+        const date = (entry.timestamp || '').replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, '$1/$2/$3 $4:$5');
+        meta.textContent = [entry.scene, (entry.resolution || '').toUpperCase(), date].filter(Boolean).join('  ·  ');
+    }
+    closeHistoryModal();
+}
+
+function clearBaseImageSelection() {
+    _baseImageEntry = null;
+    const thumb = document.getElementById('base-image-thumb');
+    const empty = document.getElementById('base-image-empty');
+    const filled = document.getElementById('base-image-filled');
+    if (thumb) thumb.src = '';
+    if (empty) empty.classList.remove('hidden');
+    if (filled) filled.classList.add('hidden');
 }
 
 function applyHistorySettings(entry) {
@@ -2088,6 +2172,26 @@ async function executeSwap() {
 
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="animate-pulse">處理中...</span>'; }
 
+    // 本地 file:/// 圖片需轉 base64 送後端（後端再上傳至公開 host）
+    let imagePayload = {};
+    if (swapRenderedUrl && swapRenderedUrl.startsWith('file:///')) {
+        try {
+            const baseImg = document.getElementById('swap-base-image');
+            if (!baseImg || !baseImg.complete || !baseImg.naturalWidth) throw new Error('image not ready');
+            const cvs = document.createElement('canvas');
+            cvs.width = baseImg.naturalWidth;
+            cvs.height = baseImg.naturalHeight;
+            cvs.getContext('2d').drawImage(baseImg, 0, 0);
+            imagePayload = { image_base64: cvs.toDataURL('image/jpeg', 0.9) };
+        } catch (_) {
+            if (btn) { btn.disabled = false; btn.innerHTML = '⚡ Execute SWAP'; }
+            showUpdateToast('⚠️ 無法讀取底圖，請重新選擇');
+            return;
+        }
+    } else {
+        imagePayload = { image_url: swapRenderedUrl };
+    }
+
     try {
         const resp = await fetch(`${API_BASE}/api/inpaint`, {
             method: 'POST',
@@ -2095,7 +2199,7 @@ async function executeSwap() {
                 'Content-Type': 'application/json',
                 'X-User-Email': window.loamlabUserEmail
             },
-            body: JSON.stringify({ image_url: swapRenderedUrl, mask_base64: maskBase64, prompt, ...(swapRefImageBase64 && { reference_image_base64: swapRefImageBase64 }) })
+            body: JSON.stringify({ ...imagePayload, mask_base64: maskBase64, prompt, ...(swapRefImageBase64 && { reference_image_base64: swapRefImageBase64 }) })
         });
         const result = await resp.json();
         if (result.code === 0 && result.url) {

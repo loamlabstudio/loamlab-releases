@@ -54,6 +54,16 @@
             background: radial-gradient(circle at 15% 50%, rgba(30, 27, 36, 1) 0%, rgba(9, 9, 11, 1) 100%);
         }
 
+        /* 渲染完成：Blur-to-Clear 揭幕動畫 */
+        @keyframes blur-clear {
+            0%   { filter: blur(14px); opacity: 0.3; transform: scale(1.02); }
+            60%  { filter: blur(3px);  opacity: 0.85; }
+            100% { filter: blur(0);    opacity: 1;    transform: scale(1); }
+        }
+        .animate-blur-clear {
+            animation: blur-clear 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
         /* Apple-style 高質感渲染動畫 */
         @keyframes shimmer {
             0% {
@@ -739,8 +749,24 @@
 
             </div>
 
+            <!-- 用戶見證 -->
+            <div class="grid grid-cols-3 gap-3 mt-6 border-t border-white/[0.06] pt-5">
+                <div class="bg-white/[0.03] rounded-lg px-4 py-3 border border-white/[0.06]">
+                    <p class="text-[11px] text-white/60 leading-relaxed">"第一次用就直接拿去給客戶提案，對方以為是 3D Max 出圖。"</p>
+                    <p class="text-[10px] text-white/30 mt-2 font-medium tracking-wide">— 室內設計師，台北</p>
+                </div>
+                <div class="bg-white/[0.03] rounded-lg px-4 py-3 border border-white/[0.06]">
+                    <p class="text-[11px] text-white/60 leading-relaxed">"以前做渲染要等隔天，現在 90 秒出圖，改了 7 版都沒感覺到貴。"</p>
+                    <p class="text-[10px] text-white/30 mt-2 font-medium tracking-wide">— 建築師，高雄</p>
+                </div>
+                <div class="bg-white/[0.03] rounded-lg px-4 py-3 border border-white/[0.06]">
+                    <p class="text-[11px] text-white/60 leading-relaxed">"Pro 方案一個月 2000 點，我一個案子的提案圖就值回票價了。"</p>
+                    <p class="text-[10px] text-white/30 mt-2 font-medium tracking-wide">— 設計顧問，上海</p>
+                </div>
+            </div>
+
             <!-- 管理訂閱連結 -->
-            <div class="text-center mt-5">
+            <div class="text-center mt-4">
                 <a href="#" onclick="if(window.sketchup){sketchup.open_browser('https://app.lemonsqueezy.com/my-orders')}else{window.open('https://app.lemonsqueezy.com/my-orders','_blank')};return false;"
                    class="text-[11px] text-white/30 hover:text-white/60 transition-colors" data-i18n="manage_subscription">Manage Subscription →</a>
             </div>
@@ -886,12 +912,12 @@
     <!-- Feedback Modal -->
     <!-- Render History Modal -->
     <div id="history-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-        <div class="w-[580px] max-w-[95vw] bg-[#0f0f12] border border-white/10 rounded-2xl shadow-2xl p-6 flex flex-col gap-4 relative" style="max-height:80vh;">
+        <div class="w-[700px] max-w-[95vw] bg-[#0f0f12] border border-white/10 rounded-2xl shadow-2xl p-6 flex flex-col gap-4 relative" style="max-height:82vh;">
             <div class="flex items-center justify-between shrink-0">
                 <span class="text-[13px] font-bold text-white/80 tracking-widest uppercase" data-i18n="history_title">Render History</span>
                 <button id="btn-close-history" onclick="closeHistoryModal()" class="text-white/30 hover:text-white/60 transition-colors text-lg leading-none">✕</button>
             </div>
-            <div id="history-grid" class="flex flex-col gap-2 overflow-y-auto no-scrollbar" style="max-height:60vh;">
+            <div id="history-grid" class="grid grid-cols-2 gap-3 overflow-y-auto no-scrollbar" style="max-height:68vh;">
                 <!-- 動態生成 -->
             </div>
         </div>

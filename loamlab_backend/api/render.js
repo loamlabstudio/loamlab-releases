@@ -104,31 +104,24 @@ export default async function handler(req, res) {
         });
     }
 
-    let monthlyPoints = user.points || 0;
-    let lifetimePoints = user.lifetime_points || 0;
-    let totalPoints = monthlyPoints + lifetimePoints;
+    // 3. 原子扣款（Supabase RPC，FOR UPDATE 鎖列，防止並發 Race Condition）
+    const { data: deductResult, error: deductErr } = await supabase.rpc('deduct_render_points', {
+        p_email: userEmail,
+        p_cost: cost
+    });
 
-    if (totalPoints < cost) {
-        return res.status(402).json({ code: -1, msg: `點數不足！本次渲染需 ${cost} 點，您的餘額僅剩 ${totalPoints} 點 (Beta 初始贈送 10 點)。` });
+    if (deductErr) {
+        return res.status(500).json({ code: -1, msg: `系統錯誤：扣款失敗 ${deductErr.message}` });
+    }
+    if (!deductResult?.success) {
+        if (deductResult?.error === 'insufficient_points') {
+            return res.status(402).json({ code: -1, msg: `點數不足！本次渲染需 ${cost} 點，您的餘額僅剩 ${deductResult.balance} 點。` });
+        }
+        return res.status(403).json({ code: -1, msg: `扣款失敗：${deductResult?.error}` });
     }
 
-    // 3. 預先扣除點數 (瀑布流：優先扣除即將過期的月費點數)
-    if (monthlyPoints >= cost) {
-        monthlyPoints -= cost;
-    } else {
-        let remainingCost = cost - monthlyPoints;
-        monthlyPoints = 0;
-        lifetimePoints -= remainingCost;
-    }
-
-    const { error: updateErr } = await supabase
-        .from('users')
-        .update({ points: monthlyPoints, lifetime_points: lifetimePoints })
-        .eq('email', userEmail);
-
-    if (updateErr) {
-        return res.status(500).json({ code: -1, msg: '系統錯誤：資料庫扣款失敗。' });
-    }
+    let monthlyPoints = deductResult.points;
+    let lifetimePoints = deductResult.lifetime_points;
 
     // ★ 修復：用 try/catch 包裹交易紀錄，避免因 transactions 表不存在而崩潰主流程
     let transactionId = null;

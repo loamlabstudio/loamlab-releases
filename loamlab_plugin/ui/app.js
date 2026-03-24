@@ -472,7 +472,7 @@ window.receiveFromRuby = function (data) {
                                 </div>
                                 <div class="relative w-full overflow-hidden bg-black aspect-video border-t border-white/[0.05] group">
                                     <div class="absolute top-2 left-2 bg-[#dc2626] text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest">AI RENDERED</div>
-                                    <img src="${targetUrl}" class="w-full h-full object-cover animate-fade-in transition-transform duration-[3s] group-hover:scale-[1.04]" title="點擊檢視大圖" onclick="window.open('${targetUrl}', '_blank')">
+                                    <img src="${targetUrl}" class="w-full h-full object-cover animate-blur-clear transition-transform duration-[3s] group-hover:scale-[1.04]" title="點擊檢視大圖" onclick="window.open('${targetUrl}', '_blank')">
                                 </div>
                             `;
                         }
@@ -1265,32 +1265,38 @@ function renderHistoryGrid(files) {
     if (!grid) return;
     const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
     if (!files || files.length === 0) {
-        grid.innerHTML = `<div class="text-center text-white/30 text-[12px] py-10">${lang['history_empty'] || 'No renders yet (set a save folder first)'}</div>`;
+        grid.innerHTML = `<div class="col-span-2 text-center text-white/30 text-[12px] py-10">${lang['history_empty'] || 'No renders yet (set a save folder first)'}</div>`;
         return;
     }
     window._historyFiles = files;
     grid.innerHTML = files.map((e, i) => {
         const date = (e.timestamp || '').replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, '$1/$2/$3 $4:$5');
-        const promptSnippet = (e.prompt || '').slice(0, 50) + ((e.prompt || '').length > 50 ? '…' : '');
+        const promptSnippet = (e.prompt || '').slice(0, 40) + ((e.prompt || '').length > 40 ? '…' : '');
+        const imgSrc = e.file_url || '';
         return `
-        <div class="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3 border border-white/8 hover:border-white/15 transition-colors">
-            <div class="flex-1 min-w-0 flex flex-col gap-0.5">
-                <div class="flex items-center gap-2">
-                    <span class="text-[11px] text-white/75 font-medium truncate">${e.scene || '—'}</span>
-                    <span class="text-[9px] text-white/30 font-mono shrink-0">${(e.resolution || '').toUpperCase()}</span>
-                    <span class="text-[9px] text-white/25 shrink-0">${date}</span>
+        <div class="relative group rounded-xl overflow-hidden border border-white/8 hover:border-white/20 transition-colors bg-black/40 flex flex-col">
+            <div class="relative aspect-video bg-white/5 overflow-hidden">
+                ${imgSrc
+                    ? `<img src="${imgSrc}" class="w-full h-full object-cover block" draggable="false"
+                            onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-white/20 text-[10px]\\'>No Preview</div>'">`
+                    : `<div class="w-full h-full flex items-center justify-center text-white/20 text-[10px]">No Preview</div>`
+                }
+                <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3">
+                    <button onclick="applyHistorySettings(window._historyFiles[${i}])"
+                        class="text-[10px] px-4 py-1.5 rounded-full bg-amber-500/90 hover:bg-amber-400 text-black font-bold tracking-wider transition-all shadow-lg">
+                        ${lang['history_rerender'] || '重用設定'}
+                    </button>
                 </div>
-                ${promptSnippet ? `<span class="text-[9px] text-white/35 truncate">${promptSnippet}</span>` : ''}
             </div>
-            <div class="flex gap-1.5 shrink-0">
-                <button onclick="window.sketchup && sketchup.open_save_dir({})"
-                    class="text-[9px] px-2.5 py-1.5 rounded border border-white/15 text-white/45 hover:bg-white/10 hover:text-white/70 transition-all">
-                    ${lang['history_download'] || 'Open Folder'}
-                </button>
-                <button onclick="applyHistorySettings(window._historyFiles[${i}])"
-                    class="text-[9px] px-2.5 py-1.5 rounded border border-amber-500/25 text-amber-300/65 hover:bg-amber-500/15 hover:text-amber-200 transition-all">
-                    ${lang['history_rerender'] || 'Use Settings'}
-                </button>
+            <div class="px-3 py-2 flex flex-col gap-0.5">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-[11px] text-white/75 font-medium truncate flex-1">${e.scene || '—'}</span>
+                    <span class="text-[9px] text-white/35 font-mono shrink-0">${(e.resolution || '').toUpperCase()}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-[9px] text-white/30 truncate flex-1">${promptSnippet}</span>
+                    <span class="text-[9px] text-white/20 shrink-0 ml-1">${date}</span>
+                </div>
             </div>
         </div>`;
     }).join('');

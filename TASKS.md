@@ -27,10 +27,10 @@
 | T09 | 渲染後端 | 工具 2 局部換裝：In-painting 後端整合（Fal.ai flux-pro/v1/fill）+ 點擊座標格式（x_ratio/y_ratio）驗證 | `loamlab_backend/api/render.js`, `loamlab_plugin/ui/app.js` | `[DONE]` | `main` |
 | T15 | Plugin UI / 後端 | 工具 2 升級：換用 Fal.ai flux-general/inpainting（支援 reference_image_url）+ 參考圖本機上傳 + 軟硬裝 tag 群組資料驅動化（SWAP_TAG_GROUPS） | `loamlab_backend/api/inpaint.js`, `loamlab_plugin/ui/app.js`, `loamlab_plugin/ui/index.html` | `[DONE]` | `main` |
 | T10 | Plugin UI | UX 修復：儲存多層目錄自動建立（FileUtils.mkdir_p）+ 場景預設全選 + 消除 native alert → showUpdateToast | `loamlab_plugin/main.rb`, `loamlab_plugin/ui/app.js` | `[DONE]` | `main` |
-| T11 | 支付 | webhook.js 清理：① 統一環境變數為 LEMONSQUEEZY_WEBHOOK_SECRET（移除 LEMON_WEBHOOK_SECRET fallback）② 確認並移除 referral 殘留發點邏輯（舊 200+200，已由 render.js B+100/A+300 取代） | `loamlab_backend/api/webhook.js` | `[OPEN]` | — |
-| T12 | 用戶/點數 | fix_anomalies.js CJS/ESM 修復：require() → import，dev 環境補 ADMIN_KEY 驗證（PRODUCT_PLAN.md §8 技術債，工具 4 開發前必修） | `loamlab_backend/api/fix_anomalies.js` | `[OPEN]` | — |
-| T13 | Plugin UI | i18n.js 補全缺失 key：res_1k/2k/4k（index.html 已引用但未定義，視覺空白 bug）+ 驗證 SWAP/Extract key 中英文完整 | `loamlab_plugin/ui/i18n.js` | `[OPEN]` | — |
-| T14 | 反饋系統 | feedback.js 品牌修正：郵件模板殘留「野人相機」→「LoamLab AI Renderer」 | `loamlab_backend/api/feedback.js` | `[OPEN]` | — |
+| T11 | 支付 | webhook.js 清理：① 統一環境變數為 LEMONSQUEEZY_WEBHOOK_SECRET（移除 LEMON_WEBHOOK_SECRET fallback）② 確認並移除 referral 殘留發點邏輯（舊 200+200，已由 render.js B+100/A+300 取代） | `loamlab_backend/api/webhook.js` | `[DONE]` | `main` |
+| T12 | 用戶/點數 | fix_anomalies.js 重建：ESM import，ADMIN_KEY 必驗，修復負點數 | `loamlab_backend/api/fix_anomalies.js` | `[DONE]` | `main` |
+| T13 | Plugin UI | i18n.js 補全缺失 key：res_1k/2k/4k（index.html 已引用但未定義，視覺空白 bug）+ 驗證 SWAP/Extract key 中英文完整 | `loamlab_plugin/ui/i18n.js` | `[DONE]` | `main` |
+| T14 | 反饋系統 | feedback.js 品牌修正：郵件模板殘留「野人相機」→「LoamLab AI Renderer」 | `loamlab_backend/api/feedback.js` | `[DONE]` | `main` |
 
 ---
 
@@ -41,6 +41,12 @@
 - [x] T05 — 反饋系統（main）— ✅ 已部署 vercel --prod（2026-03-22）；待：T07 驗收完成後進入發布前清單
 - [x] T06 — 素材庫/SWAP Phase 1-2（main）— ✅ 已部署 vercel --prod（2026-03-23）
 - [x] T10 — UX 修復（main）— ✅ 已 commit（2026-03-23）
+- [x] T11 — webhook.js 清理（代碼已正確，標記完成）
+- [x] T12 — fix_anomalies.js 重建 ESM（main）— ✅ 已 commit（2026-03-24）
+- [x] T13 — i18n.js res_4k 補全（代碼已正確，標記完成）
+- [x] T14 — feedback.js 品牌修正（代碼已正確，標記完成）
+- [x] Phase 3 — render.js 原子扣款 RPC + supabase_setup.sql（main）— ✅ 已 commit（2026-03-24）；待：Supabase SQL Editor 執行新 RPC 段落
+- [x] Phase 1 — Paywall 見證文字 + Blur-to-Clear 動畫（main）— ✅ 已 commit（2026-03-24）
 
 ---
 

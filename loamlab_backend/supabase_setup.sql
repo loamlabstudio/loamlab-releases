@@ -106,3 +106,50 @@ CREATE TABLE IF NOT EXISTS public.feedback (
 );
 ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Enable all access for service role" ON public.feedback FOR ALL USING (true);
+
+/*
+===================================================
+Phase 19: 原子扣款 RPC — 防止並發 Race Condition
+在 Supabase Dashboard → SQL Editor 執行此段
+===================================================
+*/
+
+-- 瀑布流原子扣款：月費點數 (points) 優先，不足再扣永久點數 (lifetime_points)
+-- SECURITY DEFINER 使函數以建立者權限執行，繞過 RLS，可用 anon key 呼叫
+CREATE OR REPLACE FUNCTION deduct_render_points(p_email TEXT, p_cost INT)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_monthly  INT;
+  v_lifetime INT;
+BEGIN
+  -- 鎖定列，防止並發請求同時讀取相同餘額
+  SELECT COALESCE(points, 0), COALESCE(lifetime_points, 0)
+    INTO v_monthly, v_lifetime
+    FROM users
+   WHERE email = p_email
+     FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN json_build_object('success', false, 'error', 'user_not_found');
+  END IF;
+
+  IF (v_monthly + v_lifetime) < p_cost THEN
+    RETURN json_build_object(
+      'success', false,
+      'error',   'insufficient_points',
+      'balance', v_monthly + v_lifetime
+    );
+  END IF;
+
+  IF v_monthly >= p_cost THEN
+    UPDATE users SET points = v_monthly - p_cost WHERE email = p_email;
+    RETURN json_build_object('success', true, 'points', v_monthly - p_cost, 'lifetime_points', v_lifetime);
+  ELSE
+    UPDATE users SET points = 0, lifetime_points = v_lifetime - (p_cost - v_monthly) WHERE email = p_email;
+    RETURN json_build_object('success', true, 'points', 0, 'lifetime_points', v_lifetime - (p_cost - v_monthly));
+  END IF;
+END;
+$$;

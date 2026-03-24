@@ -851,25 +851,25 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // 選擇儲存目錄按鈕
+    // 選擇儲存目錄按鈕：已設定路徑 → 直接開資料夾；未設定 → 彈出選擇器
     const btnChooseDir = document.getElementById('btn-choose-dir');
     const saveDirDisplay = document.getElementById('save-dir-display');
+    const openOrChooseSaveDir = () => {
+        if (!window.sketchup) return;
+        const current = document.getElementById('save-dir-display')?.title || '';
+        const isEmpty = !current || current === (UI_LANG[currentLang] || UI_LANG['en-US'])['save_dir_empty'];
+        if (isEmpty) {
+            sketchup.choose_save_dir({});
+        } else {
+            sketchup.open_save_dir({});
+        }
+    };
     if (btnChooseDir) {
-        btnChooseDir.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (window.sketchup) {
-                sketchup.choose_save_dir({});
-            }
-        });
+        btnChooseDir.addEventListener('click', (e) => { e.preventDefault(); openOrChooseSaveDir(); });
+        // 右鍵 / 長按 → 重新選擇資料夾
+        btnChooseDir.addEventListener('contextmenu', (e) => { e.preventDefault(); if (window.sketchup) sketchup.choose_save_dir({}); });
     }
-    if (saveDirDisplay) {
-        saveDirDisplay.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (window.sketchup) {
-                sketchup.choose_save_dir({});
-            }
-        });
-    }
+    if (saveDirDisplay) saveDirDisplay.addEventListener('click', (e) => { e.preventDefault(); openOrChooseSaveDir(); });
 
     // 顯眼的 Debug API 按鈕
     const btnDebugApi = document.getElementById('btn-debug-api');

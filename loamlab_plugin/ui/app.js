@@ -1901,21 +1901,26 @@ function openSwapModal(_sketchupImgSrc, renderedImgUrl) {
     const baseImg = document.getElementById('swap-base-image');
     if (baseImg) baseImg.src = renderedImgUrl;
 
-    // 初始化 canvas
+    // 初始化 canvas — 立即初始化，不等圖片載入（避免 swapCtx = null 導致塗抹失效）
     swapCanvas = document.getElementById('swap-mask-canvas');
     if (swapCanvas) {
-        // 等底圖載入完後再同步 canvas 尺寸
+        const initCtx = (w, h) => {
+            swapCanvas.width = w || 512;
+            swapCanvas.height = h || 288;
+            swapCtx = swapCanvas.getContext('2d');
+            swapCtx.strokeStyle = 'rgba(255,100,50,0.85)';
+            swapCtx.lineWidth = parseInt(document.getElementById('swap-brush-size')?.value || '30', 10);
+            swapCtx.lineCap = 'round';
+            swapCtx.lineJoin = 'round';
+        };
+        // 先用預設尺寸初始化，讓用戶可立即塗抹
+        initCtx(512, 288);
+        // 圖片載入後重新同步尺寸
         if (baseImg) {
             const syncSize = () => {
-                swapCanvas.width = baseImg.offsetWidth || 512;
-                swapCanvas.height = baseImg.offsetHeight || 288;
-                swapCtx = swapCanvas.getContext('2d');
-                swapCtx.strokeStyle = 'rgba(255,100,50,0.85)';
-                swapCtx.lineWidth = parseInt(document.getElementById('swap-brush-size')?.value || '20', 10);
-                swapCtx.lineCap = 'round';
-                swapCtx.lineJoin = 'round';
+                if (baseImg.offsetWidth > 0) initCtx(baseImg.offsetWidth, baseImg.offsetHeight);
             };
-            if (baseImg.complete) syncSize();
+            if (baseImg.complete && baseImg.naturalWidth) syncSize();
             else baseImg.onload = syncSize;
         }
     }
@@ -1939,13 +1944,13 @@ function openSwapModal(_sketchupImgSrc, renderedImgUrl) {
             return { x: (src.clientX - rect.left) * (swapCanvas.width / rect.width), y: (src.clientY - rect.top) * (swapCanvas.height / rect.height) };
         };
 
-        swapCanvas.addEventListener('mousedown', (e) => { swapIsDrawing = true; const p = getPos(e); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); });
-        swapCanvas.addEventListener('mousemove', (e) => { if (!swapIsDrawing) return; const p = getPos(e); swapCtx.lineTo(p.x, p.y); swapCtx.stroke(); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); });
+        swapCanvas.addEventListener('mousedown', (e) => { if (!swapCtx) return; swapIsDrawing = true; const p = getPos(e); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); });
+        swapCanvas.addEventListener('mousemove', (e) => { if (!swapIsDrawing || !swapCtx) return; const p = getPos(e); swapCtx.lineTo(p.x, p.y); swapCtx.stroke(); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); });
         swapCanvas.addEventListener('mouseup', () => { swapIsDrawing = false; });
         swapCanvas.addEventListener('mouseleave', () => { swapIsDrawing = false; });
 
-        swapCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); swapIsDrawing = true; const p = getPos(e); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); }, { passive: false });
-        swapCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (!swapIsDrawing) return; const p = getPos(e); swapCtx.lineTo(p.x, p.y); swapCtx.stroke(); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); }, { passive: false });
+        swapCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); if (!swapCtx) return; swapIsDrawing = true; const p = getPos(e); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); }, { passive: false });
+        swapCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (!swapIsDrawing || !swapCtx) return; const p = getPos(e); swapCtx.lineTo(p.x, p.y); swapCtx.stroke(); swapCtx.beginPath(); swapCtx.moveTo(p.x, p.y); }, { passive: false });
         swapCanvas.addEventListener('touchend', () => { swapIsDrawing = false; });
     }
 

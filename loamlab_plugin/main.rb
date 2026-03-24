@@ -331,19 +331,17 @@ module LoamLab
 
       # 6. 列出已儲存的渲染歷史（讀取 loamlab_history.json）
       dialog.add_action_callback("list_saved_renders") do |action_context, params|
-        model     = Sketchup.active_model
-        save_path = model.get_attribute("LoamLabAI", "save_path", "").to_s.dup.force_encoding("UTF-8")
-
-        if save_path.empty? || !File.directory?(save_path)
-          payload = { action: 'historyList', files: [] }.to_json
-          dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(payload)}')")
-          next
-        end
-
         begin
           require 'json'
-          index_path = File.join(save_path, "loamlab_history.json")
-          history = File.exist?(index_path) ? (JSON.parse(File.read(index_path, encoding: 'UTF-8')) rescue []) : []
+          model     = Sketchup.active_model
+          save_path = model.get_attribute("LoamLabAI", "save_path", "").to_s.dup.force_encoding("UTF-8")
+
+          history = []
+          if !save_path.empty? && File.directory?(save_path)
+            index_path = File.join(save_path, "loamlab_history.json")
+            history = File.exist?(index_path) ? (JSON.parse(File.read(index_path, encoding: 'UTF-8')) rescue []) : []
+          end
+
           payload = { action: 'historyList', files: history }.to_json
           dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(payload)}')")
         rescue => e

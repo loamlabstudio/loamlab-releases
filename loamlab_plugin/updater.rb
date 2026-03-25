@@ -46,53 +46,70 @@ module LoamLabPlugin
       end
 
       # ─── Step 2：下載並覆蓋安裝（由 JS 確認後呼叫）────────────────
+      # 完全棄用 Thread.new（在 SketchUp 主執行緒中不穩定）
+      # 改為 UI.start_timer 鏈式：下載 → 解壓 → 重啟，每步之間交還主執行緒
       def download_and_install(dialog, url)
         send_to_js(dialog, status: 'update_downloading')
         puts "[Updater] 開始下載：#{url}"
 
-        Thread.new do
+        tmp      = (ENV['TEMP'] || ENV['TMP'] || 'C:/Temp').gsub('\\', '/')
+        zip_path = "#{tmp}/loamlab_update_#{Time.now.to_i}.rbz"
+        zip_win  = zip_path.gsub('/', '\\')
+
+        # --- Step A：PowerShell 下載（同步 system() 在計時器中阻塞即可，不卡 UI） ---
+        UI.start_timer(0.1, false) do
           begin
-            tmp = (ENV['TEMP'] || ENV['TMP'] || 'C:/Temp').gsub('\\', '/')
-            zip_path = "#{tmp}/loamlab_update_#{Time.now.to_i}.zip"
+            dl_ok = system(
+              "powershell -ExecutionPolicy Bypass -NoProfile -Command " \
+              "\"Invoke-WebRequest -Uri '#{url}' -OutFile '#{zip_win}'\""
+            )
 
-            # 用 PowerShell 下載（原生處理 HTTPS 302 redirect + SSL，避免 Ruby open-uri 相容性問題）
-            zip_win_dl = zip_path.gsub('/', '\\')
-            dl_ok = system("powershell -ExecutionPolicy Bypass -Command " \
-                           "\"Invoke-WebRequest -Uri '#{url}' -OutFile '#{zip_win_dl}'\"")
-            raise '下載失敗，請稍後再試或手動下載' unless dl_ok && File.exist?(zip_path)
-            puts "[Updater] 下載完成：#{zip_path}"
+            unless dl_ok && File.exist?(zip_path) && File.size(zip_path) > 10_000
+              File.delete(zip_path) rescue nil
+              send_to_js(dialog, status: 'update_error',
+                         msg: '下載失敗：請檢查網路，或前往 GitHub 手動下載最新版本')
+              next
+            end
+            puts "[Updater] 下載完成（#{File.size(zip_path)} bytes）：#{zip_path}"
 
-            # 插件根目錄（loamlab_plugin/ 的上一層 = SketchUp Plugins/）
+            # --- Step B：解壓覆蓋 ---
+            # loamlab_plugin/ 的上一層 = SketchUp Plugins 目錄
             plugins_dir = File.dirname(File.dirname(__FILE__))
-            zip_win     = zip_path.gsub('/', '\\')
             dest_win    = plugins_dir.gsub('/', '\\')
 
-            # 用 PowerShell 解壓縮，-Force 強制覆蓋既有檔案
-            cmd = "powershell -ExecutionPolicy Bypass -Command " \
-                  "\"Expand-Archive -Path '#{zip_win}' -DestinationPath '#{dest_win}' -Force\""
-            ok  = system(cmd)
+            unzip_ok = system(
+              "powershell -ExecutionPolicy Bypass -NoProfile -Command " \
+              "\"Expand-Archive -Path '#{zip_win}' -DestinationPath '#{dest_win}' -Force\""
+            )
             File.delete(zip_path) rescue nil
 
-            if ok
-              puts "[Updater] 解壓完成，重新載入插件"
-              UI.start_timer(0.2, false) do
-                # 熱重載非 main 的 Ruby 支援模組（config/coze_api/updater）
-                plugin_dir = File.dirname(__FILE__)
-                %w[config.rb coze_api.rb updater.rb].each do |f|
-                  fp = File.join(plugin_dir, f)
-                  load fp if File.exist?(fp)
-                end
-                # 重載 WebDialog（JS/HTML 從磁碟讀取新版本）
-                dialog.execute_script("window.location.reload()")
+            unless unzip_ok
+              send_to_js(dialog, status: 'update_error',
+                         msg: '解壓縮失敗，請手動重新安裝 .rbz 檔案')
+              next
+            end
+            puts "[Updater] 解壓完成 → #{dest_win}"
+
+            # --- Step C：重載所有 Ruby 模組，並重開 dialog ---
+            UI.start_timer(0.3, false) do
+              plugin_dir = File.dirname(__FILE__)
+              # 依序重載支援模組，最後重載 main.rb（含 register_callbacks）
+              %w[config.rb coze_api.rb updater.rb main.rb].each do |f|
+                fp = File.join(plugin_dir, f)
+                load fp if File.exist?(fp)
               end
-            else
-              UI.start_timer(0, false) { send_to_js(dialog, status: 'update_error', msg: '解壓縮失敗，請重試或手動下載安裝') }
+              # 關閉舊 dialog → show_dialog 會建立帶新程式碼的新視窗
+              begin
+                dialog.close
+              rescue
+              end
+              LoamLab::AIURenderer.show_dialog
             end
 
           rescue => e
-            puts "[Updater] 下載/安裝失敗：#{e.message}"
-            err_msg = e.message
-            UI.start_timer(0, false) { send_to_js(dialog, status: 'update_error', msg: "安裝失敗：#{err_msg}") }
+            File.delete(zip_path) rescue nil
+            puts "[Updater] 安裝失敗：#{e.message}"
+            send_to_js(dialog, status: 'update_error', msg: "安裝失敗：#{e.message}")
           end
         end
       end

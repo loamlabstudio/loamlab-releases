@@ -369,7 +369,7 @@
 
                     <!-- 底圖選擇器 (Tool 2/3/4 顯示：從歷史選底圖) -->
                     <div id="base-image-picker" class="hidden w-full flex flex-col gap-1.5">
-                        <label class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">底圖 Base Image</label>
+                        <label id="base-image-picker-label" class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">底圖 Base Image</label>
                         <div id="base-image-pick-btn" onclick="openHistoryModalForPick()"
                             class="w-full rounded-xl border-2 border-dashed border-white/15 bg-black/20 cursor-pointer hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group overflow-hidden relative">
                             <div id="base-image-empty" class="flex flex-col items-center justify-center gap-2 text-white/30 group-hover:text-amber-400/50 transition-colors p-4">
@@ -385,6 +385,37 @@
                                     <span id="base-image-meta" class="text-[10px] text-white/70 block truncate"></span>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- 工具 2：參考圖上傳（可選，置於 Advanced Settings 外側） -->
+                    <div id="reference-image-picker" class="hidden w-full flex flex-col gap-1.5">
+                        <label class="text-[11px] font-semibold tracking-wider text-blue-400/60 uppercase" data-i18n="ref_image_label">參考圖 Reference <span class="text-white/30 normal-case font-normal" data-i18n="optional">（選填）</span></label>
+                        <label id="ref-image-upload-btn"
+                            class="w-full rounded-xl border-2 border-dashed border-blue-500/20 bg-black/20 cursor-pointer hover:border-blue-500/50 hover:bg-blue-500/5 transition-all group overflow-hidden relative">
+                            <input type="file" id="ref-image-input" accept="image/*" class="hidden">
+                            <div id="ref-image-empty" class="flex flex-col items-center justify-center gap-2 text-white/25 group-hover:text-blue-400/50 transition-colors py-3">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                                <span class="text-[10px] uppercase tracking-wider font-semibold" data-i18n="ref_image_upload">上傳本地參考圖</span>
+                            </div>
+                            <div id="ref-image-filled" class="hidden relative">
+                                <img id="ref-image-thumb" src="" class="w-full object-cover rounded-xl" style="max-height:72px;">
+                                <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 rounded-xl">
+                                    <span class="text-[10px] text-white/90 font-semibold uppercase tracking-widest" data-i18n="ref_image_change">更換參考圖</span>
+                                </div>
+                                <button id="ref-image-clear" onclick="clearReferenceImage(event)" class="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 text-white/70 hover:text-white flex items-center justify-center text-[10px] z-10">✕</button>
+                            </div>
+                        </label>
+                    </div>
+
+                    <!-- 工具 3：鏡頭風格選擇（置於 Advanced Settings 外側，收起時仍可見） -->
+                    <div id="shot-style-selector" class="hidden w-full flex flex-col">
+                        <label class="text-[11px] font-semibold tracking-wider text-white/50 mb-2 uppercase"><span data-i18n="shot_style_label">鏡頭風格</span></label>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="industrial" data-i18n="shot_industrial">硬朗工業</span>
+                            <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="natural" data-i18n="shot_natural">柔和自然</span>
+                            <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="dramatic" data-i18n="shot_dramatic">戲劇張力</span>
+                            <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="minimal" data-i18n="shot_minimal">極簡留白</span>
                         </div>
                     </div>
 
@@ -422,7 +453,7 @@
                                             class="peer hidden" checked>
                                         <div class="text-center py-2 flex flex-col items-center justify-center bg-black/50 border border-[var(--border-white)] rounded-lg peer-checked:bg-[var(--accent-red)]/20 peer-checked:border-[var(--accent-red)]/60 transition-all hover:bg-white/5">
                                             <span class="text-[11px] font-semibold tracking-wider text-white/80 peer-checked:text-[var(--accent-red-hover)]">1K (Fast)</span>
-                                            <span class="text-[9px] text-white/35 mt-0.5 font-mono">15 pts</span>
+                                            <span id="ui-cost-1k" class="text-[9px] text-white/35 mt-0.5 font-mono">15 pts</span>
                                         </div>
                                     </label>
                                     <label class="cursor-pointer flex-1 relative group/res">
@@ -430,7 +461,7 @@
                                             class="peer hidden">
                                         <div class="text-center py-2 flex flex-col items-center justify-center bg-black/50 border border-white/10 rounded-lg peer-checked:bg-[#dc2626]/20 peer-checked:border-[#dc2626]/60 transition-all hover:bg-white/5">
                                             <span class="text-[11px] font-semibold tracking-wider text-white/80 peer-checked:text-[#ef4444]">2K (Pro)</span>
-                                            <span class="text-[9px] text-white/35 mt-0.5 font-mono">20 pts</span>
+                                            <span id="ui-cost-2k" class="text-[9px] text-white/35 mt-0.5 font-mono">20 pts</span>
                                         </div>
                                     </label>
                                     <label class="cursor-pointer flex-1 relative group/res">
@@ -438,7 +469,7 @@
                                             class="peer hidden">
                                         <div class="text-center py-2 flex flex-col items-center justify-center bg-black/50 border border-white/10 rounded-lg peer-checked:bg-[#dc2626]/20 peer-checked:border-[#dc2626]/60 transition-all hover:bg-white/5">
                                             <span class="text-[11px] font-semibold tracking-wider text-white/80 peer-checked:text-[#ef4444]">4K (Ultra)</span>
-                                            <span class="text-[9px] text-white/35 mt-0.5 font-mono">25 pts</span>
+                                            <span id="ui-cost-4k" class="text-[9px] text-white/35 mt-0.5 font-mono">30 pts</span>
                                         </div>
                                     </label>
                                 </div>
@@ -463,16 +494,6 @@
                                     class="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[12px] text-white/90 focus:outline-none focus:border-[#dc2626]/70 focus:ring-1 focus:ring-[#dc2626]/50 transition-all placeholder-white/20 resize-none custom-scrollbar mb-3 font-light tracking-wide shadow-inner"
                                     placeholder="e.g. Leather sofa, wooden floor, warm lighting..."></textarea>
 
-                                <!-- 工具 3：鏡頭風格選擇（預設隱藏） -->
-                                <div id="shot-style-selector" class="hidden w-full flex flex-col mb-3">
-                                    <label class="text-[11px] font-semibold tracking-wider text-white/50 mb-2 uppercase"><span data-i18n="shot_style_label">鏡頭風格</span></label>
-                                    <div class="flex flex-wrap gap-1.5">
-                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="industrial" data-i18n="shot_industrial">硬朗工業</span>
-                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="natural" data-i18n="shot_natural">柔和自然</span>
-                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="dramatic" data-i18n="shot_dramatic">戲劇張力</span>
-                                        <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="minimal" data-i18n="shot_minimal">極簡留白</span>
-                                    </div>
-                                </div>
 
                                 <!-- Material Tags -->
                                 <div class="flex flex-wrap gap-1.5" id="material-tags">
@@ -534,7 +555,7 @@
                         class="relative overflow-hidden w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-4 mt-2 rounded-[14px] font-bold shadow-[0_0_20px_rgba(220,38,38,0.35)] hover:shadow-[0_0_35px_rgba(220,38,38,0.6)] transition-all duration-300 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0 text-[15px] tracking-widest border border-red-500/40 outline-none"
                         data-i18n="btn_render">
                         <span class="relative z-10 flex items-center justify-center gap-2 drop-shadow-md">
-                            開始渲染 Start Engine
+                            <span id="btn-render-label">開始渲染 Start Engine</span>
                             <span id="render-cost-preview" class="text-[10px] font-mono text-white/60 bg-black/30 px-1.5 py-0.5 rounded hidden"></span>
                             <svg class="w-4 h-4 ml-1 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -629,7 +650,7 @@
 
             <div class="text-center mb-6">
                 <h2 class="text-2xl font-bold text-white tracking-widest mb-2 px-6">INVITE & EARN</h2>
-                <p class="text-white/50 text-[12px] tracking-wide">好友輸入邀請碼並完成<strong class="text-white/80">第一張算圖</strong>後，雙方立即得獎。<br>您獲得 <span class="text-[#dc2626] font-bold">300 點</span>，好友獲得 <span class="text-amber-400 font-bold">100 點</span>（永久點數，不過期）。</p>
+                <p class="text-white/50 text-[12px] tracking-wide">好友輸入邀請碼並完成<strong class="text-white/80">第一張算圖</strong>後，雙方立即得獎。<br>您與好友皆可獲得 <span id="ui-ref-free-b" class="text-amber-400 font-bold">50 點</span>（可作 2-3 張算圖，永久有效）。<br><span class="text-[#dc2626] font-bold mt-1 inline-block">【進階獎勵】好友未來首次升級方案，您將獲得該方案 <span id="ui-ref-paid-a">50%</span> 點數分潤！</span></p>
             </div>
 
             <!-- 分享代碼區塊 -->
@@ -662,7 +683,7 @@
                 <div id="referral-bind-status"
                     class="hidden mt-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg py-3 px-4 text-center text-[12px] text-emerald-400 font-medium space-y-1">
                     <div>✨ 邀請碼已記錄！邀請人：<span id="bound-referrer-code" class="font-mono font-bold text-white tracking-wider"></span></div>
-                    <div class="text-white/40">完成第一張算圖後，100 點將自動發放至您的永久點數。</div></div>
+                    <div class="text-white/40">完成第一張算圖後，<span id="ui-ref-free-b-hint">50</span> 點將自動發放至您的永久點數。如果您付費升級方案，您與推薦人都會獲得額外的返利！</div></div>
             </div>
 
         </div>
@@ -686,7 +707,10 @@
             <div class="text-center mb-8">
                 <h2 class="text-2xl font-bold text-white tracking-widest mb-2 px-10" data-i18n="pricing_title">LOAMLAB CAMERA UPGRADE STRATEGY</h2>
                 <p class="text-white/50 text-sm tracking-wide" data-i18n="pricing_subtitle">Choose the perfect plan for your architectural pipeline.</p>
-                <p class="text-[#dc2626] text-xs mt-1" data-i18n="pricing_cost_hint">Standard 2K render costs 20 Credits.</p>
+                <div class="flex flex-col items-center gap-1.5 mt-2.5">
+                    <p class="text-[#dc2626]/80 text-[11px] font-medium tracking-widest uppercase">💡 Render Costs: 1K (<span id="ui-pricing-cost-1k">15</span> pts) | 2K (<span id="ui-pricing-cost-2k">20</span> pts) | 4K (<span id="ui-pricing-cost-4k">30</span> pts)</p>
+                    <p class="text-white/40 text-[10px] tracking-wide">Subscription points reset monthly (Use it or lose it). Top-up points are permanent.</p>
+                </div>
                 <div class="inline-flex items-center gap-2 mt-3 px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/25">
                     <span class="text-green-400 text-[11px] font-semibold tracking-wide">🎉 公測限時特惠 — 全方案 -30%，結帳自動套用</span>
                 </div>
@@ -972,6 +996,118 @@
             </div>
         </div>
     </div>
+
+    <!-- Smart Canvas Modal (智能語義畫布) -->
+    <div id="smart-canvas-modal" class="fixed inset-0 bg-black/95 backdrop-blur-md z-50 hidden items-center justify-center">
+        <div class="relative w-[1080px] max-w-[98vw] bg-[#0f0f12] border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden" style="height:90vh;">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
+                <div>
+                    <h2 class="text-[15px] font-bold text-white tracking-widest" data-i18n="sc_title">SMART CANVAS</h2>
+                    <p class="text-[11px] text-white/40 mt-0.5" data-i18n="sc_subtitle">懸停高亮物件，點擊選取，輸入替換指令</p>
+                </div>
+                <button id="sc-close" class="text-white/40 hover:text-white bg-white/5 hover:bg-white/10 rounded-full p-2 transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="flex flex-1 min-h-0 overflow-hidden">
+                <!-- Left: 疊層畫布區 -->
+                <div class="flex-1 flex flex-col bg-black/60 relative min-w-0">
+                    <!-- Canvas Stack -->
+                    <div class="flex-1 relative flex items-center justify-center overflow-hidden p-3">
+                        <div class="relative inline-block" id="sc-canvas-stack">
+                            <!-- 底層：渲染結果圖 -->
+                            <img id="sc-base-img" class="block max-w-full rounded-lg select-none" style="max-height:calc(90vh - 200px);" alt="render">
+                            <!-- 中層：通道圖（隱藏，供像素採樣） -->
+                            <canvas id="sc-channel-canvas" class="absolute inset-0 rounded-lg" style="display:none;"></canvas>
+                            <!-- 次頂：hover 高亮疊層 -->
+                            <canvas id="sc-highlight-canvas" class="absolute inset-0 rounded-lg pointer-events-none" style="opacity:1;"></canvas>
+                            <!-- 頂層：手繪互動層 -->
+                            <canvas id="sc-draw-canvas" class="absolute inset-0 rounded-lg opacity-70" style="touch-action:none; cursor:crosshair;"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 底部膠囊工具列 -->
+                    <div class="shrink-0 flex items-center justify-center pb-4 px-4">
+                        <div id="sc-capsule" class="flex items-center gap-1.5 bg-black/70 backdrop-blur border border-white/15 rounded-full px-4 py-2 shadow-lg">
+                            <button class="sc-tool-btn sc-active" data-tool="wand" title="魔術棒 (Smart Select)">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 9-7 2-4 7L5 3z"/></svg>
+                            </button>
+                            <button class="sc-tool-btn" data-tool="brush" title="筆刷 (Brush)">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                            </button>
+                            <input type="color" id="sc-color-picker" value="#ff6432" class="w-7 h-7 rounded-full border-2 border-white/20 cursor-pointer bg-transparent" title="筆刷顏色">
+                            <input type="range" id="sc-brush-size" min="5" max="60" value="20" class="w-16 accent-rose-500" title="筆刷大小">
+                            <button class="sc-tool-btn" data-tool="eraser" title="橡皮擦 (Eraser)">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            </button>
+                            <div class="w-px h-5 bg-white/15 mx-1"></div>
+                            <button id="sc-undo" title="復原 (Undo)" class="sc-tool-btn">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+                            </button>
+                            <button id="sc-clear" title="清空 (Clear All)" class="sc-tool-btn text-white/50 hover:text-rose-400">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: 區域列表 + 執行 -->
+                <div class="w-[260px] shrink-0 flex flex-col border-l border-white/10 bg-[#0c0c0e]">
+                    <div class="px-4 py-3 border-b border-white/5 shrink-0">
+                        <p class="text-[10px] text-white/40 font-semibold uppercase tracking-widest" data-i18n="sc_regions_title">選取區域</p>
+                    </div>
+                    <div id="sc-region-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 no-scrollbar">
+                        <!-- 動態渲染區域卡片 -->
+                        <p id="sc-region-empty" class="text-[11px] text-white/25 text-center mt-6" data-i18n="sc_region_empty">使用魔術棒或筆刷<br>選取要替換的區域</p>
+                    </div>
+                    <!-- 費用提示 -->
+                    <div class="px-4 py-2 shrink-0">
+                        <p class="text-[10px] text-white/30">每個區域消耗 <span class="text-white/60 font-bold">10 pts</span></p>
+                    </div>
+                    <!-- 執行按鈕 -->
+                    <div class="p-4 border-t border-white/10 shrink-0">
+                        <button id="btn-execute-smart-swap" class="w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-3 rounded-xl font-bold text-[13px] tracking-widest shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] transition-all active:scale-[0.98]" data-i18n="sc_execute">
+                            執行替換
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 浮動 Label 輸入框（Magic Wand 點擊後彈出於游標旁） -->
+    <div id="sc-label-popup" class="fixed z-[60] hidden">
+        <div class="flex items-center gap-1.5 bg-[#1a1a1e] border border-white/20 rounded-xl shadow-2xl px-3 py-2 backdrop-blur">
+            <input type="text" id="sc-label-input" maxlength="80"
+                class="bg-transparent text-[12px] text-white/90 placeholder-white/30 outline-none w-[180px]"
+                placeholder="描述替換內容...">
+            <button id="sc-label-confirm" class="text-[11px] px-2 py-0.5 bg-rose-500/30 border border-rose-500/50 text-rose-300 rounded-lg hover:bg-rose-500/50 transition-all font-semibold">✓</button>
+            <button id="sc-label-cancel" class="text-[11px] text-white/30 hover:text-white/60 transition-all">✕</button>
+        </div>
+    </div>
+
+    <!-- Smart Canvas 工具列樣式 -->
+    <style>
+        .sc-tool-btn {
+            display:flex; align-items:center; justify-content:center;
+            width:32px; height:32px; border-radius:8px;
+            color: rgba(255,255,255,0.5);
+            transition: all 0.15s;
+        }
+        .sc-tool-btn:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); }
+        .sc-tool-btn.sc-active { background: rgba(220,38,38,0.25); color: #f87171; border: 1px solid rgba(220,38,38,0.4); }
+        .sc-region-card {
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px; padding: 10px 12px;
+            display:flex; flex-direction:column; gap:6px;
+        }
+        .sc-region-card .sc-region-swatch {
+            width:12px; height:12px; border-radius:50%; flex-shrink:0; margin-top:2px;
+        }
+    </style>
 
 </body>
 

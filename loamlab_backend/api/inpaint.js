@@ -54,12 +54,20 @@ export default async function handler(req, res) {
     const userEmail = req.headers['x-user-email'];
     if (!userEmail) return res.status(401).json({ code: -1, msg: 'Missing X-User-Email header' });
 
-    const { image_url, image_base64, mask_base64, prompt = '', reference_image_base64 = null } = req.body || {};
-    if ((!image_url && !image_base64) || !mask_base64) {
-        return res.status(400).json({ code: -1, msg: 'Missing image_url (or image_base64) or mask_base64' });
+    const { image_url, image_base64, mask_base64, prompt = '', reference_image_base64 = null, inpaints = null } = req.body || {};
+    if (!image_url && !image_base64) {
+        return res.status(400).json({ code: -1, msg: 'Missing image_url or image_base64' });
+    }
+    // 向後相容：若無 inpaints[]，將單遮罩轉換為陣列格式
+    const inpaintList = inpaints && inpaints.length > 0
+        ? inpaints
+        : (mask_base64 ? [{ mask_base64, prompt }] : null);
+    if (!inpaintList) {
+        return res.status(400).json({ code: -1, msg: 'Missing mask_base64 or inpaints[]' });
     }
 
-    const COST = 10;
+    const COST_PER = 10;
+    const COST = COST_PER * inpaintList.length;
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
     // Query user
@@ -104,7 +112,7 @@ export default async function handler(req, res) {
             user_email: userEmail,
             amount: -COST,
             transaction_type: 'INPAINT',
-            metadata: { prompt: prompt.slice(0, 120) }
+            metadata: { prompt: inpaintList.map(i => (i.prompt || '').slice(0, 60)).join(' | ').slice(0, 200), regions: inpaintList.length }
         }]);
     } catch (_) {}
 
@@ -123,7 +131,7 @@ export default async function handler(req, res) {
     };
 
     try {
-        // 若前端傳來 base64（本地 file:/// 圖），先上傳至公開 host 取得 URL
+        // 若前端傳來 base64，先上傳至公開 host 取得 URL
         let resolvedImageUrl = image_url;
         if (!resolvedImageUrl && image_base64) {
             try {
@@ -134,16 +142,7 @@ export default async function handler(req, res) {
             }
         }
 
-        // Upload mask to public URL (Fal.ai requires URL, not base64)
-        let maskUrl;
-        try {
-            maskUrl = await uploadBase64(mask_base64, IMGBB_API_KEY);
-        } catch (e) {
-            await refund('MASK_UPLOAD_FAIL');
-            return res.status(500).json({ code: -1, msg: 'Mask upload failed', points_refunded: true });
-        }
-
-        // Upload reference image if provided
+        // Upload reference image if provided (單遮罩向後相容)
         let referenceImageUrl = null;
         if (reference_image_base64) {
             try {
@@ -154,47 +153,61 @@ export default async function handler(req, res) {
             }
         }
 
-        // Call Fal.ai Flux Dev Inpainting
-        // white mask = area to fill, black = area to preserve
-        const falPayload = {
-            image_url: resolvedImageUrl,
-            mask_url: maskUrl,
-            prompt: prompt || 'Replace the material in the marked area. Match the lighting, shadows, and perspective of the surrounding scene exactly.',
-            num_inference_steps: 28,
-            guidance_scale: 3.5,
-            output_format: 'jpeg',
-            ...(referenceImageUrl && {
-                reference_image_url: referenceImageUrl,
-                reference_strength: 0.7
-            })
-        };
+        // 依序處理每個遮罩（避免 Fal.ai 速率限制）
+        const resultUrls = [];
+        for (const item of inpaintList) {
+            // Upload mask
+            let maskUrl;
+            try {
+                maskUrl = await uploadBase64(item.mask_base64, IMGBB_API_KEY);
+            } catch (e) {
+                await refund('MASK_UPLOAD_FAIL');
+                return res.status(500).json({ code: -1, msg: 'Mask upload failed', points_refunded: true });
+            }
 
-        const falRes = await fetch('https://fal.run/fal-ai/flux-general/inpainting', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Key ${FAL_API_KEY}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(falPayload)
-        });
+            // Call Fal.ai Flux Dev Inpainting
+            // white mask = area to fill, black = area to preserve
+            const falPayload = {
+                image_url: resolvedImageUrl,
+                mask_url: maskUrl,
+                prompt: item.prompt || 'Replace the material in the marked area. Match the lighting, shadows, and perspective of the surrounding scene exactly.',
+                num_inference_steps: 28,
+                guidance_scale: 3.5,
+                output_format: 'jpeg',
+                ...(referenceImageUrl && {
+                    reference_image_url: referenceImageUrl,
+                    reference_strength: 0.7
+                })
+            };
 
-        if (!falRes.ok) {
-            const errText = await falRes.text().catch(() => '');
-            await refund('FAL_API_ERROR');
-            return res.status(500).json({ code: -1, msg: `Fal.ai error ${falRes.status}: ${errText.slice(0, 200)}`, points_refunded: true });
-        }
+            const falRes = await fetch('https://fal.run/fal-ai/flux-general/inpainting', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Key ${FAL_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(falPayload)
+            });
 
-        const falData = await falRes.json();
-        const resultUrl = falData?.images?.[0]?.url;
+            if (!falRes.ok) {
+                const errText = await falRes.text().catch(() => '');
+                await refund('FAL_API_ERROR');
+                return res.status(500).json({ code: -1, msg: `Fal.ai error ${falRes.status}: ${errText.slice(0, 200)}`, points_refunded: true });
+            }
 
-        if (!resultUrl) {
-            await refund('FAL_NO_URL');
-            return res.status(500).json({ code: -1, msg: 'No result image from Fal.ai', points_refunded: true });
+            const falData = await falRes.json();
+            const resultUrl = falData?.images?.[0]?.url;
+            if (!resultUrl) {
+                await refund('FAL_NO_URL');
+                return res.status(500).json({ code: -1, msg: 'No result image from Fal.ai', points_refunded: true });
+            }
+            resultUrls.push(resultUrl);
         }
 
         return res.status(200).json({
             code: 0,
-            url: resultUrl,
+            url: resultUrls[0],           // 向後相容
+            urls: resultUrls,             // 多遮罩完整列表
             points_deducted: COST,
             points_remaining: monthlyPoints + lifetimePoints,
             has_reference: !!referenceImageUrl

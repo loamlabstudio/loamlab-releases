@@ -235,6 +235,21 @@ Object.keys(UI_LANG).forEach(l => {
 - **Image hosting pipeline**: `render.js` uploads Base64 images to freeimage.host first; falls back to ImgBB if that fails; refunds and aborts if both fail
 - **Cost detection in `render.js`**: resolution tier (`1K`/`2K`/`4K`) is inferred by string-searching the JSON payload — ensure resolution strings are consistent between plugin and backend
 - **`fix_anomalies.js` has a mixed CJS/ESM bug**: uses `require()` (CommonJS) but also `export default` — avoid touching until refactored
+- **Inpainting (`inpaint.js`)**: currently uses Fal.ai; evaluated alternatives are Vertex AI Imagen 3 (`EDIT_MODE_INPAINT_INSERTION`, $0.02/img, requires Service Account) and Gemini API (text-instruction only, no mask). See `ATLASCLOUD_API.md` §八-B and `GOOGLE_AI_STUDIO_API.md` §三 for full specs.
+- **AtlasCloud Nano Banana 2 does NOT support masking/inpainting** — it is T2I + image-to-image style transfer only. Max 14 reference images. Pricing: 1K=$0.072, 2K=$0.108, 4K=$0.144. API docs: `ATLASCLOUD_API.md`.
+- **Gemini API (AI Studio)** can serve as a Coze fallback for T2I rendering — no mask support, uses API Key auth, returns Base64 PNG. API docs: `GOOGLE_AI_STUDIO_API.md`.
+
+---
+
+## External AI API Reference
+
+| API | 用途 | 認證方式 | 詳細說明 |
+|-----|------|---------|---------|
+| Coze Workflow | 主力渲染（現有）| `COZE_PAT` | `render.js` |
+| AtlasCloud Nano Banana 2 | 備援渲染 / 多參考圖風格遷移 | `ATLASCLOUD_API_KEY` | `ATLASCLOUD_API.md` |
+| Gemini API (AI Studio) | Coze fallback 候選 | `GEMINI_API_KEY` | `GOOGLE_AI_STUDIO_API.md` §二 |
+| Vertex AI Imagen 3 | Inpainting（Fal.ai 替換候選）| Service Account JSON | `GOOGLE_AI_STUDIO_API.md` §三 |
+| Fal.ai | Inpainting（現有）| 內建 | `inpaint.js` |
 
 ---
 
@@ -249,3 +264,7 @@ Object.keys(UI_LANG).forEach(l => {
 | `LEMONSQUEEZY_WEBHOOK_SECRET` | `webhook.js` | HMAC signing secret |
 | `IMGBB_API_KEY` | `render.js` | Fallback image host; hardcoded default exists |
 | `ADMIN_KEY` | `fix_anomalies.js` | Guards admin endpoint in production |
+| `ATLASCLOUD_API_KEY` | 備援渲染（未實裝）| AtlasCloud 控制台取得；詳見 `ATLASCLOUD_API.md` |
+| `GEMINI_API_KEY` | Gemini fallback（未實裝）| Google AI Studio 免費申請 |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Vertex AI Inpainting（未實裝）| Service Account JSON 路徑 |
+| `GOOGLE_CLOUD_PROJECT` | Vertex AI Inpainting（未實裝）| GCP 控制台取得 |

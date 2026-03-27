@@ -3,5 +3,10 @@
     "api/render.js": {
       "maxDuration": 300
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/public/index.html" },
+    { "source": "/terms.html", "destination": "/public/terms.html" },
+    { "source": "/privacy.html", "destination": "/public/privacy.html" }
+  ]
 }

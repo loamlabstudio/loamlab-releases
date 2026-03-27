@@ -105,18 +105,19 @@ module LoamLab
       # 2. 開始渲染指令 (由 JS 呼叫)
       dialog.add_action_callback("render_scene") do |action_context, params|
         puts "LoamLab: 收到渲染指令 - #{params.inspect}"
-        scenes_to_render = params["scenes"] || []
-        user_prompt = (params["prompt"] || "").to_s.dup.force_encoding("UTF-8")
-        resolution = params["resolution"] || "1k"
-        tool             = (params["tool"] || 1).to_i
-        base_image_url   = (params["base_image_url"] || "").to_s
-        base_image_scene = (params["base_image_scene"] || "底圖").to_s.dup.force_encoding("UTF-8")
+        scenes_to_render        = params["scenes"] || []
+        user_prompt             = (params["prompt"] || "").to_s.dup.force_encoding("UTF-8")
+        resolution              = params["resolution"] || "1k"
+        tool                    = (params["tool"] || 1).to_i
+        base_image_url          = (params["base_image_url"] || "").to_s
+        base_image_scene        = (params["base_image_scene"] || "底圖").to_s.dup.force_encoding("UTF-8")
+        reference_image_base64  = (params["reference_image_base64"] || "").to_s
 
         dialog.execute_script("window.receiveFromRuby({status: 'rendering'})")
 
         # 延遲一點執行，避免阻塞前端 UI 動畫
         UI.start_timer(0.1, false) do
-            self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution, tool, base_image_url, base_image_scene)
+            self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution, tool, base_image_url, base_image_scene, reference_image_base64)
         end
       end
 
@@ -363,6 +364,72 @@ module LoamLab
           UI.openURL("file:///#{save_path}")
         end
       end
+
+      # 8. 生成色塊通道圖 (Segmentation Map) — Tool 2 選物件用
+      dialog.add_action_callback("loamlab_generate_seg_map") do |action_context|
+        begin
+          model = Sketchup.active_model
+          view  = model.active_view
+
+          # 收集所有 top-level Groups / ComponentInstances
+          top_entities = model.active_entities.select { |e|
+            e.is_a?(Sketchup::Group) || e.is_a?(Sketchup::ComponentInstance)
+          }
+
+          if top_entities.empty?
+            dialog.execute_script("window._onSegMapReady(#{JSON.dump({error: 'No objects found in scene'})})")
+            next
+          end
+
+          # 為每個 entity 分配唯一顏色（黃金角 137.5° 均勻分佈）
+          color_entries = []
+          materials_created = []
+          top_entities.each_with_index do |ent, i|
+            hue = (i * 137.5) % 360
+            r, g, b = self.hsl_to_rgb(hue, 0.78, 0.52)
+            hex = format("#%02X%02X%02X", r, g, b)
+            raw_name = ent.respond_to?(:name) ? ent.name : ""
+            display_name = raw_name.empty? ? "Object #{i + 1}" : raw_name
+            color_entries << { color: hex, name: display_name }
+
+            mat = model.materials.add("__seg_#{i}_#{ent.object_id}")
+            mat.color = Sketchup::Color.new(r, g, b)
+            materials_created << mat
+          end
+
+          # 儲存原始材質 & 遞迴覆蓋
+          saved_materials = {}
+          top_entities.each_with_index do |ent, i|
+            self.override_faces_recursive(ent, materials_created[i], saved_materials)
+          end
+
+          # 截圖
+          temp_dir = ENV['TEMP'] || ENV['TMP'] || 'C:/Temp'
+          Dir.mkdir(temp_dir) unless File.exist?(temp_dir)
+          temp_path = File.join(temp_dir, "loamlab_segmap_#{Time.now.to_i}.jpg")
+          view.write_image(temp_path, 1280, 720, true, 0.9)
+
+          # 還原原始材質
+          saved_materials.each do |_, s|
+            begin
+              s[:face].material      = s[:mat]
+              s[:face].back_material = s[:back]
+            rescue; end
+          end
+          # 刪除臨時材質
+          materials_created.each { |m| model.materials.remove(m) rescue nil }
+
+          # 轉 base64
+          seg_b64 = Base64.strict_encode64(File.read(temp_path, mode: 'rb'))
+          File.delete(temp_path) rescue nil
+
+          result = { segmap_base64: "data:image/jpeg;base64,#{seg_b64}", color_entries: color_entries }
+          dialog.execute_script("window._onSegMapReady(#{JSON.dump(result)})")
+        rescue => e
+          dialog.execute_script("window._onSegMapReady(#{JSON.dump({error: e.message})})")
+          puts "[LoamLab] generate_seg_map error: #{e.message}\n#{e.backtrace.first(3).join("\n")}"
+        end
+      end
     end
 
     # 獲取當前模型所有的場景名稱
@@ -397,11 +464,47 @@ module LoamLab
     end
 
     # 批量導出指定的場景為實體檔案並上傳 Coze
-    def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1, base_image_url="", base_image_scene="底圖")
+    def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1, base_image_url="", base_image_scene="底圖", reference_image_base64="")
       model = Sketchup.active_model
       return unless model
 
-      # 工具 2/3 底圖模式：直接讀本地圖檔送 Coze，跳過 SketchUp 截圖
+      # 工具 2：AtlasCloud 家具替換（base_image + 可選 reference_image，皆 base64）
+      if tool == 2 && !base_image_url.empty? && base_image_url.start_with?("file:///")
+        begin
+          local_path = base_image_url.sub("file:///", "").gsub("/", File::SEPARATOR)
+          img_data   = File.read(local_path, mode: 'rb')
+          base_data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
+          user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+          params_hash = {
+            "base_image"   => base_data_uri,
+            "user_prompt"  => user_prompt,
+            "resolution"   => resolution
+          }
+          params_hash["reference_image"] = reference_image_base64 unless reference_image_base64.empty?
+          request_body = JSON.dump({ tool: 2, parameters: params_hash })
+          req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
+          req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
+          req.body = request_body
+          captured_scene = base_image_scene
+          req.start do |_, response|
+            begin
+              data   = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
+              result = (data['code'] == 0 && data['url']) ?
+                { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
+                { status: 'render_failed', message: data['msg'] || "HTTP #{response.status_code}" }
+            rescue => e
+              result = { status: 'render_failed', message: "解析失敗: #{e.message}" }
+            end
+            UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
+          end
+          UI.start_timer(0.1, false) { dialog.execute_script("window.receiveFromRuby({status: 'export_done'})") }
+        rescue => e
+          dialog.execute_script("window.receiveFromRuby(#{JSON.generate({ status: 'render_failed', message: "底圖讀取失敗: #{e.message}" })})")
+        end
+        return
+      end
+
+      # 工具 3 底圖模式：直接讀本地圖檔送 Coze，跳過 SketchUp 截圖
       if !base_image_url.empty? && base_image_url.start_with?("file:///")
         begin
           local_path = base_image_url.sub("file:///", "").gsub("/", File::SEPARATOR)
@@ -490,7 +593,20 @@ module LoamLab
             closest_ratio = supported_ratios.min_by { |k, v| (v - ratio_val).abs }[0]
 
             view.write_image(temp_img_path, 1280, 720, true, 0.6)
-            
+
+            # 通道圖生成（Smart Canvas 魔術棒用）
+            channel_b64 = ""
+            begin
+              channel_path = File.join(temp_dir, "loamlab_channel_#{index}_#{Time.now.to_i}.jpg")
+              self.export_channel_image(view, 1280, 720, channel_path)
+              if File.exist?(channel_path)
+                channel_b64 = "data:image/jpeg;base64,#{Base64.strict_encode64(File.read(channel_path, mode: 'rb'))}"
+                File.delete(channel_path)
+              end
+            rescue => e
+              puts "[LoamLab] channel image failed (non-fatal): #{e.message}"
+            end
+
             # 自動備份
             if !save_path.empty? && File.directory?(save_path)
               safe_project_name = project_name.gsub(/[:*?"<>|\/\\]/, "_")
@@ -517,12 +633,13 @@ module LoamLab
             req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
             req.body = request_body
 
-            captured_scene = scene_name
+            captured_scene      = scene_name
+            captured_channel_b64 = channel_b64
             req.start do |_, response|
               begin
                 data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
                 result = (data['code'] == 0 && data['url']) ?
-                  { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
+                  { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'], channel_base64: captured_channel_b64 } :
                   { status: 'render_failed', message: data['msg'] || "HTTP #{response.status_code}", points_refunded: data['points_refunded'], error: data['error'] }
               rescue => e
                 result = { status: 'render_failed', message: "解析失敗: #{e.message}" }
@@ -547,6 +664,72 @@ module LoamLab
       process_chain.call(0)
     end
     
+    # 生成色彩通道圖 (Smart Canvas 用) — 切換至「依材質著色」模式截圖後立即還原
+    def self.export_channel_image(view, width, height, path)
+      model = Sketchup.active_model
+      ro    = model.rendering_options
+
+      saved = {
+        'FaceColorMode'   => ro['FaceColorMode'],
+        'DisplayShadows'  => ro['DisplayShadows'],
+        'DrawHorizon'     => ro['DrawHorizon'],
+        'DrawGround'      => ro['DrawGround'],
+        'DrawSky'         => ro['DrawSky'],
+        'EdgeDisplayMode' => ro['EdgeDisplayMode']
+      }
+
+      begin
+        ro['FaceColorMode']   = 3      # Color by Material
+        ro['DisplayShadows']  = false
+        ro['DrawHorizon']     = false
+        ro['DrawGround']      = false
+        ro['DrawSky']         = false
+        ro['EdgeDisplayMode'] = 0      # 無邊線
+        view.write_image(path, width, height, false)
+      ensure
+        saved.each { |k, v| ro[k] = v rescue nil }
+      end
+    end
+
+    # 遞迴覆蓋 entity 下所有 Face 的材質（生成 segmap 用）
+    def self.override_faces_recursive(entity, mat, saved)
+      sub_entities = entity.is_a?(Sketchup::Group) ? entity.entities : entity.definition.entities
+      sub_entities.each do |e|
+        if e.is_a?(Sketchup::Face)
+          saved[e.object_id] = { face: e, mat: e.material, back: e.back_material }
+          e.material      = mat
+          e.back_material = mat
+        elsif e.is_a?(Sketchup::Group) || e.is_a?(Sketchup::ComponentInstance)
+          override_faces_recursive(e, mat, saved)
+        end
+      end
+    rescue => e
+      puts "[LoamLab] override_faces_recursive error: #{e.message}"
+    end
+
+    # HSL (0-360, 0-1, 0-1) → [R, G, B] (0-255)
+    def self.hsl_to_rgb(h, s, l)
+      h = h / 360.0
+      if s == 0
+        v = (l * 255).round
+        return [v, v, v]
+      end
+      q = l < 0.5 ? l * (1 + s) : l + s - l * s
+      p = 2 * l - q
+      r = hue_to_rgb(p, q, h + 1.0/3)
+      g = hue_to_rgb(p, q, h)
+      b = hue_to_rgb(p, q, h - 1.0/3)
+      [(r * 255).round, (g * 255).round, (b * 255).round]
+    end
+
+    def self.hue_to_rgb(p, q, t)
+      t += 1 if t < 0; t -= 1 if t > 1
+      return p + (q - p) * 6 * t if t < 1.0/6
+      return q if t < 1.0/2
+      return p + (q - p) * (2.0/3 - t) * 6 if t < 2.0/3
+      p
+    end
+
     # 新增選單項目
     unless file_loaded?(__FILE__)
       main_menu = UI.menu('Plugins').add_submenu('LoamLab Camera (野人相機)')

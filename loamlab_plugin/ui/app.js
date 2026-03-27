@@ -17,6 +17,7 @@ let finishedScenesCount = 0;
 let currentActiveTool = 1;
 let selectedShotStyle = 'dramatic';
 let _baseImageEntry = null; // 工具 2/3/4：從歷史選取的底圖
+let _referenceImageBase64 = null; // 工具 2：本地上傳的參考圖 base64
 
 const PROXY_PREFIX = "This interior design scene contains simple geometric proxy shapes (boxes/blocks/cylinders) representing furniture placeholders. Replace each proxy with a realistic, high-quality piece of furniture of the indicated type while preserving its exact position, scale, and spatial relationship. ";
 
@@ -84,10 +85,36 @@ function setActiveTool(n) {
     const materialTagsDiv = document.getElementById('material-tags');
     const promptInput = document.getElementById('user-prompt-input');
     const titleEl = document.querySelector('[data-i18n="title"]');
+    const scenesContainer = document.getElementById('scenes-container');
+    const renderLabel = document.getElementById('btn-render-label');
+    const advancedDetails = document.querySelector('details.group');
 
     if (hintBanner) hintBanner.classList.add('hidden');
     if (shotStyleSelector) shotStyleSelector.classList.add('hidden');
     if (materialTagsDiv) materialTagsDiv.classList.remove('hidden');
+    // 重置：隱藏參考圖選擇器（工具 2 才顯示）
+    document.getElementById('reference-image-picker')?.classList.add('hidden');
+    clearReferenceImage();
+    // 重置：切換工具時恢復 scenes-container，恢復按鈕文字，恢復 picker 樣式
+    if (scenesContainer) scenesContainer.classList.remove('hidden');
+    if (renderLabel) renderLabel.textContent = t('btn_render');
+    const pickerLabel = document.getElementById('base-image-picker-label');
+    const pickBtn = document.getElementById('base-image-pick-btn');
+    const pickEmpty = document.getElementById('base-image-empty');
+    if (pickerLabel) pickerLabel.className = 'text-[11px] font-semibold tracking-wider text-white/50 uppercase';
+    if (pickBtn) pickBtn.className = 'w-full rounded-xl border-2 border-dashed border-white/15 bg-black/20 cursor-pointer hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group overflow-hidden relative';
+    if (pickEmpty) pickEmpty.className = 'flex flex-col items-center justify-center gap-2 text-white/30 group-hover:text-amber-400/50 transition-colors p-4';
+    // 離開副工具時：清除底圖預覽佔位卡，重置 thumb 大小
+    const gridEl0 = document.getElementById('preview-grid');
+    if (gridEl0 && gridEl0.querySelector('[data-base-preview]')) {
+        gridEl0.innerHTML = '';
+        gridEl0.classList.add('hidden');
+        document.getElementById('preview-placeholder')?.classList.remove('hidden');
+    }
+    const baseThumb0 = document.getElementById('base-image-thumb');
+    if (baseThumb0) { baseThumb0.style.maxHeight = '96px'; baseThumb0.style.display = ''; }
+    const filled0 = document.getElementById('base-image-filled');
+    if (filled0) filled0.style.minHeight = '';
 
     if (n === 1) {
         if (titleEl) titleEl.textContent = (UI_LANG[currentLang] || UI_LANG['en-US'])['title'];
@@ -97,31 +124,54 @@ function setActiveTool(n) {
         const lang2 = UI_LANG[currentLang] || UI_LANG['en-US'];
         if (titleEl) titleEl.textContent = lang2['tool_furniture'];
         if (hintBanner) {
-            hintBanner.className = 'w-full rounded-lg px-3 py-2.5 text-[11px] leading-relaxed bg-amber-500/10 border border-amber-500/20 text-amber-200/70';
+            hintBanner.className = 'w-full rounded-lg px-3 py-2.5 text-[11px] leading-relaxed bg-blue-500/10 border border-blue-500/20 text-blue-200/70';
             hintBanner.textContent = lang2['tool_furniture_hint'];
+            hintBanner.classList.remove('hidden');
         }
-        rebuildFurnitureTags();
+        // Tool 2: 隱藏場景列表、tags，Advanced Settings 預設收起（同步工具 3）
+        if (scenesContainer) scenesContainer.classList.add('hidden');
+        if (advancedDetails) advancedDetails.open = false;
+        if (materialTagsDiv) materialTagsDiv.classList.add('hidden');
+        document.getElementById('reference-image-picker')?.classList.remove('hidden');
         if (promptInput) promptInput.placeholder = lang2['tool_furniture_ph'];
+        if (pickerLabel) { pickerLabel.className = 'text-[11px] font-semibold tracking-wider text-blue-400/80 uppercase'; pickerLabel.textContent = (lang2['base_image_label'] || '底圖 Base Image') + '  ★ ' + (lang2['required'] || 'Required'); }
+        if (pickBtn) pickBtn.className = 'w-full rounded-xl border-2 border-dashed border-blue-500/30 bg-black/20 cursor-pointer hover:border-blue-500/60 hover:bg-blue-500/5 transition-all group overflow-hidden relative';
+        if (pickEmpty) pickEmpty.className = 'flex flex-col items-center justify-center gap-2 text-white/30 group-hover:text-blue-400/50 transition-colors py-5';
     } else if (n === 3) {
         const lang3 = UI_LANG[currentLang] || UI_LANG['en-US'];
         if (titleEl) titleEl.textContent = lang3['tool_multi_angle'];
         if (hintBanner) {
             hintBanner.className = 'w-full rounded-lg px-3 py-2.5 text-[11px] leading-relaxed bg-blue-500/10 border border-blue-500/20 text-blue-200/70';
             hintBanner.textContent = lang3['tool_ninegrid_hint'];
+            hintBanner.classList.remove('hidden');
         }
+        // Tool 3: 隱藏場景列表，底圖必填 (blue 色系)
+        if (scenesContainer) scenesContainer.classList.add('hidden');
+        if (advancedDetails) advancedDetails.open = false;
         if (shotStyleSelector) shotStyleSelector.classList.remove('hidden');
         if (materialTagsDiv) materialTagsDiv.classList.add('hidden');
         if (promptInput) promptInput.placeholder = lang3['tool_ninegrid_ph'];
+        if (pickerLabel) { pickerLabel.className = 'text-[11px] font-semibold tracking-wider text-blue-400/80 uppercase'; pickerLabel.textContent = (lang3['base_image_label'] || '底圖 Base Image') + '  ★ ' + (lang3['required'] || 'Required'); }
+        if (pickBtn) pickBtn.className = 'w-full rounded-xl border-2 border-dashed border-blue-500/30 bg-black/20 cursor-pointer hover:border-blue-500/60 hover:bg-blue-500/5 transition-all group overflow-hidden relative';
+        if (pickEmpty) pickEmpty.className = 'flex flex-col items-center justify-center gap-2 text-white/30 group-hover:text-blue-400/50 transition-colors py-5';
     } else if (n === 4) {
         const lang4 = UI_LANG[currentLang] || UI_LANG['en-US'];
         if (titleEl) titleEl.textContent = lang4['tool_swap'] || 'Material SWAP';
         if (hintBanner) {
-            hintBanner.className = 'w-full rounded-lg px-3 py-2.5 text-[11px] leading-relaxed bg-purple-500/10 border border-purple-500/20 text-purple-200/70';
+            hintBanner.className = 'w-full rounded-lg px-3 py-2.5 text-[11px] leading-relaxed bg-blue-500/10 border border-blue-500/20 text-blue-200/70';
             hintBanner.textContent = lang4['tool_swap_hint'] || '';
             hintBanner.classList.remove('hidden');
         }
+        // Tool 4: 隱藏場景列表、tags，Advanced Settings 預設收起（同步工具 3）
+        if (scenesContainer) scenesContainer.classList.add('hidden');
+        if (advancedDetails) advancedDetails.open = false;
         if (materialTagsDiv) materialTagsDiv.classList.add('hidden');
         if (promptInput) promptInput.placeholder = 'e.g. marble texture, oak wood floor...';
+        if (renderLabel) renderLabel.textContent = lang4['btn_mask_editor'] || 'Paint Mask →';
+        // Tool 4 底圖必填，blue 色系（同步工具 3）
+        if (pickerLabel) { pickerLabel.className = 'text-[11px] font-semibold tracking-wider text-blue-400/80 uppercase'; pickerLabel.textContent = (lang4['base_image_required_label'] || '底圖 Base Image') + '  ★ ' + (lang4['required'] || 'Required'); }
+        if (pickBtn) pickBtn.className = 'w-full rounded-xl border-2 border-dashed border-blue-500/30 bg-black/20 cursor-pointer hover:border-blue-500/60 hover:bg-blue-500/5 transition-all group overflow-hidden relative';
+        if (pickEmpty) pickEmpty.className = 'flex flex-col items-center justify-center gap-2 text-white/30 group-hover:text-blue-400/50 transition-colors py-5';
     }
 
     // 底圖選擇器：工具 2/3/4 顯示，工具 1 隱藏
@@ -456,6 +506,7 @@ window.receiveFromRuby = function (data) {
         // 利用標題來尋找是哪一張卡片算完了，並替換圖片
         const targetScene = data.scene_name;
         const targetUrl = data.url;
+        const channelB64 = data.channel_base64 || '';
 
         if (targetScene && targetUrl) {
             // AI 渲染結果自動存檔（Ruby 下載圖片 → save_path + 更新 JSON 索引）
@@ -466,6 +517,63 @@ window.receiveFromRuby = function (data) {
                     resolution: document.querySelector('input[name="resolution"]:checked')?.value || '2k',
                     prompt: document.getElementById('user-prompt-input')?.value || ''
                 });
+            }
+
+            // 工具 2 結果：全寬結果卡（家具替換前後對比）
+            if (currentActiveTool === 2) {
+                const gridEl2 = document.getElementById('preview-grid');
+                if (gridEl2) {
+                    const baseThumbSrc = document.getElementById('base-image-thumb')?.src || '';
+                    gridEl2.className = 'w-full h-full px-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar pb-6 pt-4';
+                    gridEl2.innerHTML = `
+                        <div data-tool2-result="true" class="relative w-full rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
+                            <div class="absolute top-3 left-3 bg-blue-600 text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest">FURNITURE SWAP · AI</div>
+                            ${baseThumbSrc ? `<div class="w-full flex flex-col">
+                                <div class="relative w-full overflow-hidden bg-black aspect-video">
+                                    <div class="absolute top-2 left-2 bg-black/60 backdrop-blur-md border border-white/10 text-white/50 text-[8px] px-2 py-1 rounded z-10 font-mono tracking-widest">BEFORE</div>
+                                    <img src="${baseThumbSrc}" class="w-full h-full object-cover opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all duration-700">
+                                </div>
+                                <div class="relative w-full overflow-hidden bg-black aspect-video border-t border-white/[0.05]">
+                                    <div class="absolute top-2 left-2 bg-blue-600 text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest">AFTER</div>
+                                    <img src="${targetUrl}" class="w-full h-full object-cover animate-blur-clear" onclick="window.open('${targetUrl}', '_blank')">
+                                </div>
+                            </div>` : `<img src="${targetUrl}" class="w-full object-contain animate-blur-clear" onclick="window.open('${targetUrl}', '_blank')">`}
+                            <div class="px-4 py-3 flex items-center justify-between border-t border-white/[0.05] bg-black/40">
+                                <span class="text-[10px] text-white/30 truncate max-w-[60%]">${document.getElementById('user-prompt-input')?.value || 'Furniture Swap'}</span>
+                                <button id="tool2-save-btn" class="text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> SAVE</button>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('tool2-save-btn')?.addEventListener('click', () => {
+                        const p = document.getElementById('user-prompt-input')?.value || '';
+                        if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
+                    });
+                }
+                return;
+            }
+
+            // 九宮格結果：直接替換 9 格骨架為全寬結果卡
+            if (currentActiveTool === 3) {
+                const gridEl3 = document.getElementById('preview-grid');
+                if (gridEl3) {
+                    const promptText3 = document.getElementById('user-prompt-input')?.value || '';
+                    gridEl3.className = 'w-full h-full px-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar pb-6 pt-4';
+                    gridEl3.innerHTML = `
+                        <div data-ninegrid-result="true" class="relative w-full rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
+                            <div class="absolute top-3 left-3 bg-[#dc2626] text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest">9-GRID · AI RENDERED</div>
+                            <img src="${targetUrl}" class="w-full object-contain animate-blur-clear" title="點擊檢視大圖" onclick="window.open('${targetUrl}', '_blank')">
+                            <div class="px-4 py-3 flex items-center justify-between border-t border-white/[0.05] bg-black/40">
+                                <span class="text-[10px] text-white/30 truncate max-w-[60%]">${promptText3 || 'Multi-angle Gen'}</span>
+                                <button id="ninegrid-save-btn" class="text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black hover:border-white transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> SAVE</button>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('ninegrid-save-btn')?.addEventListener('click', () => {
+                        const p = document.getElementById('user-prompt-input')?.value || '';
+                        if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
+                    });
+                }
+                return; // 跳過後續 span.truncate 查找邏輯
             }
 
             const gridEl = document.getElementById('preview-grid');
@@ -479,16 +587,14 @@ window.receiveFromRuby = function (data) {
                         if (imgContainer) {
                             const originalImgSrc = imgContainer.querySelector('img').src;
 
-                            // 打破舊有的容器，重新建構為震懾視覺的上下切割對比圖卡
-                            imgContainer.className = "w-full flex flex-col relative bg-black";
+                            // 保持 aspect-video 高度，改用 overlay 疊加對比（hover 查看 SKETCHUP 原圖）
+                            imgContainer.className = "relative w-full overflow-hidden bg-black aspect-video flex-shrink-0";
                             imgContainer.innerHTML = `
-                                <div class="relative w-full overflow-hidden bg-black aspect-video group cursor-crosshair">
-                                    <div class="absolute top-2 left-2 bg-black/60 backdrop-blur-md border border-white/10 text-white/50 text-[8px] px-2 py-1 rounded shadow-sm z-10 font-mono tracking-widest hover:opacity-0 transition-opacity">SKETCHUP</div>
-                                    <img src="${originalImgSrc}" class="w-full h-full object-cover opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all duration-[800ms] blur-[2px] hover:blur-none" title="懸停查看原圖">
-                                </div>
-                                <div class="relative w-full overflow-hidden bg-black aspect-video border-t border-white/[0.05] group">
-                                    <div class="absolute top-2 left-2 bg-[#dc2626] text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest">AI RENDERED</div>
-                                    <img src="${targetUrl}" class="w-full h-full object-cover animate-blur-clear transition-transform duration-[3s] group-hover:scale-[1.04]" title="點擊檢視大圖" onclick="window.open('${targetUrl}', '_blank')">
+                                <img src="${targetUrl}" class="w-full h-full object-cover transition-transform duration-[3s] hover:scale-[1.04]" onclick="window.open('${targetUrl}', '_blank')" title="點擊開大圖" style="cursor:pointer">
+                                <div class="absolute top-2 left-2 bg-[#dc2626] text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest pointer-events-none">AI RENDERED</div>
+                                <div class="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none">
+                                    <img src="${originalImgSrc}" class="w-full h-full object-cover opacity-90">
+                                    <div class="absolute top-2 left-2 bg-black/70 backdrop-blur-md border border-white/10 text-white/60 text-[8px] px-2 py-1 rounded z-10 font-mono tracking-widest">SKETCHUP</div>
                                 </div>
                             `;
                         }
@@ -531,7 +637,7 @@ window.receiveFromRuby = function (data) {
                                 swapBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> SWAP`;
                                 swapBtn.onclick = (e) => {
                                     e.stopPropagation();
-                                    openSwapModal(originalImgSrc, targetUrl);
+                                    channelB64 ? openSmartCanvas(channelB64, targetUrl) : openSwapModal(originalImgSrc, targetUrl);
                                 };
                                 btnContainer.appendChild(swapBtn);
 
@@ -835,7 +941,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (currentActiveTool === 2) {
             finalPrompt = PROXY_PREFIX + userPrompt;
         } else if (currentActiveTool === 3) {
-            finalPrompt = NINEGRID_PREFIX + SHOT_MODIFIERS[selectedShotStyle] + userPrompt;
+            finalPrompt = SHOT_MODIFIERS[selectedShotStyle] + userPrompt;
         }
 
         // 工具 2/3 有底圖時：以底圖取代 SketchUp 截圖，不需選場景
@@ -883,6 +989,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 ...(usingBaseImage && {
                     base_image_url: _baseImageEntry.file_url,
                     base_image_scene: _baseImageEntry.scene || '底圖'
+                }),
+                ...(currentActiveTool === 2 && _referenceImageBase64 && {
+                    reference_image_base64: _referenceImageBase64
                 })
             });
         } else {
@@ -936,6 +1045,23 @@ document.addEventListener("DOMContentLoaded", () => {
             tag.classList.remove('bg-black/40', 'border-white/10', 'text-white/60');
             tag.classList.add('bg-blue-500/20', 'border-blue-400/40', 'text-blue-200');
         });
+    });
+
+    // 工具 3：Advanced Settings 開合時，同步切換底圖縮圖顯示
+    document.querySelector('details.group')?.addEventListener('toggle', (e) => {
+        if (currentActiveTool !== 3) return;
+        const thumb = document.getElementById('base-image-thumb');
+        const filled = document.getElementById('base-image-filled');
+        if (!filled || filled.classList.contains('hidden')) return;
+        if (e.target.open) {
+            // 展開：壓縮為 meta 列
+            if (thumb) thumb.style.display = 'none';
+            if (filled) filled.style.minHeight = '40px';
+        } else {
+            // 收起：顯示底圖預覽
+            if (thumb) { thumb.style.display = ''; thumb.style.maxHeight = '180px'; }
+            if (filled) filled.style.minHeight = '';
+        }
     });
 
     // Swap Modal 控制按鈕
@@ -1069,6 +1195,50 @@ window.openPricingModal = openPricingModal; // 讓共用邏輯呼叫
 let authPollTimer = null;
 let API_BASE = "https://loamlab-camera-backend.vercel.app";
 
+window.LOAMLAB_CONFIG = null;
+async function fetchGlobalConfig() {
+    try {
+        const res = await fetch(`${API_BASE}/api/config`);
+        const data = await res.json();
+        if (data.code === 0 && data.config) {
+            window.LOAMLAB_CONFIG = data.config;
+            applyConfigToUI();
+        }
+    } catch (e) {
+        console.warn('[LoamLab] Failed to fetch config', e);
+    }
+}
+
+function applyConfigToUI() {
+    const cfg = window.LOAMLAB_CONFIG;
+    if (!cfg) return;
+
+    if (cfg.render_costs) {
+        if (document.getElementById('ui-cost-1k')) document.getElementById('ui-cost-1k').textContent = cfg.render_costs['1k'] + ' pts';
+        if (document.getElementById('ui-cost-2k')) document.getElementById('ui-cost-2k').textContent = cfg.render_costs['2k'] + ' pts';
+        if (document.getElementById('ui-cost-4k')) document.getElementById('ui-cost-4k').textContent = cfg.render_costs['4k'] + ' pts';
+        
+        if (document.getElementById('ui-pricing-cost-1k')) document.getElementById('ui-pricing-cost-1k').textContent = cfg.render_costs['1k'];
+        if (document.getElementById('ui-pricing-cost-2k')) document.getElementById('ui-pricing-cost-2k').textContent = cfg.render_costs['2k'];
+        if (document.getElementById('ui-pricing-cost-4k')) document.getElementById('ui-pricing-cost-4k').textContent = cfg.render_costs['4k'];
+        
+        const r1k = document.querySelector('input[name="resolution"][value="1k"]');
+        if (r1k) r1k.setAttribute('data-cost', cfg.render_costs['1k']);
+        const r2k = document.querySelector('input[name="resolution"][value="2k"]');
+        if (r2k) r2k.setAttribute('data-cost', cfg.render_costs['2k']);
+        const r4k = document.querySelector('input[name="resolution"][value="4k"]');
+        if (r4k) r4k.setAttribute('data-cost', cfg.render_costs['4k']);
+    }
+
+    if (cfg.referral) {
+        if (document.getElementById('ui-ref-free-b')) document.getElementById('ui-ref-free-b').textContent = cfg.referral.free_reward_b + ' 點';
+        if (document.getElementById('ui-ref-free-b-hint')) document.getElementById('ui-ref-free-b-hint').textContent = cfg.referral.free_reward_b;
+        if (document.getElementById('ui-ref-paid-a')) document.getElementById('ui-ref-paid-a').textContent = (cfg.referral.paid_reward_percent_a * 100) + '%';
+    }
+}
+
+fetchGlobalConfig();
+
 // =========================================================
 // 反饋系統 (Feedback System)
 // =========================================================
@@ -1149,11 +1319,21 @@ function updatePlanCostLabels(lang) {
 
 // ★ webhook.js 的 VARIANT_* 常數必須與此同步
 // =========================================================
+// 支付平台配置：'LS' (LemonSqueezy) 或 'DODO' (Dodo Payments)
+const CURRENT_PAYMENT_PLATFORM = 'DODO'; 
+
 const LS_VARIANTS = {
-    TOPUP: 1432023,   // ← 替換為 Top-up Variant ID
-    STARTER: 1432194,   // ← 替換為 Starter Variant ID
-    PRO: 1432198,   // ← 替換為 Pro Variant ID
-    STUDIO: 1432205    // ← 替換為 Studio Variant ID
+    TOPUP: 1432023,
+    STARTER: 1432194,
+    PRO: 1432198,
+    STUDIO: 1432205
+};
+
+const DODO_VARIANTS = {
+    TOPUP: 'pdt_0NblIvgNSETSCveL7Xmk',
+    STARTER: 'pdt_0NblmUvFrwJe36ymTELWV',
+    PRO: 'pdt_0NblmafncbUuGNrMRvJp4',
+    STUDIO: 'pdt_0Nblmhwbr5WXfNyDHpaA2'
 };
 const BETA_DISCOUNT_CODE = 'LOAM_BETA_30';
 const BETA_DISCOUNT_RATE = 0.70; // 公測 -30% 折扣
@@ -1375,6 +1555,72 @@ function pickBaseImage(entry) {
         meta.textContent = [entry.scene, (entry.resolution || '').toUpperCase(), date].filter(Boolean).join('  ·  ');
     }
     closeHistoryModal();
+    // 副工具 (2/3/4)：依 Advanced Settings 開合決定縮圖模式
+    if (currentActiveTool === 2 || currentActiveTool === 3 || currentActiveTool === 4) {
+        const advDet = document.querySelector('details.group');
+        const thumb3 = document.getElementById('base-image-thumb');
+        const filled3 = document.getElementById('base-image-filled');
+        if (advDet && advDet.open) {
+            if (thumb3) thumb3.style.display = 'none';
+            if (filled3) filled3.style.minHeight = '40px';
+        } else {
+            if (thumb3) { thumb3.style.display = ''; thumb3.style.maxHeight = '180px'; }
+            if (filled3) filled3.style.minHeight = '';
+        }
+    }
+
+    // 副工具 (2/3/4)：選底圖後，若左側 grid 無 AI 渲染結果，顯示底圖預覽
+    if (currentActiveTool === 2 || currentActiveTool === 3 || currentActiveTool === 4) {
+        const gridEl = document.getElementById('preview-grid');
+        const hasRendered = gridEl && gridEl.querySelector('.btn-container, [data-ninegrid-result]');
+        if (!hasRendered) {
+            const placeholder = document.getElementById('preview-placeholder');
+            if (placeholder) placeholder.classList.add('hidden');
+            gridEl.classList.remove('hidden');
+            gridEl.className = 'w-full h-full px-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar pb-6 pt-4';
+            gridEl.innerHTML = `
+                <div data-base-preview="true" class="relative w-full rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
+                    <div class="absolute top-3 left-3 bg-black/60 backdrop-blur-sm text-white/50 text-[9px] px-2.5 py-1 rounded z-10 font-mono tracking-widest">BASE IMAGE</div>
+                    <img src="${entry.file_url}" class="w-full object-cover">
+                </div>
+            `;
+        }
+    }
+}
+
+// 工具 2：參考圖 FileReader
+document.addEventListener('DOMContentLoaded', () => {
+    const refInput = document.getElementById('ref-image-input');
+    if (refInput) {
+        refInput.addEventListener('change', (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                _referenceImageBase64 = ev.target.result; // data:image/...;base64,...
+                const thumb = document.getElementById('ref-image-thumb');
+                const empty = document.getElementById('ref-image-empty');
+                const filled = document.getElementById('ref-image-filled');
+                if (thumb) thumb.src = _referenceImageBase64;
+                if (empty) empty.classList.add('hidden');
+                if (filled) filled.classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+});
+
+function clearReferenceImage(e) {
+    if (e) e.preventDefault();
+    _referenceImageBase64 = null;
+    const input = document.getElementById('ref-image-input');
+    const thumb = document.getElementById('ref-image-thumb');
+    const empty = document.getElementById('ref-image-empty');
+    const filled = document.getElementById('ref-image-filled');
+    if (input) input.value = '';
+    if (thumb) thumb.src = '';
+    if (empty) empty.classList.remove('hidden');
+    if (filled) filled.classList.add('hidden');
 }
 
 function clearBaseImageSelection() {
@@ -1486,9 +1732,15 @@ window.openCheckout = function (variantId) {
         return;
     }
 
-    // LemonSqueezy 支援透過 ?checkout[email]= 來預填並鎖死結帳信箱，加上 custom 以供 Webhook 辨識防錯
-    const storeUrl = "https://loamlabstudio.lemonsqueezy.com/checkout/buy/";
-    const finalUrl = `${storeUrl}${variantId}?checkout[email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[custom][user_email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[discount_code]=${BETA_DISCOUNT_CODE}`;
+    // 根據平台選擇 Store URL 與參數
+    let finalUrl = "";
+    if (CURRENT_PAYMENT_PLATFORM === 'DODO') {
+        const storeUrl = "https://buy.dodopayments.com/buy";
+        finalUrl = `${storeUrl}?variant_id=${variantId}&customer_email=${encodeURIComponent(window.loamlabUserEmail)}`;
+    } else {
+        const storeUrl = "https://loamlabstudio.lemonsqueezy.com/checkout/buy/";
+        finalUrl = `${storeUrl}${variantId}?checkout[email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[custom][user_email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[discount_code]=${BETA_DISCOUNT_CODE}`;
+    }
 
     if (window.sketchup) {
         sketchup.open_browser(finalUrl);
@@ -2278,3 +2530,429 @@ function appendInpaintResultCard(url, promptText = 'Inpaint Result') {
     gridEl.className = gridEl.className.replace(/grid-cols-\d/, '');
     gridEl.classList.add(count >= 3 ? 'grid-cols-3' : count === 2 ? 'grid-cols-2' : 'grid-cols-1');
 }
+
+// =============================================================
+// Smart Canvas — 智能語義畫布模塊
+// =============================================================
+
+const SmartCanvas = {
+    renderedUrl: '',       // 渲染結果圖 URL（用於發送 inpaint API）
+    channelImgSrc: '',     // 通道圖 base64
+    activeTool: 'wand',    // 'wand' | 'brush' | 'eraser'
+    regions: [],           // [{ id, maskCanvas, label, color }]
+    undoStack: [],         // draw-canvas 快照 ImageData[]
+    hoveredColor: null,    // 當前 hover 的 RGB [r,g,b]
+    brushColor: '#ff6432',
+    brushSize: 20,
+    isDrawing: false,
+    rafPending: false,
+
+    // Canvas & Context 快捷參考（open 時賦值）
+    baseImg: null,
+    channelCanvas: null, channelCtx: null,
+    highlightCanvas: null, highlightCtx: null,
+    drawCanvas: null, drawCtx: null,
+    canvasW: 0, canvasH: 0,
+};
+
+function openSmartCanvas(channelBase64, renderedUrl) {
+    SmartCanvas.renderedUrl = renderedUrl;
+    SmartCanvas.channelImgSrc = channelBase64;
+    SmartCanvas.regions = [];
+    SmartCanvas.undoStack = [];
+    SmartCanvas.activeTool = 'wand';
+    SmartCanvas.hoveredColor = null;
+
+    const modal = document.getElementById('smart-canvas-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    // 清空區域列表
+    _scRenderRegionList();
+
+    // 重置工具按鈕狀態
+    document.querySelectorAll('.sc-tool-btn').forEach(b => b.classList.remove('sc-active'));
+    document.querySelector('.sc-tool-btn[data-tool="wand"]')?.classList.add('sc-active');
+
+    // 載入渲染圖
+    SmartCanvas.baseImg = document.getElementById('sc-base-img');
+    SmartCanvas.baseImg.onload = () => {
+        const w = SmartCanvas.baseImg.naturalWidth;
+        const h = SmartCanvas.baseImg.naturalHeight;
+        // 實際顯示尺寸（CSS 縮放後的 px）
+        const rect = SmartCanvas.baseImg.getBoundingClientRect();
+        const dw = Math.round(rect.width)  || w;
+        const dh = Math.round(rect.height) || h;
+        SmartCanvas.canvasW = dw;
+        SmartCanvas.canvasH = dh;
+        _scInitCanvases(dw, dh, channelBase64);
+        _scBindEvents();
+    };
+    SmartCanvas.baseImg.src = renderedUrl;
+}
+
+function _scInitCanvases(w, h, channelBase64) {
+    ['sc-channel-canvas', 'sc-highlight-canvas', 'sc-draw-canvas'].forEach(id => {
+        const c = document.getElementById(id);
+        c.width = w; c.height = h;
+        c.style.width = w + 'px'; c.style.height = h + 'px';
+    });
+
+    SmartCanvas.channelCanvas = document.getElementById('sc-channel-canvas');
+    SmartCanvas.channelCtx    = SmartCanvas.channelCanvas.getContext('2d');
+    SmartCanvas.highlightCanvas = document.getElementById('sc-highlight-canvas');
+    SmartCanvas.highlightCtx    = SmartCanvas.highlightCanvas.getContext('2d');
+    SmartCanvas.drawCanvas = document.getElementById('sc-draw-canvas');
+    SmartCanvas.drawCtx    = SmartCanvas.drawCanvas.getContext('2d');
+
+    // 清空 draw/highlight canvas
+    SmartCanvas.highlightCtx.clearRect(0, 0, w, h);
+    SmartCanvas.drawCtx.clearRect(0, 0, w, h);
+
+    // 將通道圖繪入隱藏 canvas（供像素採樣）
+    if (channelBase64) {
+        const img = new Image();
+        img.onload = () => SmartCanvas.channelCtx.drawImage(img, 0, 0, w, h);
+        img.src = channelBase64;
+    }
+}
+
+function _scGetXY(e) {
+    const rect = SmartCanvas.drawCanvas.getBoundingClientRect();
+    const scaleX = SmartCanvas.canvasW / rect.width;
+    const scaleY = SmartCanvas.canvasH / rect.height;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+        x: Math.round((clientX - rect.left) * scaleX),
+        y: Math.round((clientY - rect.top)  * scaleY)
+    };
+}
+
+function _scColorEquals(a, b, tol = 20) {
+    if (!a || !b) return false;
+    return Math.abs(a[0]-b[0]) < tol && Math.abs(a[1]-b[1]) < tol && Math.abs(a[2]-b[2]) < tol;
+}
+
+function _scHighlightByColor([r, g, b]) {
+    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
+    const src = SmartCanvas.channelCtx.getImageData(0, 0, w, h);
+    const dst = SmartCanvas.highlightCtx.createImageData(w, h);
+    const TOL = 18;
+    for (let i = 0; i < src.data.length; i += 4) {
+        if (Math.abs(src.data[i]-r) < TOL &&
+            Math.abs(src.data[i+1]-g) < TOL &&
+            Math.abs(src.data[i+2]-b) < TOL) {
+            dst.data[i] = 80; dst.data[i+1] = 170; dst.data[i+2] = 255; dst.data[i+3] = 110;
+        }
+    }
+    SmartCanvas.highlightCtx.putImageData(dst, 0, 0);
+}
+
+function _scBuildMaskFromColor([r, g, b]) {
+    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const src = SmartCanvas.channelCtx.getImageData(0, 0, w, h);
+    const dst = ctx.createImageData(w, h);
+    const TOL = 18;
+    for (let i = 0; i < src.data.length; i += 4) {
+        const match = Math.abs(src.data[i]-r) < TOL &&
+                      Math.abs(src.data[i+1]-g) < TOL &&
+                      Math.abs(src.data[i+2]-b) < TOL;
+        const v = match ? 255 : 0;
+        dst.data[i] = v; dst.data[i+1] = v; dst.data[i+2] = v; dst.data[i+3] = 255;
+    }
+    ctx.putImageData(dst, 0, 0);
+    return canvas;
+}
+
+function _scMergeMaskFromDraw() {
+    // 從 draw canvas 提取純黑白遮罩（橘色筆刷區域 → 白色）
+    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const src = SmartCanvas.drawCtx.getImageData(0, 0, w, h);
+    const dst = ctx.createImageData(w, h);
+    for (let i = 0; i < src.data.length; i += 4) {
+        const painted = src.data[i+3] > 20;
+        const v = painted ? 255 : 0;
+        dst.data[i] = v; dst.data[i+1] = v; dst.data[i+2] = v; dst.data[i+3] = 255;
+    }
+    ctx.putImageData(dst, 0, 0);
+    return canvas;
+}
+
+function _scSaveUndo() {
+    const snap = SmartCanvas.drawCtx.getImageData(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+    SmartCanvas.undoStack.push(snap);
+    if (SmartCanvas.undoStack.length > 30) SmartCanvas.undoStack.shift();
+}
+
+function _scShowLabelPopup(clientX, clientY, onConfirm) {
+    const popup = document.getElementById('sc-label-popup');
+    const input = document.getElementById('sc-label-input');
+    if (!popup || !input) return;
+
+    input.value = '';
+    popup.style.left = Math.min(clientX, window.innerWidth - 260) + 'px';
+    popup.style.top  = Math.max(clientY - 60, 10) + 'px';
+    popup.classList.remove('hidden');
+    input.focus();
+
+    const confirm = () => {
+        popup.classList.add('hidden');
+        document.getElementById('sc-label-confirm').onclick = null;
+        document.getElementById('sc-label-cancel').onclick = null;
+        input.onkeydown = null;
+        onConfirm(input.value.trim());
+    };
+    const cancel = () => {
+        popup.classList.add('hidden');
+        document.getElementById('sc-label-confirm').onclick = null;
+        document.getElementById('sc-label-cancel').onclick = null;
+        input.onkeydown = null;
+    };
+
+    document.getElementById('sc-label-confirm').onclick = confirm;
+    document.getElementById('sc-label-cancel').onclick = cancel;
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') confirm();
+        if (e.key === 'Escape') cancel();
+    };
+}
+
+function _scRenderRegionList() {
+    const list = document.getElementById('sc-region-list');
+    const empty = document.getElementById('sc-region-empty');
+    if (!list) return;
+    // 清除舊的卡片（保留 empty 文字）
+    list.querySelectorAll('.sc-region-card').forEach(el => el.remove());
+
+    if (SmartCanvas.regions.length === 0) {
+        if (empty) empty.style.display = '';
+        return;
+    }
+    if (empty) empty.style.display = 'none';
+
+    SmartCanvas.regions.forEach((region, idx) => {
+        const card = document.createElement('div');
+        card.className = 'sc-region-card';
+        card.innerHTML = `
+            <div class="flex items-start gap-2">
+                <div class="sc-region-swatch" style="background:${region.colorHex || '#ff6432'}"></div>
+                <span class="text-[10px] text-white/50 font-semibold uppercase tracking-wide">區域 ${idx + 1}</span>
+                <button class="ml-auto text-white/20 hover:text-rose-400 text-[11px] leading-none sc-del-btn">✕</button>
+            </div>
+            <input type="text" class="sc-region-label-input w-full bg-transparent border-b border-white/10 text-[11px] text-white/80 outline-none placeholder-white/25 pb-0.5"
+                value="${region.label || ''}" placeholder="描述替換內容..." />
+        `;
+        card.querySelector('.sc-del-btn').onclick = () => {
+            SmartCanvas.regions.splice(idx, 1);
+            _scRenderRegionList();
+        };
+        card.querySelector('.sc-region-label-input').oninput = (e) => {
+            SmartCanvas.regions[idx].label = e.target.value;
+        };
+        list.appendChild(card);
+    });
+}
+
+function _scBindEvents() {
+    const dc = SmartCanvas.drawCanvas;
+    // 解除舊的 listeners（簡單起見：clone & replace）
+    const fresh = dc.cloneNode(true);
+    dc.parentNode.replaceChild(fresh, dc);
+    SmartCanvas.drawCanvas = fresh;
+    SmartCanvas.drawCtx = fresh.getContext('2d');
+
+    // --- 魔術棒：hover 高亮 ---
+    fresh.addEventListener('mousemove', (e) => {
+        if (SmartCanvas.activeTool !== 'wand') {
+            // 筆刷繪製
+            if (SmartCanvas.isDrawing) _scDraw(e);
+            return;
+        }
+        if (SmartCanvas.rafPending) return;
+        SmartCanvas.rafPending = true;
+        requestAnimationFrame(() => {
+            SmartCanvas.rafPending = false;
+            const { x, y } = _scGetXY(e);
+            const px = SmartCanvas.channelCtx.getImageData(x, y, 1, 1).data;
+            const color = [px[0], px[1], px[2]];
+            if (px[3] < 10) { SmartCanvas.highlightCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH); return; }
+            if (!_scColorEquals(color, SmartCanvas.hoveredColor)) {
+                SmartCanvas.hoveredColor = color;
+                _scHighlightByColor(color);
+            }
+        });
+    });
+
+    fresh.addEventListener('mouseleave', () => {
+        SmartCanvas.highlightCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+        SmartCanvas.hoveredColor = null;
+    });
+
+    // --- 魔術棒 click → 選取區域 → 彈出 label ---
+    fresh.addEventListener('click', (e) => {
+        if (SmartCanvas.activeTool !== 'wand') return;
+        const color = SmartCanvas.hoveredColor;
+        if (!color) return;
+        const maskCanvas = _scBuildMaskFromColor(color);
+        const colorHex = `#${color.map(v => v.toString(16).padStart(2,'0')).join('')}`;
+        _scShowLabelPopup(e.clientX, e.clientY, (label) => {
+            SmartCanvas.regions.push({ id: Date.now(), maskCanvas, label, colorHex });
+            _scRenderRegionList();
+        });
+    });
+
+    // --- 筆刷 / 橡皮擦 繪製 ---
+    fresh.addEventListener('mousedown', (e) => {
+        if (SmartCanvas.activeTool === 'wand') return;
+        SmartCanvas.isDrawing = true;
+        _scSaveUndo();
+        _scDraw(e);
+    });
+    fresh.addEventListener('mouseup', () => {
+        if (!SmartCanvas.isDrawing) return;
+        SmartCanvas.isDrawing = false;
+        if (SmartCanvas.activeTool === 'brush') {
+            // 本次筆刷筆觸 → 建立 region
+            const maskCanvas = _scMergeMaskFromDraw();
+            SmartCanvas.regions.push({ id: Date.now(), maskCanvas, label: '', colorHex: SmartCanvas.brushColor });
+            _scRenderRegionList();
+            SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+        }
+    });
+    fresh.addEventListener('mousemove', (e) => {
+        if (SmartCanvas.activeTool !== 'wand' && SmartCanvas.isDrawing) _scDraw(e);
+    });
+}
+
+function _scDraw(e) {
+    const { x, y } = _scGetXY(e);
+    const ctx = SmartCanvas.drawCtx;
+    ctx.globalCompositeOperation = SmartCanvas.activeTool === 'eraser' ? 'destination-out' : 'source-over';
+    ctx.beginPath();
+    ctx.arc(x, y, SmartCanvas.brushSize / 2, 0, Math.PI * 2);
+    ctx.fillStyle = SmartCanvas.brushColor;
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+}
+
+async function executeSmartSwap() {
+    if (!window.loamlabUserEmail) {
+        showUpdateToast(t('base_image_required') || '請先登入');
+        return;
+    }
+    if (SmartCanvas.regions.length === 0) {
+        showUpdateToast(t('sc_no_regions') || '請先選取至少一個區域');
+        return;
+    }
+
+    const btn = document.getElementById('btn-execute-smart-swap');
+    if (btn) { btn.disabled = true; btn.textContent = t('swap_executing') || '替換中...'; }
+
+    const inpaints = SmartCanvas.regions.map(r => ({
+        mask_base64: r.maskCanvas.toDataURL('image/png'),
+        prompt: r.label || 'replace material'
+    }));
+
+    try {
+        const apiBase = window.loamlabApiBase || 'https://loamlabbackend.vercel.app';
+        const res = await fetch(`${apiBase}/api/inpaint`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-User-Email': window.loamlabUserEmail
+            },
+            body: JSON.stringify({
+                image_url: SmartCanvas.renderedUrl,
+                inpaints
+            })
+        });
+        const data = await res.json();
+        if (data.code === 0) {
+            // 更新點數
+            if (data.points_remaining !== undefined) {
+                const pb = document.getElementById('point-balance');
+                if (pb) pb.textContent = data.points_remaining;
+            }
+            // 關閉 modal
+            document.getElementById('smart-canvas-modal')?.classList.add('hidden');
+            document.getElementById('smart-canvas-modal')?.classList.remove('flex');
+            // 顯示每個結果
+            const urls = data.urls || (data.url ? [data.url] : []);
+            urls.forEach(url => appendInpaintResultCard(url, 'Smart Canvas'));
+            showUpdateToast(t('swap_done') || '替換完成！');
+        } else {
+            showUpdateToast('替換失敗：' + (data.msg || data.error || 'unknown error'));
+        }
+    } catch (err) {
+        showUpdateToast('網路錯誤：' + err.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = t('sc_execute') || '執行替換'; }
+    }
+}
+
+// Smart Canvas 控制器初始化（DOM ready 後掛載）
+document.addEventListener('DOMContentLoaded', () => {
+    // 關閉按鈕
+    document.getElementById('sc-close')?.addEventListener('click', () => {
+        document.getElementById('smart-canvas-modal')?.classList.add('hidden');
+        document.getElementById('smart-canvas-modal')?.classList.remove('flex');
+    });
+
+    // 執行替換按鈕
+    document.getElementById('btn-execute-smart-swap')?.addEventListener('click', executeSmartSwap);
+
+    // 工具切換
+    document.querySelectorAll('.sc-tool-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            SmartCanvas.activeTool = btn.dataset.tool;
+            document.querySelectorAll('.sc-tool-btn').forEach(b => b.classList.remove('sc-active'));
+            btn.classList.add('sc-active');
+            SmartCanvas.isDrawing = false;
+            // 切換 wand 時清空 highlight，切換筆刷時清空 hover
+            if (SmartCanvas.activeTool === 'wand') {
+                SmartCanvas.drawCanvas && SmartCanvas.drawCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+            } else {
+                SmartCanvas.highlightCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+                SmartCanvas.hoveredColor = null;
+            }
+        });
+    });
+
+    // 筆刷顏色
+    document.getElementById('sc-color-picker')?.addEventListener('input', (e) => {
+        SmartCanvas.brushColor = e.target.value;
+    });
+
+    // 筆刷大小
+    document.getElementById('sc-brush-size')?.addEventListener('input', (e) => {
+        SmartCanvas.brushSize = parseInt(e.target.value, 10);
+    });
+
+    // 復原
+    document.getElementById('sc-undo')?.addEventListener('click', () => {
+        if (SmartCanvas.undoStack.length > 0) {
+            const snap = SmartCanvas.undoStack.pop();
+            SmartCanvas.drawCtx?.putImageData(snap, 0, 0);
+        } else if (SmartCanvas.regions.length > 0) {
+            SmartCanvas.regions.pop();
+            _scRenderRegionList();
+        }
+    });
+
+    // 清空
+    document.getElementById('sc-clear')?.addEventListener('click', () => {
+        SmartCanvas.drawCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+        SmartCanvas.highlightCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+        SmartCanvas.regions = [];
+        SmartCanvas.undoStack = [];
+        _scRenderRegionList();
+    });
+});

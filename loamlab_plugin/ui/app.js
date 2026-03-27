@@ -540,10 +540,14 @@ window.receiveFromRuby = function (data) {
                             </div>` : `<img src="${targetUrl}" class="w-full object-contain animate-blur-clear" onclick="window.open('${targetUrl}', '_blank')">`}
                             <div class="px-4 py-3 flex items-center justify-between border-t border-white/[0.05] bg-black/40">
                                 <span class="text-[10px] text-white/30 truncate max-w-[60%]">${document.getElementById('user-prompt-input')?.value || 'Furniture Swap'}</span>
-                                <button id="tool2-save-btn" class="text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> SAVE</button>
+                                <div class="flex items-center gap-2">
+                                    <button id="tool2-swap-btn" class="text-[9px] px-2.5 py-1 rounded border border-amber-500/30 text-amber-300/80 hover:bg-amber-500/20 hover:text-amber-200 hover:border-amber-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> SWAP</button>
+                                    <button id="tool2-save-btn" class="text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> SAVE</button>
+                                </div>
                             </div>
                         </div>
                     `;
+                    document.getElementById('tool2-swap-btn')?.addEventListener('click', () => openSmartCanvas(channelB64, targetUrl));
                     document.getElementById('tool2-save-btn')?.addEventListener('click', () => {
                         const p = document.getElementById('user-prompt-input')?.value || '';
                         if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
@@ -922,7 +926,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 showUpdateToast('⚠️ ' + (langObj['base_image_required'] || '請先從歷史選擇一張底圖'));
                 return;
             }
-            openSwapModal(null, _baseImageEntry.file_url);
+            openSmartCanvas('', _baseImageEntry.file_url);
             return;
         }
 
@@ -931,6 +935,7 @@ document.addEventListener("DOMContentLoaded", () => {
             showUpdateToast('⚠️ ' + (langObj['base_image_required'] || '請先從歷史選擇一張底圖'));
             return;
         }
+
 
         const checkboxes = document.querySelectorAll('input[name="scene"]:checked');
         const selectedScenes = Array.from(checkboxes).map(cb => cb.value);
@@ -1586,6 +1591,11 @@ function pickBaseImage(entry) {
             `;
         }
     }
+
+    // 工具 2/4：選完底圖直接開 Smart Canvas
+    if (currentActiveTool === 2 || currentActiveTool === 4) {
+        openSmartCanvas('', entry.file_url);
+    }
 }
 
 // 工具 2：參考圖 FileReader
@@ -1607,6 +1617,31 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             reader.readAsDataURL(file);
         });
+    }
+});
+
+// 工具 2：Ctrl+V 貼上參考圖
+document.addEventListener('paste', (e) => {
+    const refPicker = document.getElementById('reference-image-picker');
+    if (!refPicker || refPicker.classList.contains('hidden')) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+        if (!item.type.startsWith('image/')) continue;
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            _referenceImageBase64 = ev.target.result;
+            const thumb = document.getElementById('ref-image-thumb');
+            const empty = document.getElementById('ref-image-empty');
+            const filled = document.getElementById('ref-image-filled');
+            if (thumb) thumb.src = _referenceImageBase64;
+            if (empty) empty.classList.add('hidden');
+            if (filled) filled.classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+        break;
     }
 });
 
@@ -2541,7 +2576,11 @@ const SmartCanvas = {
     activeTool: 'wand',    // 'wand' | 'brush' | 'eraser'
     regions: [],           // [{ id, maskCanvas, label, color }]
     undoStack: [],         // draw-canvas 快照 ImageData[]
-    hoveredColor: null,    // 當前 hover 的 RGB [r,g,b]
+    redoStack: [],         // redo 快照
+    hoveredMask: null,     // 當前 wand hover 的 flood fill 遮罩 Uint8Array
+    edgeMap: null,         // Sobel 邊緣圖 Uint8Array（init 後計算一次）
+    basePixels: null,      // 底圖像素 RGBA Uint8ClampedArray（供色差 flood fill 使用）
+    lastWandX: -1, lastWandY: -1,  // 節流：上次 flood fill 座標
     brushColor: '#ff6432',
     brushSize: 20,
     isDrawing: false,
@@ -2571,7 +2610,14 @@ function openSmartCanvas(channelBase64, renderedUrl) {
     // 清空區域列表
     _scRenderRegionList();
 
-    // 重置工具按鈕狀態
+    // 重置工具按鈕狀態；wand 在 fallback 模式（底圖採樣）也可用
+    const wandBtn = document.querySelector('.sc-tool-btn[data-tool="wand"]');
+    if (wandBtn) {
+        wandBtn.disabled = false;
+        wandBtn.style.opacity = '';
+        wandBtn.title = channelBase64 ? '魔術棒 (Smart Select)' : '魔術棒 (顏色採樣模式)';
+    }
+    SmartCanvas.activeTool = 'wand';
     document.querySelectorAll('.sc-tool-btn').forEach(b => b.classList.remove('sc-active'));
     document.querySelector('.sc-tool-btn[data-tool="wand"]')?.classList.add('sc-active');
 
@@ -2616,6 +2662,18 @@ function _scInitCanvases(w, h, channelBase64) {
         img.onload = () => SmartCanvas.channelCtx.drawImage(img, 0, 0, w, h);
         img.src = channelBase64;
     }
+
+    // 預計算 Sobel 邊緣圖（供 wand flood fill 使用）
+    SmartCanvas.edgeMap = null;
+    SmartCanvas.hoveredMask = null;
+    SmartCanvas.lastWandX = -1; SmartCanvas.lastWandY = -1;
+    if (SmartCanvas.baseImg?.complete) {
+        SmartCanvas.edgeMap = _scComputeEdgeMap();
+    } else {
+        SmartCanvas.baseImg.addEventListener('load', () => {
+            SmartCanvas.edgeMap = _scComputeEdgeMap();
+        }, { once: true });
+    }
 }
 
 function _scGetXY(e) {
@@ -2636,9 +2694,14 @@ function _scColorEquals(a, b, tol = 20) {
 }
 
 function _scHighlightByColor([r, g, b]) {
+    // 先重繪持久 region 遮罩，再將 hover highlight 疊加在上方
+    _scRenderOverlays();
     const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
     const src = SmartCanvas.channelCtx.getImageData(0, 0, w, h);
-    const dst = SmartCanvas.highlightCtx.createImageData(w, h);
+    const hoverCanvas = document.createElement('canvas');
+    hoverCanvas.width = w; hoverCanvas.height = h;
+    const hCtx = hoverCanvas.getContext('2d');
+    const dst = hCtx.createImageData(w, h);
     const TOL = 18;
     for (let i = 0; i < src.data.length; i += 4) {
         if (Math.abs(src.data[i]-r) < TOL &&
@@ -2647,7 +2710,8 @@ function _scHighlightByColor([r, g, b]) {
             dst.data[i] = 80; dst.data[i+1] = 170; dst.data[i+2] = 255; dst.data[i+3] = 110;
         }
     }
-    SmartCanvas.highlightCtx.putImageData(dst, 0, 0);
+    hCtx.putImageData(dst, 0, 0);
+    SmartCanvas.highlightCtx.drawImage(hoverCanvas, 0, 0);
 }
 
 function _scBuildMaskFromColor([r, g, b]) {
@@ -2662,15 +2726,16 @@ function _scBuildMaskFromColor([r, g, b]) {
         const match = Math.abs(src.data[i]-r) < TOL &&
                       Math.abs(src.data[i+1]-g) < TOL &&
                       Math.abs(src.data[i+2]-b) < TOL;
-        const v = match ? 255 : 0;
-        dst.data[i] = v; dst.data[i+1] = v; dst.data[i+2] = v; dst.data[i+3] = 255;
+        dst.data[i] = 255; dst.data[i+1] = 255; dst.data[i+2] = 255;
+        dst.data[i+3] = match ? 255 : 0;
     }
     ctx.putImageData(dst, 0, 0);
     return canvas;
 }
 
 function _scMergeMaskFromDraw() {
-    // 從 draw canvas 提取純黑白遮罩（橘色筆刷區域 → 白色）
+    // 從 draw canvas 提取遮罩：有筆刷的區域 alpha=255，其餘 alpha=0（透明）
+    // 必須用 alpha=0 而非黑色像素，_scRenderOverlays 的 destination-in 才能正確裁切
     const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
     const canvas = document.createElement('canvas');
     canvas.width = w; canvas.height = h;
@@ -2679,17 +2744,189 @@ function _scMergeMaskFromDraw() {
     const dst = ctx.createImageData(w, h);
     for (let i = 0; i < src.data.length; i += 4) {
         const painted = src.data[i+3] > 20;
-        const v = painted ? 255 : 0;
-        dst.data[i] = v; dst.data[i+1] = v; dst.data[i+2] = v; dst.data[i+3] = 255;
+        dst.data[i] = 255; dst.data[i+1] = 255; dst.data[i+2] = 255;
+        dst.data[i+3] = painted ? 255 : 0;
     }
     ctx.putImageData(dst, 0, 0);
     return canvas;
 }
 
+// Sobel 邊緣偵測：對底圖灰階化後計算梯度，返回 Uint8Array（255=邊緣, 0=非邊緣）
+function _scComputeEdgeMap() {
+    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
+    const tmp = document.createElement('canvas');
+    tmp.width = w; tmp.height = h;
+    const tCtx = tmp.getContext('2d');
+    tCtx.drawImage(SmartCanvas.baseImg, 0, 0, w, h);
+    const imgData = tCtx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+    SmartCanvas.basePixels = data; // 供 flood fill 色差比對
+    const gray = new Float32Array(w * h);
+    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        gray[p] = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+    }
+    const THRESHOLD = 25;
+    const edges = new Uint8Array(w * h);
+    for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+            const gx = -gray[(y-1)*w+(x-1)] - 2*gray[y*w+(x-1)] - gray[(y+1)*w+(x-1)]
+                      + gray[(y-1)*w+(x+1)] + 2*gray[y*w+(x+1)] + gray[(y+1)*w+(x+1)];
+            const gy = -gray[(y-1)*w+(x-1)] - 2*gray[(y-1)*w+x] - gray[(y-1)*w+(x+1)]
+                      + gray[(y+1)*w+(x-1)] + 2*gray[(y+1)*w+x] + gray[(y+1)*w+(x+1)];
+            edges[y*w+x] = (Math.sqrt(gx*gx + gy*gy) > THRESHOLD) ? 255 : 0;
+        }
+    }
+    return edges;
+}
+
+// BFS flood fill：從 (startX, startY) 開始，遇邊緣或色差過大時停止
+// 雙重停止條件：Sobel 邊緣 + 與起始點的 RGB 歐氏距離 > 50（Photoshop Magic Wand 邏輯）
+function _scFloodFill(startX, startY) {
+    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
+    const edges = SmartCanvas.edgeMap;
+    const pixels = SmartCanvas.basePixels;
+    if (!edges) return null;
+    const mask = new Uint8Array(w * h);
+    const visited = new Uint8Array(w * h);
+    const startIdx = startY * w + startX;
+    if (startIdx < 0 || startIdx >= w * h) return mask;
+    if (edges[startIdx]) return mask; // 點在邊線上，返回空遮罩
+    // 採樣起始點顏色
+    const COLOR_TOL_SQ = 12000; // ~110 combined（≈63 per channel），讓光影漸層連通
+    const sr = pixels ? pixels[startIdx * 4]     : 0;
+    const sg = pixels ? pixels[startIdx * 4 + 1] : 0;
+    const sb = pixels ? pixels[startIdx * 4 + 2] : 0;
+    const stack = [startIdx];
+    visited[startIdx] = 1; mask[startIdx] = 1;
+    const dirs = [-1, 1, -w, w];
+    while (stack.length > 0) {
+        const idx = stack.pop();
+        const x = idx % w;
+        for (const d of dirs) {
+            if (d === -1 && x === 0) continue;
+            if (d ===  1 && x === w - 1) continue;
+            const nIdx = idx + d;
+            if (nIdx < 0 || nIdx >= w * h) continue;
+            if (visited[nIdx] || edges[nIdx]) continue;
+            // 色差停止：與起始點 RGB 距離超過容差則不蔓延
+            if (pixels) {
+                const dr = pixels[nIdx * 4]     - sr;
+                const dg = pixels[nIdx * 4 + 1] - sg;
+                const db = pixels[nIdx * 4 + 2] - sb;
+                if (dr * dr + dg * dg + db * db > COLOR_TOL_SQ) continue;
+            }
+            visited[nIdx] = 1; mask[nIdx] = 1;
+            stack.push(nIdx);
+        }
+    }
+    return mask;
+}
+
+// Uint8Array 遮罩 → canvas（painted 區域 alpha=255，其餘 alpha=0）
+function _scMaskArrayToCanvas(mask) {
+    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    const imgData = ctx.createImageData(w, h);
+    for (let i = 0; i < mask.length; i++) {
+        imgData.data[i*4] = 255; imgData.data[i*4+1] = 255; imgData.data[i*4+2] = 255;
+        imgData.data[i*4+3] = mask[i] ? 255 : 0;
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return c;
+}
+
+// 產生 annotated composite：底圖 + 各區域彩色疊加層（用於送 Coze）
+function _scCreateAnnotatedComposite() {
+    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(SmartCanvas.baseImg, 0, 0, w, h);
+    for (const region of SmartCanvas.regions) {
+        const tint = document.createElement('canvas');
+        tint.width = w; tint.height = h;
+        const tCtx = tint.getContext('2d');
+        tCtx.drawImage(region.maskCanvas, 0, 0);
+        tCtx.globalCompositeOperation = 'source-in';
+        tCtx.fillStyle = region.colorHex || '#ff6432';
+        tCtx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = 0.65;
+        ctx.drawImage(tint, 0, 0);
+        ctx.globalAlpha = 1;
+    }
+    return c;
+}
+
+// Flood fill hover 高亮（疊加在持久 region overlays 上方）
+function _scHighlightByFloodFill(mask) {
+    _scRenderOverlays(); // 先保留持久 region 遮罩
+    if (!mask) return;
+    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
+    const hC = document.createElement('canvas');
+    hC.width = w; hC.height = h;
+    const hCtx = hC.getContext('2d');
+    const dst = hCtx.createImageData(w, h);
+    for (let i = 0; i < mask.length; i++) {
+        if (mask[i]) {
+            dst.data[i*4] = 80; dst.data[i*4+1] = 170;
+            dst.data[i*4+2] = 255; dst.data[i*4+3] = 100;
+        }
+    }
+    hCtx.putImageData(dst, 0, 0);
+    SmartCanvas.highlightCtx.drawImage(hC, 0, 0);
+}
+
 function _scSaveUndo() {
-    const snap = SmartCanvas.drawCtx.getImageData(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+    // 同時儲存 canvas 狀態 + regions 陣列，確保 undo/redo 完全同步
+    const snap = {
+        canvas: SmartCanvas.drawCtx.getImageData(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH),
+        regions: SmartCanvas.regions.map(r => ({ ...r }))
+    };
     SmartCanvas.undoStack.push(snap);
-    if (SmartCanvas.undoStack.length > 30) SmartCanvas.undoStack.shift();
+    if (SmartCanvas.undoStack.length > 20) SmartCanvas.undoStack.shift();
+    SmartCanvas.redoStack = [];
+}
+
+// 從底圖採樣 region 的平均代表色（用於 prompt 提示 Coze/Banana2 當前顏色）
+function _scSampleBaseColor(maskCanvas) {
+    try {
+        const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
+        const tmp = document.createElement('canvas');
+        tmp.width = w; tmp.height = h;
+        tmp.getContext('2d').drawImage(SmartCanvas.baseImg, 0, 0, w, h);
+        const baseData = tmp.getContext('2d').getImageData(0, 0, w, h).data;
+        const maskData = maskCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+        let rSum = 0, gSum = 0, bSum = 0, count = 0;
+        for (let i = 0; i < maskData.length; i += 4) {
+            if (maskData[i+3] > 128) {
+                rSum += baseData[i]; gSum += baseData[i+1]; bSum += baseData[i+2];
+                count++;
+            }
+        }
+        if (count === 0) return null;
+        const toHex = v => Math.round(v / count).toString(16).padStart(2, '0');
+        return `#${toHex(rSum)}${toHex(gSum)}${toHex(bSum)}`;
+    } catch (_) { return null; }
+}
+
+// 區域遮罩持久疊加層：每次 regions 變動後重繪 highlight canvas
+function _scRenderOverlays() {
+    if (!SmartCanvas.highlightCtx) return;
+    SmartCanvas.highlightCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+    SmartCanvas.regions.forEach(r => {
+        const tmp = document.createElement('canvas');
+        tmp.width = SmartCanvas.canvasW; tmp.height = SmartCanvas.canvasH;
+        const tCtx = tmp.getContext('2d');
+        tCtx.fillStyle = r.colorHex || '#ff6432';
+        tCtx.fillRect(0, 0, tmp.width, tmp.height);
+        tCtx.globalCompositeOperation = 'destination-in';
+        tCtx.drawImage(r.maskCanvas, 0, 0, tmp.width, tmp.height);
+        SmartCanvas.highlightCtx.globalAlpha = 0.45;
+        SmartCanvas.highlightCtx.drawImage(tmp, 0, 0);
+    });
+    SmartCanvas.highlightCtx.globalAlpha = 1;
 }
 
 function _scShowLabelPopup(clientX, clientY, onConfirm) {
@@ -2753,6 +2990,7 @@ function _scRenderRegionList() {
         card.querySelector('.sc-del-btn').onclick = () => {
             SmartCanvas.regions.splice(idx, 1);
             _scRenderRegionList();
+            _scRenderOverlays();
         };
         card.querySelector('.sc-region-label-input').oninput = (e) => {
             SmartCanvas.regions[idx].label = e.target.value;
@@ -2769,10 +3007,9 @@ function _scBindEvents() {
     SmartCanvas.drawCanvas = fresh;
     SmartCanvas.drawCtx = fresh.getContext('2d');
 
-    // --- 魔術棒：hover 高亮 ---
+    // --- 魔術棒：hover 邊緣感知 flood fill 高亮 ---
     fresh.addEventListener('mousemove', (e) => {
         if (SmartCanvas.activeTool !== 'wand') {
-            // 筆刷繪製
             if (SmartCanvas.isDrawing) _scDraw(e);
             return;
         }
@@ -2781,31 +3018,35 @@ function _scBindEvents() {
         requestAnimationFrame(() => {
             SmartCanvas.rafPending = false;
             const { x, y } = _scGetXY(e);
-            const px = SmartCanvas.channelCtx.getImageData(x, y, 1, 1).data;
-            const color = [px[0], px[1], px[2]];
-            if (px[3] < 10) { SmartCanvas.highlightCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH); return; }
-            if (!_scColorEquals(color, SmartCanvas.hoveredColor)) {
-                SmartCanvas.hoveredColor = color;
-                _scHighlightByColor(color);
+            // 移動 > 3px 才重算 flood fill（節流）
+            if (Math.abs(x - SmartCanvas.lastWandX) > 3 || Math.abs(y - SmartCanvas.lastWandY) > 3) {
+                SmartCanvas.lastWandX = x; SmartCanvas.lastWandY = y;
+                SmartCanvas.hoveredMask = _scFloodFill(x, y);
+                _scHighlightByFloodFill(SmartCanvas.hoveredMask);
             }
         });
     });
 
     fresh.addEventListener('mouseleave', () => {
-        SmartCanvas.highlightCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
-        SmartCanvas.hoveredColor = null;
+        SmartCanvas.hoveredMask = null;
+        SmartCanvas.lastWandX = -1; SmartCanvas.lastWandY = -1;
+        _scRenderOverlays();
     });
 
     // --- 魔術棒 click → 選取區域 → 彈出 label ---
-    fresh.addEventListener('click', (e) => {
+    fresh.addEventListener('click', () => {
         if (SmartCanvas.activeTool !== 'wand') return;
-        const color = SmartCanvas.hoveredColor;
-        if (!color) return;
-        const maskCanvas = _scBuildMaskFromColor(color);
-        const colorHex = `#${color.map(v => v.toString(16).padStart(2,'0')).join('')}`;
-        _scShowLabelPopup(e.clientX, e.clientY, (label) => {
-            SmartCanvas.regions.push({ id: Date.now(), maskCanvas, label, colorHex });
-            _scRenderRegionList();
+        // 確認有有效遮罩（非空）
+        if (!SmartCanvas.hoveredMask || !SmartCanvas.hoveredMask.some(v => v)) return;
+        _scSaveUndo();
+        const maskCanvas = _scMaskArrayToCanvas(SmartCanvas.hoveredMask);
+        SmartCanvas.regions.push({ id: Date.now(), maskCanvas, label: '', colorHex: SmartCanvas.brushColor });
+        _scRenderRegionList();
+        _scRenderOverlays();
+        // 自動 focus 最新區域的 label 輸入框（右側面板）
+        requestAnimationFrame(() => {
+            const inputs = document.querySelectorAll('#sc-region-list .sc-region-label-input');
+            if (inputs.length) inputs[inputs.length - 1].focus();
         });
     });
 
@@ -2820,11 +3061,11 @@ function _scBindEvents() {
         if (!SmartCanvas.isDrawing) return;
         SmartCanvas.isDrawing = false;
         if (SmartCanvas.activeTool === 'brush') {
-            // 本次筆刷筆觸 → 建立 region
             const maskCanvas = _scMergeMaskFromDraw();
             SmartCanvas.regions.push({ id: Date.now(), maskCanvas, label: '', colorHex: SmartCanvas.brushColor });
             _scRenderRegionList();
             SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+            _scRenderOverlays(); // 清掉 draw layer 後把 region 疊加顯示回來
         }
     });
     fresh.addEventListener('mousemove', (e) => {
@@ -2844,57 +3085,69 @@ function _scDraw(e) {
 }
 
 async function executeSmartSwap() {
-    if (!window.loamlabUserEmail) {
-        showUpdateToast(t('base_image_required') || '請先登入');
-        return;
-    }
     if (SmartCanvas.regions.length === 0) {
         showUpdateToast(t('sc_no_regions') || '請先選取至少一個區域');
         return;
     }
+    // 確認每個區域都已填寫描述
+    const emptyIdx = SmartCanvas.regions.findIndex(r => !r.label.trim());
+    if (emptyIdx !== -1) {
+        showUpdateToast('請為所有區域填寫替換描述');
+        requestAnimationFrame(() => {
+            const inputs = document.querySelectorAll('#sc-region-list .sc-region-label-input');
+            if (inputs[emptyIdx]) { inputs[emptyIdx].focus(); inputs[emptyIdx].classList.add('ring-1', 'ring-red-400'); }
+        });
+        return;
+    }
 
     const btn = document.getElementById('btn-execute-smart-swap');
-    if (btn) { btn.disabled = true; btn.textContent = t('swap_executing') || '替換中...'; }
+    if (btn) { btn.disabled = true; btn.textContent = '處理中...'; }
 
-    const inpaints = SmartCanvas.regions.map(r => ({
-        mask_base64: r.maskCanvas.toDataURL('image/png'),
-        prompt: r.label || 'replace material'
-    }));
+    // 1. 產生 annotated composite：底圖 + 各區域彩色疊加（Coze 依此識別修改位置）
+    const composite = _scCreateAnnotatedComposite();
+    const compositeBase64 = composite.toDataURL('image/jpeg', 0.9);
+
+    // 2. 帶顏色代碼的結構化 prompt
+    const regionLines = SmartCanvas.regions.map((r, i) =>
+        `Region ${i + 1} (highlighted in ${r.colorHex || '#ff6432'}): ${r.label}`
+    ).join('; ');
+    const prompt = `Interior design edit. Apply only these targeted changes to the highlighted regions: ${regionLines}. Preserve all other areas, lighting, shadows, and perspective exactly.`;
+
+    // 3. 解析度
+    const resRadio = document.querySelector('input[name="resolution"]:checked');
+    const resolution = resRadio ? resRadio.value : '2k';
 
     try {
-        const apiBase = window.loamlabApiBase || 'https://loamlabbackend.vercel.app';
-        const res = await fetch(`${apiBase}/api/inpaint`, {
+        const resp = await fetch(`${API_BASE}/api/render`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-User-Email': window.loamlabUserEmail
+                'X-User-Email': window.loamlabUserEmail || '',
+                'X-Plugin-Version': '1.2.5'
             },
             body: JSON.stringify({
-                image_url: SmartCanvas.renderedUrl,
-                inpaints
+                tool: 2,
+                parameters: { base_image: compositeBase64, prompt, resolution }
             })
         });
-        const data = await res.json();
-        if (data.code === 0) {
-            // 更新點數
-            if (data.points_remaining !== undefined) {
+        const result = await resp.json();
+        if (result.code === 0 && result.url) {
+            if (result.points_remaining !== undefined) {
                 const pb = document.getElementById('point-balance');
-                if (pb) pb.textContent = data.points_remaining;
+                if (pb) pb.textContent = result.points_remaining;
             }
-            // 關閉 modal
             document.getElementById('smart-canvas-modal')?.classList.add('hidden');
             document.getElementById('smart-canvas-modal')?.classList.remove('flex');
-            // 顯示每個結果
-            const urls = data.urls || (data.url ? [data.url] : []);
-            urls.forEach(url => appendInpaintResultCard(url, 'Smart Canvas'));
-            showUpdateToast(t('swap_done') || '替換完成！');
+            const label = SmartCanvas.regions.map(r => r.label).join(' + ');
+            appendInpaintResultCard(result.url, label || 'Smart Canvas');
+            showUpdateToast('✅ 替換完成！');
         } else {
-            showUpdateToast('替換失敗：' + (data.msg || data.error || 'unknown error'));
+            showUpdateToast('❌ ' + (result.msg || '替換失敗'));
         }
     } catch (err) {
-        showUpdateToast('網路錯誤：' + err.message);
+        showUpdateToast('網路錯誤: ' + err.message);
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = t('sc_execute') || '執行替換'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Apply Changes'; }
     }
 }
 
@@ -2916,13 +3169,10 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.sc-tool-btn').forEach(b => b.classList.remove('sc-active'));
             btn.classList.add('sc-active');
             SmartCanvas.isDrawing = false;
-            // 切換 wand 時清空 highlight，切換筆刷時清空 hover
-            if (SmartCanvas.activeTool === 'wand') {
-                SmartCanvas.drawCanvas && SmartCanvas.drawCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
-            } else {
-                SmartCanvas.highlightCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
-                SmartCanvas.hoveredColor = null;
-            }
+            // 切換工具時清空草稿層並恢復持久 region 遮罩
+            SmartCanvas.hoveredColor = null;
+            SmartCanvas.drawCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+            _scRenderOverlays();
         });
     });
 
@@ -2938,21 +3188,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 復原
     document.getElementById('sc-undo')?.addEventListener('click', () => {
-        if (SmartCanvas.undoStack.length > 0) {
-            const snap = SmartCanvas.undoStack.pop();
-            SmartCanvas.drawCtx?.putImageData(snap, 0, 0);
-        } else if (SmartCanvas.regions.length > 0) {
-            SmartCanvas.regions.pop();
-            _scRenderRegionList();
-        }
+        if (SmartCanvas.undoStack.length === 0) return;
+        const cur = {
+            canvas: SmartCanvas.drawCtx?.getImageData(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH),
+            regions: SmartCanvas.regions.map(r => ({ ...r }))
+        };
+        SmartCanvas.redoStack.push(cur);
+        const snap = SmartCanvas.undoStack.pop();
+        SmartCanvas.drawCtx?.putImageData(snap.canvas, 0, 0);
+        SmartCanvas.regions = snap.regions;
+        _scRenderRegionList();
+        _scRenderOverlays();
+    });
+
+    // 重做
+    document.getElementById('sc-redo')?.addEventListener('click', () => {
+        if (SmartCanvas.redoStack.length === 0) return;
+        const cur = {
+            canvas: SmartCanvas.drawCtx?.getImageData(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH),
+            regions: SmartCanvas.regions.map(r => ({ ...r }))
+        };
+        SmartCanvas.undoStack.push(cur);
+        const snap = SmartCanvas.redoStack.pop();
+        SmartCanvas.drawCtx?.putImageData(snap.canvas, 0, 0);
+        SmartCanvas.regions = snap.regions;
+        _scRenderRegionList();
+        _scRenderOverlays();
     });
 
     // 清空
     document.getElementById('sc-clear')?.addEventListener('click', () => {
         SmartCanvas.drawCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
-        SmartCanvas.highlightCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
         SmartCanvas.regions = [];
         SmartCanvas.undoStack = [];
+        SmartCanvas.redoStack = [];
         _scRenderRegionList();
+        _scRenderOverlays();
     });
 });

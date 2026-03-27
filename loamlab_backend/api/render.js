@@ -23,6 +23,7 @@ export default async function handler(req, res) {
     const WORKFLOW_ID = process.env.WORKFLOW_ID || "7613251981235208197";
     const NINEGRID_WORKFLOW_ID = process.env.NINEGRID_WORKFLOW_ID || "7620780480431030325";
     const FURNITURE_WORKFLOW_ID = process.env.FURNITURE_WORKFLOW_ID || "7620803784345157685";
+    const SMART_CANVAS_WORKFLOW_ID = process.env.SMART_CANVAS_WORKFLOW_ID || '7621816572496478261';
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
 
@@ -191,47 +192,56 @@ export default async function handler(req, res) {
             }
         };
         try {
-            if (!supabaseAdmin) throw new Error('SUPABASE_SERVICE_ROLE_KEY 未設定');
             const baseImageB64 = userPayload.parameters?.base_image;
-            const refImageB64  = userPayload.parameters?.reference_image || null;
-            const userPrompt   = (userPayload.parameters?.user_prompt || '').trim();
-            if (!baseImageB64) throw new Error('base_image 未提供');
+            const baseImageUrl = userPayload.parameters?.base_image_url || '';
+            const userPrompt   = (userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '').trim();
+            if (!baseImageB64 && !baseImageUrl) throw new Error('base_image 未提供');
 
-            await supabaseAdmin.storage.createBucket('render-temp', { public: false }).catch(() => {});
-
-            // 上傳底圖
-            const baseRaw = baseImageB64.split(',')[1] || baseImageB64;
-            const baseName = `tmp/${Date.now()}_base_${Math.random().toString(36).slice(2)}.jpg`;
-            const { error: upBase } = await supabaseAdmin.storage.from('render-temp').upload(baseName, Buffer.from(baseRaw, 'base64'), { contentType: 'image/jpeg' });
-            if (upBase) throw new Error(`底圖上傳失敗: ${upBase.message}`);
-            tempBase = baseName;
-            const { data: baseSign } = await supabaseAdmin.storage.from('render-temp').createSignedUrl(baseName, 3600);
-
-            // 上傳參考圖（選填）
-            let refSignedUrl = '';
-            if (refImageB64) {
-                const refRaw = refImageB64.split(',')[1] || refImageB64;
-                const refName = `tmp/${Date.now()}_ref_${Math.random().toString(36).slice(2)}.jpg`;
-                const { error: upRef } = await supabaseAdmin.storage.from('render-temp').upload(refName, Buffer.from(refRaw, 'base64'), { contentType: 'image/jpeg' });
-                if (upRef) throw new Error(`參考圖上傳失敗: ${upRef.message}`);
-                tempRef = refName;
-                const { data: refSign } = await supabaseAdmin.storage.from('render-temp').createSignedUrl(refName, 3600);
-                refSignedUrl = refSign?.signedUrl || '';
+            // 底圖：優先用遠端 URL，否則上傳 base64（Supabase 優先，fallback freeimage.host）
+            let baseForCoze = baseImageUrl;
+            if (baseImageB64) {
+                const cleanB64 = baseImageB64.replace(/^data:image\/\w+;base64,/, '');
+                if (supabaseAdmin) {
+                    await supabaseAdmin.storage.createBucket('render-temp', { public: false }).catch(() => {});
+                    const baseRaw = cleanB64;
+                    const baseName = `tmp/${Date.now()}_base_${Math.random().toString(36).slice(2)}.jpg`;
+                    const { error: upBase } = await supabaseAdmin.storage.from('render-temp').upload(baseName, Buffer.from(baseRaw, 'base64'), { contentType: 'image/jpeg' });
+                    if (upBase) throw new Error(`底圖上傳失敗: ${upBase.message}`);
+                    tempBase = baseName;
+                    const { data: baseSign } = await supabaseAdmin.storage.from('render-temp').createSignedUrl(baseName, 3600);
+                    baseForCoze = baseSign?.signedUrl || '';
+                } else {
+                    // Fallback: freeimage.host（無需 auth，與 inpaint.js 相同邏輯）
+                    let uploaded = false;
+                    try {
+                        const form = new FormData();
+                        form.append('key', '6d207e02198a847aa98d0a2a901485a5');
+                        form.append('action', 'upload');
+                        form.append('source', cleanB64);
+                        form.append('format', 'json');
+                        const r = await fetch('https://freeimage.host/api/1/upload', { method: 'POST', body: form });
+                        const d = await r.json();
+                        if (d.status_code === 200 && d.image?.url) { baseForCoze = d.image.url; uploaded = true; }
+                    } catch (_) {}
+                    if (!uploaded) {
+                        const IMGBB_KEY = process.env.IMGBB_API_KEY || '';
+                        const form2 = new FormData();
+                        form2.append('image', cleanB64);
+                        const r2 = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: form2 });
+                        const d2 = await r2.json();
+                        if (d2.success && d2.data?.url) baseForCoze = d2.data.url;
+                        else throw new Error('底圖上傳失敗（freeimage.host 與 ImgBB 均失敗）');
+                    }
+                }
             }
 
-            // 呼叫 Coze FURNITURE_WORKFLOW_ID
+            // 呼叫 Coze Universal_Image_Editor（統一使用 SMART_CANVAS_WORKFLOW_ID）
             const cozeRes = await fetch('https://api.coze.com/v1/workflow/stream_run', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${COZE_PAT}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    workflow_id: FURNITURE_WORKFLOW_ID,
-                    parameters: {
-                        image: [baseSign?.signedUrl || ''],
-                        reference_image_url: refSignedUrl,
-                        user_prompt: userPrompt,
-                        resolution: resVal || '2k',
-                        aspect_ratio: '16:9'
-                    }
+                    workflow_id: SMART_CANVAS_WORKFLOW_ID,
+                    parameters: { image: [baseForCoze], prompt: userPrompt, resolution: resVal || '2k' }
                 })
             });
             if (!cozeRes.ok) throw new Error(`Coze Error: ${cozeRes.status}`);

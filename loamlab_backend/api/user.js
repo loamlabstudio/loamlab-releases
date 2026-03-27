@@ -58,10 +58,12 @@ export default async function handler(req, res) {
             code: 0,
             email,
             points: data ? (data.points || 0) + (data.lifetime_points || 0) : 0,
+            lifetime_points: data ? (data.lifetime_points || 0) : 0,
             subscription_plan: data ? (data.subscription_plan || null) : null,
             last_topup_at: data ? (data.last_topup_at || null) : null,
             referral_code: data ? data.referral_code : null,
             referred_by: data ? data.referred_by : null,
+            inviter_id: data ? data.referred_by : null,
             referral_success_count: referralSuccessCount || 0,
             is_new_user: error && error.code === 'PGRST116' ? true : false
         });

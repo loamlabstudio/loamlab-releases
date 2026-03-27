@@ -2635,6 +2635,7 @@ function openSmartCanvas(channelBase64, renderedUrl) {
         _scInitCanvases(dw, dh, channelBase64);
         _scBindEvents();
     };
+    SmartCanvas.renderedUrl = renderedUrl;
     SmartCanvas.baseImg.src = renderedUrl;
 }
 
@@ -3107,11 +3108,10 @@ async function executeSmartSwap() {
     const composite = _scCreateAnnotatedComposite();
     const compositeBase64 = composite.toDataURL('image/jpeg', 0.9);
 
-    // 2. 帶顏色代碼的結構化 prompt
-    const regionLines = SmartCanvas.regions.map((r, i) =>
-        `Region ${i + 1} (highlighted in ${r.colorHex || '#ff6432'}): ${r.label}`
+    // 2. 帶顏色代碼的結構化 prompt（簡潔格式：#色碼: 描述）
+    const prompt = SmartCanvas.regions.map(r =>
+        `${r.colorHex || '#ff6432'}: ${r.label}`
     ).join('; ');
-    const prompt = `Interior design edit. Apply only these targeted changes to the highlighted regions: ${regionLines}. Preserve all other areas, lighting, shadows, and perspective exactly.`;
 
     // 3. 解析度
     const resRadio = document.querySelector('input[name="resolution"]:checked');
@@ -3127,7 +3127,7 @@ async function executeSmartSwap() {
             },
             body: JSON.stringify({
                 tool: 2,
-                parameters: { base_image: compositeBase64, prompt, resolution }
+                parameters: { original_image_url: SmartCanvas.renderedUrl, base_image: compositeBase64, prompt, resolution }
             })
         });
         const result = await resp.json();

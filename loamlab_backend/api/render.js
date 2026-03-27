@@ -194,6 +194,7 @@ export default async function handler(req, res) {
         try {
             const baseImageB64 = userPayload.parameters?.base_image;
             const baseImageUrl = userPayload.parameters?.base_image_url || '';
+            const originalImageUrl = userPayload.parameters?.original_image_url || '';
             const userPrompt   = (userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '').trim();
             if (!baseImageB64 && !baseImageUrl) throw new Error('base_image 未提供');
 
@@ -241,7 +242,7 @@ export default async function handler(req, res) {
                 headers: { 'Authorization': `Bearer ${COZE_PAT}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     workflow_id: SMART_CANVAS_WORKFLOW_ID,
-                    parameters: { image: [baseForCoze], prompt: userPrompt, resolution: resVal || '2k' }
+                    parameters: { image: [originalImageUrl, baseForCoze].filter(Boolean), prompt: userPrompt, resolution: resVal || '2k' }
                 })
             });
             if (!cozeRes.ok) throw new Error(`Coze Error: ${cozeRes.status}`);
@@ -254,6 +255,7 @@ export default async function handler(req, res) {
             if (finalUrl) {
                 return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: monthlyPoints + lifetimePoints, transaction_id: transactionId });
             } else {
+                console.error('[Tool2] parseUrlFromSse failed. SSE preview:', sseText.slice(0, 600));
                 await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
                 return res.status(500).json({ code: -1, msg: '算圖完成但未收到圖片 URL', points_refunded: true });
             }
@@ -345,6 +347,15 @@ function parseUrlFromSse(sseText) {
             try {
                 const obj = JSON.parse(jsonStr);
                 if (obj.code && obj.code !== 0) return null;
+                if (currentEvent === 'workflow_finished') {
+                    const outputs = obj.outputs || obj.data?.outputs || {};
+                    const imgs = outputs.images || outputs.image;
+                    if (Array.isArray(imgs) && imgs[0]) {
+                        const u = typeof imgs[0] === 'string' ? imgs[0] : (imgs[0].url || imgs[0].image || '');
+                        if (u.startsWith('http')) return u;
+                    }
+                    if (outputs.url && String(outputs.url).startsWith('http')) return String(outputs.url);
+                }
                 if (currentEvent === 'Message' || currentEvent === 'message') {
                     const content = obj.content || obj.answer || obj.data || '';
                     let parsed;

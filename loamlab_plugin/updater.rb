@@ -52,19 +52,20 @@ module LoamLabPlugin
         send_to_js(dialog, status: 'update_downloading')
         puts "[Updater] 開始下載：#{url}"
 
-        tmp      = (ENV['TEMP'] || ENV['TMP'] || 'C:/Temp').gsub('\\', '/')
-        zip_path = "#{tmp}/loamlab_update_#{Time.now.to_i}.rbz"
-        zip_win  = zip_path.gsub('/', '\\')
+        require 'tmpdir'
+        zip_path = File.join(Dir.tmpdir, "loamlab_update_#{Time.now.to_i}.rbz")
 
-        # --- Step A：PowerShell 下載（同步 system() 在計時器中阻塞即可，不卡 UI） ---
+        # --- Step A：Net::HTTP 跨平台下載 ---
         UI.start_timer(0.1, false) do
           begin
-            dl_ok = system(
-              "powershell -ExecutionPolicy Bypass -NoProfile -Command " \
-              "\"Invoke-WebRequest -Uri '#{url}' -OutFile '#{zip_win}'\""
-            )
+            dl_uri = URI.parse(url)
+            Net::HTTP.start(dl_uri.host, dl_uri.port, use_ssl: dl_uri.scheme == 'https',
+                            read_timeout: 120, open_timeout: 30) do |http|
+              resp = http.get(dl_uri.request_uri)
+              File.binwrite(zip_path, resp.body)
+            end
 
-            unless dl_ok && File.exist?(zip_path) && File.size(zip_path) > 10_000
+            unless File.exist?(zip_path) && File.size(zip_path) > 10_000
               File.delete(zip_path) rescue nil
               send_to_js(dialog, status: 'update_error',
                          msg: '下載失敗：請檢查網路，或前往 GitHub 手動下載最新版本')
@@ -72,15 +73,20 @@ module LoamLabPlugin
             end
             puts "[Updater] 下載完成（#{File.size(zip_path)} bytes）：#{zip_path}"
 
-            # --- Step B：解壓覆蓋 ---
+            # --- Step B：解壓覆蓋（跨平台） ---
             # loamlab_plugin/ 的上一層 = SketchUp Plugins 目錄
             plugins_dir = File.dirname(File.dirname(__FILE__))
-            dest_win    = plugins_dir.gsub('/', '\\')
 
-            unzip_ok = system(
-              "powershell -ExecutionPolicy Bypass -NoProfile -Command " \
-              "\"Expand-Archive -Path '#{zip_win}' -DestinationPath '#{dest_win}' -Force\""
-            )
+            if Sketchup.platform == :platform_osx
+              unzip_ok = system("unzip -o '#{zip_path}' -d '#{plugins_dir}'")
+            else
+              zip_win  = zip_path.gsub('/', '\\')
+              dest_win = plugins_dir.gsub('/', '\\')
+              unzip_ok = system(
+                "powershell -ExecutionPolicy Bypass -NoProfile -Command " \
+                "\"Expand-Archive -Path '#{zip_win}' -DestinationPath '#{dest_win}' -Force\""
+              )
+            end
             File.delete(zip_path) rescue nil
 
             unless unzip_ok
@@ -88,7 +94,7 @@ module LoamLabPlugin
                          msg: '解壓縮失敗，請手動重新安裝 .rbz 檔案')
               next
             end
-            puts "[Updater] 解壓完成 → #{dest_win}"
+            puts "[Updater] 解壓完成 → #{plugins_dir}"
 
             # --- Step C：重載所有 Ruby 模組，並重開 dialog ---
             UI.start_timer(0.3, false) do

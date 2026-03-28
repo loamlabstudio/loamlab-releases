@@ -1,6 +1,7 @@
 require 'sketchup.rb'
 require 'json'
 require 'base64'
+require 'tmpdir'
 require_relative 'config.rb'
 require_relative 'coze_api.rb'
 require_relative 'updater.rb'
@@ -38,7 +39,7 @@ module LoamLab
       current_dir = File.dirname(__FILE__)
       html_path = File.join(current_dir, 'ui', 'index.html')
       # 因 set_file 不支援 querystring，改用 set_url 來載入含有 cache-busting 的本地檔案路徑
-      url = "file:///#{html_path}?t=#{Time.now.to_i}"
+      url = "#{path_to_file_uri(html_path)}?t=#{Time.now.to_i}"
       @dialog.set_url(url)
       
       # 註冊所有的 JS to Ruby Callback
@@ -194,39 +195,20 @@ module LoamLab
         end
       end
 
-      # 新增功能：指定本地資料夾，自動分層儲存滿意的算圖結果
+      # 新增功能：儲存渲染圖到用戶指定位置
       dialog.add_action_callback("save_image") do |action_context, params|
         url = params["url"]
-        prompt = (params["prompt"] || "default").to_s.dup.force_encoding("UTF-8")
-        lang = params["lang"] || "zh-TW"
-        
         next unless url
-        
-        # 讓使用者選擇最高階儲存目錄
-        chosen_dir = UI.select_directory(title: "選擇要保存 LoamLab 渲染圖的資料夾")
-        if chosen_dir
+
+        default_name = "AI_Render_#{Time.now.strftime('%H%M%S')}.jpg"
+        file_path = UI.savepanel("保存渲染圖", "", default_name)
+        if file_path
           begin
-             # 建立基於語言與日期的專業資料夾結構
-             require 'fileutils'
-             date_str = Time.now.strftime("%Y-%m-%d")
-             target_dir = File.join(chosen_dir, "LoamLab_Renders_#{lang}", date_str)
-             FileUtils.mkdir_p(target_dir)
-             
-             # 安全化檔案名稱，避免非法字元
-             safe_prompt = prompt[0..20].gsub(/[^a-zA-Z0-9_\u4e00-\u9fa5]/, '_')
-             file_name = "AI_Render_#{Time.now.strftime("%H%M%S")}_#{safe_prompt}.jpg"
-             full_path = File.join(target_dir, file_name)
-             
-             require 'open-uri'
-             File.open(full_path, "wb") do |file|
-               URI.open(url) do |image|
-                 file.write(image.read)
-               end
-             end
-             
-             UI.messagebox("圖片已成功保存至:\n#{full_path}")
+            require 'open-uri'
+            File.open(file_path, "wb") { |f| URI.open(url) { |img| f.write(img.read) } }
+            UI.messagebox("圖片已成功保存至:\n#{file_path}")
           rescue => e
-             UI.messagebox("儲存圖片失敗:\n#{e.message}")
+            UI.messagebox("儲存圖片失敗:\n#{e.message}")
           end
         end
       end
@@ -341,7 +323,7 @@ module LoamLab
                 ts = File.mtime(f).strftime("%Y%m%d_%H%M%S")
                 res = ''; scene = fname
               end
-              file_url = "file:///#{f.gsub('\\', '/')}"
+              file_url = path_to_file_uri(f)
               { 'filename' => fname, 'scene' => scene, 'resolution' => res,
                 'timestamp' => ts, 'file_url' => file_url }
             end
@@ -361,11 +343,60 @@ module LoamLab
         model = Sketchup.active_model
         save_path = model.get_attribute("LoamLabAI", "save_path", "")
         if save_path && !save_path.empty? && File.directory?(save_path)
-          UI.openURL("file:///#{save_path}")
+          UI.openURL(path_to_file_uri(save_path))
         end
       end
 
       # 8. 生成色塊通道圖 (Segmentation Map) — Tool 2 選物件用
+      # Smart Canvas 執行：遠端底圖 URL + 合并 prompt → /api/render Tool 2 → Coze Banana2
+      dialog.add_action_callback("smart_canvas_execute") do |action_context, params|
+        base_image_url = (params["base_image_url"] || "").to_s
+        prompt         = (params["prompt"] || "").to_s.dup.force_encoding("UTF-8")
+        resolution     = (params["resolution"] || "2k").to_s
+        scene_label    = (params["scene_label"] || "Smart Canvas").to_s
+
+        if base_image_url.empty?
+          dialog.execute_script("window.receiveFromRuby(#{JSON.generate({ status: 'render_failed', message: 'Smart Canvas: 缺少底圖 URL' })})")
+          next
+        end
+
+        dialog.execute_script("window.receiveFromRuby({status: 'rendering'})")
+
+        UI.start_timer(0.1, false) do
+          begin
+            user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+            request_body = JSON.dump({
+              tool: 2,
+              parameters: {
+                "base_image_url" => base_image_url,
+                "user_prompt"    => prompt,
+                "resolution"     => resolution,
+                "aspect_ratio"   => "16:9"
+              }
+            })
+            req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
+            req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
+            req.body = request_body
+            captured_label = scene_label
+            req.start do |_, response|
+              begin
+                data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
+                result = (data['code'] == 0 && data['url']) ?
+                  { status: 'render_success', scene_name: captured_label, url: data['url'],
+                    points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
+                  { status: 'render_failed', message: data['msg'] || "HTTP #{response.status_code}" }
+              rescue => e
+                result = { status: 'render_failed', message: "解析失敗: #{e.message}" }
+              end
+              UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
+            end
+            UI.start_timer(0.1, false) { dialog.execute_script("window.receiveFromRuby({status: 'export_done'})") }
+          rescue => e
+            dialog.execute_script("window.receiveFromRuby(#{JSON.generate({ status: 'render_failed', message: "Smart Canvas 執行失敗: #{e.message}" })})")
+          end
+        end
+      end
+
       dialog.add_action_callback("loamlab_generate_seg_map") do |action_context|
         begin
           model = Sketchup.active_model
@@ -404,8 +435,7 @@ module LoamLab
           end
 
           # 截圖
-          temp_dir = ENV['TEMP'] || ENV['TMP'] || 'C:/Temp'
-          Dir.mkdir(temp_dir) unless File.exist?(temp_dir)
+          temp_dir  = Dir.tmpdir
           temp_path = File.join(temp_dir, "loamlab_segmap_#{Time.now.to_i}.jpg")
           view.write_image(temp_path, 1280, 720, true, 0.9)
 
@@ -439,14 +469,27 @@ module LoamLab
       model.pages.map { |page| page.name }
     end
 
+    # ─── 跨平台路徑工具 ──────────────────────────────────────────────
+    # 本地路徑 → file:/// URL（Windows: C:/... → file:///C:/..., Mac: /Users/... → file:///Users/...）
+    def self.path_to_file_uri(path)
+      normalized = path.gsub('\\', '/')
+      normalized = "/#{normalized}" unless normalized.start_with?('/')
+      "file://#{normalized}"
+    end
+
+    # file:/// URL → 本地路徑（反向轉換，跨平台正確）
+    def self.file_uri_to_path(uri)
+      path = uri.sub('file://', '')        # → "/Users/..." or "/C:/Users/..."
+      path = path[1..-1] if path.match?(%r{\A/[A-Za-z]:/})  # Windows: 移除多餘開頭 /
+      path
+    end
+
     # 將當前往視角擷取為 Base64 圖片 (品質較低，縮圖預覽用)
     def self.get_preview_base64
       model = Sketchup.active_model
       return "" unless model
       
-      temp_dir = ENV['TEMP'] || ENV['TMP'] || 'C:/Temp'
-      # 確保目錄存在
-      Dir.mkdir(temp_dir) unless File.exist?(temp_dir)
+      temp_dir      = Dir.tmpdir
       temp_img_path = File.join(temp_dir, "loamlab_preview_#{Time.now.to_i}.jpg")
       
       begin
@@ -468,10 +511,43 @@ module LoamLab
       model = Sketchup.active_model
       return unless model
 
+      # 工具 2 (Smart Canvas)：遠端 URL 直接透傳 render.js，不讀本地檔案
+      if tool == 2 && !base_image_url.empty? && base_image_url.start_with?("http")
+        begin
+          user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+          params_hash = {
+            "base_image_url" => base_image_url,
+            "user_prompt"    => user_prompt,
+            "resolution"     => resolution,
+            "smart_canvas"   => true
+          }
+          request_body = JSON.dump({ tool: 2, parameters: params_hash })
+          req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
+          req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
+          req.body = request_body
+          captured_scene = base_image_scene
+          req.start do |_, response|
+            begin
+              data   = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
+              result = (data['code'] == 0 && data['url']) ?
+                { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
+                { status: 'render_failed', message: data['msg'] || "HTTP #{response.status_code}" }
+            rescue => e
+              result = { status: 'render_failed', message: "解析失敗: #{e.message}" }
+            end
+            UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
+          end
+          UI.start_timer(0.1, false) { dialog.execute_script("window.receiveFromRuby({status: 'export_done'})") }
+        rescue => e
+          dialog.execute_script("window.receiveFromRuby(#{JSON.generate({ status: 'render_failed', message: "Smart Canvas 請求失敗: #{e.message}" })})")
+        end
+        return
+      end
+
       # 工具 2：AtlasCloud 家具替換（base_image + 可選 reference_image，皆 base64）
       if tool == 2 && !base_image_url.empty? && base_image_url.start_with?("file:///")
         begin
-          local_path = base_image_url.sub("file:///", "").gsub("/", File::SEPARATOR)
+          local_path = file_uri_to_path(base_image_url)
           img_data   = File.read(local_path, mode: 'rb')
           base_data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
           user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
@@ -507,7 +583,7 @@ module LoamLab
       # 工具 3 底圖模式：直接讀本地圖檔送 Coze，跳過 SketchUp 截圖
       if !base_image_url.empty? && base_image_url.start_with?("file:///")
         begin
-          local_path = base_image_url.sub("file:///", "").gsub("/", File::SEPARATOR)
+          local_path = file_uri_to_path(base_image_url)
           img_data   = File.read(local_path, mode: 'rb')
           data_uri   = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
           user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
@@ -552,7 +628,7 @@ module LoamLab
         end
       end
 
-      temp_dir = ENV['TEMP'] || ENV['TMP'] || 'C:/Temp'
+      temp_dir     = Dir.tmpdir
       project_name = (model.title.empty? ? "未命名專案" : model.title).to_s.dup.force_encoding("UTF-8")
       save_path = model.get_attribute("LoamLabAI", "save_path", "").to_s.dup.force_encoding("UTF-8")
       timestamp = Time.now.strftime("%Y%m%d_%H%M%S")
@@ -737,6 +813,7 @@ module LoamLab
         self.show_dialog
       end
       # 新增「重新載入 (開發用)」— 安全版：不移除模組常數，避免 SketchUp 當機
+      if LoamLab::BUILD_TYPE == "dev"
       main_menu.add_item('開發重新載入 (Dev Reload)') do
         begin
           dir = File.dirname(File.expand_path(__FILE__))
@@ -756,7 +833,8 @@ module LoamLab
           UI.messagebox("Dev Reload 失敗: #{e.message}")
         end
       end
-      
+      end # if BUILD_TYPE == "dev"
+
       # 註冊快捷工具列 (Toolbar)
       toolbar = UI::Toolbar.new "LoamLab"
       cmd = UI::Command.new("AI Render") {

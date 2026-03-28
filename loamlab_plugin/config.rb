@@ -18,7 +18,7 @@ module LoamLab
   end
 
   # 閻ｈ泛澧犻搹鐔衡挀 (闁絽瀚?updater 閻楀牊婀板В鏂跨毆濮楃喎鍩?
-  VERSION = '1.2.5'
+  VERSION = '1.2.6'
 end
 
 

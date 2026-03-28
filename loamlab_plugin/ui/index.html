@@ -264,9 +264,9 @@
                         </path>
                     </svg>
                 </div>
-                <!-- 2. 代理建模 / 局部換裝 (Dev only) -->
-                <div id="sidebar-tool-2" class="dev-only-tool hidden sidebar-tool-btn w-full aspect-square rounded-xl bg-transparent transition-colors cursor-pointer flex flex-col items-center justify-center text-white/50 group relative overflow-hidden hover:bg-white/10 hover:text-white"
-                    title="代理建模 / 局部換裝" onclick="setActiveTool(2)">
+                <!-- 2. SpaceReform -->
+                <div id="sidebar-tool-2" class="sidebar-tool-btn w-full aspect-square rounded-xl bg-transparent transition-colors cursor-pointer flex flex-col items-center justify-center text-white/50 group relative overflow-hidden hover:bg-white/10 hover:text-white"
+                    title="SpaceReform" onclick="setActiveTool(2)">
                     <div class="absolute inset-x-0 top-0 h-1 bg-[var(--accent-red)] sidebar-active-bar hidden"></div>
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -274,8 +274,8 @@
                         </path>
                     </svg>
                 </div>
-                <!-- 3. 九宮格鏡頭構圖 (Dev only) -->
-                <div id="sidebar-tool-3" class="dev-only-tool hidden sidebar-tool-btn w-full aspect-square rounded-xl bg-transparent transition-colors cursor-pointer flex flex-col items-center justify-center text-white/50 group relative overflow-hidden hover:bg-white/10 hover:text-white"
+                <!-- 3. 九宮格鏡頭構圖 -->
+                <div id="sidebar-tool-3" class="sidebar-tool-btn w-full aspect-square rounded-xl bg-transparent transition-colors cursor-pointer flex flex-col items-center justify-center text-white/50 group relative overflow-hidden hover:bg-white/10 hover:text-white"
                     title="九宮格鏡頭構圖" onclick="setActiveTool(3)">
                     <div class="absolute inset-x-0 top-0 h-1 bg-[var(--accent-red)] sidebar-active-bar hidden"></div>
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -551,6 +551,22 @@
                         </div>
                     </div>
 
+                    <!-- Smart Canvas 待執行指示器 -->
+                    <div id="sc-pending-indicator" class="hidden mb-2 flex items-center justify-between bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2">
+                        <button id="sc-pending-edit" class="flex items-center gap-1.5 text-[11px] text-white/55 hover:text-white/85 transition-colors font-medium outline-none text-left">
+                            <svg class="w-3 h-3 shrink-0 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                            <span id="sc-pending-label"></span>
+                        </button>
+                        <button id="sc-pending-cancel" class="text-white/25 hover:text-white/70 text-[16px] leading-none ml-2 outline-none">×</button>
+                    </div>
+
+                    <!-- DEV ONLY: 快速重測 -->
+                    <button id="dev-retest-btn"
+                        class="hidden w-full mb-2 py-2 rounded-xl border border-dashed border-yellow-400/30 text-[11px] text-yellow-400/60 hover:border-yellow-400/60 hover:text-yellow-400 transition-all outline-none"
+                        onclick="executeSmartSwap(window._devLastScBody)">
+                        🔁 快速重測（上次選區）
+                    </button>
+
                     <button id="btn-render"
                         class="relative overflow-hidden w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-4 mt-2 rounded-[14px] font-bold shadow-[0_0_20px_rgba(220,38,38,0.35)] hover:shadow-[0_0_35px_rgba(220,38,38,0.6)] transition-all duration-300 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0 text-[15px] tracking-widest border border-red-500/40 outline-none"
                         data-i18n="btn_render">
@@ -819,101 +835,6 @@
         </div>
     </div>
 
-    <!-- 遮罩換裝彈窗 (Swap Modal) -->
-    <div id="swap-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden items-center justify-center">
-        <div class="relative w-[900px] max-w-[96vw] max-h-[90vh] bg-[#0f0f12] border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden">
-            <!-- Header -->
-            <div class="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
-                <div>
-                    <h2 class="text-[15px] font-bold text-white tracking-widest">FURNITURE SWAP</h2>
-                    <p class="text-[11px] text-white/40 mt-0.5">在渲染圖上塗抹遮罩，指定替換區域</p>
-                </div>
-                <button id="btn-close-swap" class="text-white/40 hover:text-white bg-white/5 hover:bg-white/10 rounded-full p-2 transition-all">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-            </div>
-
-            <!-- Body -->
-            <div class="flex gap-0 flex-1 min-h-0 overflow-hidden">
-                <!-- Left: Canvas 塗抹區 -->
-                <div class="flex-1 flex flex-col bg-black/60 relative min-w-0">
-                    <div class="flex items-center gap-3 px-4 py-2.5 border-b border-white/5 shrink-0 bg-black/40">
-                        <span class="text-[10px] text-white/50 font-semibold uppercase tracking-widest">塗抹要替換的區域</span>
-                        <div class="flex items-center gap-2 ml-auto">
-                            <span class="text-[10px] text-white/40">刷子大小</span>
-                            <input id="swap-brush-size" type="range" min="5" max="80" value="30" class="w-20 accent-[#dc2626]">
-                            <span id="swap-brush-size-label" class="text-[10px] text-white/60 w-6 text-right">30</span>
-                        </div>
-                        <button id="btn-clear-mask" class="text-[10px] px-3 py-1 rounded border border-white/20 text-white/60 hover:text-white hover:border-white/50 transition-all font-medium uppercase tracking-wider">清除</button>
-                    </div>
-                    <div class="flex-1 relative flex items-center justify-center overflow-hidden p-3">
-                        <div class="relative inline-block" id="swap-canvas-container">
-                            <img id="swap-base-image" class="block max-w-full max-h-[calc(90vh-200px)] rounded-lg" src="" alt="Rendered scene">
-                            <canvas id="swap-mask-canvas" class="absolute inset-0 rounded-lg cursor-crosshair opacity-70" style="touch-action:none;"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right: 參數設定 -->
-                <div class="w-[280px] shrink-0 flex flex-col border-l border-white/10 bg-[#0c0c0e]">
-                    <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-                        <!-- 素材庫 -->
-                        <div class="flex flex-col gap-1.5">
-                            <div class="flex items-center justify-between">
-                                <label class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">素材庫 Library</label>
-                                <span class="text-[9px] text-white/25" id="material-count">0 items</span>
-                            </div>
-                            <div id="material-library-grid" class="grid grid-cols-3 gap-1.5 max-h-[144px] overflow-y-auto rounded-lg"></div>
-                            <p class="text-[10px] text-white/25">點選材質自動帶入指令　在渲染圖點 EXTRACT 提取</p>
-                        </div>
-                        <div class="border-t border-white/5"></div>
-                        <!-- 參考圖上傳 -->
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">參考圖片 Reference <span class="text-white/25 normal-case tracking-normal">（選填）</span></label>
-                            <div class="flex items-center gap-2">
-                                <label for="swap-reference-file" class="cursor-pointer flex-1 flex items-center justify-center gap-1.5 bg-black/40 border border-dashed border-white/15 hover:border-[#dc2626]/50 rounded-lg py-2 text-[10px] text-white/40 hover:text-white/70 transition-all">
-                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                                    <span id="swap-ref-label">上傳參考圖片</span>
-                                </label>
-                                <input id="swap-reference-file" type="file" accept="image/*" class="hidden" onchange="onRefImageSelected(this)">
-                                <div id="swap-ref-preview" class="hidden relative w-10 h-10 shrink-0">
-                                    <img id="swap-ref-thumb" class="w-10 h-10 rounded object-cover border border-white/20">
-                                    <button onclick="clearRefImage()" class="absolute -top-1 -right-1 w-4 h-4 bg-black rounded-full text-white/70 hover:text-white flex items-center justify-center text-[10px] leading-none">✕</button>
-                                </div>
-                            </div>
-                            <p class="text-[10px] text-white/30">AI 將依照參考圖的風格替換遮罩區域</p>
-                        </div>
-                        <!-- 替換說明 -->
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">替換指令 Prompt</label>
-                            <textarea id="swap-prompt-input" rows="3" placeholder="e.g. rough concrete wall texture, grey..." class="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[11px] text-white/90 focus:outline-none focus:border-[#dc2626]/70 placeholder-white/20 resize-none"></textarea>
-                        </div>
-                        <!-- 快速標籤（內容由 app.js SWAP_TAG_GROUPS 動態渲染）-->
-                        <div class="flex flex-col gap-1.5">
-                            <div class="flex items-center gap-2">
-                                <label class="text-[11px] font-semibold tracking-wider text-white/50 uppercase">快速標籤</label>
-                                <div class="flex gap-1">
-                                    <button onclick="setTagGroup('soft')" data-group="soft" class="tag-group-btn text-[9px] px-1.5 py-0.5 rounded border transition-all border-amber-500/40 text-amber-300/70">軟裝</button>
-                                    <button onclick="setTagGroup('hard')" data-group="hard" class="tag-group-btn text-[9px] px-1.5 py-0.5 rounded border transition-all border-white/10 text-white/30 hover:text-white/60">硬裝</button>
-                                </div>
-                            </div>
-                            <div id="swap-tags-container" class="flex flex-wrap gap-1"></div>
-                        </div>
-                        <!-- 費用提示 -->
-                        <div class="bg-white/[0.03] border border-white/5 rounded-lg p-3 text-[10px] text-white/30 leading-relaxed">
-                            消耗 <span class="text-white/60 font-bold">10 pts</span>　由 Fal.ai Flux Inpainting 驅動，支援參考圖引導替換
-                        </div>
-                    </div>
-                    <!-- 執行按鈕 -->
-                    <div class="p-4 border-t border-white/10 shrink-0">
-                        <button id="btn-execute-swap" onclick="executeSwap()" class="w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-3 rounded-xl font-bold text-[13px] tracking-widest shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] transition-all active:scale-[0.98]">
-                            ⚡ Execute SWAP
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- 引入外部邏輯腳本 (強制加上 ?v=1.2.0 擊破 CEF 瀏覽器快取) -->
     <script src="i18n.js?v=1.2.0"></script>
@@ -1043,6 +964,9 @@
                             <button class="sc-tool-btn" data-tool="eraser" title="橡皮擦 (Eraser)">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                             </button>
+                            <button class="sc-tool-btn" data-tool="fill" title="填充 (Fill enclosed area)">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15c-.59.56-.59 1.53 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10 10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z"/></svg>
+                            </button>
                             <div class="w-px h-5 bg-white/15 mx-1"></div>
                             <button id="sc-undo" title="復原 (Undo)" class="sc-ctrl-btn">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
@@ -1066,14 +990,21 @@
                         <!-- 動態渲染區域卡片 -->
                         <p id="sc-region-empty" class="text-[11px] text-white/25 text-center mt-6" data-i18n="sc_region_empty">使用魔術棒或筆刷<br>選取要替換的區域</p>
                     </div>
-                    <!-- 費用提示 -->
-                    <div class="px-4 py-2 shrink-0">
-                        <p class="text-[10px] text-white/30">每個區域消耗 <span class="text-white/60 font-bold">10 pts</span></p>
+                    <!-- 快速標籤 -->
+                    <div id="sc-tag-section" class="hidden px-3 py-2.5 border-t border-white/5">
+                        <div class="flex items-center gap-2 mb-1.5">
+                            <span class="text-[9px] font-semibold text-white/30 uppercase tracking-widest">快速標籤</span>
+                            <div class="flex gap-1">
+                                <button onclick="scSetTagGroup('soft')" data-group="soft" class="sc-tag-group-btn text-[9px] px-1.5 py-0.5 rounded border transition-all border-amber-500/40 text-amber-300/70">軟裝</button>
+                                <button onclick="scSetTagGroup('hard')" data-group="hard" class="sc-tag-group-btn text-[9px] px-1.5 py-0.5 rounded border transition-all border-white/10 text-white/30 hover:text-white/60">硬裝</button>
+                            </div>
+                        </div>
+                        <div id="sc-tags-container" class="flex flex-wrap gap-1"></div>
                     </div>
                     <!-- 執行按鈕 -->
                     <div class="p-4 border-t border-white/10 shrink-0">
-                        <button id="btn-execute-smart-swap" class="w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-3 rounded-xl font-bold text-[13px] tracking-widest shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] transition-all active:scale-[0.98]" data-i18n="sc_execute">
-                            執行替換
+                        <button id="btn-execute-smart-swap" class="w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-3 rounded-xl font-bold text-[13px] tracking-widest shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] transition-all active:scale-[0.98]">
+                            Apply Changes
                         </button>
                     </div>
                 </div>

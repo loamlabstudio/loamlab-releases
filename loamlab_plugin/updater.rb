@@ -55,15 +55,10 @@ module LoamLabPlugin
         require 'tmpdir'
         zip_path = File.join(Dir.tmpdir, "loamlab_update_#{Time.now.to_i}.rbz")
 
-        # --- Step A：Net::HTTP 跨平台下載 ---
+        # --- Step A：Net::HTTP 跨平台下載（含 redirect 追蹤） ---
         UI.start_timer(0.1, false) do
           begin
-            dl_uri = URI.parse(url)
-            Net::HTTP.start(dl_uri.host, dl_uri.port, use_ssl: dl_uri.scheme == 'https',
-                            read_timeout: 120, open_timeout: 30) do |http|
-              resp = http.get(dl_uri.request_uri)
-              File.binwrite(zip_path, resp.body)
-            end
+            self.http_download(url, zip_path)
 
             unless File.exist?(zip_path) && File.size(zip_path) > 10_000
               File.delete(zip_path) rescue nil
@@ -121,6 +116,25 @@ module LoamLabPlugin
       end
 
       private
+
+      # 跟隨 HTTP redirect 下載二進位檔案到 dest_path（GitHub Release 會 302 跳轉到 CDN）
+      def http_download(url, dest_path, limit = 8)
+        raise "下載重新導向次數過多" if limit == 0
+        uri = URI.parse(url)
+        Net::HTTP.start(uri.host, uri.port,
+                        use_ssl: uri.scheme == 'https',
+                        read_timeout: 120, open_timeout: 30) do |http|
+          resp = http.get(uri.request_uri)
+          case resp.code.to_i
+          when 200
+            File.open(dest_path, 'wb') { |f| f.write(resp.body) }
+          when 301, 302, 303, 307, 308
+            http_download(resp['location'], dest_path, limit - 1)
+          else
+            raise "HTTP #{resp.code}"
+          end
+        end
+      end
 
       # 比較版本號：支援 "1.3.0" > "1.2.0-beta" 這類混合格式
       def version_newer?(v_new, v_old)

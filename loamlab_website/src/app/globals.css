@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --color-loam-primary: #DA1E1F;
+  --color-loam-glow: rgba(218, 30, 31, 0.4);
+  --color-loam-dark: #0D0E10;
+  --color-loam-bone: #FBFBFA;
+  --color-loam-glass: rgba(255, 255, 255, 0.03);
+}
+
+@layer base {
+  body {
+    background-color: var(--color-loam-dark);
+    color: #ffffff;
+    font-family: var(--font-inter), sans-serif;
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    background: var(--color-loam-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .text-gradient {
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-image: linear-gradient(to right, #ffffff, #a1a1aa);
+  }
+
+  .text-gradient-primary {
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-image: linear-gradient(to right, #fcd34d, #f59e0b);
+  }
+}
+
+/* Custom Animations */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 0 0 var(--color-loam-glow); }
+  70% { box-shadow: 0 0 20px 10px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes ticker-refresh {
+  0%   { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.ticker-refresh {
+  animation: ticker-refresh 0.3s ease-out;
+}

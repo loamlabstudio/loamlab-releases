@@ -23,7 +23,7 @@ export default async function handler(req, res) {
 
         if (countErr) throw countErr;
 
-        // 2. 取得點數統計 (points + lifetime_points)
+        // 2. 取得點數統計
         const { data: pointsData, error: pointsErr } = await supabase
             .from('users')
             .select('points, lifetime_points');
@@ -34,10 +34,24 @@ export default async function handler(req, res) {
             return acc + (user.points || 0) + (user.lifetime_points || 0);
         }, 0);
 
-        // 3. 回傳統計數據
+        // 3. 按解析度分級計算真實節省小時數（供行銷網頁 ticker 使用）
+        // 1K × 1.5h、2K × 3h、4K × 5h（保守估計，對應傳統渲染工時）
+        const [r1k, r2k, r4k] = await Promise.all([
+            supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('transaction_type', 'RENDER_1K'),
+            supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('transaction_type', 'RENDER_2K'),
+            supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('transaction_type', 'RENDER_4K'),
+        ]);
+        const hoursSavedV2 = Math.floor(
+            (r1k.count ?? 0) * 1.5 +
+            (r2k.count ?? 0) * 3 +
+            (r4k.count ?? 0) * 5
+        );
+
+        // 4. 回傳統計數據
         return res.status(200).json({
             code: 0,
             status: "healthy",
+            hours_saved_v2: hoursSavedV2,
             stats: {
                 total_users: totalUsers,
                 total_points_issued: totalPointsIssued,

@@ -10,7 +10,7 @@ function LiveTicker() {
   useEffect(() => {
     fetch('https://loamlab-camera-backend.vercel.app/api/stats')
       .then(r => r.json())
-      .then(data => setHours(data.hours_saved_v2 ?? 0))
+      .then(data => setHours(data.hours_saved ?? 0))
       .catch(() => setHours(3240)); // fallback 避免畫面空白
   }, []);
 

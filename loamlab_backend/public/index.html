@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en-US" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoamLab Camera | AI Renderer for SketchUp</title>
+    <meta name="description" content="LoamLab Camera — AI rendering plugin for SketchUp. Photorealistic results in 30 seconds. 1K/2K/4K resolution. Free to download.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://loamlabbackend.vercel.app">
+    <meta property="og:title" content="LoamLab Camera | AI Renderer for SketchUp">
+    <meta property="og:description" content="From SketchUp model to photorealistic render in 30 seconds. Native plugin, no exports needed.">
+    <meta property="og:image" content="https://loamlabbackend.vercel.app/images/hero-bg.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="LoamLab Camera | AI Renderer for SketchUp">
+    <meta name="twitter:description" content="From SketchUp model to photorealistic render in 30 seconds.">
+    <meta name="twitter:image" content="https://loamlabbackend.vercel.app/images/hero-bg.jpg">
+    <link rel="canonical" href="https://loamlabbackend.vercel.app">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'w-red': '#DA1E1F',
+                        'w-dark': '#09090b',
+                        'w-bone': '#FBFBFA',
+                        'l-blue': '#4F84D8',
+                        'l-green': '#10b981'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #09090b; color: #FBFBFA; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+        .noise-overlay {
+            position: fixed; inset: 0; opacity: 0.02; mix-blend-mode: screen; pointer-events: none; z-index: 50;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        }
+        .comparison-slider { cursor: ew-resize; user-select: none; touch-action: pan-y; }
+        #mobileMenu { transition: opacity 0.25s ease, transform 0.25s ease; }
+        #mobileMenu.hidden { opacity: 0; transform: translateY(-8px); pointer-events: none; }
+        #mobileMenu.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    </style>
+</head>
+<body class="relative min-h-screen font-sans selection:bg-w-red selection:text-white">
+
+    <div class="noise-overlay"></div>
+
+    <!-- 導航與語系切換 -->
+    <nav class="fixed w-full z-50 px-6 md:px-12 py-6 flex justify-between items-center bg-[#09090b]/80 backdrop-blur-md border-b border-white/5">
+        <a href="#hero" class="flex items-center space-x-3 group cursor-pointer hover:opacity-75 transition-opacity">
+            <svg width="28" height="28" viewBox="0 0 100 100" fill="none">
+                <path d="M 50 50 L 35 78 L 65 78 Z" fill="#DA1E1F"/>
+                <path d="M 5 80 L 35 20 L 65 80" stroke="white" stroke-width="5" stroke-linejoin="miter"/>
+                <path d="M 35 80 L 65 20 L 95 80" stroke="white" stroke-width="5" stroke-linejoin="miter"/>
+                <path d="M 0 80 L 100 80" stroke="white" stroke-width="3"/>
+            </svg>
+            <span class="text-[11px] tracking-[0.2em] font-bold uppercase hidden sm:block">LoamLab Camera</span>
+        </a>
+        
+        <div class="hidden lg:flex space-x-10 text-[10px] tracking-[0.2em] uppercase text-zinc-500">
+            <a href="#vision" class="hover:text-white transition-colors" data-i18n="nav_vision">Vision</a>
+            <a href="#features" class="hover:text-white transition-colors" data-i18n="nav_features">Features</a>
+            <a href="#comparison" class="hover:text-white transition-colors" data-i18n="nav_compare">Compare</a>
+            <a href="#pricing" class="hover:text-white transition-colors" data-i18n="nav_pricing">Pricing</a>
+            <a href="#referral" class="hover:text-white transition-colors" data-i18n="nav_referral">Rewards</a>
+        </div>
+
+        <div class="flex items-center space-x-4">
+            <div class="relative group">
+                <select id="langSelect" onchange="changeLang(this.value)" class="bg-transparent text-[10px] tracking-widest text-zinc-500 hover:text-white transition-colors outline-none cursor-pointer uppercase appearance-none pr-4 font-bold border-none text-right">
+                    <option value="us" class="bg-[#09090b] text-white" selected>US ENGLISH</option>
+                    <option value="tw" class="bg-[#09090b] text-white">TW 繁體中文</option>
+                    <option value="cn" class="bg-[#09090b] text-white">CN 简体中文</option>
+                    <option value="es" class="bg-[#09090b] text-white">ES ESPAÑOL</option>
+                    <option value="br" class="bg-[#09090b] text-white">BR PORTUGUÊS</option>
+                    <option value="jp" class="bg-[#09090b] text-white">JP 日本語</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center text-zinc-500">
+                    <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+            </div>
+
+            <a href="https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.2.5/loamlab_plugin.rbz" class="px-5 py-2 rounded bg-white text-black text-[10px] font-bold tracking-widest uppercase hover:bg-white/80 transition-colors hidden sm:block" data-i18n="nav_login">
+                Get Started
+            </a>
+            <!-- Hamburger (mobile only) -->
+            <button id="menuToggle" onclick="toggleMenu()" class="flex lg:hidden flex-col gap-[5px] p-2 group" aria-label="Menu">
+                <span class="w-5 h-[1.5px] bg-white/70 group-hover:bg-white transition-colors block"></span>
+                <span class="w-5 h-[1.5px] bg-white/70 group-hover:bg-white transition-colors block"></span>
+                <span class="w-5 h-[1.5px] bg-white/70 group-hover:bg-white transition-colors block"></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Mobile Menu Overlay -->
+    <div id="mobileMenu" class="hidden fixed top-[73px] left-0 right-0 z-40 bg-[#09090b]/95 backdrop-blur-xl border-b border-white/10 px-6 py-8 flex flex-col gap-6 lg:hidden">
+        <a href="#vision" onclick="toggleMenu()" class="text-[11px] tracking-[0.3em] uppercase text-zinc-400 hover:text-white transition-colors" data-i18n="nav_vision">Vision</a>
+        <a href="#features" onclick="toggleMenu()" class="text-[11px] tracking-[0.3em] uppercase text-zinc-400 hover:text-white transition-colors" data-i18n="nav_features">Features</a>
+        <a href="#comparison" onclick="toggleMenu()" class="text-[11px] tracking-[0.3em] uppercase text-zinc-400 hover:text-white transition-colors" data-i18n="nav_compare">Compare</a>
+        <a href="#pricing" onclick="toggleMenu()" class="text-[11px] tracking-[0.3em] uppercase text-zinc-400 hover:text-white transition-colors" data-i18n="nav_pricing">Pricing</a>
+        <a href="#referral" onclick="toggleMenu()" class="text-[11px] tracking-[0.3em] uppercase text-zinc-400 hover:text-white transition-colors" data-i18n="nav_referral">Rewards</a>
+        <a href="https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.2.5/loamlab_plugin.rbz" class="mt-2 px-6 py-3 rounded bg-white text-black text-[10px] font-bold tracking-widest uppercase text-center hover:bg-white/80 transition-colors" data-i18n="nav_login">Get Started</a>
+    </div>
+
+    <!-- 1. 首屏 (巨大單位合併 + 背景數據) -->
+    <section id="hero" class="relative w-full min-h-[95vh] flex flex-col justify-center items-center overflow-hidden pt-20">
+        <!-- 真實渲染圖作為背景 -->
+        <div class="absolute inset-0 z-0 pointer-events-none">
+            <div class="absolute inset-0 bg-cover bg-center opacity-15" style="background-image: url('/images/hero-bg.jpg')"></div>
+            <div class="absolute inset-0 bg-gradient-to-b from-[#09090b]/60 via-transparent to-[#09090b]"></div>
+        </div>
+
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0">
+            <div id="bgTicker" class="text-[25vw] font-bold text-white/[0.02] tracking-tighter leading-none w-full text-center" style="transform: translateY(-5%);">
+                89,919
+            </div>
+        </div>
+
+        <div class="relative z-10 text-center px-4 w-full max-w-5xl mx-auto">
+            <p class="text-w-red text-[10px] md:text-xs tracking-[0.4em] uppercase mb-8 font-semibold" data-i18n="hero_subtitle">
+                The New Standard of Rendering
+            </p>
+            
+            <h1 class="text-5xl md:text-7xl lg:text-[100px] font-light tracking-tight mb-8 leading-[1.1] text-white" data-i18n="hero_title">
+                Intuition <br class="md:hidden"/>Ahead of <span class="italic font-normal text-w-red">Computation</span>
+            </h1>
+            
+            <p class="text-base md:text-lg text-zinc-400 max-w-2xl mx-auto mb-16 font-light leading-relaxed" data-i18n="hero_desc">
+                From a 3-hour struggle to a 30-second masterpiece.<br class="hidden md:block">
+                LoamLab Camera is a native SketchUp AI rendering engine that brutally compresses your workflow.
+            </p>
+
+            <div class="flex flex-col sm:flex-row gap-8 justify-center items-center mb-16">
+                <a href="https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.2.5/loamlab_plugin.rbz" class="w-full sm:w-auto px-10 py-4 rounded-full bg-w-red text-white text-[10px] font-bold tracking-[0.2em] uppercase hover:bg-red-600 transition-colors shadow-[0_10px_30px_rgba(218,30,31,0.2)] text-center" data-i18n="btn_download">
+                    Download Free Plugin
+                </a>
+                <div class="hidden sm:block w-[1px] h-10 bg-white/10"></div>
+                
+                <!-- 直覺合一的跳動計時器 -->
+                <div class="flex flex-col items-center sm:items-start">
+                    <div class="flex items-baseline space-x-2">
+                        <span id="fgTicker" class="text-4xl md:text-5xl font-light text-white tracking-widest leading-none">89,919</span>
+                        <span class="text-w-red text-2xl md:text-3xl font-bold tracking-[0.1em]" data-i18n="ticker_unit">HOURS</span>
+                    </div>
+                    <div class="text-[10px] text-zinc-500 tracking-[0.3em] uppercase mt-2 font-bold" data-i18n="ticker_label">
+                        Saved Globally
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-[10px] text-zinc-600 font-mono tracking-widest max-w-md mx-auto" data-i18n="math_calc">
+                * Estimated based on a workflow reduction from 3 hours to 30 seconds.
+            </div>
+        </div>
+
+        <div class="absolute bottom-10 left-1/2 -translate-x-1/2 animate-bounce opacity-30 cursor-pointer" onclick="document.getElementById('vision').scrollIntoView({behavior:'smooth'})">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        </div>
+    </section>
+
+    <!-- 2. 核心願景 (Vision) -->
+    <section id="vision" class="max-w-5xl mx-auto py-32 md:py-40 px-6 border-b border-white/5 flex flex-col items-center text-center">
+        <h2 class="text-3xl md:text-5xl font-light mb-16" data-i18n="vision_title">30 Seconds. Redefine Narrative.</h2>
+        <div class="grid md:grid-cols-3 gap-12 md:gap-16 text-left">
+            <div>
+                <div class="text-w-red text-2xl font-light mb-6">01.</div>
+                <h3 class="text-lg mb-3 tracking-widest" data-i18n="vision_1_h">Seamless Native Workflow</h3>
+                <p class="text-xs font-light text-zinc-500 leading-relaxed" data-i18n="vision_1_p">Fully embedded in SketchUp. No model exports, no external software. Keep your creative flow uninterrupted.</p>
+            </div>
+            <div>
+                <div class="text-w-red text-2xl font-light mb-6">02.</div>
+                <h3 class="text-lg mb-3 tracking-widest" data-i18n="vision_2_h">Cinematic Lighting</h3>
+                <p class="text-xs font-light text-zinc-500 leading-relaxed" data-i18n="vision_2_p">Beyond rigid physics-based raytracing. Our AI models are trained on real photos to add an 'emotional dimension'.</p>
+            </div>
+            <div>
+                <div class="text-w-red text-2xl font-light mb-6">03.</div>
+                <h3 class="text-lg mb-3 tracking-widest" data-i18n="vision_3_h">Bone-China Resolution</h3>
+                <p class="text-xs font-light text-zinc-500 leading-relaxed" data-i18n="vision_3_p">Overcoming standard AI blurriness. Embedded with proprietary ultra-resolution algorithms for crisp 4K outputs.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 3. 使用流程 (How It Works) -->
+    <section id="how" class="max-w-5xl mx-auto py-32 md:py-40 px-6 border-b border-white/5">
+        <div class="text-center mb-20">
+            <p class="text-w-red text-[10px] tracking-[0.4em] uppercase mb-6 font-semibold" data-i18n="how_eyebrow">Quick Start</p>
+            <h2 class="text-3xl md:text-5xl font-light mb-4" data-i18n="how_title">Up and Running in 3 Steps</h2>
+            <p class="text-sm text-zinc-500 font-light" data-i18n="how_sub">No complex setup. Works inside SketchUp directly.</p>
+        </div>
+        <div class="grid md:grid-cols-3 gap-12 md:gap-16 relative">
+            <div class="hidden md:block absolute top-6 left-[16%] right-[16%] h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+            <div class="flex flex-col">
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="w-12 h-12 shrink-0 rounded-full border border-w-red/50 bg-w-red/10 flex items-center justify-center text-w-red text-sm font-bold">01</div>
+                    <h3 class="text-base font-semibold" data-i18n="how_step1_h">Download & Install</h3>
+                </div>
+                <p class="text-xs text-zinc-500 leading-relaxed font-light pl-16" data-i18n="how_step1_p">Download the free .rbz plugin and install via SketchUp › Extension Manager. Compatible with SketchUp 2021+.</p>
+            </div>
+            <div class="flex flex-col">
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="w-12 h-12 shrink-0 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-white text-sm font-bold">02</div>
+                    <h3 class="text-base font-semibold" data-i18n="how_step2_h">Open Your Scene</h3>
+                </div>
+                <p class="text-xs text-zinc-500 leading-relaxed font-light pl-16" data-i18n="how_step2_p">Log in with Google, position your SketchUp camera, choose resolution and style. No exports needed.</p>
+            </div>
+            <div class="flex flex-col">
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="w-12 h-12 shrink-0 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-white text-sm font-bold">03</div>
+                    <h3 class="text-base font-semibold" data-i18n="how_step3_h">Render in 30 Seconds</h3>
+                </div>
+                <p class="text-xs text-zinc-500 leading-relaxed font-light pl-16" data-i18n="how_step3_p">Click Render. Within 30 seconds, a photorealistic AI image is generated and displayed in the panel. Download instantly.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 4. 功能展示 (Features) -->
+    <section id="features" class="max-w-6xl mx-auto py-32 md:py-40 px-6 border-b border-white/5">
+        <div class="text-center mb-20">
+            <h2 class="text-3xl md:text-5xl font-light mb-6" data-i18n="feat_title">What LoamLab Camera Can Do</h2>
+            <p class="text-sm text-zinc-500 font-light" data-i18n="feat_sub">Four powerful tools. One seamless panel.</p>
+        </div>
+        <div id="featuresGrid" class="grid md:grid-cols-2 gap-6"></div>
+    </section>
+
+    <!-- 5. 滑動對比 (Before & After) -->
+    <section id="comparison" class="w-full py-32 md:py-40 px-4 z-10 relative">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl md:text-5xl font-light tracking-tight mb-4" data-i18n="comp_title">1-Click Native Quality.</h2>
+                <p class="text-[9px] md:text-[10px] text-zinc-600 tracking-[0.4em] uppercase" data-i18n="comp_sub">Slide left and right to reveal the magic</p>
+            </div>
+            
+            <div class="relative w-full max-w-6xl mx-auto rounded-2xl p-[1px] bg-gradient-to-b from-white/10 to-transparent shadow-[0_45px_100px_-20px_rgba(0,0,0,1)]">
+                <div id="compareSlider" class="comparison-slider relative w-full h-[50vh] min-h-[400px] md:h-[70vh] rounded-[15px] overflow-hidden bg-black/50">
+                    <div class="absolute inset-0 bg-cover bg-center pointer-events-none opacity-90 transition-opacity" style="background-image: url('/images/before.jpg')"></div>
+                    <div class="absolute top-6 left-6 px-4 py-2 bg-black/60 backdrop-blur rounded text-[10px] md:text-xs tracking-widest uppercase border border-white/10 text-white/50" data-i18n="comp_raw">SketchUp Viewport</div>
+
+                    <div id="afterImage" class="absolute top-0 left-0 bottom-0 bg-cover bg-center border-r-[3px] border-w-red pointer-events-none w-[50%]" style="background-image: url('/images/after.jpg')">
+                        <div class="absolute top-6 left-6 px-4 py-2 bg-w-red text-white rounded text-[10px] md:text-xs tracking-widest uppercase shadow-[0_0_20px_rgba(218,30,31,0.6)]">LoamLab Render</div>
+                    </div>
+
+                    <div id="sliderButton" class="absolute top-1/2 left-1/2 -translate-y-1/2 -translate-x-1/2 w-12 h-16 bg-black/70 backdrop-blur-md rounded-full flex gap-1 items-center justify-center border border-white/20 z-20 hover:border-w-red hover:bg-[#09090b] transition-colors cursor-grab active:cursor-grabbing shadow-xl" style="left: 50%;">
+                        <div class="w-[1px] h-6 bg-white/50"></div>
+                        <div class="w-[1px] h-6 bg-white/50"></div>
+                        <div class="w-[1px] h-6 bg-white/50"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 4. 定價方案 -->
+    <section id="pricing" class="w-full py-32 px-4 max-w-7xl mx-auto z-10 relative">
+        <div class="text-center mb-16">
+            <h2 class="text-3xl md:text-5xl font-light tracking-tight mb-4 uppercase tracking-[0.1em]" data-i18n="pay_title">LOAMLAB PRICING PLANS</h2>
+            <p class="text-sm text-zinc-500 font-light mb-8" data-i18n="pay_subtitle">Choose the optimal plan for your workflow.<br>Subscription points reset monthly (Use it or lose it). Top-up points are permanent.</p>
+            
+            <div class="flex flex-col items-center gap-4">
+                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-l-green/30 bg-l-green/10 text-l-green text-[10px] md:text-xs font-mono font-bold">
+                    🎉 <span data-i18n="pay_badge">BETA Limited Offer — 30% OFF Applied at Checkout</span>
+                </div>
+                <div class="flex flex-col md:flex-row items-center gap-4 text-[10px] tracking-widest text-zinc-500 uppercase mt-4 opacity-70">
+                    <span data-i18n="pay_step1">1. Seamless Checkout</span> 
+                    <span class="hidden md:inline">-</span> 
+                    <span data-i18n="pay_step2">2. Instant Account Setup</span> 
+                    <span class="hidden md:inline">-</span> 
+                    <span class="text-w-bone font-bold" data-i18n="pay_step3">3. Render in SketchUp directly</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="pricingContainer" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
+            <div class="col-span-4 flex justify-center items-center h-48 text-zinc-600 text-sm">
+                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-w-red" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                Deploying Pricing Engines...
+            </div>
+        </div>
+    </section>
+
+    <!-- 5. 邀請裂變 -->
+    <section id="referral" class="max-w-5xl mx-auto py-32 px-6 border-t border-white/5 text-center">
+        <h2 class="text-3xl md:text-5xl font-light mb-6" data-i18n="ref_title">Share Code. Earn Power.</h2>
+        <p class="text-sm text-zinc-500 font-light mb-16 max-w-2xl mx-auto leading-relaxed" data-i18n="ref_desc">We understand the influence of designers. Share your exclusive code with peers. Once they bind their account, both receive permanent bonus credits seamlessly.</p>
+        
+        <div class="flex justify-center items-center gap-16 md:gap-32">
+            <div>
+                <div class="text-5xl text-w-red font-light mb-2">+300</div>
+                <div class="text-[9px] tracking-[0.2em] uppercase text-zinc-500" data-i18n="ref_inviter">You Receive</div>
+            </div>
+            <div class="w-[1px] h-16 bg-white/10 hidden md:block"></div>
+            <div>
+                <div class="text-5xl text-white font-light mb-2">+100</div>
+                <div class="text-[9px] tracking-[0.2em] uppercase text-zinc-500" data-i18n="ref_invitee">Invitee Bonus</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 7. 常見問題 (FAQ) -->
+    <section id="faq" class="max-w-3xl mx-auto py-32 px-6 border-t border-white/5">
+        <div class="text-center mb-16">
+            <h2 class="text-3xl md:text-5xl font-light mb-4" data-i18n="faq_title">Frequently Asked Questions</h2>
+        </div>
+        <div id="faqContainer" class="divide-y divide-white/10"></div>
+    </section>
+
+    <!-- 8. 服務條款 (Terms of Service) -->
+    <section id="terms" class="max-w-3xl mx-auto py-12 px-6 border-t border-white/5">
+        <button onclick="toggleSection('terms-body')" class="w-full flex items-center justify-between text-left group py-4">
+            <div>
+                <h2 class="text-2xl font-light" data-i18n="tos_title">Terms of Service</h2>
+                <p class="text-[10px] text-zinc-600 tracking-widest uppercase mt-2" data-i18n="tos_updated">Last updated: March 2026</p>
+            </div>
+            <svg id="terms-icon" class="shrink-0 w-5 h-5 text-zinc-600 transition-transform duration-300 group-hover:text-zinc-400 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div id="terms-body" style="max-height:0; overflow:hidden; transition:max-height 0.4s ease">
+            <div class="text-xs text-zinc-400 leading-relaxed space-y-6 pt-6 pb-8">
+                <p><strong class="text-white text-sm block mb-1">1. Acceptance of Terms</strong>By downloading, installing, or using LoamLab Camera ("the Plugin"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Plugin.</p>
+                <p><strong class="text-white text-sm block mb-1">2. Description of Service</strong>LoamLab Camera is an AI-powered rendering plugin for SketchUp developed by LoamLab Studio. It captures your 3D scene and generates photorealistic images via a cloud-based AI backend.</p>
+                <p><strong class="text-white text-sm block mb-1">3. Account &amp; Eligibility</strong>You must be 18 years or older. Registration requires a valid Google account. You are responsible for all activity under your account and must not share login credentials.</p>
+                <p><strong class="text-white text-sm block mb-1">4. Credits &amp; Payments</strong>The Plugin uses a point-based credit system. Monthly subscription credits reset at the end of each billing period and do not carry over ("Use it or lose it"). One-time Top-up credits are permanent and never expire. All prices are in USD. Payment is processed by DodoPayments.</p>
+                <p><strong class="text-white text-sm block mb-1">5. Refund Policy</strong>One-time Top-up purchases are eligible for a full refund within 7 days of purchase if fewer than 10 credits have been consumed. Monthly subscriptions are non-refundable once the billing period has started. To request a refund, contact <a href="mailto:loamlabstudio@gmail.com" class="text-w-red hover:underline">loamlabstudio@gmail.com</a>.</p>
+                <p><strong class="text-white text-sm block mb-1">6. Intellectual Property</strong>Images generated using LoamLab Camera are owned by the user who initiated the render. LoamLab Studio retains all rights to the Plugin software, brand assets, and underlying technology.</p>
+                <p><strong class="text-white text-sm block mb-1">7. Termination</strong>LoamLab Studio reserves the right to suspend or terminate accounts that violate these Terms, abuse the service, or attempt unauthorized access to backend systems.</p>
+                <p><strong class="text-white text-sm block mb-1">8. Disclaimer</strong>The service is provided "as is" without warranty of any kind. LoamLab Studio is not liable for any indirect, incidental, or consequential damages arising from use of the Plugin.</p>
+                <p><strong class="text-white text-sm block mb-1">9. Changes to Terms</strong>We may update these Terms at any time. Continued use of the Plugin after changes constitutes acceptance. Users will be notified via in-plugin notice.</p>
+                <p><strong class="text-white text-sm block mb-1">10. Contact</strong>For questions: <a href="mailto:loamlabstudio@gmail.com" class="text-w-red hover:underline">loamlabstudio@gmail.com</a></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 9. 隱私政策 (Privacy Policy) -->
+    <section id="privacy" class="max-w-3xl mx-auto py-12 px-6 border-t border-white/5 mb-8">
+        <button onclick="toggleSection('privacy-body')" class="w-full flex items-center justify-between text-left group py-4">
+            <div>
+                <h2 class="text-2xl font-light" data-i18n="pp_title">Privacy Policy</h2>
+                <p class="text-[10px] text-zinc-600 tracking-widest uppercase mt-2" data-i18n="pp_updated">Last updated: March 2026</p>
+            </div>
+            <svg id="privacy-icon" class="shrink-0 w-5 h-5 text-zinc-600 transition-transform duration-300 group-hover:text-zinc-400 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div id="privacy-body" style="max-height:0; overflow:hidden; transition:max-height 0.4s ease">
+            <div class="text-xs text-zinc-400 leading-relaxed space-y-6 pt-6 pb-8">
+                <p><strong class="text-white text-sm block mb-1">1. Information We Collect</strong>We collect your Google account email and display name at login. We also collect anonymized usage data (renders initiated, errors) and your SketchUp version to improve the service.</p>
+                <p><strong class="text-white text-sm block mb-1">2. How We Use Your Information</strong>Your data is used to manage your account and credit balance, process payments, provide support, and improve product quality. We do not sell your personal data to third parties.</p>
+                <p><strong class="text-white text-sm block mb-1">3. Data Storage</strong>Account data is stored in Supabase (PostgreSQL), hosted on AWS infrastructure in the United States. Scene images submitted for rendering are processed by our AI backend and are not stored long-term.</p>
+                <p><strong class="text-white text-sm block mb-1">4. Third-Party Services</strong>We use: Supabase (database), Vercel (backend hosting), Coze AI (image generation), DodoPayments (payment processing), Google OAuth (authentication). Each has its own privacy policy.</p>
+                <p><strong class="text-white text-sm block mb-1">5. Cookies</strong>We use session cookies solely to maintain your login state. No tracking or advertising cookies are used.</p>
+                <p><strong class="text-white text-sm block mb-1">6. Your Rights</strong>You may request deletion of your account and all associated data at any time by emailing <a href="mailto:loamlabstudio@gmail.com" class="text-w-red hover:underline">loamlabstudio@gmail.com</a>. Requests are processed within 30 days.</p>
+                <p><strong class="text-white text-sm block mb-1">7. Security</strong>We implement industry-standard security measures including HTTPS encryption. No system is 100% secure; please maintain a strong password for your Google account.</p>
+                <p><strong class="text-white text-sm block mb-1">8. Contact</strong>Privacy questions: <a href="mailto:loamlabstudio@gmail.com" class="text-w-red hover:underline">loamlabstudio@gmail.com</a></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 10. Footer -->
+    <footer class="w-full py-16 border-t border-white/5 text-center mt-10">
+        <div class="flex items-center justify-center space-x-3 opacity-30 mb-8 cursor-pointer hover:opacity-100 transition-opacity" onclick="window.scrollTo(0,0)">
+            <svg width="28" height="28" viewBox="0 0 100 100" fill="none">
+                <path d="M 50 50 L 35 78 L 65 78 Z" fill="#DA1E1F"/>
+                <path d="M 5 80 L 35 20 L 65 80" stroke="white" stroke-width="5" stroke-linejoin="miter"/>
+                <path d="M 35 80 L 65 20 L 95 80" stroke="white" stroke-width="5" stroke-linejoin="miter"/>
+                <path d="M 0 80 L 100 80" stroke="white" stroke-width="3"/>
+            </svg>
+            <span class="text-[11px] font-bold tracking-[0.2em] uppercase text-white">LoamLab Camera</span>
+        </div>
+        <div class="text-[10px] tracking-[0.3em] uppercase text-zinc-600 space-x-6 flex justify-center flex-wrap gap-y-2">
+            <a href="#terms" class="hover:text-white transition-colors" data-i18n="foot_terms">Terms</a>
+            <a href="#privacy" class="hover:text-white transition-colors" data-i18n="foot_privacy">Privacy</a>
+            <a href="mailto:loamlabstudio@gmail.com" class="hover:text-white transition-colors" data-i18n="foot_contact">Contact</a>
+            <span>&copy; LoamLab Studio</span>
+        </div>
+    </footer>
+
+    <!-- JS 邏輯區 -->
+    <script>
+        // --- 1. 動態算圖計數器 (高頻持續跳動) ---
+        // === SYNC POINT: hours_saved — driven by /api/stats (real render count from Supabase) ===
+        let baseHours = 0;
+        const bgTicker = document.getElementById('bgTicker');
+        const fgTicker = document.getElementById('fgTicker');
+
+        // Fetch real data from API; start ticker from actual value
+        fetch('/api/stats').then(r => r.json()).then(d => {
+            if (d.hours_saved != null) baseHours = Math.round(d.hours_saved);
+        }).catch(() => {});
+
+        const tickNext = () => {
+            // 小時增長很慢，大部分 tick 不跳，15% 機率 +1
+            if (Math.random() > 0.85) {
+                baseHours += 1;
+                const formatted = baseHours.toLocaleString();
+                bgTicker.innerText = formatted;
+                fgTicker.innerText = formatted;
+            }
+            // 0.8s ~ 4s 不規則節奏
+            setTimeout(tickNext, 800 + Math.random() * 3200);
+        };
+        setTimeout(tickNext, 1500);
+
+        // --- 2. Before/After 滑動邏輯 ---
+        const compSlider = document.getElementById('compareSlider');
+        const compAfter = document.getElementById('afterImage');
+        const compBtn = document.getElementById('sliderButton');
+        let isDown = false;
+        const updateSliderPos = (x) => {
+            let rect = compSlider.getBoundingClientRect();
+            let relativeX = Math.max(0, Math.min(x - rect.left, rect.width));
+            let pct = (relativeX / rect.width) * 100;
+            compAfter.style.width = pct + '%'; compBtn.style.left = pct + '%';
+        };
+        const handleMove = (e) => { if (isDown) updateSliderPos(e.type.includes('touch') ? e.touches[0].clientX : e.clientX); };
+        compSlider.addEventListener('mousedown', (e) => { isDown = true; updateSliderPos(e.clientX); });
+        compSlider.addEventListener('touchstart', (e) => { isDown = true; updateSliderPos(e.touches[0].clientX); });
+        window.addEventListener('mouseup', () => isDown = false); window.addEventListener('touchend', () => isDown = false);
+        window.addEventListener('mousemove', handleMove); window.addEventListener('touchmove', handleMove);
+
+        // --- 3. 動態六國語言與貨幣換算 (US/TW/CN/ES/BR/JP) ---
+        // 預設語言為英文 US
+        let currentLang = 'us'; 
+        
+        // Features list object
+        const FeatText = {
+            t_perm: {tw:"永久有效點數", us:"Permanent Credits", cn:"永久有效点数", es:"Créditos Permanentes", br:"Créditos Permanentes", jp:"永久有効クレジット"},
+            t_mo1: {tw:"每月", us:"Monthly Credits", cn:"每月", es:"Créditos Mensuales", br:"Créditos Mensais", jp:"/月額クレジット"},
+            t_res2: {tw:"支援最高 2K 畫質", us:"Up to 2K Resolution", cn:"最高支持 2K 画质", es:"Resolución hasta 2K", br:"Resolução até 2K", jp:"最大 2K 解像度"},
+            t_res4: {tw:"4K 影院畫質解鎖", us:"4K Resolution Unlocked", cn:"解锁 4K 影院级画质", es:"Resolución 4K Desbloqueada", br:"Resolução 4K Desbloqueada", jp:"4K シネマ画質対応"},
+            t_dev1: {tw:"1 台裝置綁定", us:"1 Device", cn:"1 台设备绑定", es:"1 Dispositivo", br:"1 Dispositivo", jp:"1台のデバイス"},
+            t_dev2: {tw:"2 台裝置同時登入", us:"2 Devices Simultaneously", cn:"2 台设备同时在线", es:"2 Dispositivos Simultáneos", br:"2 Dispositivos Simultaneamente", jp:"同時2台接続"},
+            t_dev5: {tw:"5 台裝置同時登入", us:"5 Devices Simultaneously", cn:"5 台设备同时在线", es:"5 Dispositivos Simultáneos", br:"5 Dispositivos Simultaneamente", jp:"同時5台接続"},
+            t_comF: {tw:"無商業授權", us:"No Commercial Use", cn:"无商业授权", es:"Sin Uso Comercial", br:"Sem Uso Comercial", jp:"商用利用不可"},
+            t_comT: {tw:"企業商業授權許可", us:"Commercial License", cn:"企业商业授权许可", es:"Licencia Comercial", br:"Licença Comercial", jp:"商用利用可能"}
+        };
+
+        const dict = {
+            us: {
+                nav_vision: "Vision", nav_compare: "Compare", nav_pricing: "Plans", nav_referral: "Rewards", nav_login: "Download",
+                hero_subtitle: "The New Standard of Rendering", 
+                hero_title: "Intuition <br class='md:hidden'/>Ahead of <span class='italic font-normal text-w-red'>Computation</span>",
+                hero_desc: "From a 3-hour struggle to a 30-second masterpiece.<br class='hidden md:block'>LoamLab Camera is a native SketchUp AI rendering engine that brutally compresses your workflow.",
+                btn_download: "Download Free Plugin", 
+                ticker_unit: "HOURS", ticker_label: "Saved Globally", math_calc: "* Estimated based on a workflow reduction from 3 hours to 30 seconds.",
+                vision_title: "30 Seconds. Redefine Narrative.", 
+                vision_1_h: "Seamless Native Workflow", vision_1_p: "Fully embedded in SketchUp. No model exports, no external software. Keep your creative flow uninterrupted.",
+                vision_2_h: "Cinematic Lighting", vision_2_p: "Beyond rigid physics-based raytracing. Our AI models are trained on real photos to add an 'emotional dimension'.",
+                vision_3_h: "Bone-China Resolution", vision_3_p: "Overcoming standard AI blurriness. Embedded with proprietary ultra-resolution algorithms for crisp 4K outputs.",
+                comp_title: "1-Click Native Quality.", comp_sub: "Slide left and right to reveal the magic", comp_raw: "SketchUp Viewport",
+                pay_title: "LOAMLAB PRICING PLANS", pay_subtitle: "Choose the optimal plan for your workflow.<br>Subscription points reset monthly. Top-up credits are permanent.",
+                pay_badge: "BETA Limited Offer — 30% OFF Applied at Checkout",
+                pay_step1: "1. Seamless Checkout", pay_step2: "2. Instant Auth", pay_step3: "3. Render in SketchUp directly",
+                ref_title: "Share Code. Earn Power.", ref_desc: "Share your exclusive code with peers. Once they bind their account, both receive permanent bonus credits seamlessly.",
+                ref_inviter: "You Receive", ref_invitee: "Invitee Bonus",
+                foot_terms: "Terms of Service", foot_privacy: "Privacy Policy", foot_contact: "Contact",
+                nav_features: "Features",
+                how_eyebrow: "Quick Start", how_title: "Up and Running in 3 Steps", how_sub: "No complex setup. Works inside SketchUp directly.",
+                how_step1_h: "Download & Install", how_step1_p: "Download the free .rbz plugin and install via SketchUp › Extension Manager. Compatible with SketchUp 2021+.",
+                how_step2_h: "Open Your Scene", how_step2_p: "Log in with Google, position your SketchUp camera, choose resolution and style. No exports needed.",
+                how_step3_h: "Render in 30 Seconds", how_step3_p: "Click Render. Within 30 seconds, a photorealistic AI image is generated and shown in the panel.",
+                feat_title: "What LoamLab Camera Can Do", feat_sub: "Four powerful tools. One seamless panel.",
+                faq_title: "Frequently Asked Questions",
+                tos_title: "Terms of Service", tos_updated: "Last updated: March 2026",
+                pp_title: "Privacy Policy", pp_updated: "Last updated: March 2026"
+            },
+            tw: {
+                nav_vision: "核心組件", nav_compare: "原生對比", nav_pricing: "升級方案", nav_referral: "邀請裂變", nav_login: "立即下載",
+                hero_subtitle: "渲染工具的新標竿", hero_title: "讓直覺，<br class='md:hidden'/>領先於<span class='italic font-normal text-w-red'>算力</span>",
+                hero_desc: "從冗長的的 3 小時等待，跳躍至 30 秒的視覺直出。<br class='hidden md:block'>LoamLab Camera 是直接安裝於 SketchUp 的 AI 渲染引擎，將繁雜工作極限濃縮。",
+                btn_download: "下載首發外掛版 (免費)", 
+                ticker_unit: "小時", ticker_label: "為全球設計師累計節省", math_calc: "* 依照平均每張渲染從 3 小時縮減為 30 秒之粗估值",
+                vision_title: "30 秒，改變設計敘事。", 
+                vision_1_h: "原生無界", vision_1_p: "完全嵌入 SketchUp。無需匯出模型，無需啟動外部軟體。保持您的靈感連續，建構與渲染同步。",
+                vision_2_h: "電影級光影", vision_2_p: "突破傳統光追的死板，AI 模型透過巨量實景訓練，為幾何表面無縫補足人類直覺裡的「情緒維度」。",
+                vision_3_h: "骨瓷級解析", vision_3_p: "搭載團隊專屬的超分辨率重建演算法，解決一般 AI 常見的破圖與模糊，4K 畫質直出不卡頓。",
+                comp_title: "一鍵直達。原生畫質。", comp_sub: "左右滑動以感觸細節差異", comp_raw: "SketchUp 原生界面",
+                pay_title: "LOAMLAB 渲染升級方案", pay_subtitle: "選擇最適合您建築流程的方案。<br>月費點數採 Use it or lose it 機制。單次加值點數則為永久有效。",
+                pay_badge: "公測限時特惠 — 全方案 -30%，結帳自動套用",
+                pay_step1: "1. 快速結帳授權", pay_step2: "2. 帳號即刻啟動綁定", pay_step3: "3. 返回 SketchUp 一鍵出圖",
+                ref_title: "推薦同行，裂變能量。", ref_desc: "我們深知設計師的影響力。取得外掛後分享您的專屬代碼，不論學妹或同事，只要對方綁定體驗，雙方皆可獲得永久配額。",
+                ref_inviter: "邀請人獲得", ref_invitee: "受邀人綁定首贈",
+                foot_terms: "服務條款", foot_privacy: "隱私權政策", foot_contact: "聯繫我們",
+                nav_features: "功能介紹",
+                how_eyebrow: "快速開始", how_title: "3 步驟，立刻上手", how_sub: "無需複雜設定，直接在 SketchUp 內運作。",
+                how_step1_h: "下載並安裝", how_step1_p: "下載免費 .rbz 外掛檔案，透過 SketchUp › 擴充管理員安裝。支援 SketchUp 2021+。",
+                how_step2_h: "打開場景", how_step2_p: "以 Google 帳號登入，調整 SketchUp 鏡頭視角，選擇解析度與風格提示詞。全程不離開 SketchUp。",
+                how_step3_h: "30 秒取得渲染", how_step3_p: "點擊 Render。30 秒內 AI 生成的真實感圖像即顯示於面板中，可立即下載或分享。",
+                feat_title: "LoamLab Camera 能做什麼", feat_sub: "四大強力工具，一個完整面板。",
+                faq_title: "常見問題",
+                tos_title: "服務條款", tos_updated: "最後更新：2026 年 3 月",
+                pp_title: "隱私權政策", pp_updated: "最後更新：2026 年 3 月"
+            },
+            cn: {
+                nav_vision: "核心组件", nav_compare: "原生对比", nav_pricing: "升级方案", nav_referral: "邀请裂变", nav_login: "立即下载",
+                hero_subtitle: "渲染工具的新标杆", hero_title: "让直觉，<br class='md:hidden'/>领先于<span class='italic font-normal text-w-red'>算力</span>",
+                hero_desc: "从冗长的 3 小时等待，跳跃至 30 秒的视觉直出。<br class='hidden md:block'>LoamLab Camera 是直接安装于 SketchUp 的 AI 渲染引擎，将繁杂工作极限浓缩。",
+                btn_download: "下载首发版插件 (免费)", 
+                ticker_unit: "小时", ticker_label: "为全球设计师累计节省", math_calc: "* 依照平均每张渲染从 3 小时缩减为 30 秒之估算值",
+                vision_title: "30 秒，改变设计叙事。", 
+                vision_1_h: "原生无界", vision_1_p: "完全嵌入 SketchUp。无需导出模型，无须启动外部软件。保持您的灵感连续，建构与渲染同步。",
+                vision_2_h: "电影级光影", vision_2_p: "突破传统光追的死板，AI 模型透过海量实景训练，为几何表面无缝补足人类直觉里的「情绪维度」。",
+                vision_3_h: "骨瓷级解析", vision_3_p: "解决一般 AI 算图边缘模糊问题。搭载专属超分辨率重建算法，4K 画质直出不卡顿。",
+                comp_title: "一键直达。原生画质。", comp_sub: "左右滑动感受细节差异", comp_raw: "SketchUp 原生界面",
+                pay_title: "LOAMLAB 渲染升级方案", pay_subtitle: "选择最适合您工作流的方案。<br>月费点数采月底清零机制。单次充值点数永久有效。",
+                pay_badge: "公测限时特惠 — 全方案 -30%，结帐自动抵扣",
+                pay_step1: "1. 快速结帐", pay_step2: "2. 帐号静默绑定", pay_step3: "3. 返回 SketchUp 一键出图",
+                ref_title: "推荐同行，裂变能量。", ref_desc: "取得插件后分享您的专属代码，不拘同事或后辈，只要对方绑定体验成功，双方皆可获得永久点数配额。",
+                ref_inviter: "邀请人获得", ref_invitee: "受邀人绑定首赠",
+                foot_terms: "服务条款", foot_privacy: "隐私政策", foot_contact: "联系我们",
+                nav_features: "功能介绍",
+                how_eyebrow: "快速开始", how_title: "3 步骤，立刻上手", how_sub: "无需复杂设置，直接在 SketchUp 内运行。",
+                how_step1_h: "下载并安装", how_step1_p: "下载免费 .rbz 插件文件，通过 SketchUp › 扩展管理器安装。支持 SketchUp 2021+。",
+                how_step2_h: "打开场景", how_step2_p: "用 Google 账号登录，调整 SketchUp 镜头视角，选择分辨率和风格。全程不离开 SketchUp。",
+                how_step3_h: "30 秒出图", how_step3_p: "点击 Render。30 秒内 AI 生成的真实感图像将显示在面板中，可立即下载。",
+                feat_title: "LoamLab Camera 能做什么", feat_sub: "四大强力工具，一个完整面板。",
+                faq_title: "常见问题",
+                tos_title: "服务条款", tos_updated: "最后更新：2026 年 3 月",
+                pp_title: "隐私政策", pp_updated: "最后更新：2026 年 3 月"
+            },
+            es: {
+                nav_vision: "Visión", nav_compare: "Comparar", nav_pricing: "Planes", nav_referral: "Premios", nav_login: "Descargar",
+                hero_subtitle: "El Nuevo Estándar de Renderizado", hero_title: "Intuición <br class='md:hidden'/>Sobre <span class='italic font-normal text-w-red'>Computación</span>",
+                hero_desc: "De una lucha de 3 horas a una obra maestra en 30 segundos.<br class='hidden md:block'>LoamLab Camera es un motor de renderizado AI nativo de SketchUp.",
+                btn_download: "Descargar Plugin Gratis", 
+                ticker_unit: "HORAS", ticker_label: "Ahorradas Globalmente", math_calc: "* Estimado basado en la reducción de flujo de trabajo de 3 horas a 30 segundos.",
+                vision_title: "Redefine la Narrativa en 30 Segundos.", 
+                vision_1_h: "Flujo de Trabajo Nativo", vision_1_p: "Totalmente integrado en SketchUp. Sin exportaciones, sin software externo. Mantén tu flujo ininterrumpido.",
+                vision_2_h: "Iluminación Cinematográfica", vision_2_p: "Más allá del trazado de rayos. Nuestros modelos de IA añaden una 'dimensión emocional' a la arquitectura.",
+                vision_3_h: "Resolución Nítida 4K", vision_3_p: "Algoritmos propietarios de ultra resolución para salidas nítidas en 4K sin desenfoque.",
+                comp_title: "Calidad Nativa de 1-Clic.", comp_sub: "Desliza para revelar la magia", comp_raw: "Viewport de SketchUp",
+                pay_title: "PLANES DE PRECIOS LOAMLAB", pay_subtitle: "Elige el plan óptimo para ti.<br>Los puntos mensuales se renuevan. Créditos de recarga son permanentes.",
+                pay_badge: "Oferta BETA: -30% aplicado",
+                pay_step1: "1. Pago Seguro", pay_step2: "2. Autenticación Instantánea", pay_step3: "3. Renderiza en SketchUp",
+                ref_title: "Comparte tu Código.", ref_desc: "Comparte tu código con colegas. Una vez que se registren, ambos reciben créditos de bonificación permanentes.",
+                ref_inviter: "Tú Recibes", ref_invitee: "Bono de Invitado",
+                foot_terms: "Términos de Servicio", foot_privacy: "Privacidad", foot_contact: "Contacto",
+                nav_features: "Funciones",
+                how_eyebrow: "Inicio Rápido", how_title: "Listo en 3 Pasos", how_sub: "Sin configuración compleja. Funciona directamente en SketchUp.",
+                how_step1_h: "Descargar e Instalar", how_step1_p: "Descarga el plugin .rbz e instálalo desde SketchUp › Extension Manager. Compatible con SketchUp 2021+.",
+                how_step2_h: "Abre tu Escena", how_step2_p: "Inicia sesión con Google, ajusta tu cámara, elige resolución y estilo. Todo dentro de SketchUp.",
+                how_step3_h: "Render en 30 Segundos", how_step3_p: "Haz clic en Render. En 30 segundos, una imagen fotorrealista aparece en el panel.",
+                feat_title: "Qué Puede Hacer LoamLab Camera", feat_sub: "Cuatro herramientas poderosas. Un panel.",
+                faq_title: "Preguntas Frecuentes",
+                tos_title: "Términos de Servicio", tos_updated: "Última actualización: Marzo 2026",
+                pp_title: "Política de Privacidad", pp_updated: "Última actualización: Marzo 2026"
+            },
+            br: {
+                nav_vision: "Visão", nav_compare: "Comparar", nav_pricing: "Planos", nav_referral: "Prêmios", nav_login: "Baixar",
+                hero_subtitle: "O Novo Padrão de Renderização", hero_title: "Intuição <br class='md:hidden'/>Sobre <span class='italic font-normal text-w-red'>Computação</span>",
+                hero_desc: "De uma luta de 3 horas para uma obra-prima em 30 segundos.<br class='hidden md:block'>LoamLab Camera é um motor de renderização nativo para SketchUp.",
+                btn_download: "Baixar Plugin Grátis", 
+                ticker_unit: "HORAS", ticker_label: "Economizadas Globalmente", math_calc: "* Estimativa de 3 horas reduzidas para 30 segundos por visualização.",
+                vision_title: "Redefina a Narrativa em 30 Segs.", 
+                vision_1_h: "Fluxo de Trabalho Nativo", vision_1_p: "Totalmente incorporado no SketchUp. Não exporte modelos. Mantenha seu fluxo criativo ininterrupto.",
+                vision_2_h: "Iluminação Cinematográfica", vision_2_p: "Nossos modelos de IA adicionam uma 'dimensão emocional' verdadeira à luz e materiais.",
+                vision_3_h: "Resolução Nítida 4K", vision_3_p: "Algoritmos proprietários de ultra-resolução para saídas em 4K nítidas e claras.",
+                comp_title: "Qualidade Nativa em 1-Clique.", comp_sub: "Deslize para ver a mágica", comp_raw: "SketchUp Viewport",
+                pay_title: "PLANOS E PREÇOS LOAMLAB", pay_subtitle: "Escolha o melhor plano para o seu fluxo.<br>Pontos de assinatura são mensais. Créditos de recarga duram para sempre.",
+                pay_badge: "Oferta BETA: -30% OFF automático",
+                pay_step1: "1. Compra Segura", pay_step2: "2. Autorização Instantânea", pay_step3: "3. Criar no SketchUp",
+                ref_title: "Compartilhe o Código.", ref_desc: "Compartilhe o seu código exclusivo. Ambos ganham créditos bônus permanentes sempre que ativam a conta.",
+                ref_inviter: "Você Recebe", ref_invitee: "Bônus do Convidado",
+                foot_terms: "Termos de Uso", foot_privacy: "Privacidade", foot_contact: "Contato",
+                nav_features: "Recursos",
+                how_eyebrow: "Início Rápido", how_title: "Pronto em 3 Passos", how_sub: "Sem configuração complexa. Funciona direto no SketchUp.",
+                how_step1_h: "Baixar e Instalar", how_step1_p: "Baixe o plugin .rbz gratuito e instale via SketchUp › Extension Manager. Compatível com SketchUp 2021+.",
+                how_step2_h: "Abra sua Cena", how_step2_p: "Faça login com Google, posicione sua câmera, escolha resolução e estilo. Tudo dentro do SketchUp.",
+                how_step3_h: "Render em 30 Segundos", how_step3_p: "Clique em Render. Em 30 segundos, uma imagem fotorrealista aparece no painel.",
+                feat_title: "O Que o LoamLab Camera Faz", feat_sub: "Quatro ferramentas poderosas. Um painel.",
+                faq_title: "Perguntas Frequentes",
+                tos_title: "Termos de Serviço", tos_updated: "Última atualização: Março 2026",
+                pp_title: "Política de Privacidade", pp_updated: "Última atualização: Março 2026"
+            },
+            jp: {
+                nav_vision: "ビジョン", nav_compare: "品質比較", nav_pricing: "料金プラン", nav_referral: "リワード", nav_login: "ダウンロード",
+                hero_subtitle: "次世代のレンダリング標準", hero_title: "直感が、<br class='md:hidden'/>計算を<span class='italic font-normal text-w-red'>越える</span>",
+                hero_desc: "3時間の苦闘をたった30秒のマスターピースへ。<br class='hidden md:block'>LoamLab CameraはSketchUp専用のAIレンダリングエンジンです。あなたのインスピレーションを即座に映画品質に。",
+                btn_download: "プラグインのダウンロード", 
+                ticker_unit: "時間 (HOURS)", ticker_label: "世界中で節約された総時間", math_calc: "* 3時間の作業が30秒に短縮された場合の推定値",
+                vision_title: "30秒で、デザインが変わる。", 
+                vision_1_h: "シームレスな体験", vision_1_p: "100% SketchUp 統合。モデルのエクスポートは不要。クリエイティビティを遮りません。",
+                vision_2_h: "シネマティックな光", vision_2_p: "私たちのAIは現実の写真から学習し、建築光に「感情の次元」を追加します。",
+                vision_3_h: "4K 超解像度", vision_3_p: "独自の超解像アルゴリズムにより、AIによくあるぼやけを解消し、シャープな出力。",
+                comp_title: "1クリックで、ネイティブ進化。", comp_sub: "左右にスライドして比較", comp_raw: "SketchUp 原寸画面",
+                pay_title: "LOAMLAB 料金プラン", pay_subtitle: "ワークフローに最適なプランをお選びください。<br>月額プランのポイントは翌月に繰り越しできません。Top-Upクレジットは永久有効です。",
+                pay_badge: "BETA 特別価格 — チェックアウト時に自動 30% オフ",
+                pay_step1: "1. クイック決済", pay_step2: "2. 即時アカウント認証", pay_step3: "3. SU内で即レンダリング",
+                ref_title: "エネルギーを分け合う。", ref_desc: "紹介コードを共有しましょう。同僚が初めてアカウントをバインドした時、両方に永久ボーナスクレジットが付与されます。",
+                ref_inviter: "紹介者のリワード", ref_invitee: "招待された方のボーナス",
+                foot_terms: "利用規約", foot_privacy: "プライバシーポリシー", foot_contact: "お問い合わせ",
+                nav_features: "機能",
+                how_eyebrow: "クイックスタート", how_title: "3ステップで始める", how_sub: "複雑な設定不要。SketchUp 内で直接動作。",
+                how_step1_h: "ダウンロード＆インストール", how_step1_p: "無料の .rbz プラグインをダウンロードし、SketchUp › Extension Manager からインストール。SketchUp 2021+ 対応。",
+                how_step2_h: "シーンを開く", how_step2_p: "Google でログインし、カメラを調整して解像度とスタイルを選択。SketchUp を離れる必要なし。",
+                how_step3_h: "30秒でレンダリング", how_step3_p: "Render をクリック。30秒以内にフォトリアルな AI 画像がパネルに表示されます。",
+                feat_title: "LoamLab Camera でできること", feat_sub: "4つの強力なツール。1つのパネル。",
+                faq_title: "よくある質問",
+                tos_title: "利用規約", tos_updated: "最終更新：2026年3月",
+                pp_title: "プライバシーポリシー", pp_updated: "最終更新：2026年3月"
+            }
+        };
+
+        // === SYNC POINT: Tool status — keep in sync with PRODUCT_PLAN.md ===
+        const FeaturesConfig = [
+            { id: "ai-render", live: true, icon: "✦",
+              title: {us:"AI Render", tw:"AI 渲染", cn:"AI 渲染", es:"AI Render", br:"AI Render", jp:"AI レンダー"},
+              desc: {us:"Photorealistic rendering straight from SketchUp. Choose 1K, 2K, or 4K. Supports material hints: wood, glass, concrete, marble, metal, fabric, leather.",
+                     tw:"直接從 SketchUp 生成真實感渲染圖。支援 1K、2K、4K 解析度。可輸入材質提示詞（木材、玻璃、清水模、大理石等）。",
+                     cn:"直接从 SketchUp 生成真实感渲染图。支持 1K/2K/4K。支持材质提示词（木材、玻璃、清水混凝土等）。",
+                     es:"Render fotorrealista directo desde SketchUp en 1K, 2K o 4K con sugerencias de materiales.",
+                     br:"Render fotorrealista direto do SketchUp em 1K, 2K ou 4K com sugestões de materiais.",
+                     jp:"SketchUp から直接 1K/2K/4K のフォトリアルなレンダリング。素材ヒント対応。"},
+              pts: "15–25 pts / render" },
+            { id: "furniture", live: false, icon: "◈",
+              title: {us:"Furniture Stylist", tw:"傢具替換師", cn:"家具替换", es:"Estilista de Muebles", br:"Estilista de Móveis", jp:"家具スタイリスト"},
+              desc: {us:"Click on any furniture in a rendered image to generate 5 AI-designed style variants. Ideal for rapid client presentations and interior mood exploration.",
+                     tw:"在渲染圖上點擊傢具，AI 自動生成 5 組不同風格替換方案。適合快速客戶提案與室內風格探索。",
+                     cn:"在渲染图上点击家具，AI 自动生成 5 组不同风格替换方案。",
+                     es:"Haz clic en cualquier mueble para generar 5 variantes de estilo con IA.",
+                     br:"Clique em qualquer móvel para gerar 5 variantes de estilo com IA.",
+                     jp:"レンダー画像の家具をクリックして AI が5種類のスタイル案を生成。"},
+              pts: "Coming Soon" },
+            { id: "multiangle", live: false, icon: "⊞",
+              title: {us:"Multi-Angle Shots", tw:"九宮格鏡頭", cn:"九宫格镜头", es:"Tomas Múltiples", br:"Ângulos Múltiplos", jp:"マルチアングル"},
+              desc: {us:"Generate a 3×3 grid of 9 dramatic camera angles in a single click. Styles: Dramatic Tension, Industrial Edge, Soft Natural, Minimal Whitespace.",
+                     tw:"一鍵生成 3×3 九宮格合圖，包含 9 個不同戲劇鏡頭角度。支援：戲劇張力、硬朗工業、柔和自然、極簡留白。",
+                     cn:"一键生成 3×3 九宫格合图，包含 9 个不同风格镜头角度。",
+                     es:"Genera 9 ángulos dramáticos en cuadrícula 3×3 con un clic.",
+                     br:"Gere 9 ângulos dramáticos em grade 3×3 com um clique.",
+                     jp:"1クリックで3×3グリッドの9つのドラマチックな角度を生成。"},
+              pts: "Coming Soon" },
+            { id: "smartcanvas", live: false, icon: "◎",
+              title: {us:"Smart Canvas", tw:"智能語義畫布", cn:"智能语义画布", es:"Lienzo Inteligente", br:"Canvas Inteligente", jp:"スマートキャンバス"},
+              desc: {us:"Select objects in your render and describe changes in natural language. The AI understands spatial context to seamlessly replace, restyle, or remove elements.",
+                     tw:"在渲染圖上選取物件，用自然語言描述替換需求。AI 理解空間語義，無縫替換材質、風格或物件。",
+                     cn:"在渲染图上选取对象，用自然语言描述替换需求。AI 理解空间语义，无缝替换材质或风格。",
+                     es:"Selecciona objetos y describe cambios en lenguaje natural. IA entiende el contexto espacial.",
+                     br:"Selecione objetos e descreva mudanças em linguagem natural com contexto espacial.",
+                     jp:"オブジェクトを選択して自然言語で変更を記述。AIが空間コンテキストを理解します。"},
+              pts: "Coming Soon" }
+        ];
+
+        function renderFeatures() {
+            const grid = document.getElementById('featuresGrid');
+            if (!grid) return;
+            const liveLabel = {us:"✓ Live", tw:"✓ 已上線", cn:"✓ 已上线", es:"✓ En Vivo", br:"✓ Disponível", jp:"✓ 利用可能"};
+            const soonLabel = {us:"Coming Soon", tw:"即將推出", cn:"即将推出", es:"Próximamente", br:"Em Breve", jp:"近日公開"};
+            grid.innerHTML = FeaturesConfig.map(f => `
+                <div class="flex flex-col p-8 rounded-2xl border transition-all ${f.live ? 'border-white/15 bg-white/[0.02] hover:-translate-y-1' : 'border-white/5 bg-transparent hover:border-white/10'}">
+                    <div class="flex items-start justify-between mb-5">
+                        <span class="text-w-red text-2xl font-light">${f.icon}</span>
+                        <span class="px-3 py-1 rounded-full text-[9px] font-bold tracking-widest ${f.live ? 'bg-l-green/15 text-l-green border border-l-green/30' : 'bg-white/5 text-zinc-600 border border-white/10'}">
+                            ${f.live ? (liveLabel[currentLang] || liveLabel.us) : (soonLabel[currentLang] || soonLabel.us)}
+                        </span>
+                    </div>
+                    <h3 class="text-base font-semibold mb-3 ${f.live ? 'text-white' : 'text-zinc-500'}">${f.title[currentLang] || f.title.us}</h3>
+                    <p class="text-xs leading-relaxed font-light flex-grow ${f.live ? 'text-zinc-400' : 'text-zinc-600'}">${f.desc[currentLang] || f.desc.us}</p>
+                    <div class="mt-6 text-[10px] font-mono tracking-widest ${f.live ? 'text-l-green' : 'text-zinc-700'}">${f.pts}</div>
+                </div>
+            `).join('');
+        }
+
+        // === SYNC POINT: FAQ — update answers when policies change ===
+        const FAQConfig = [
+            { q: {us:"What is LoamLab Camera?", tw:"LoamLab Camera 是什麼？", cn:"LoamLab Camera 是什么？", es:"¿Qué es LoamLab Camera?", br:"O que é o LoamLab Camera?", jp:"LoamLab Camera とは？"},
+              a: {us:"LoamLab Camera is an AI-powered rendering plugin for SketchUp. It captures your 3D scene and generates photorealistic images in under 30 seconds using cloud AI — no render farm, no complex setup.",
+                  tw:"LoamLab Camera 是專為 SketchUp 打造的 AI 渲染外掛程式。它捕捉您的 3D 場景，利用雲端 AI 在 30 秒內生成真實感圖像，無需渲染農場或複雜設定。",
+                  cn:"LoamLab Camera 是专为 SketchUp 打造的 AI 渲染插件，利用云端 AI 在 30 秒内生成真实感图像。"} },
+            { q: {us:"Which SketchUp versions are supported?", tw:"支援哪些 SketchUp 版本？", cn:"支持哪些 SketchUp 版本？", es:"¿Qué versiones de SketchUp son compatibles?", br:"Quais versões do SketchUp são suportadas?", jp:"対応 SketchUp バージョンは？"},
+              a: {us:"LoamLab Camera works with SketchUp 2021, 2022, 2023, and 2024 on both Windows and macOS. It requires SketchUp desktop (not the web version) and an active internet connection.",
+                  tw:"支援 SketchUp 2021、2022、2023、2024，Windows 及 macOS 皆可。需使用 SketchUp 桌面版（非網頁版）及穩定網路連線。",
+                  cn:"支持 SketchUp 2021/2022/2023/2024，Windows 和 macOS 均可。需要桌面版（非网页版）和稳定网络连接。"} },
+            { q: {us:"How does the credit system work?", tw:"點數系統如何運作？", cn:"积分系统如何运作？", es:"¿Cómo funciona el sistema de créditos?", br:"Como funciona o sistema de créditos?", jp:"クレジットシステムは？"},
+              a: {us:"Each render consumes credits based on resolution: 1K costs 15 credits, 2K costs 20, and 4K costs 30. Subscription plans provide monthly credits; Top-up purchases give permanent credits that never expire.",
+                  tw:"每次渲染依解析度扣除點數：1K 扣 15 點、2K 扣 20 點、4K 扣 30 點。訂閱方案每月發放點數；單次加值點數永久有效不過期。",
+                  cn:"每次渲染按分辨率扣积分：1K 扣 15 点、2K 扣 20 点、4K 扣 30 点。订阅按月发放；单次充值积分永久有效。"} },
+            { q: {us:"Do subscription credits roll over?", tw:"訂閱點數可以結轉到下月嗎？", cn:"订阅积分可以结转到下个月吗？", es:"¿Los créditos se acumulan?", br:"Os créditos acumulam?", jp:"クレジットは繰り越せますか？"},
+              a: {us:"No. Subscription credits follow a \"Use it or lose it\" policy — they reset at the start of each billing cycle. This ensures stable server performance. Top-up credits, however, are permanent and never expire.",
+                  tw:"不會。訂閱點數採「用完即失」機制，每個計費週期結束後重置。單次加值點數則永久有效，不受此限制。",
+                  cn:"不会。订阅积分采\"用完即失\"机制，每个计费周期结束后重置。单次充值积分永久有效。"} },
+            { q: {us:"Is there a free trial?", tw:"有免費試用嗎？", cn:"有免费试用吗？", es:"¿Hay prueba gratuita?", br:"Há avaliação gratuita?", jp:"無料トライアルはありますか？"},
+              a: {us:"Yes! New users receive 60 free signup bonus credits (enough for 3 renders at 2K quality). During the Beta period, users who accept an invitation receive an additional 100 bonus credits.",
+                  tw:"有！新用戶註冊即獲贈 60 點（足夠 3 張 2K 渲染）。公測期間接受邀請的用戶另獲 100 點獎勵。",
+                  cn:"有！新用户注册即获赠 60 点（够 3 张 2K 渲染）。公测期间接受邀请的用户额外获得 100 点奖励。"} },
+            { q: {us:"Can I get a refund?", tw:"可以申請退款嗎？", cn:"可以申请退款吗？", es:"¿Puedo obtener un reembolso?", br:"Posso obter um reembolso?", jp:"返金できますか？"},
+              a: {us:"One-time Top-up purchases are eligible for a full refund within 7 days if fewer than 10 credits have been consumed. Monthly subscriptions are non-refundable once the billing period starts. Contact loamlabstudio@gmail.com.",
+                  tw:"單次加值購買在 7 天內、且已使用不超過 10 點時可申請全額退款。月費訂閱一旦計費週期開始即不退款。請聯繫 loamlabstudio@gmail.com。",
+                  cn:"单次充值购买在 7 天内、已使用不超过 10 点时可申请全额退款。月费订阅一旦开始计费周期不退款。请联系 loamlabstudio@gmail.com。"} },
+            { q: {us:"How do I contact support?", tw:"如何聯繫客服？", cn:"如何联系客服？", es:"¿Cómo contacto al soporte?", br:"Como contato o suporte?", jp:"サポートへの連絡は？"},
+              a: {us:"Email us at loamlabstudio@gmail.com — we respond within 24–48 business hours. You can also use the in-plugin feedback button to report issues with your render details automatically attached.",
+                  tw:"發送 email 至 loamlabstudio@gmail.com，我們將在 24–48 個工作小時內回覆。也可使用外掛內的回饋按鈕，自動附帶渲染詳情。",
+                  cn:"发送邮件至 loamlabstudio@gmail.com，我们将在 24–48 个工作小时内回复。也可使用插件内的反馈按钮。"} }
+        ];
+
+        function renderFAQ() {
+            const container = document.getElementById('faqContainer');
+            if (!container) return;
+            container.innerHTML = FAQConfig.map((item, i) => `
+                <div class="faq-item">
+                    <button onclick="toggleFAQ(${i})" class="w-full flex items-center justify-between py-5 text-left gap-4 hover:text-white transition-colors group">
+                        <span class="text-sm font-medium text-zinc-300 group-hover:text-white">${item.q[currentLang] || item.q.us}</span>
+                        <svg id="faq-icon-${i}" class="shrink-0 w-4 h-4 text-zinc-600 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                    <div id="faq-body-${i}" class="overflow-hidden" style="max-height:0;transition:max-height 0.3s ease">
+                        <p class="pb-5 text-xs text-zinc-500 leading-relaxed font-light">${item.a[currentLang] || item.a.us}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function toggleFAQ(index) {
+            const body = document.getElementById('faq-body-' + index);
+            const icon = document.getElementById('faq-icon-' + index);
+            const isOpen = body.style.maxHeight !== '0px' && body.style.maxHeight !== '';
+            document.querySelectorAll('[id^="faq-body-"]').forEach(el => { el.style.maxHeight = '0px'; });
+            document.querySelectorAll('[id^="faq-icon-"]').forEach(el => { el.style.transform = ''; });
+            if (!isOpen) { body.style.maxHeight = body.scrollHeight + 'px'; icon.style.transform = 'rotate(180deg)'; }
+        }
+
+        // === SYNC POINT: DodoPayments variant IDs — must match app.js DODO_VARIANTS & webhook.js ===
+        const _DODO = 'https://buy.dodopayments.com/buy';
+
+        const PricingConfig = [
+            { id: "top-up", title: {us:"TOP-UP", tw:"TOP-UP 加值", cn:"TOP-UP 加值", es:"RECARGA", br:"RECARGA", jp:"TOP-UP"}, origPrice: 18, price: 13, per: {"us":"one-time", "tw":"/次", "cn":"/次", "es":"/una vez", "br":"/uma vez", "jp":"/回"}, isPopular: false,
+                exchText: {us:"2K ≈ $1.30", tw:"2K ≈ NT$42", cn:"2K ≈ ¥8.5", es:"2K ≈ €1.20", br:"2K ≈ R$6.50", jp:"2K ≈ ¥195"},
+                feats: [{k:'t_perm', v:"200 ", ok:true}, {k:'t_res2', v:"", ok:true}, {k:'t_dev1', v:"", ok:true}, {k:'t_comF', v:"", ok:false}], btn: {us:"BUY NOW",tw:"BUY NOW",cn:"BUY NOW",es:"COMPRAR",br:"COMPRAR",jp:"購入する"},
+                checkoutUrl: `${_DODO}?variant_id=pdt_0NblIvgNSETSCveL7Xmk`
+            },
+            { id: "starter", title: {us:"STARTER", tw:"STARTER", cn:"STARTER", es:"STARTER", br:"STARTER", jp:"STARTER"}, origPrice: 24, price: 17, per: {"us":"/mo", "tw":"/月", "cn":"/月", "es":"/mes", "br":"/mês", "jp":" /月"}, isPopular: false,
+                exchText: {us:"2K ≈ $1.15", tw:"2K ≈ NT$37", cn:"2K ≈ ¥7.5", es:"2K ≈ €1.05", br:"2K ≈ R$5.80", jp:"2K ≈ ¥170"},
+                feats: [{k:'t_mo1', v:"300 ", ok:true}, {k:'t_res2', v:"", ok:true}, {k:'t_dev1', v:"", ok:true}, {k:'t_comF', v:"", ok:false}], btn: {us:"SUBSCRIBE",tw:"SUBSCRIBE",cn:"SUBSCRIBE",es:"SUSCRIBIRSE",br:"ASSINAR",jp:"サブスクライブ"},
+                checkoutUrl: `${_DODO}?variant_id=pdt_0NblmUvFrwJe36ymTELWV`
+            },
+            { id: "pro", title: {us:"PRO", tw:"PRO", cn:"PRO", es:"PRO", br:"PRO", jp:"PRO"}, origPrice: 52, price: 36, per: {"us":"/mo", "tw":"/月", "cn":"/月", "es":"/mes", "br":"/mês", "jp":" /月"}, isPopular: true,
+                exchText: {us:"2K ≈ $0.36", tw:"2K ≈ NT$12", cn:"2K ≈ ¥2.5", es:"2K ≈ €0.34", br:"2K ≈ R$1.85", jp:"2K ≈ ¥54"},
+                feats: [{k:'t_mo1', v:"2,000 ", ok:true}, {k:'t_res4', v:"", ok:true}, {k:'t_dev2', v:"", ok:true}, {k:'t_comT', v:"", ok:true}], btn: {us:"SUBSCRIBE",tw:"SUBSCRIBE",cn:"SUBSCRIBE",es:"SUSCRIBIRSE",br:"ASSINAR",jp:"サブスクライブ"},
+                checkoutUrl: `${_DODO}?variant_id=pdt_0NblmafncbUuGNrMRvJp4`
+            },
+            { id: "studio", title: {us:"STUDIO", tw:"STUDIO", cn:"STUDIO", es:"ESTUDIO", br:"ESTÚDIO", jp:"STUDIO"}, origPrice: 139, price: 97, per: {"us":"/mo", "tw":"/月", "cn":"/月", "es":"/mes", "br":"/mês", "jp":" /月"}, isPopular: false,
+                exchText: {us:"2K ≈ $0.21", tw:"2K ≈ NT$7", cn:"2K ≈ ¥1.5", es:"2K ≈ €0.20", br:"2K ≈ R$1.10", jp:"2K ≈ ¥30"},
+                feats: [{k:'t_mo1', v:"9,000 ", ok:true}, {k:'t_res4', v:"", ok:true}, {k:'t_dev5', v:"", ok:true}, {k:'t_comT', v:"", ok:true}], btn: {us:"SUBSCRIBE",tw:"SUBSCRIBE",cn:"SUBSCRIBE",es:"SUSCRIBIRSE",br:"ASSINAR",jp:"サブスクライブ"},
+                checkoutUrl: `${_DODO}?variant_id=pdt_0Nblmhwbr5WXfNyDHpaA2`
+            }
+        ];
+
+        function changeLang(langKey) {
+            currentLang = langKey;
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (dict[currentLang][key]) el.innerHTML = dict[currentLang][key]; // 用 innerHTML 支援 <br>
+            });
+            const htmlLangs = {us:'en-US', tw:'zh-TW', cn:'zh-CN', es:'es', br:'pt-BR', jp:'ja'};
+            document.documentElement.lang = htmlLangs[currentLang];
+            renderPricing();
+            renderFeatures();
+            renderFAQ();
+        }
+
+        function renderPricing() {
+            const container = document.getElementById('pricingContainer');
+            container.innerHTML = PricingConfig.map(plan => `
+                <div class="flex flex-col p-8 rounded-2xl border ${plan.isPopular ? 'border-w-red bg-w-red/[0.03] scale-105 shadow-[0_20px_50px_rgba(218,30,31,0.15)] z-10' : 'border-white/10 bg-[#121418]'} text-left relative transition-all duration-300">
+                    ${plan.isPopular ? `<div class="absolute top-0 right-0 bg-w-red text-white text-[9px] px-3 py-1 font-bold tracking-widest uppercase rounded-bl-xl">Most Popular</div>` : ''}
+                    
+                    <div class="text-[14px] tracking-[0.2em] font-bold text-white mb-4 uppercase">${plan.title[currentLang]}</div>
+                    
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-xs text-zinc-500 line-through">$${plan.origPrice}</span>
+                        <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-l-green/20 text-l-green tracking-widest">-30% BETA</span>
+                    </div>
+                    
+                    <div class="text-5xl font-light text-white mb-6">$${plan.price} <span class="text-xs font-normal text-zinc-500">${plan.per[currentLang]}</span></div>
+                    
+                    <ul class="space-y-4 mb-8 flex-grow text-[11px] md:text-xs font-light text-zinc-400">
+                        ${plan.feats.map(f => `
+                            <li class="flex items-center gap-3">
+                                <span class="${f.ok ? 'text-l-green font-bold text-sm' : 'text-zinc-600'}">${f.ok ? '✓' : '×'}</span> 
+                                <span class="${f.ok ? 'text-white' : 'text-zinc-600'}">${f.v}${FeatText[f.k][currentLang]}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                    
+                    <div class="text-[10px] text-l-green mb-6 font-mono font-bold tracking-widest">${plan.exchText[currentLang]}</div>
+                    
+                    <button onclick="window.open('${plan.checkoutUrl}','_blank')" class="w-full py-4 rounded text-[10px] font-bold tracking-[0.2em] uppercase transition-colors cursor-pointer ${plan.isPopular ? 'bg-w-red text-white hover:bg-red-600' : 'bg-white/10 text-white border border-white/5 hover:bg-white hover:text-black'}">
+                        ${plan.btn[currentLang]}
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // Legal section toggle (Terms / Privacy)
+        function toggleSection(id) {
+            const body = document.getElementById(id);
+            const icon = document.getElementById(id.replace('-body', '-icon'));
+            const isOpen = body.style.maxHeight !== '0px' && body.style.maxHeight !== '';
+            if (isOpen) {
+                body.style.maxHeight = '0px';
+                if (icon) icon.style.transform = '';
+            } else {
+                body.style.maxHeight = body.scrollHeight + 'px';
+                if (icon) icon.style.transform = 'rotate(180deg)';
+            }
+        }
+
+        // Mobile menu toggle
+        let menuOpen = false;
+        function toggleMenu() {
+            menuOpen = !menuOpen;
+            const menu = document.getElementById('mobileMenu');
+            menu.classList.toggle('hidden', !menuOpen);
+            menu.classList.toggle('open', menuOpen);
+        }
+        // Close menu on outside click
+        document.addEventListener('click', (e) => {
+            if (menuOpen && !e.target.closest('#mobileMenu') && !e.target.closest('#menuToggle')) {
+                menuOpen = false;
+                const menu = document.getElementById('mobileMenu');
+                menu.classList.add('hidden'); menu.classList.remove('open');
+            }
+        });
+
+        // 初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            changeLang(currentLang); // 強制用 default (us) 刷新整個字典（包含 renderPricing）
+            renderFeatures();
+            renderFAQ();
+            // Slider: force 50% start position (defensive JS init, avoids CSS CDN timing issue)
+            compAfter.style.width = '50%';
+            compBtn.style.left = '50%';
+        });
+    </script>
+</body>
+</html>

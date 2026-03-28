@@ -41,7 +41,7 @@ export default async function handler(req, res) {
             supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('transaction_type', 'RENDER_2K'),
             supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('transaction_type', 'RENDER_4K'),
         ]);
-        const hoursSavedV2 = Math.floor(
+        const hoursSaved = Math.floor(
             (r1k.count ?? 0) * 1.5 +
             (r2k.count ?? 0) * 3 +
             (r4k.count ?? 0) * 5
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
             code: 0,
             status: "healthy",
-            hours_saved_v2: hoursSavedV2,
+            hours_saved: hoursSaved,
             stats: {
                 total_users: totalUsers,
                 total_points_issued: totalPointsIssued,

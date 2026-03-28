@@ -391,15 +391,15 @@
         }).catch(() => {});
 
         const tickNext = () => {
-            // 小時增長很慢，大部分 tick 不跳，15% 機率 +1
-            if (Math.random() > 0.85) {
+            // 50% 機率跳動，讓數字明顯活著但不像機器人
+            if (Math.random() > 0.5) {
                 baseHours += 1;
                 const formatted = baseHours.toLocaleString();
                 bgTicker.innerText = formatted;
                 fgTicker.innerText = formatted;
             }
-            // 0.8s ~ 4s 不規則節奏
-            setTimeout(tickNext, 800 + Math.random() * 3200);
+            // 0.6s ~ 2.5s 不規則節奏，平均約 2.6s 跳一次
+            setTimeout(tickNext, 600 + Math.random() * 1900);
         };
         setTimeout(tickNext, 1500);
 

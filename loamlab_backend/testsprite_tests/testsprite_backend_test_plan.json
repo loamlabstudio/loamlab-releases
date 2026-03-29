@@ -1,0 +1,72 @@
+[
+  {
+    "id": "TC001",
+    "title": "post api render with sufficient points",
+    "description": "Test the POST /api/render endpoint with a user having sufficient points. Verify that the render request is accepted, points are deducted, a job_id and signed_upload_url are returned, and the rendering workflow completes successfully with a final image URL."
+  },
+  {
+    "id": "TC002",
+    "title": "post api render with insufficient points",
+    "description": "Test the POST /api/render endpoint with a user having insufficient points. Verify that the request is rejected with a 402 status and an insufficient_credits error."
+  },
+  {
+    "id": "TC003",
+    "title": "get api user with existing user",
+    "description": "Test the GET /api/user endpoint with an existing user email and valid X-User-Email header. Verify that the response returns 200 with user points, lifetime points, referral code, and inviter id."
+  },
+  {
+    "id": "TC004",
+    "title": "get api user with new user registration",
+    "description": "Test the GET /api/user endpoint with a new user email and valid X-User-Email header. Verify that the user is automatically registered, and the response returns 201 with default points and account details."
+  },
+  {
+    "id": "TC005",
+    "title": "get api user missing x user email header",
+    "description": "Test the GET /api/user endpoint without the X-User-Email header. Verify that the response returns 400 with a missing_header error."
+  },
+  {
+    "id": "TC006",
+    "title": "post api webhook with valid signature and new event",
+    "description": "Test the POST /api/webhook endpoint with a valid HMAC signature and a new payment event. Verify that the event is processed, points are credited to the user based on variant_id, the transaction is recorded, and a 200 acknowledgment is returned."
+  },
+  {
+    "id": "TC007",
+    "title": "post api webhook with invalid signature",
+    "description": "Test the POST /api/webhook endpoint with an invalid HMAC signature. Verify that the request is rejected with a 401 signature_invalid error."
+  },
+  {
+    "id": "TC008",
+    "title": "post api webhook with duplicate event id",
+    "description": "Test the POST /api/webhook endpoint with a valid signature but a duplicate event id that has already been processed. Verify that the request is idempotently handled and a 200 no-op response is returned."
+  },
+  {
+    "id": "TC_MW_001",
+    "title": "get api stats health check",
+    "description": "Test GET /api/stats returns code=0, hours_saved >= 89919, and stats object with total_users and total_points_issued."
+  },
+  {
+    "id": "TC_MW_002",
+    "title": "marketing page email correctness",
+    "description": "Verify the marketing page HTML does not contain old placeholder 'support@loamlab.studio' and contains new Gmail address 'loamlabstudio@gmail.com' at least 7 times."
+  },
+  {
+    "id": "TC_MW_003",
+    "title": "faq new user credits 60",
+    "description": "Verify the marketing page FAQ contains correct 60-credit new user bonus text in English, Traditional Chinese, and Simplified Chinese."
+  },
+  {
+    "id": "TC_MW_004",
+    "title": "faq 4k credits 30",
+    "description": "Verify the marketing page FAQ shows 4K costs 30 credits (not the old 25) in all three languages, and the old wrong value is absent."
+  },
+  {
+    "id": "TC_MW_005",
+    "title": "tos section collapsed by default",
+    "description": "Verify the Terms of Service section (id=terms-body) has max-height:0 inline style on page load, confirming it renders collapsed by default."
+  },
+  {
+    "id": "TC_MW_006",
+    "title": "privacy section collapsed by default",
+    "description": "Verify the Privacy Policy section (id=privacy-body) has max-height:0 inline style on page load, confirming it renders collapsed by default."
+  }
+]

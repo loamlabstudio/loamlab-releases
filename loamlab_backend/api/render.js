@@ -75,7 +75,7 @@ export default async function handler(req, res) {
     // 2. 查詢帳戶點數與方案等級
     let { data: user, error: dbErr } = await supabase
         .from('users')
-        .select('points, lifetime_points, referred_by, referral_rewarded, subscription_plan')
+        .select('points, lifetime_points, subscription_plan')
         .eq('email', userEmail)
         .single();
 
@@ -182,11 +182,12 @@ export default async function handler(req, res) {
         }
     }
 
-    // 5-A. 工具 2（家具風格替換）→ Supabase Storage 上傳兩圖 → Coze FURNITURE_WORKFLOW_ID
+    // 5-A. 工具 2 → Coze Universal_Image_Editor (SMART_CANVAS_WORKFLOW_ID)
     if (activeTool === 2) {
         let tempBase = null, tempRef = null;
+        const tempRefImages = [];
         const cleanTemp2 = async () => {
-            const paths = [tempBase, tempRef].filter(Boolean);
+            const paths = [tempBase, tempRef, ...tempRefImages].filter(Boolean);
             if (paths.length && supabaseAdmin) {
                 try { await supabaseAdmin.storage.from('render-temp').remove(paths); } catch(e) {}
             }
@@ -194,11 +195,36 @@ export default async function handler(req, res) {
         try {
             const baseImageB64 = userPayload.parameters?.base_image;
             const baseImageUrl = userPayload.parameters?.base_image_url || '';
-            const originalImageUrl = userPayload.parameters?.original_image_url || '';
+            const originalImageB64 = userPayload.parameters?.original_image_b64;
+            let originalImageUrl = userPayload.parameters?.original_image_url || '';
             const userPrompt   = (userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '').trim();
             if (!baseImageB64 && !baseImageUrl) throw new Error('base_image 未提供');
 
-            // 底圖：優先用遠端 URL，否則上傳 base64（Supabase 優先，fallback freeimage.host）
+            // 原始底圖：若前端傳來 base64（本地檔案路徑無法被 AtlasCloud 訪問），上傳取得公開 URL
+            if (originalImageB64 && !originalImageUrl) {
+                const cleanOrig = originalImageB64.replace(/^data:image\/\w+;base64,/, '');
+                if (supabaseAdmin) {
+                    await supabaseAdmin.storage.createBucket('render-temp', { public: false }).catch(() => {});
+                    const origName = `tmp/${Date.now()}_orig_${Math.random().toString(36).slice(2)}.jpg`;
+                    const { error: upOrig } = await supabaseAdmin.storage.from('render-temp').upload(origName, Buffer.from(cleanOrig, 'base64'), { contentType: 'image/jpeg' });
+                    if (!upOrig) {
+                        tempRef = origName;
+                        const { data: origSign } = await supabaseAdmin.storage.from('render-temp').createSignedUrl(origName, 3600);
+                        if (origSign?.signedUrl) originalImageUrl = origSign.signedUrl;
+                    }
+                }
+                if (!originalImageUrl) {
+                    const form = new FormData();
+                    form.append('key', '6d207e02198a847aa98d0a2a901485a5');
+                    form.append('action', 'upload'); form.append('source', cleanOrig); form.append('format', 'json');
+                    const r = await fetch('https://freeimage.host/api/1/upload', { method: 'POST', body: form });
+                    const d = await r.json();
+                    if (d.status_code === 200 && d.image?.url) originalImageUrl = d.image.url;
+                }
+                if (!originalImageUrl) throw new Error('原始底圖上傳失敗');
+            }
+
+            // 合成疊加圖：優先用遠端 URL，否則上傳 base64（Supabase 優先，fallback freeimage.host）
             let baseForCoze = baseImageUrl;
             if (baseImageB64) {
                 const cleanB64 = baseImageB64.replace(/^data:image\/\w+;base64,/, '');
@@ -236,26 +262,69 @@ export default async function handler(req, res) {
                 }
             }
 
+            // 上傳用戶的參考圖（image-mode region）— 對應 prompt 中的 "image 3, 4..." 索引
+            const refImagesB64 = (userPayload.parameters?.ref_images || []).filter(Boolean);
+            console.log('[Tool2] ref_images received:', refImagesB64.length, refImagesB64.map(b => b?.slice(0, 30)));
+            const refImageUrls = [];
+            for (const b64 of refImagesB64) {
+                const clean = b64.replace(/^data:image\/\w+;base64,/, '');
+                let url = '';
+                if (supabaseAdmin) {
+                    await supabaseAdmin.storage.createBucket('render-temp', { public: false }).catch(() => {});
+                    const fname = `tmp/${Date.now()}_ref_${Math.random().toString(36).slice(2)}.jpg`;
+                    const { error: upRef } = await supabaseAdmin.storage.from('render-temp').upload(fname, Buffer.from(clean, 'base64'), { contentType: 'image/jpeg' });
+                    if (!upRef) {
+                        tempRefImages.push(fname);
+                        const { data: s } = await supabaseAdmin.storage.from('render-temp').createSignedUrl(fname, 3600);
+                        if (s?.signedUrl) url = s.signedUrl;
+                    }
+                }
+                if (!url) {
+                    try {
+                        const form = new FormData();
+                        form.append('key', '6d207e02198a847aa98d0a2a901485a5');
+                        form.append('action', 'upload'); form.append('source', clean); form.append('format', 'json');
+                        const r = await fetch('https://freeimage.host/api/1/upload', { method: 'POST', body: form });
+                        const d = await r.json();
+                        if (d.status_code === 200 && d.image?.url) url = d.image.url;
+                    } catch (_) {}
+                }
+                if (url) refImageUrls.push(url);
+            }
+
             // 呼叫 Coze Universal_Image_Editor（統一使用 SMART_CANVAS_WORKFLOW_ID）
+            const SMART_CANVAS_SPACE_ID = process.env.SMART_CANVAS_SPACE_ID || '7612576046118010896';
+            // image 1=original（模型主要編輯目標）, image 2=composite（定位指引）, image 3+=用戶參考圖
+            const cozeImages = [originalImageUrl, baseForCoze, ...refImageUrls].filter(Boolean);
+            const cozePayload = {
+                workflow_id: SMART_CANVAS_WORKFLOW_ID,
+                space_id: SMART_CANVAS_SPACE_ID,
+                // prompt = color codes only (e.g. "#ff6432: replace sofa; #00b4d8: wood floor")
+                // Coze Code node wraps with default_prompt template
+                parameters: { image: cozeImages, prompt: userPrompt, user_prompt: userPrompt, resolution: resVal || '2k', aspect_ratio: '16:9', reference_image_url: originalImageUrl }
+            };
+            console.log('[Tool2] Coze payload:', JSON.stringify({ ...cozePayload, parameters: { ...cozePayload.parameters, image: cozeImages.map(u => u.slice(0, 80)) } }));
+
             const cozeRes = await fetch('https://api.coze.com/v1/workflow/stream_run', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${COZE_PAT}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    workflow_id: SMART_CANVAS_WORKFLOW_ID,
-                    parameters: { image: [originalImageUrl, baseForCoze].filter(Boolean), prompt: userPrompt, resolution: resVal || '2k' }
-                })
+                body: JSON.stringify(cozePayload),
+                signal: AbortSignal.timeout(240000)  // 4 分鐘，比 Vercel maxDuration 提前結束
             });
-            if (!cozeRes.ok) throw new Error(`Coze Error: ${cozeRes.status}`);
+            if (!cozeRes.ok) {
+                const errBody = await cozeRes.text().catch(() => '');
+                throw new Error(`Coze HTTP ${cozeRes.status}: ${errBody.slice(0, 300)}`);
+            }
 
             let sseText = '';
             for await (const chunk of cozeRes.body) sseText += Buffer.from(chunk).toString('utf8');
+            console.log('[Tool2] SSE full:', sseText);
             const finalUrl = parseUrlFromSse(sseText);
 
             await cleanTemp2();
             if (finalUrl) {
                 return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: monthlyPoints + lifetimePoints, transaction_id: transactionId });
             } else {
-                console.error('[Tool2] parseUrlFromSse failed. SSE preview:', sseText.slice(0, 600));
                 await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
                 return res.status(500).json({ code: -1, msg: '算圖完成但未收到圖片 URL', points_refunded: true });
             }
@@ -290,35 +359,8 @@ export default async function handler(req, res) {
 
         const finalUrl = parseUrlFromSse(sseText);
         if (finalUrl) {
-            // Referral 首次算圖獎勵：B +100 / A +300，發放後設 referral_rewarded = true 防重複
-            let referralBonusB = 0;
-            try {
-                if (user.referred_by && user.referral_rewarded === false) {
-                    const REWARD_B = PRICING_CONFIG.referral.free_reward_b;  // B 算圖成功加點
-                    const REWARD_A = PRICING_CONFIG.referral.free_reward_a;  // A 推薦成功加點
-                    await supabase.from('users')
-                        .update({ lifetime_points: lifetimePoints + REWARD_B, referral_rewarded: true })
-                        .eq('email', userEmail);
-                    referralBonusB = REWARD_B;
-                    const { data: inviter } = await supabase.from('users')
-                        .select('lifetime_points').eq('email', user.referred_by).single();
-                    if (inviter) {
-                        await supabase.from('users')
-                            .update({ lifetime_points: (inviter.lifetime_points || 0) + REWARD_A })
-                            .eq('email', user.referred_by);
-                    }
-                    try {
-                        await supabase.from('transactions').insert([
-                            { user_email: userEmail, amount: REWARD_B, transaction_type: 'REFERRAL_REWARD_B' },
-                            { user_email: user.referred_by, amount: REWARD_A, transaction_type: 'REFERRAL_REWARD_A' }
-                        ]);
-                    } catch(e) {}
-                }
-            } catch (refErr) {
-                console.warn('[Referral] 獎勵發放失敗（不影響渲染結果）:', refErr.message);
-            }
             await cleanTemp();
-            return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: monthlyPoints + lifetimePoints + referralBonusB, transaction_id: transactionId });
+            return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: monthlyPoints + lifetimePoints, transaction_id: transactionId });
         } else {
             await cleanTemp();
             await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);

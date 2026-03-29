@@ -25,18 +25,18 @@ export default async function handler(req, res) {
 
         if (sigDodo) {
             // --- 處理 Dodo Payments Webhook ---
-            if (!verifySignature(rawBody, sigDodo, WEB_SECRET_DODO)) {
+            if (!verifyDodoSignature(rawBody, req.headers, WEB_SECRET_DODO)) {
                 return res.status(401).json({ error: 'Invalid Dodo Signature' });
             }
             const event = JSON.parse(rawBody.toString());
             console.log('[Dodo] Event received:', event.type);
-            
+
             if (event.type === 'payment.succeeded' || event.type === 'subscription.active') {
                 const data = event.data;
                 const customerEmail = data.customer?.email;
-                // Dodo 的商品 ID 在 product_cart 的第一項，或是直接在 data.variant_id
-                const variantId = data.product_cart?.[0]?.variant_id || data.variant_id;
-                const orderId = data.transaction_id || data.order_id || data.subscription_id;
+                // Dodo 的商品 ID 在 product_cart[0].product_id，或直接在 data.product_id
+                const variantId = data.product_cart?.[0]?.product_id || data.product_id;
+                const orderId = data.payment_id || data.subscription_id;
                 
                 if (customerEmail && variantId) {
                     await processTopup(customerEmail, variantId, orderId, 'DODO');
@@ -85,11 +85,11 @@ async function processTopup(customerEmail, variantId, orderId, platform) {
     // 這裡建議未來將 ID 移入環境變數或資料庫，目前保留寫死以匹配原有邏輯
     const IDS = {
         LS: { TOPUP: 1432023, STARTER: 1432194, PRO: 1432198, STUDIO: 1432205 },
-        DODO: { 
-            TOPUP: parseInt(process.env.DODO_VARIANT_TOPUP) || 0,
-            STARTER: parseInt(process.env.DODO_VARIANT_STARTER) || 0,
-            PRO: parseInt(process.env.DODO_VARIANT_PRO) || 0,
-            STUDIO: parseInt(process.env.DODO_VARIANT_STUDIO) || 0
+        DODO: {
+            TOPUP: 'pdt_0NblIvgNSETSCveL7Xmk',
+            STARTER: 'pdt_0NblmUvFrwJe36ymTELWV',
+            PRO: 'pdt_0NblmafncbUuGNrMRvJp4',
+            STUDIO: 'pdt_0Nblmhwbr5WXfNyDHpaA2'
         }
     };
 
@@ -108,17 +108,20 @@ async function processTopup(customerEmail, variantId, orderId, platform) {
     const { data: user } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
 
     if (user) {
-        // 推薦分銷邏輯 (Paid Referral)
+        // 推薦分銷邏輯 (Paid Referral)：B 首次付費 → A +300、B +100（固定）
         let bonusB = 0;
         if (user.referred_by) {
             const { data: txPaid } = await supabase.from('transactions').select('id').eq('user_email', customerEmail).eq('transaction_type', 'REFERRAL_PAID_B').maybeSingle();
             if (!txPaid) {
-                const REWARD_A = Math.floor(pointsToAdd * PRICING_CONFIG.referral.paid_reward_percent_a);
-                const REWARD_B = Math.floor(pointsToAdd * PRICING_CONFIG.referral.paid_reward_percent_b);
+                const REWARD_A = PRICING_CONFIG.referral.paid_reward_a;
+                const REWARD_B = PRICING_CONFIG.referral.paid_reward_b;
                 bonusB = REWARD_B;
-                const { data: inviter } = await supabase.from('users').select('lifetime_points').eq('email', user.referred_by).single();
+                const { data: inviter } = await supabase.from('users').select('lifetime_points, referral_success_count').eq('email', user.referred_by).single();
                 if (inviter) {
-                    await supabase.from('users').update({ lifetime_points: (inviter.lifetime_points || 0) + REWARD_A }).eq('email', user.referred_by);
+                    await supabase.from('users').update({
+                        lifetime_points: (inviter.lifetime_points || 0) + REWARD_A,
+                        referral_success_count: (inviter.referral_success_count || 0) + 1
+                    }).eq('email', user.referred_by);
                     await supabase.from('transactions').insert([
                         { user_email: user.referred_by, amount: REWARD_A, transaction_type: 'REFERRAL_PAID_A', order_id: `refA_${fullOrderId}` },
                         { user_email: customerEmail, amount: REWARD_B, transaction_type: 'REFERRAL_PAID_B', order_id: `refB_${fullOrderId}` }
@@ -165,6 +168,21 @@ function verifySignature(rawBody, signature, secret) {
     const hmac = crypto.createHmac('sha256', secret);
     const digest = hmac.update(rawBody).digest('hex');
     return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(signature));
+}
+
+// Dodo Payments 使用 Standard Webhooks 規範：簽署內容 = webhook-id.webhook-timestamp.body
+function verifyDodoSignature(rawBody, headers, secret) {
+    const msgId = headers['webhook-id'];
+    const msgTimestamp = headers['webhook-timestamp'];
+    const sigHeader = headers['webhook-signature'];
+    if (!msgId || !msgTimestamp || !sigHeader || !secret) return false;
+    const signedContent = `${msgId}.${msgTimestamp}.${rawBody.toString()}`;
+    const secretBytes = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+    const hmac = crypto.createHmac('sha256', secretBytes);
+    const digest = hmac.update(signedContent).digest('base64');
+    // sigHeader 可能含多個簽名，格式為 "v1,base64sig v1,base64sig2"
+    const signatures = sigHeader.split(' ').map(s => s.split(',')[1]).filter(Boolean);
+    return signatures.some(sig => sig === digest);
 }
 
 async function getRawBody(req) {

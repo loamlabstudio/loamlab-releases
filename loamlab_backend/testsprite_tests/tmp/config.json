@@ -1,0 +1,18 @@
+{
+  "status": "init",
+  "scope": "codebase",
+  "type": "backend",
+  "localEndpoint": "http://localhost:3000/",
+  "serverPort": 64351,
+  "executionArgs": {
+    "projectName": "loamlab_backend_unified",
+    "projectPath": "c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend",
+    "testIds": [],
+    "additionalInstruction": "",
+    "serverMode": "development",
+    "envs": {
+      "API_KEY": "sk-user-ujxtUaGbBUeHbugZyYmP-iHqRvLXvAac2PGF1lYJv4ahjblij1VZd8hDI60rWwipV7HOZSIIaQfY3LqUkf8c_WXW07mN_ZEiBOHb2Uv4EIxB6Lccq-Jst1d5X-qp_L-bcbg"
+    }
+  },
+  "proxy": "http://d061a220-0ae5-4707-b18d-c2c3581b7b57:MCrFDMtmzCdZGwbPeCZ92Y4br8hozrFt@tun.testsprite.com:8080"
+}

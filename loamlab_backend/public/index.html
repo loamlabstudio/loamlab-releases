@@ -6,15 +6,15 @@
     <title>LoamLab Camera | AI Renderer for SketchUp</title>
     <meta name="description" content="LoamLab Camera — AI rendering plugin for SketchUp. Photorealistic results in 30 seconds. 1K/2K/4K resolution. Free to download.">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://loamlabbackend.vercel.app">
+    <meta property="og:url" content="https://loamlab-camera.vercel.app">
     <meta property="og:title" content="LoamLab Camera | AI Renderer for SketchUp">
     <meta property="og:description" content="From SketchUp model to photorealistic render in 30 seconds. Native plugin, no exports needed.">
-    <meta property="og:image" content="https://loamlabbackend.vercel.app/images/hero-bg.jpg">
+    <meta property="og:image" content="https://loamlab-camera.vercel.app/images/hero-bg.jpg">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="LoamLab Camera | AI Renderer for SketchUp">
     <meta name="twitter:description" content="From SketchUp model to photorealistic render in 30 seconds.">
-    <meta name="twitter:image" content="https://loamlabbackend.vercel.app/images/hero-bg.jpg">
-    <link rel="canonical" href="https://loamlabbackend.vercel.app">
+    <meta name="twitter:image" content="https://loamlab-camera.vercel.app/images/hero-bg.jpg">
+    <link rel="canonical" href="https://loamlab-camera.vercel.app">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script>
@@ -87,7 +87,7 @@
                 </div>
             </div>
 
-            <a href="https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.2.5/loamlab_plugin.rbz" class="px-5 py-2 rounded bg-white text-black text-[10px] font-bold tracking-widest uppercase hover:bg-white/80 transition-colors hidden sm:block" data-i18n="nav_login">
+            <a href="https://github.com/loamlabstudio/loamlab-releases/releases/latest/download/loamlab_plugin.rbz" class="px-5 py-2 rounded bg-white text-black text-[10px] font-bold tracking-widest uppercase hover:bg-white/80 transition-colors hidden sm:block" data-i18n="nav_login">
                 Get Started
             </a>
             <!-- Hamburger (mobile only) -->
@@ -106,7 +106,7 @@
         <a href="#comparison" onclick="toggleMenu()" class="text-[11px] tracking-[0.3em] uppercase text-zinc-400 hover:text-white transition-colors" data-i18n="nav_compare">Compare</a>
         <a href="#pricing" onclick="toggleMenu()" class="text-[11px] tracking-[0.3em] uppercase text-zinc-400 hover:text-white transition-colors" data-i18n="nav_pricing">Pricing</a>
         <a href="#referral" onclick="toggleMenu()" class="text-[11px] tracking-[0.3em] uppercase text-zinc-400 hover:text-white transition-colors" data-i18n="nav_referral">Rewards</a>
-        <a href="https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.2.5/loamlab_plugin.rbz" class="mt-2 px-6 py-3 rounded bg-white text-black text-[10px] font-bold tracking-widest uppercase text-center hover:bg-white/80 transition-colors" data-i18n="nav_login">Get Started</a>
+        <a href="https://github.com/loamlabstudio/loamlab-releases/releases/latest/download/loamlab_plugin.rbz" class="mt-2 px-6 py-3 rounded bg-white text-black text-[10px] font-bold tracking-widest uppercase text-center hover:bg-white/80 transition-colors" data-i18n="nav_login">Get Started</a>
     </div>
 
     <!-- 1. 首屏 (巨大單位合併 + 背景數據) -->
@@ -118,9 +118,7 @@
         </div>
 
         <div class="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0">
-            <div id="bgTicker" class="text-[25vw] font-bold text-white/[0.02] tracking-tighter leading-none w-full text-center" style="transform: translateY(-5%);">
-                89,919
-            </div>
+            <div id="bgTicker" class="text-[25vw] font-bold text-white/[0.07] tracking-tighter leading-none w-full text-center" style="transform: translateY(-5%); -webkit-mask-image: radial-gradient(ellipse 65% 65% at center, black 20%, transparent 75%); mask-image: radial-gradient(ellipse 65% 65% at center, black 20%, transparent 75%); text-shadow: 0 0 150px rgba(218,30,31,0.12);"></div>
         </div>
 
         <div class="relative z-10 text-center px-4 w-full max-w-5xl mx-auto">
@@ -138,7 +136,7 @@
             </p>
 
             <div class="flex flex-col sm:flex-row gap-8 justify-center items-center mb-16">
-                <a href="https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.2.5/loamlab_plugin.rbz" class="w-full sm:w-auto px-10 py-4 rounded-full bg-w-red text-white text-[10px] font-bold tracking-[0.2em] uppercase hover:bg-red-600 transition-colors shadow-[0_10px_30px_rgba(218,30,31,0.2)] text-center" data-i18n="btn_download">
+                <a href="https://github.com/loamlabstudio/loamlab-releases/releases/latest/download/loamlab_plugin.rbz" class="w-full sm:w-auto px-10 py-4 rounded-full bg-w-red text-white text-[10px] font-bold tracking-[0.2em] uppercase hover:bg-red-600 transition-colors shadow-[0_10px_30px_rgba(218,30,31,0.2)] text-center" data-i18n="btn_download">
                     Download Free Plugin
                 </a>
                 <div class="hidden sm:block w-[1px] h-10 bg-white/10"></div>
@@ -146,7 +144,7 @@
                 <!-- 直覺合一的跳動計時器 -->
                 <div class="flex flex-col items-center sm:items-start">
                     <div class="flex items-baseline space-x-2">
-                        <span id="fgTicker" class="text-4xl md:text-5xl font-light text-white tracking-widest leading-none">89,919</span>
+                        <span id="fgTicker" class="text-4xl md:text-5xl font-light text-white tracking-widest leading-none" style="opacity:0">0</span>
                         <span class="text-w-red text-2xl md:text-3xl font-bold tracking-[0.1em]" data-i18n="ticker_unit">HOURS</span>
                     </div>
                     <div class="text-[10px] text-zinc-500 tracking-[0.3em] uppercase mt-2 font-bold" data-i18n="ticker_label">
@@ -387,8 +385,13 @@
 
         // Fetch real data from API; start ticker from actual value
         fetch('/api/stats').then(r => r.json()).then(d => {
-            if (d.hours_saved != null) baseHours = Math.round(d.hours_saved);
-        }).catch(() => {});
+            if (d.hours_saved != null) {
+                baseHours = Math.round(d.hours_saved);
+                const formatted = baseHours.toLocaleString();
+                bgTicker.innerText = formatted;
+                fgTicker.innerText = formatted;
+            }
+        }).catch(() => {}).finally(() => { fgTicker.style.opacity = '1'; });
 
         const tickNext = () => {
             // 50% 機率跳動，讓數字明顯活著但不像機器人
@@ -603,7 +606,7 @@
             }
         };
 
-        // === SYNC POINT: Tool status — keep in sync with PRODUCT_PLAN.md ===
+        // === SYNC POINT: tool live status must match loamlab_plugin/PRODUCT_SPEC.md ===
         const FeaturesConfig = [
             { id: "ai-render", live: true, icon: "✦",
               title: {us:"AI Render", tw:"AI 渲染", cn:"AI 渲染", es:"AI Render", br:"AI Render", jp:"AI レンダー"},
@@ -614,16 +617,16 @@
                      br:"Render fotorrealista direto do SketchUp em 1K, 2K ou 4K com sugestões de materiais.",
                      jp:"SketchUp から直接 1K/2K/4K のフォトリアルなレンダリング。素材ヒント対応。"},
               pts: "15–25 pts / render" },
-            { id: "furniture", live: false, icon: "◈",
-              title: {us:"Furniture Stylist", tw:"傢具替換師", cn:"家具替换", es:"Estilista de Muebles", br:"Estilista de Móveis", jp:"家具スタイリスト"},
-              desc: {us:"Click on any furniture in a rendered image to generate 5 AI-designed style variants. Ideal for rapid client presentations and interior mood exploration.",
-                     tw:"在渲染圖上點擊傢具，AI 自動生成 5 組不同風格替換方案。適合快速客戶提案與室內風格探索。",
-                     cn:"在渲染图上点击家具，AI 自动生成 5 组不同风格替换方案。",
-                     es:"Haz clic en cualquier mueble para generar 5 variantes de estilo con IA.",
-                     br:"Clique em qualquer móvel para gerar 5 variantes de estilo com IA.",
-                     jp:"レンダー画像の家具をクリックして AI が5種類のスタイル案を生成。"},
-              pts: "Coming Soon" },
-            { id: "multiangle", live: false, icon: "⊞",
+            { id: "spacereform", live: true, icon: "◈",
+              title: {us:"SpaceReform", tw:"空間改造", cn:"空间改造", es:"SpaceReform", br:"SpaceReform", jp:"スペース改造"},
+              desc: {us:"Select a rendered image, mask any area — AI reforms the space precisely while preserving structure and lighting.",
+                     tw:"選取已渲染的底圖，框選局部或整體，AI 精準改造空間風格，保留結構與光影。",
+                     cn:"选取已渲染的底图，框选局部或整体，AI 精准改造空间风格，保留结构与光影。",
+                     es:"Selecciona una imagen renderizada, enmascara cualquier zona — la IA reforma con precisión.",
+                     br:"Selecione uma imagem renderizada, mascare qualquer área — a IA reforma com precisão.",
+                     jp:"レンダリング画像の任意の範囲を指定するとAIが構造と光を保ちながら改造します。"},
+              pts: "15–25 pts / render" },
+            { id: "multiangle", live: true, icon: "⊞",
               title: {us:"Multi-Angle Shots", tw:"九宮格鏡頭", cn:"九宫格镜头", es:"Tomas Múltiples", br:"Ângulos Múltiplos", jp:"マルチアングル"},
               desc: {us:"Generate a 3×3 grid of 9 dramatic camera angles in a single click. Styles: Dramatic Tension, Industrial Edge, Soft Natural, Minimal Whitespace.",
                      tw:"一鍵生成 3×3 九宮格合圖，包含 9 個不同戲劇鏡頭角度。支援：戲劇張力、硬朗工業、柔和自然、極簡留白。",
@@ -631,7 +634,7 @@
                      es:"Genera 9 ángulos dramáticos en cuadrícula 3×3 con un clic.",
                      br:"Gere 9 ângulos dramáticos em grade 3×3 com um clique.",
                      jp:"1クリックで3×3グリッドの9つのドラマチックな角度を生成。"},
-              pts: "Coming Soon" },
+              pts: "15–25 pts / render" },
             { id: "smartcanvas", live: false, icon: "◎",
               title: {us:"Smart Canvas", tw:"智能語義畫布", cn:"智能语义画布", es:"Lienzo Inteligente", br:"Canvas Inteligente", jp:"スマートキャンバス"},
               desc: {us:"Select objects in your render and describe changes in natural language. The AI understands spatial context to seamlessly replace, restyle, or remove elements.",

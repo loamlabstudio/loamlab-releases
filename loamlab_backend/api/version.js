@@ -6,6 +6,6 @@ export default function handler(req, res) {
     return res.status(200).json({
         latest_version: "1.2.6",
         release_notes: "新增 SpaceReform 工具（局部改圖）；公測版開放工具 1/2/3",
-        download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.2.6-beta/loamlab_plugin.rbz"
+        download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/latest/download/loamlab_plugin.rbz"
     });
 }

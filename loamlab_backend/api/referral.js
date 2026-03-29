@@ -35,17 +35,17 @@ export default async function handler(req, res) {
         if (inviterErr || !inviter) return res.status(404).json({ code: -1, msg: '無效的邀請碼' });
         if (inviter.email === email) return res.status(400).json({ code: -1, msg: '不能輸入自己的邀請碼' });
 
-        // 3. 純綁定：記錄邀請人，獎勵在 B 首次算圖後由 render.js 觸發
+        // 3. 純綁定：記錄邀請人，獎勵在 B 首次付費後由 webhook.js 觸發
         const { error: updateBErr } = await supabase
             .from('users')
-            .update({ referred_by: inviter.email, referral_rewarded: false })
+            .update({ referred_by: inviter.email })
             .eq('email', email);
 
         if (updateBErr) throw updateBErr;
 
         return res.status(200).json({
             code: 0,
-            msg: '邀請碼已記錄！完成第一張算圖後，100 點將自動到帳，您的邀請人同時獲得 300 點。'
+            msg: '邀請碼已綁定！首次付費後，+100 點將自動到帳，您的推薦人同時獲得 +300 點。'
         });
 
     } catch (err) {

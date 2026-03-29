@@ -1,0 +1,53 @@
+version: "2"
+type: backend
+tech_stack:
+  - Node.js
+  - Vercel Serverless
+  - Supabase (PostgreSQL)
+  - Coze Workflow API
+features:
+  - name: Rendering Engine Proxy
+    description: Handles image rendering requests, point deduction, and temporary image storage.
+    files:
+      - api/render.js
+    endpoints:
+      - method: POST
+        path: /api/render
+        description: Submit a render task to Coze workflow.
+        auth_required: true
+        request_schema:
+          headers:
+            X-User-Email: string
+          body:
+            parameters:
+              user_prompt: string
+              resolution: string
+  - name: User Account Management
+    description: Manages user points, registration, and referrals.
+    files:
+      - api/user.js
+    endpoints:
+      - method: GET
+        path: /api/user
+        description: Get user points and account statistics.
+        auth_required: true
+        request_schema:
+          query:
+            email: string
+  - name: LemonSqueezy Webhook
+    description: Processes payment notifications, HMAC verification, and point distribution.
+    files:
+      - api/webhook.js
+    endpoints:
+      - method: POST
+        path: /api/webhook
+        description: Receive payment notifications.
+  - name: Frontend UI Dashboard
+    description: Multi-language SketchUp UI for rendering controls and user accounts.
+    files:
+      - ../loamlab_plugin/ui/index.html
+      - ../loamlab_plugin/ui/app.js
+known_limitations:
+  - issue: Minimal input validation on prompt length
+    location: api/render.js
+    impact: Possible long strings might affect Coze API behavior.

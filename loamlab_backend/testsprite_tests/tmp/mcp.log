@@ -1,0 +1,1056 @@
+{"timestamp":"2026-03-25T07:57:24.372Z","level":"error","message":"Tool invocation failed: Validation error:\ntype: Invalid input\ntestScope: Invalid input","correlationId":"591494d3-49af-4758-8368-897fffc56e96","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T07:57:24.369Z","level":"info","message":"Tool invocation started","correlationId":"591494d3-49af-4758-8368-897fffc56e96","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T14:20:20.887Z","level":"info","message":"Tool invocation started","correlationId":"edb2ef45-5eee-486e-9883-2a0aab1190ec","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T14:20:20.889Z","level":"debug","message":"Initialization params","correlationId":"edb2ef45-5eee-486e-9883-2a0aab1190ec","tool":"testsprite_bootstrap","context":{"localPort":3000,"type":"backend","projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend","testScope":"codebase"}}
+{"timestamp":"2026-03-25T14:20:20.890Z","level":"info","message":"Attempting to start server (attempt 1/3)","correlationId":"edb2ef45-5eee-486e-9883-2a0aab1190ec","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T14:20:21.373Z","level":"info","message":"GET /init?project_path=c%3A%5CUsers%5Cqingwen%5C.gemini%5Cantigravity%5Cworkspaces%5C%E5%9C%9F%E7%AA%9F%E8%A8%AD%E8%A8%88su%E6%B8%B2%E6%9F%93%E6%8F%92%E4%BB%B6%5Cloamlab_backend&default_type=backend 200 2ms","correlationId":"edb2ef45-5eee-486e-9883-2a0aab1190ec","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T14:20:21.423Z","level":"info","message":"GET /api/config?project_path=c%3A%5CUsers%5Cqingwen%5C.gemini%5Cantigravity%5Cworkspaces%5C%E5%9C%9F%E7%AA%9F%E8%A8%AD%E8%A8%88su%E6%B8%B2%E6%9F%93%E6%8F%92%E4%BB%B6%5Cloamlab_backend 200 1ms","correlationId":"edb2ef45-5eee-486e-9883-2a0aab1190ec","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T14:20:21.438Z","level":"info","message":"GET /favicon.ico 404 1ms","correlationId":"edb2ef45-5eee-486e-9883-2a0aab1190ec","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T14:20:20.897Z","level":"info","message":"HTTP server started successfully on port 60341","correlationId":"edb2ef45-5eee-486e-9883-2a0aab1190ec","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T14:20:20.898Z","level":"info","message":"HTTP server started, config saved","correlationId":"edb2ef45-5eee-486e-9883-2a0aab1190ec","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T14:21:38.462Z","level":"info","message":"Tool invocation started","correlationId":"8e6bc9ce-9fc6-4e54-8e14-80c739c8c34f","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T14:21:38.463Z","level":"error","message":"Tool invocation failed: Validation error:\nprojectRootPath: Invalid input","correlationId":"8e6bc9ce-9fc6-4e54-8e14-80c739c8c34f","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T14:28:07.253Z","level":"debug","message":"Code analyze params","correlationId":"5f484513-37db-4591-a442-ab6d001b859f","tool":"testsprite_generate_code_summary","context":{"projectRootPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T14:28:07.252Z","level":"info","message":"Tool invocation started","correlationId":"5f484513-37db-4591-a442-ab6d001b859f","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T14:28:07.255Z","level":"info","message":"Tool invocation completed","correlationId":"5f484513-37db-4591-a442-ab6d001b859f","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T14:28:07.254Z","level":"info","message":"Scope determined","correlationId":"5f484513-37db-4591-a442-ab6d001b859f","tool":"testsprite_generate_code_summary","context":{"scope":"codebase","type":"backend"}}
+{"timestamp":"2026-03-25T14:28:48.404Z","level":"info","message":"Tool invocation started","correlationId":"411ccd2d-69be-4115-9784-a9891a5d054d","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T14:28:48.406Z","level":"error","message":"Tool invocation failed: Validation error:\nprojectPath: Invalid input\n: Invalid input","correlationId":"411ccd2d-69be-4115-9784-a9891a5d054d","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T14:43:11.705Z","level":"info","message":"Tool invocation started","correlationId":"6be3a543-d9f2-4565-970c-d1a8ec20f0d3","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T14:43:11.707Z","level":"debug","message":"Code analyze params","correlationId":"6be3a543-d9f2-4565-970c-d1a8ec20f0d3","tool":"testsprite_generate_code_summary","context":{"projectRootPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T14:43:11.708Z","level":"info","message":"Scope determined","correlationId":"6be3a543-d9f2-4565-970c-d1a8ec20f0d3","tool":"testsprite_generate_code_summary","context":{"scope":"codebase","type":"backend"}}
+{"timestamp":"2026-03-25T14:43:11.708Z","level":"info","message":"Tool invocation completed","correlationId":"6be3a543-d9f2-4565-970c-d1a8ec20f0d3","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T14:43:18.698Z","level":"info","message":"Tool invocation started","correlationId":"589e6d5f-1267-4094-bbe4-1d7756c69261","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T14:43:18.698Z","level":"debug","message":"Generate standard PRD params","correlationId":"589e6d5f-1267-4094-bbe4-1d7756c69261","tool":"testsprite_generate_standardized_prd","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T14:43:18.699Z","level":"error","message":"Error reading PRD files: Error: ENOENT: no such file or directory, scandir 'c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend\\testsprite_tests\\tmp\\prd_files'","correlationId":"589e6d5f-1267-4094-bbe4-1d7756c69261","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T14:43:18.699Z","level":"error","message":"Tool invocation failed: Error reading PRD files: Error: ENOENT: no such file or directory, scandir 'c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend\\testsprite_tests\\tmp\\prd_files'","correlationId":"589e6d5f-1267-4094-bbe4-1d7756c69261","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T14:43:28.702Z","level":"debug","message":"Generate backend test plan params","correlationId":"9824aa55-4522-43b3-a956-98cf6695b1af","tool":"testsprite_generate_backend_test_plan","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T14:43:28.702Z","level":"error","message":"Tool invocation failed: Failed to generate backend test plan: Failed to read PRD file at c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend\\testsprite_tests\\standard_prd.json: ENOENT: no such file or directory, open 'c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend\\testsprite_tests\\standard_prd.json'","correlationId":"9824aa55-4522-43b3-a956-98cf6695b1af","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T14:43:28.702Z","level":"info","message":"Tool invocation started","correlationId":"9824aa55-4522-43b3-a956-98cf6695b1af","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T14:43:38.710Z","level":"info","message":"Tool invocation started","correlationId":"eb58708a-fc67-434b-bf5f-1fdecca2af64","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T14:43:38.712Z","level":"info","message":"Tool invocation completed","correlationId":"eb58708a-fc67-434b-bf5f-1fdecca2af64","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T14:43:49.973Z","level":"info","message":"Tool invocation started","correlationId":"1d3854b4-af72-4d46-b356-0db5de2aa07d","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T14:43:49.976Z","level":"info","message":"Scope determined","correlationId":"1d3854b4-af72-4d46-b356-0db5de2aa07d","tool":"testsprite_generate_code_summary","context":{"scope":"codebase","type":"backend"}}
+{"timestamp":"2026-03-25T14:43:49.975Z","level":"debug","message":"Code analyze params","correlationId":"1d3854b4-af72-4d46-b356-0db5de2aa07d","tool":"testsprite_generate_code_summary","context":{"projectRootPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T14:43:49.976Z","level":"info","message":"Tool invocation completed","correlationId":"1d3854b4-af72-4d46-b356-0db5de2aa07d","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T14:43:56.976Z","level":"info","message":"Tool invocation started","correlationId":"69e0adf7-409f-40cf-afcd-59992f32183c","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T14:43:56.977Z","level":"debug","message":"Generate standard PRD params","correlationId":"69e0adf7-409f-40cf-afcd-59992f32183c","tool":"testsprite_generate_standardized_prd","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T14:43:56.977Z","level":"info","message":"PRD files loaded","correlationId":"69e0adf7-409f-40cf-afcd-59992f32183c","tool":"testsprite_generate_standardized_prd","context":{"fileCount":1}}
+{"timestamp":"2026-03-25T14:44:06.980Z","level":"debug","message":"Generate backend test plan params","correlationId":"c8a806f4-7a11-46a2-837c-e1452cca313f","tool":"testsprite_generate_backend_test_plan","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T14:44:06.979Z","level":"info","message":"Tool invocation started","correlationId":"c8a806f4-7a11-46a2-837c-e1452cca313f","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T14:44:06.980Z","level":"error","message":"Tool invocation failed: Failed to generate backend test plan: Failed to read PRD file at c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend\\testsprite_tests\\standard_prd.json: ENOENT: no such file or directory, open 'c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend\\testsprite_tests\\standard_prd.json'","correlationId":"c8a806f4-7a11-46a2-837c-e1452cca313f","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T14:44:16.981Z","level":"info","message":"Tool invocation started","correlationId":"fec6abfa-af3e-45e3-897f-e3fdbdf1295f","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T14:44:16.983Z","level":"info","message":"Tool invocation completed","correlationId":"fec6abfa-af3e-45e3-897f-e3fdbdf1295f","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T14:44:38.386Z","level":"info","message":"Standard PRD generated successfully","correlationId":"69e0adf7-409f-40cf-afcd-59992f32183c","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T14:44:38.387Z","level":"info","message":"Tool invocation completed","correlationId":"69e0adf7-409f-40cf-afcd-59992f32183c","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T14:48:22.404Z","level":"info","message":"Tool invocation started","correlationId":"66f2a70b-4b00-472e-bd63-7b3459dd447f","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T14:48:22.407Z","level":"info","message":"Tool invocation completed","correlationId":"66f2a70b-4b00-472e-bd63-7b3459dd447f","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T14:48:22.406Z","level":"debug","message":"Code analyze params","correlationId":"66f2a70b-4b00-472e-bd63-7b3459dd447f","tool":"testsprite_generate_code_summary","context":{"projectRootPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T14:48:22.407Z","level":"info","message":"Scope determined","correlationId":"66f2a70b-4b00-472e-bd63-7b3459dd447f","tool":"testsprite_generate_code_summary","context":{"scope":"codebase","type":"backend"}}
+{"timestamp":"2026-03-25T14:48:29.406Z","level":"debug","message":"Generate standard PRD params","correlationId":"64a99d7b-5367-4d46-83a1-206e61e40e75","tool":"testsprite_generate_standardized_prd","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T14:48:29.407Z","level":"info","message":"PRD files loaded","correlationId":"64a99d7b-5367-4d46-83a1-206e61e40e75","tool":"testsprite_generate_standardized_prd","context":{"fileCount":1}}
+{"timestamp":"2026-03-25T14:48:29.406Z","level":"info","message":"Tool invocation started","correlationId":"64a99d7b-5367-4d46-83a1-206e61e40e75","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T14:48:39.415Z","level":"debug","message":"Generate backend test plan params","correlationId":"9d9d504d-bedd-48a7-8c02-eac402c43b60","tool":"testsprite_generate_backend_test_plan","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T14:48:39.415Z","level":"info","message":"Tool invocation started","correlationId":"9d9d504d-bedd-48a7-8c02-eac402c43b60","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T14:48:49.413Z","level":"info","message":"Tool invocation started","correlationId":"444ca547-19e4-41d4-98cd-b3b7da135960","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T14:48:49.415Z","level":"info","message":"Tool invocation completed","correlationId":"444ca547-19e4-41d4-98cd-b3b7da135960","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T14:49:09.274Z","level":"info","message":"Backend test plan generated successfully","correlationId":"9d9d504d-bedd-48a7-8c02-eac402c43b60","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T14:49:09.275Z","level":"info","message":"Tool invocation completed","correlationId":"9d9d504d-bedd-48a7-8c02-eac402c43b60","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T14:49:14.352Z","level":"info","message":"Standard PRD generated successfully","correlationId":"64a99d7b-5367-4d46-83a1-206e61e40e75","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T14:49:14.352Z","level":"info","message":"Tool invocation completed","correlationId":"64a99d7b-5367-4d46-83a1-206e61e40e75","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T14:50:55.307Z","level":"debug","message":"Generate code and execute params","context":{"projectName":"loamlab_backend","projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend","testIds":[],"serverMode":"development"}}
+{"timestamp":"2026-03-25T14:50:55.318Z","level":"info","message":"Attempting to start server (attempt 1/3)"}
+{"timestamp":"2026-03-25T14:50:55.326Z","level":"info","message":"Attempting to start HTTP proxy (attempt 1/3)"}
+{"timestamp":"2026-03-25T14:50:55.320Z","level":"info","message":"HTTP server started successfully on port 62219"}
+{"timestamp":"2026-03-25T14:50:55.327Z","level":"info","message":"HTTP proxy started successfully on port 62221"}
+{"timestamp":"2026-03-25T14:50:56.351Z","level":"info","message":"🚀 Starting tunnel client: 45295dc3-7726-4eaf-9dbb-272de2ae9e0e"}
+{"timestamp":"2026-03-25T14:50:56.351Z","level":"info","message":"⏱️ Network timeout: 10000ms, Auth: enabled"}
+{"timestamp":"2026-03-25T14:50:56.352Z","level":"info","message":"🔗 Establishing control connection..."}
+{"timestamp":"2026-03-25T14:50:56.351Z","level":"info","message":"📋 Config: localhost:62221 -> tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:50:57.647Z","level":"info","message":"Verifying tunnel connectivity..."}
+{"timestamp":"2026-03-25T14:50:57.647Z","level":"info","message":"Tunnel probe attempt 1/2 through tun.testsprite.com:8080 to http://localhost:3000/..."}
+{"timestamp":"2026-03-25T14:50:57.647Z","level":"info","message":"proxy: [REDACTED]tun.testsprite.com:8080"}
+{"timestamp":"2026-03-25T14:50:58.114Z","level":"warn","message":"Tunnel probe attempt 1 failed: read ECONNRESET — retrying in 3s..."}
+{"timestamp":"2026-03-25T14:50:58.176Z","level":"info","message":"✅ Tunnel established, remote port: 8080"}
+{"timestamp":"2026-03-25T14:51:01.124Z","level":"info","message":"Tunnel probe attempt 2/2 through tun.testsprite.com:8080 to http://localhost:3000/..."}
+{"timestamp":"2026-03-25T14:51:01.636Z","level":"info","message":"🔄 [1] New connection request: 38515346-3e91-418f-b776-9f2404676cd9"}
+{"timestamp":"2026-03-25T14:51:01.636Z","level":"info","message":"TIME: connection-1"}
+{"timestamp":"2026-03-25T14:51:01.887Z","level":"info","message":"TIME END: remote-connect-1"}
+{"timestamp":"2026-03-25T14:51:01.889Z","level":"info","message":"🔐 [1] Performing authentication"}
+{"timestamp":"2026-03-25T14:51:01.636Z","level":"info","message":"🌐 [1] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:51:01.887Z","level":"info","message":"📡 [1] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:51:02.137Z","level":"info","message":"✋ [1] Sending Accept message for 38515346-3e91-418f-b776-9f2404676cd9"}
+{"timestamp":"2026-03-25T14:51:01.887Z","level":"info","message":"local-connect-1"}
+{"timestamp":"2026-03-25T14:51:02.137Z","level":"info","message":"✅ [1] Connection 38515346-3e91-418f-b776-9f2404676cd9 fully established and proxying"}
+{"timestamp":"2026-03-25T14:51:01.636Z","level":"info","message":"🔗 [1] Starting handleConnection for 38515346-3e91-418f-b776-9f2404676cd9"}
+{"timestamp":"2026-03-25T14:51:01.636Z","level":"info","message":"TIME: remote-connect-1"}
+{"timestamp":"2026-03-25T14:51:02.137Z","level":"info","message":"✅ [1] Authentication completed"}
+{"timestamp":"2026-03-25T14:51:01.889Z","level":"info","message":"✅ [1] Local connection established"}
+{"timestamp":"2026-03-25T14:51:01.887Z","level":"info","message":"✅ [1] Remote connection established"}
+{"timestamp":"2026-03-25T14:51:01.889Z","level":"info","message":"🤝 [1] Starting handshake"}
+{"timestamp":"2026-03-25T14:51:01.889Z","level":"info","message":"TIME END: local-connect-1"}
+{"timestamp":"2026-03-25T14:51:01.889Z","level":"info","message":"👋 [1] Hello message sent"}
+{"timestamp":"2026-03-25T14:51:02.137Z","level":"info","message":"🔄 [1] Starting data proxy"}
+{"timestamp":"2026-03-25T14:51:02.137Z","level":"info","message":"TIME END: connection-1"}
+{"timestamp":"2026-03-25T14:51:02.954Z","level":"info","message":"Tunnel probe succeeded on attempt 2: status=404"}
+{"timestamp":"2026-03-25T14:51:02.954Z","level":"info","message":"Tunnel connectivity verified."}
+{"timestamp":"2026-03-25T14:51:39.114Z","level":"info","message":"🔄 [2] New connection request: 074837bc-5e1f-4030-8229-d831a85b5ee7"}
+{"timestamp":"2026-03-25T14:51:39.114Z","level":"info","message":"🔗 [2] Starting handleConnection for 074837bc-5e1f-4030-8229-d831a85b5ee7"}
+{"timestamp":"2026-03-25T14:51:39.365Z","level":"info","message":"✅ [2] Remote connection established"}
+{"timestamp":"2026-03-25T14:51:39.366Z","level":"info","message":"TIME END: local-connect-2"}
+{"timestamp":"2026-03-25T14:51:39.114Z","level":"info","message":"TIME: remote-connect-2"}
+{"timestamp":"2026-03-25T14:51:39.365Z","level":"info","message":"local-connect-2"}
+{"timestamp":"2026-03-25T14:51:39.615Z","level":"info","message":"🔄 [2] Starting data proxy"}
+{"timestamp":"2026-03-25T14:51:39.364Z","level":"info","message":"TIME END: remote-connect-2"}
+{"timestamp":"2026-03-25T14:51:39.615Z","level":"info","message":"✅ [2] Authentication completed"}
+{"timestamp":"2026-03-25T14:51:39.114Z","level":"info","message":"🌐 [2] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:51:39.114Z","level":"info","message":"TIME: connection-2"}
+{"timestamp":"2026-03-25T14:51:39.615Z","level":"info","message":"✅ [2] Connection 074837bc-5e1f-4030-8229-d831a85b5ee7 fully established and proxying"}
+{"timestamp":"2026-03-25T14:51:39.366Z","level":"info","message":"✅ [2] Local connection established"}
+{"timestamp":"2026-03-25T14:51:39.365Z","level":"info","message":"📡 [2] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:51:39.366Z","level":"info","message":"👋 [2] Hello message sent"}
+{"timestamp":"2026-03-25T14:51:39.366Z","level":"info","message":"🔐 [2] Performing authentication"}
+{"timestamp":"2026-03-25T14:51:39.366Z","level":"info","message":"🤝 [2] Starting handshake"}
+{"timestamp":"2026-03-25T14:51:39.615Z","level":"info","message":"TIME END: connection-2"}
+{"timestamp":"2026-03-25T14:51:39.615Z","level":"info","message":"✋ [2] Sending Accept message for 074837bc-5e1f-4030-8229-d831a85b5ee7"}
+{"timestamp":"2026-03-25T14:51:43.330Z","level":"info","message":"🔗 [3] Starting handleConnection for 30e9f57a-f8ef-4d4f-9c44-c2847218a920"}
+{"timestamp":"2026-03-25T14:51:43.330Z","level":"info","message":"TIME: connection-3"}
+{"timestamp":"2026-03-25T14:51:43.583Z","level":"info","message":"local-connect-3"}
+{"timestamp":"2026-03-25T14:51:43.584Z","level":"info","message":"✅ [3] Local connection established"}
+{"timestamp":"2026-03-25T14:51:43.330Z","level":"info","message":"🔄 [3] New connection request: 30e9f57a-f8ef-4d4f-9c44-c2847218a920"}
+{"timestamp":"2026-03-25T14:51:43.583Z","level":"info","message":"TIME END: remote-connect-3"}
+{"timestamp":"2026-03-25T14:51:43.845Z","level":"info","message":"✅ [3] Authentication completed"}
+{"timestamp":"2026-03-25T14:51:43.583Z","level":"info","message":"✅ [3] Remote connection established"}
+{"timestamp":"2026-03-25T14:51:43.845Z","level":"info","message":"✅ [3] Connection 30e9f57a-f8ef-4d4f-9c44-c2847218a920 fully established and proxying"}
+{"timestamp":"2026-03-25T14:51:43.330Z","level":"info","message":"TIME: remote-connect-3"}
+{"timestamp":"2026-03-25T14:51:43.330Z","level":"info","message":"🌐 [3] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:51:43.845Z","level":"info","message":"🔄 [3] Starting data proxy"}
+{"timestamp":"2026-03-25T14:51:43.583Z","level":"info","message":"📡 [3] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:51:43.584Z","level":"info","message":"🔐 [3] Performing authentication"}
+{"timestamp":"2026-03-25T14:51:43.584Z","level":"info","message":"TIME END: local-connect-3"}
+{"timestamp":"2026-03-25T14:51:43.584Z","level":"info","message":"👋 [3] Hello message sent"}
+{"timestamp":"2026-03-25T14:51:43.584Z","level":"info","message":"🤝 [3] Starting handshake"}
+{"timestamp":"2026-03-25T14:51:43.845Z","level":"info","message":"✋ [3] Sending Accept message for 30e9f57a-f8ef-4d4f-9c44-c2847218a920"}
+{"timestamp":"2026-03-25T14:51:43.845Z","level":"info","message":"TIME END: connection-3"}
+{"timestamp":"2026-03-25T14:51:46.430Z","level":"info","message":"🔄 [4] New connection request: b538ac45-4406-4a3d-b87b-30a5e1edc499"}
+{"timestamp":"2026-03-25T14:51:46.430Z","level":"info","message":"🔗 [4] Starting handleConnection for b538ac45-4406-4a3d-b87b-30a5e1edc499"}
+{"timestamp":"2026-03-25T14:51:46.677Z","level":"info","message":"TIME END: remote-connect-4"}
+{"timestamp":"2026-03-25T14:51:46.679Z","level":"info","message":"🤝 [4] Starting handshake"}
+{"timestamp":"2026-03-25T14:51:46.430Z","level":"info","message":"TIME: connection-4"}
+{"timestamp":"2026-03-25T14:51:46.678Z","level":"info","message":"✅ [4] Remote connection established"}
+{"timestamp":"2026-03-25T14:51:46.920Z","level":"info","message":"✅ [4] Authentication completed"}
+{"timestamp":"2026-03-25T14:51:46.679Z","level":"info","message":"✅ [4] Local connection established"}
+{"timestamp":"2026-03-25T14:51:46.920Z","level":"info","message":"🔄 [4] Starting data proxy"}
+{"timestamp":"2026-03-25T14:51:46.430Z","level":"info","message":"🌐 [4] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:51:46.430Z","level":"info","message":"TIME: remote-connect-4"}
+{"timestamp":"2026-03-25T14:51:46.920Z","level":"info","message":"TIME END: connection-4"}
+{"timestamp":"2026-03-25T14:51:46.678Z","level":"info","message":"local-connect-4"}
+{"timestamp":"2026-03-25T14:51:46.679Z","level":"info","message":"👋 [4] Hello message sent"}
+{"timestamp":"2026-03-25T14:51:46.679Z","level":"info","message":"🔐 [4] Performing authentication"}
+{"timestamp":"2026-03-25T14:51:46.678Z","level":"info","message":"📡 [4] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:51:46.678Z","level":"info","message":"TIME END: local-connect-4"}
+{"timestamp":"2026-03-25T14:51:46.920Z","level":"info","message":"✋ [4] Sending Accept message for b538ac45-4406-4a3d-b87b-30a5e1edc499"}
+{"timestamp":"2026-03-25T14:51:46.920Z","level":"info","message":"✅ [4] Connection b538ac45-4406-4a3d-b87b-30a5e1edc499 fully established and proxying"}
+{"timestamp":"2026-03-25T14:51:49.678Z","level":"info","message":"🔄 [5] New connection request: 8964158e-a73e-4e19-b9c2-cb79b533ea70"}
+{"timestamp":"2026-03-25T14:51:49.678Z","level":"info","message":"🌐 [5] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:51:49.941Z","level":"info","message":"📡 [5] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:51:49.678Z","level":"info","message":"TIME: connection-5"}
+{"timestamp":"2026-03-25T14:51:49.941Z","level":"info","message":"local-connect-5"}
+{"timestamp":"2026-03-25T14:51:50.195Z","level":"info","message":"✅ [5] Authentication completed"}
+{"timestamp":"2026-03-25T14:51:49.941Z","level":"info","message":"✅ [5] Remote connection established"}
+{"timestamp":"2026-03-25T14:51:50.195Z","level":"info","message":"🔄 [5] Starting data proxy"}
+{"timestamp":"2026-03-25T14:51:49.678Z","level":"info","message":"🔗 [5] Starting handleConnection for 8964158e-a73e-4e19-b9c2-cb79b533ea70"}
+{"timestamp":"2026-03-25T14:51:49.678Z","level":"info","message":"TIME: remote-connect-5"}
+{"timestamp":"2026-03-25T14:51:50.195Z","level":"info","message":"✋ [5] Sending Accept message for 8964158e-a73e-4e19-b9c2-cb79b533ea70"}
+{"timestamp":"2026-03-25T14:51:49.942Z","level":"info","message":"👋 [5] Hello message sent"}
+{"timestamp":"2026-03-25T14:51:49.941Z","level":"info","message":"TIME END: local-connect-5"}
+{"timestamp":"2026-03-25T14:51:49.940Z","level":"info","message":"TIME END: remote-connect-5"}
+{"timestamp":"2026-03-25T14:51:49.942Z","level":"info","message":"✅ [5] Local connection established"}
+{"timestamp":"2026-03-25T14:51:49.942Z","level":"info","message":"🤝 [5] Starting handshake"}
+{"timestamp":"2026-03-25T14:51:49.942Z","level":"info","message":"🔐 [5] Performing authentication"}
+{"timestamp":"2026-03-25T14:51:50.195Z","level":"info","message":"✅ [5] Connection 8964158e-a73e-4e19-b9c2-cb79b533ea70 fully established and proxying"}
+{"timestamp":"2026-03-25T14:51:50.195Z","level":"info","message":"TIME END: connection-5"}
+{"timestamp":"2026-03-25T14:51:52.337Z","level":"info","message":"TIME: connection-6"}
+{"timestamp":"2026-03-25T14:51:52.337Z","level":"info","message":"🌐 [6] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:51:52.567Z","level":"info","message":"TIME END: remote-connect-6"}
+{"timestamp":"2026-03-25T14:51:52.568Z","level":"info","message":"👋 [6] Hello message sent"}
+{"timestamp":"2026-03-25T14:51:52.337Z","level":"info","message":"🔗 [6] Starting handleConnection for e671d73d-d043-4cb7-bf36-c09b65a79c9a"}
+{"timestamp":"2026-03-25T14:51:52.567Z","level":"info","message":"✅ [6] Remote connection established"}
+{"timestamp":"2026-03-25T14:51:52.820Z","level":"info","message":"✅ [6] Authentication completed"}
+{"timestamp":"2026-03-25T14:51:52.567Z","level":"info","message":"local-connect-6"}
+{"timestamp":"2026-03-25T14:51:52.820Z","level":"info","message":"✋ [6] Sending Accept message for e671d73d-d043-4cb7-bf36-c09b65a79c9a"}
+{"timestamp":"2026-03-25T14:51:52.337Z","level":"info","message":"🔄 [6] New connection request: e671d73d-d043-4cb7-bf36-c09b65a79c9a"}
+{"timestamp":"2026-03-25T14:51:52.337Z","level":"info","message":"TIME: remote-connect-6"}
+{"timestamp":"2026-03-25T14:51:52.821Z","level":"info","message":"✅ [6] Connection e671d73d-d043-4cb7-bf36-c09b65a79c9a fully established and proxying"}
+{"timestamp":"2026-03-25T14:51:52.567Z","level":"info","message":"📡 [6] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:51:52.568Z","level":"info","message":"🤝 [6] Starting handshake"}
+{"timestamp":"2026-03-25T14:51:52.568Z","level":"info","message":"TIME END: local-connect-6"}
+{"timestamp":"2026-03-25T14:51:52.568Z","level":"info","message":"🔐 [6] Performing authentication"}
+{"timestamp":"2026-03-25T14:51:52.568Z","level":"info","message":"✅ [6] Local connection established"}
+{"timestamp":"2026-03-25T14:51:52.820Z","level":"info","message":"🔄 [6] Starting data proxy"}
+{"timestamp":"2026-03-25T14:51:52.821Z","level":"info","message":"TIME END: connection-6"}
+{"timestamp":"2026-03-25T14:51:55.380Z","level":"info","message":"🔄 [7] New connection request: 3ee2e2bc-b278-46d4-8761-91fa16321b72"}
+{"timestamp":"2026-03-25T14:51:55.380Z","level":"info","message":"TIME: connection-7"}
+{"timestamp":"2026-03-25T14:51:55.631Z","level":"info","message":"TIME END: remote-connect-7"}
+{"timestamp":"2026-03-25T14:51:55.632Z","level":"info","message":"🔐 [7] Performing authentication"}
+{"timestamp":"2026-03-25T14:51:55.380Z","level":"info","message":"TIME: remote-connect-7"}
+{"timestamp":"2026-03-25T14:51:55.631Z","level":"info","message":"local-connect-7"}
+{"timestamp":"2026-03-25T14:51:55.880Z","level":"info","message":"🔄 [7] Starting data proxy"}
+{"timestamp":"2026-03-25T14:51:55.632Z","level":"info","message":"TIME END: local-connect-7"}
+{"timestamp":"2026-03-25T14:51:55.881Z","level":"info","message":"TIME END: connection-7"}
+{"timestamp":"2026-03-25T14:51:55.380Z","level":"info","message":"🌐 [7] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:51:55.380Z","level":"info","message":"🔗 [7] Starting handleConnection for 3ee2e2bc-b278-46d4-8761-91fa16321b72"}
+{"timestamp":"2026-03-25T14:51:55.880Z","level":"info","message":"✅ [7] Connection 3ee2e2bc-b278-46d4-8761-91fa16321b72 fully established and proxying"}
+{"timestamp":"2026-03-25T14:51:55.632Z","level":"info","message":"👋 [7] Hello message sent"}
+{"timestamp":"2026-03-25T14:51:55.631Z","level":"info","message":"✅ [7] Remote connection established"}
+{"timestamp":"2026-03-25T14:51:55.631Z","level":"info","message":"📡 [7] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:51:55.632Z","level":"info","message":"✅ [7] Local connection established"}
+{"timestamp":"2026-03-25T14:51:55.632Z","level":"info","message":"🤝 [7] Starting handshake"}
+{"timestamp":"2026-03-25T14:51:55.880Z","level":"info","message":"✅ [7] Authentication completed"}
+{"timestamp":"2026-03-25T14:51:55.880Z","level":"info","message":"✋ [7] Sending Accept message for 3ee2e2bc-b278-46d4-8761-91fa16321b72"}
+{"timestamp":"2026-03-25T14:51:58.453Z","level":"info","message":"🔗 [8] Starting handleConnection for ac742258-4ae5-4785-a953-928eb9332218"}
+{"timestamp":"2026-03-25T14:51:58.453Z","level":"info","message":"TIME: connection-8"}
+{"timestamp":"2026-03-25T14:51:58.725Z","level":"info","message":"TIME END: remote-connect-8"}
+{"timestamp":"2026-03-25T14:51:58.726Z","level":"info","message":"👋 [8] Hello message sent"}
+{"timestamp":"2026-03-25T14:51:58.452Z","level":"info","message":"🔄 [8] New connection request: ac742258-4ae5-4785-a953-928eb9332218"}
+{"timestamp":"2026-03-25T14:51:58.725Z","level":"info","message":"✅ [8] Remote connection established"}
+{"timestamp":"2026-03-25T14:51:58.978Z","level":"info","message":"✋ [8] Sending Accept message for ac742258-4ae5-4785-a953-928eb9332218"}
+{"timestamp":"2026-03-25T14:51:58.725Z","level":"info","message":"📡 [8] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:51:58.978Z","level":"info","message":"✅ [8] Authentication completed"}
+{"timestamp":"2026-03-25T14:51:58.453Z","level":"info","message":"🌐 [8] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:51:58.453Z","level":"info","message":"TIME: remote-connect-8"}
+{"timestamp":"2026-03-25T14:51:58.978Z","level":"info","message":"🔄 [8] Starting data proxy"}
+{"timestamp":"2026-03-25T14:51:58.726Z","level":"info","message":"TIME END: local-connect-8"}
+{"timestamp":"2026-03-25T14:51:58.725Z","level":"info","message":"local-connect-8"}
+{"timestamp":"2026-03-25T14:51:58.726Z","level":"info","message":"✅ [8] Local connection established"}
+{"timestamp":"2026-03-25T14:51:58.726Z","level":"info","message":"🔐 [8] Performing authentication"}
+{"timestamp":"2026-03-25T14:51:58.726Z","level":"info","message":"🤝 [8] Starting handshake"}
+{"timestamp":"2026-03-25T14:51:58.979Z","level":"info","message":"TIME END: connection-8"}
+{"timestamp":"2026-03-25T14:51:58.978Z","level":"info","message":"✅ [8] Connection ac742258-4ae5-4785-a953-928eb9332218 fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:01.206Z","level":"info","message":"🔗 [9] Starting handleConnection for 63cfa905-0dcc-45a2-b868-48ada4c361f6"}
+{"timestamp":"2026-03-25T14:52:01.206Z","level":"info","message":"🌐 [9] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:01.465Z","level":"info","message":"local-connect-9"}
+{"timestamp":"2026-03-25T14:52:01.206Z","level":"info","message":"TIME: connection-9"}
+{"timestamp":"2026-03-25T14:52:01.465Z","level":"info","message":"✅ [9] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:01.713Z","level":"info","message":"✅ [9] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:01.466Z","level":"info","message":"TIME END: local-connect-9"}
+{"timestamp":"2026-03-25T14:52:01.713Z","level":"info","message":"TIME END: connection-9"}
+{"timestamp":"2026-03-25T14:52:01.206Z","level":"info","message":"🔄 [9] New connection request: 63cfa905-0dcc-45a2-b868-48ada4c361f6"}
+{"timestamp":"2026-03-25T14:52:01.206Z","level":"info","message":"TIME: remote-connect-9"}
+{"timestamp":"2026-03-25T14:52:01.713Z","level":"info","message":"✋ [9] Sending Accept message for 63cfa905-0dcc-45a2-b868-48ada4c361f6"}
+{"timestamp":"2026-03-25T14:52:01.466Z","level":"info","message":"🔐 [9] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:01.465Z","level":"info","message":"📡 [9] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:01.465Z","level":"info","message":"TIME END: remote-connect-9"}
+{"timestamp":"2026-03-25T14:52:01.466Z","level":"info","message":"👋 [9] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:01.466Z","level":"info","message":"✅ [9] Local connection established"}
+{"timestamp":"2026-03-25T14:52:01.466Z","level":"info","message":"🤝 [9] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:01.713Z","level":"info","message":"✅ [9] Connection 63cfa905-0dcc-45a2-b868-48ada4c361f6 fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:01.713Z","level":"info","message":"🔄 [9] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:04.271Z","level":"info","message":"🌐 [10] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:04.271Z","level":"info","message":"🔄 [10] New connection request: 0f78bb3b-6b65-4369-ae79-81123b5cbdba"}
+{"timestamp":"2026-03-25T14:52:04.552Z","level":"info","message":"✅ [10] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:04.271Z","level":"info","message":"TIME: remote-connect-10"}
+{"timestamp":"2026-03-25T14:52:04.552Z","level":"info","message":"local-connect-10"}
+{"timestamp":"2026-03-25T14:52:04.812Z","level":"info","message":"✅ [10] Connection 0f78bb3b-6b65-4369-ae79-81123b5cbdba fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:04.552Z","level":"info","message":"TIME END: remote-connect-10"}
+{"timestamp":"2026-03-25T14:52:04.811Z","level":"info","message":"✋ [10] Sending Accept message for 0f78bb3b-6b65-4369-ae79-81123b5cbdba"}
+{"timestamp":"2026-03-25T14:52:04.271Z","level":"info","message":"🔗 [10] Starting handleConnection for 0f78bb3b-6b65-4369-ae79-81123b5cbdba"}
+{"timestamp":"2026-03-25T14:52:04.271Z","level":"info","message":"TIME: connection-10"}
+{"timestamp":"2026-03-25T14:52:04.811Z","level":"info","message":"✅ [10] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:04.553Z","level":"info","message":"TIME END: local-connect-10"}
+{"timestamp":"2026-03-25T14:52:04.552Z","level":"info","message":"📡 [10] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:04.553Z","level":"info","message":"🤝 [10] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:04.553Z","level":"info","message":"🔐 [10] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:04.553Z","level":"info","message":"✅ [10] Local connection established"}
+{"timestamp":"2026-03-25T14:52:04.553Z","level":"info","message":"👋 [10] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:04.812Z","level":"info","message":"TIME END: connection-10"}
+{"timestamp":"2026-03-25T14:52:04.811Z","level":"info","message":"🔄 [10] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:06.295Z","level":"info","message":"🔄 [11] New connection request: 378426ac-2910-4ba7-9e9f-413cbef281ea"}
+{"timestamp":"2026-03-25T14:52:06.295Z","level":"info","message":"TIME: connection-11"}
+{"timestamp":"2026-03-25T14:52:06.587Z","level":"info","message":"📡 [11] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:06.295Z","level":"info","message":"🔗 [11] Starting handleConnection for 378426ac-2910-4ba7-9e9f-413cbef281ea"}
+{"timestamp":"2026-03-25T14:52:06.587Z","level":"info","message":"local-connect-11"}
+{"timestamp":"2026-03-25T14:52:06.587Z","level":"info","message":"✅ [11] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:06.295Z","level":"info","message":"🌐 [11] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:06.295Z","level":"info","message":"TIME: remote-connect-11"}
+{"timestamp":"2026-03-25T14:52:06.588Z","level":"info","message":"TIME END: local-connect-11"}
+{"timestamp":"2026-03-25T14:52:06.588Z","level":"info","message":"✅ [11] Local connection established"}
+{"timestamp":"2026-03-25T14:52:06.588Z","level":"info","message":"🤝 [11] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:06.588Z","level":"info","message":"🔐 [11] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:06.587Z","level":"info","message":"TIME END: remote-connect-11"}
+{"timestamp":"2026-03-25T14:52:06.588Z","level":"info","message":"👋 [11] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:07.647Z","level":"info","message":"✅ [11] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:07.648Z","level":"info","message":"✅ [11] Connection 378426ac-2910-4ba7-9e9f-413cbef281ea fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:07.648Z","level":"info","message":"🔄 [11] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:07.647Z","level":"info","message":"✋ [11] Sending Accept message for 378426ac-2910-4ba7-9e9f-413cbef281ea"}
+{"timestamp":"2026-03-25T14:52:07.648Z","level":"info","message":"TIME END: connection-11"}
+{"timestamp":"2026-03-25T14:52:08.546Z","level":"info","message":"🔄 [12] New connection request: b1edee55-d12c-49ed-bb0e-2ffd8cebebf7"}
+{"timestamp":"2026-03-25T14:52:08.546Z","level":"info","message":"TIME: connection-12"}
+{"timestamp":"2026-03-25T14:52:08.799Z","level":"info","message":"TIME END: remote-connect-12"}
+{"timestamp":"2026-03-25T14:52:08.800Z","level":"info","message":"🔐 [12] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:08.546Z","level":"info","message":"🌐 [12] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:08.799Z","level":"info","message":"📡 [12] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:09.049Z","level":"info","message":"✅ [12] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:08.799Z","level":"info","message":"local-connect-12"}
+{"timestamp":"2026-03-25T14:52:09.050Z","level":"info","message":"TIME END: connection-12"}
+{"timestamp":"2026-03-25T14:52:08.546Z","level":"info","message":"TIME: remote-connect-12"}
+{"timestamp":"2026-03-25T14:52:08.546Z","level":"info","message":"🔗 [12] Starting handleConnection for b1edee55-d12c-49ed-bb0e-2ffd8cebebf7"}
+{"timestamp":"2026-03-25T14:52:09.050Z","level":"info","message":"✅ [12] Connection b1edee55-d12c-49ed-bb0e-2ffd8cebebf7 fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:08.800Z","level":"info","message":"TIME END: local-connect-12"}
+{"timestamp":"2026-03-25T14:52:08.800Z","level":"info","message":"🤝 [12] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:08.799Z","level":"info","message":"✅ [12] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:08.800Z","level":"info","message":"✅ [12] Local connection established"}
+{"timestamp":"2026-03-25T14:52:08.800Z","level":"info","message":"👋 [12] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:09.049Z","level":"info","message":"🔄 [12] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:09.049Z","level":"info","message":"✋ [12] Sending Accept message for b1edee55-d12c-49ed-bb0e-2ffd8cebebf7"}
+{"timestamp":"2026-03-25T14:52:10.671Z","level":"info","message":"🔄 [13] New connection request: a15fe591-8cd6-4838-8a70-3ca934c25b0f"}
+{"timestamp":"2026-03-25T14:52:10.671Z","level":"info","message":"🌐 [13] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:10.920Z","level":"info","message":"✅ [13] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:10.921Z","level":"info","message":"👋 [13] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:10.671Z","level":"info","message":"🔗 [13] Starting handleConnection for a15fe591-8cd6-4838-8a70-3ca934c25b0f"}
+{"timestamp":"2026-03-25T14:52:10.920Z","level":"info","message":"TIME END: remote-connect-13"}
+{"timestamp":"2026-03-25T14:52:11.171Z","level":"info","message":"✅ [13] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:10.921Z","level":"info","message":"local-connect-13"}
+{"timestamp":"2026-03-25T14:52:11.171Z","level":"info","message":"✋ [13] Sending Accept message for a15fe591-8cd6-4838-8a70-3ca934c25b0f"}
+{"timestamp":"2026-03-25T14:52:10.671Z","level":"info","message":"TIME: connection-13"}
+{"timestamp":"2026-03-25T14:52:10.671Z","level":"info","message":"TIME: remote-connect-13"}
+{"timestamp":"2026-03-25T14:52:11.172Z","level":"info","message":"TIME END: connection-13"}
+{"timestamp":"2026-03-25T14:52:10.921Z","level":"info","message":"🤝 [13] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:10.920Z","level":"info","message":"📡 [13] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:10.921Z","level":"info","message":"✅ [13] Local connection established"}
+{"timestamp":"2026-03-25T14:52:10.921Z","level":"info","message":"TIME END: local-connect-13"}
+{"timestamp":"2026-03-25T14:52:10.921Z","level":"info","message":"🔐 [13] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:11.172Z","level":"info","message":"✅ [13] Connection a15fe591-8cd6-4838-8a70-3ca934c25b0f fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:11.171Z","level":"info","message":"🔄 [13] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:12.278Z","level":"warn","message":"Transient error fetching test cb6d848a-95a4-46cd-b1a5-5f97f641720e, will retry next cycle: Error: Backend error: 502 - \"<html>\\r\\n<head><title>502 Bad Gateway</title></head>\\r\\n<body>\\r\\n<center><h1>502 Bad Gateway</h1></center>\\r\\n</body>\\r\\n</html>\\r\\n\""}
+{"timestamp":"2026-03-25T14:52:16.937Z","level":"info","message":"🌐 [14] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:16.937Z","level":"info","message":"🔗 [14] Starting handleConnection for 3a137a11-06c0-4ca2-8b3d-1c61a821888d"}
+{"timestamp":"2026-03-25T14:52:17.147Z","level":"info","message":"TIME END: remote-connect-14"}
+{"timestamp":"2026-03-25T14:52:16.937Z","level":"info","message":"TIME: remote-connect-14"}
+{"timestamp":"2026-03-25T14:52:17.147Z","level":"info","message":"✅ [14] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:17.363Z","level":"info","message":"✅ [14] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:17.147Z","level":"info","message":"📡 [14] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:17.363Z","level":"info","message":"🔄 [14] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:16.937Z","level":"info","message":"🔄 [14] New connection request: 3a137a11-06c0-4ca2-8b3d-1c61a821888d"}
+{"timestamp":"2026-03-25T14:52:16.937Z","level":"info","message":"TIME: connection-14"}
+{"timestamp":"2026-03-25T14:52:17.363Z","level":"info","message":"TIME END: connection-14"}
+{"timestamp":"2026-03-25T14:52:17.148Z","level":"info","message":"🤝 [14] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:17.148Z","level":"info","message":"🔐 [14] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:17.147Z","level":"info","message":"local-connect-14"}
+{"timestamp":"2026-03-25T14:52:17.148Z","level":"info","message":"TIME END: local-connect-14"}
+{"timestamp":"2026-03-25T14:52:17.148Z","level":"info","message":"✅ [14] Local connection established"}
+{"timestamp":"2026-03-25T14:52:17.148Z","level":"info","message":"👋 [14] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:17.363Z","level":"info","message":"✅ [14] Connection 3a137a11-06c0-4ca2-8b3d-1c61a821888d fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:17.363Z","level":"info","message":"✋ [14] Sending Accept message for 3a137a11-06c0-4ca2-8b3d-1c61a821888d"}
+{"timestamp":"2026-03-25T14:52:19.315Z","level":"info","message":"🔗 [15] Starting handleConnection for e86abb1f-3917-4942-9684-4d1659ef1e3c"}
+{"timestamp":"2026-03-25T14:52:19.314Z","level":"info","message":"TIME: connection-15"}
+{"timestamp":"2026-03-25T14:52:19.595Z","level":"info","message":"✅ [15] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:19.596Z","level":"info","message":"👋 [15] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:19.314Z","level":"info","message":"🔄 [15] New connection request: e86abb1f-3917-4942-9684-4d1659ef1e3c"}
+{"timestamp":"2026-03-25T14:52:19.595Z","level":"info","message":"TIME END: remote-connect-15"}
+{"timestamp":"2026-03-25T14:52:19.868Z","level":"info","message":"✅ [15] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:19.595Z","level":"info","message":"📡 [15] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:19.869Z","level":"info","message":"✋ [15] Sending Accept message for e86abb1f-3917-4942-9684-4d1659ef1e3c"}
+{"timestamp":"2026-03-25T14:52:19.315Z","level":"info","message":"TIME: remote-connect-15"}
+{"timestamp":"2026-03-25T14:52:19.315Z","level":"info","message":"🌐 [15] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:19.869Z","level":"info","message":"✅ [15] Connection e86abb1f-3917-4942-9684-4d1659ef1e3c fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:19.596Z","level":"info","message":"🤝 [15] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:19.596Z","level":"info","message":"✅ [15] Local connection established"}
+{"timestamp":"2026-03-25T14:52:19.596Z","level":"info","message":"TIME END: local-connect-15"}
+{"timestamp":"2026-03-25T14:52:19.595Z","level":"info","message":"local-connect-15"}
+{"timestamp":"2026-03-25T14:52:19.596Z","level":"info","message":"🔐 [15] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:19.869Z","level":"info","message":"TIME END: connection-15"}
+{"timestamp":"2026-03-25T14:52:19.869Z","level":"info","message":"🔄 [15] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:21.912Z","level":"info","message":"🔄 [16] New connection request: 854f2932-d733-40f2-84ce-71a759f43cef"}
+{"timestamp":"2026-03-25T14:52:21.913Z","level":"info","message":"🌐 [16] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:22.210Z","level":"info","message":"TIME END: remote-connect-16"}
+{"timestamp":"2026-03-25T14:52:21.913Z","level":"info","message":"TIME: remote-connect-16"}
+{"timestamp":"2026-03-25T14:52:22.210Z","level":"info","message":"📡 [16] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:22.474Z","level":"info","message":"✋ [16] Sending Accept message for 854f2932-d733-40f2-84ce-71a759f43cef"}
+{"timestamp":"2026-03-25T14:52:22.210Z","level":"info","message":"✅ [16] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:22.474Z","level":"info","message":"✅ [16] Connection 854f2932-d733-40f2-84ce-71a759f43cef fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:21.913Z","level":"info","message":"🔗 [16] Starting handleConnection for 854f2932-d733-40f2-84ce-71a759f43cef"}
+{"timestamp":"2026-03-25T14:52:21.913Z","level":"info","message":"TIME: connection-16"}
+{"timestamp":"2026-03-25T14:52:22.474Z","level":"info","message":"🔄 [16] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:22.210Z","level":"info","message":"local-connect-16"}
+{"timestamp":"2026-03-25T14:52:22.211Z","level":"info","message":"👋 [16] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:22.211Z","level":"info","message":"🤝 [16] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:22.211Z","level":"info","message":"🔐 [16] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:22.211Z","level":"info","message":"TIME END: local-connect-16"}
+{"timestamp":"2026-03-25T14:52:22.211Z","level":"info","message":"✅ [16] Local connection established"}
+{"timestamp":"2026-03-25T14:52:22.474Z","level":"info","message":"TIME END: connection-16"}
+{"timestamp":"2026-03-25T14:52:22.474Z","level":"info","message":"✅ [16] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:24.075Z","level":"info","message":"🔄 [17] New connection request: 035267b6-8713-4789-a0c8-b394b417e7be"}
+{"timestamp":"2026-03-25T14:52:24.075Z","level":"info","message":"🔗 [17] Starting handleConnection for 035267b6-8713-4789-a0c8-b394b417e7be"}
+{"timestamp":"2026-03-25T14:52:24.315Z","level":"info","message":"TIME END: remote-connect-17"}
+{"timestamp":"2026-03-25T14:52:24.317Z","level":"info","message":"👋 [17] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:24.075Z","level":"info","message":"TIME: connection-17"}
+{"timestamp":"2026-03-25T14:52:24.316Z","level":"info","message":"local-connect-17"}
+{"timestamp":"2026-03-25T14:52:24.573Z","level":"info","message":"✅ [17] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:24.316Z","level":"info","message":"📡 [17] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:24.574Z","level":"info","message":"TIME END: connection-17"}
+{"timestamp":"2026-03-25T14:52:24.075Z","level":"info","message":"🌐 [17] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:24.075Z","level":"info","message":"TIME: remote-connect-17"}
+{"timestamp":"2026-03-25T14:52:24.574Z","level":"info","message":"🔄 [17] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:24.316Z","level":"info","message":"✅ [17] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:24.317Z","level":"info","message":"🤝 [17] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:24.317Z","level":"info","message":"✅ [17] Local connection established"}
+{"timestamp":"2026-03-25T14:52:24.317Z","level":"info","message":"🔐 [17] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:24.317Z","level":"info","message":"TIME END: local-connect-17"}
+{"timestamp":"2026-03-25T14:52:24.574Z","level":"info","message":"✅ [17] Connection 035267b6-8713-4789-a0c8-b394b417e7be fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:24.573Z","level":"info","message":"✋ [17] Sending Accept message for 035267b6-8713-4789-a0c8-b394b417e7be"}
+{"timestamp":"2026-03-25T14:52:26.546Z","level":"info","message":"🌐 [18] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:26.546Z","level":"info","message":"TIME: remote-connect-18"}
+{"timestamp":"2026-03-25T14:52:26.798Z","level":"info","message":"📡 [18] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:26.799Z","level":"info","message":"👋 [18] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:26.546Z","level":"info","message":"🔄 [18] New connection request: 89907dbc-4113-45c1-b78d-d8c4bcd0213f"}
+{"timestamp":"2026-03-25T14:52:26.798Z","level":"info","message":"local-connect-18"}
+{"timestamp":"2026-03-25T14:52:27.066Z","level":"info","message":"✋ [18] Sending Accept message for 89907dbc-4113-45c1-b78d-d8c4bcd0213f"}
+{"timestamp":"2026-03-25T14:52:26.798Z","level":"info","message":"✅ [18] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:27.066Z","level":"info","message":"🔄 [18] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:26.546Z","level":"info","message":"TIME: connection-18"}
+{"timestamp":"2026-03-25T14:52:26.546Z","level":"info","message":"🔗 [18] Starting handleConnection for 89907dbc-4113-45c1-b78d-d8c4bcd0213f"}
+{"timestamp":"2026-03-25T14:52:27.066Z","level":"info","message":"✅ [18] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:26.799Z","level":"info","message":"TIME END: local-connect-18"}
+{"timestamp":"2026-03-25T14:52:26.798Z","level":"info","message":"TIME END: remote-connect-18"}
+{"timestamp":"2026-03-25T14:52:26.799Z","level":"info","message":"✅ [18] Local connection established"}
+{"timestamp":"2026-03-25T14:52:26.799Z","level":"info","message":"🤝 [18] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:26.799Z","level":"info","message":"🔐 [18] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:27.066Z","level":"info","message":"✅ [18] Connection 89907dbc-4113-45c1-b78d-d8c4bcd0213f fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:27.066Z","level":"info","message":"TIME END: connection-18"}
+{"timestamp":"2026-03-25T14:52:33.577Z","level":"info","message":"🔄 [19] New connection request: 23481ca3-ba41-49d6-8f87-4cc70ea02656"}
+{"timestamp":"2026-03-25T14:52:33.578Z","level":"info","message":"🔗 [19] Starting handleConnection for 23481ca3-ba41-49d6-8f87-4cc70ea02656"}
+{"timestamp":"2026-03-25T14:52:33.830Z","level":"info","message":"TIME END: remote-connect-19"}
+{"timestamp":"2026-03-25T14:52:33.831Z","level":"info","message":"👋 [19] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:33.578Z","level":"info","message":"🌐 [19] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:33.830Z","level":"info","message":"✅ [19] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:34.078Z","level":"info","message":"✋ [19] Sending Accept message for 23481ca3-ba41-49d6-8f87-4cc70ea02656"}
+{"timestamp":"2026-03-25T14:52:33.831Z","level":"info","message":"TIME END: local-connect-19"}
+{"timestamp":"2026-03-25T14:52:34.078Z","level":"info","message":"🔄 [19] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:33.577Z","level":"info","message":"TIME: connection-19"}
+{"timestamp":"2026-03-25T14:52:33.578Z","level":"info","message":"TIME: remote-connect-19"}
+{"timestamp":"2026-03-25T14:52:34.078Z","level":"info","message":"✅ [19] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:33.831Z","level":"info","message":"🤝 [19] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:33.831Z","level":"info","message":"🔐 [19] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:33.831Z","level":"info","message":"✅ [19] Local connection established"}
+{"timestamp":"2026-03-25T14:52:33.830Z","level":"info","message":"📡 [19] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:33.830Z","level":"info","message":"local-connect-19"}
+{"timestamp":"2026-03-25T14:52:34.078Z","level":"info","message":"✅ [19] Connection 23481ca3-ba41-49d6-8f87-4cc70ea02656 fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:34.078Z","level":"info","message":"TIME END: connection-19"}
+{"timestamp":"2026-03-25T14:52:51.861Z","level":"info","message":"TIME: connection-20"}
+{"timestamp":"2026-03-25T14:52:51.861Z","level":"info","message":"🔄 [20] New connection request: ea071811-bc43-4924-9f26-86501d4bd81b"}
+{"timestamp":"2026-03-25T14:52:52.113Z","level":"info","message":"✅ [20] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:52.114Z","level":"info","message":"👋 [20] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:51.861Z","level":"info","message":"🔗 [20] Starting handleConnection for ea071811-bc43-4924-9f26-86501d4bd81b"}
+{"timestamp":"2026-03-25T14:52:52.113Z","level":"info","message":"📡 [20] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:52.347Z","level":"info","message":"✅ [20] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:52.113Z","level":"info","message":"TIME END: remote-connect-20"}
+{"timestamp":"2026-03-25T14:52:52.347Z","level":"info","message":"🔄 [20] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:51.862Z","level":"info","message":"TIME: remote-connect-20"}
+{"timestamp":"2026-03-25T14:52:51.862Z","level":"info","message":"🌐 [20] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:52.347Z","level":"info","message":"✅ [20] Connection ea071811-bc43-4924-9f26-86501d4bd81b fully established and proxying"}
+{"timestamp":"2026-03-25T14:52:52.113Z","level":"info","message":"local-connect-20"}
+{"timestamp":"2026-03-25T14:52:52.114Z","level":"info","message":"🤝 [20] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:52.114Z","level":"info","message":"TIME END: local-connect-20"}
+{"timestamp":"2026-03-25T14:52:52.114Z","level":"info","message":"🔐 [20] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:52.114Z","level":"info","message":"✅ [20] Local connection established"}
+{"timestamp":"2026-03-25T14:52:52.347Z","level":"info","message":"✋ [20] Sending Accept message for ea071811-bc43-4924-9f26-86501d4bd81b"}
+{"timestamp":"2026-03-25T14:52:52.347Z","level":"info","message":"TIME END: connection-20"}
+{"timestamp":"2026-03-25T14:52:54.356Z","level":"info","message":"🔄 [21] New connection request: db3e4e30-de8a-4baa-bd87-fc699b14f006"}
+{"timestamp":"2026-03-25T14:52:54.356Z","level":"info","message":"TIME: connection-21"}
+{"timestamp":"2026-03-25T14:52:54.600Z","level":"info","message":"✅ [21] Remote connection established"}
+{"timestamp":"2026-03-25T14:52:54.601Z","level":"info","message":"👋 [21] Hello message sent"}
+{"timestamp":"2026-03-25T14:52:54.356Z","level":"info","message":"🔗 [21] Starting handleConnection for db3e4e30-de8a-4baa-bd87-fc699b14f006"}
+{"timestamp":"2026-03-25T14:52:54.600Z","level":"info","message":"TIME END: remote-connect-21"}
+{"timestamp":"2026-03-25T14:52:54.847Z","level":"info","message":"✅ [21] Authentication completed"}
+{"timestamp":"2026-03-25T14:52:54.601Z","level":"info","message":"TIME END: local-connect-21"}
+{"timestamp":"2026-03-25T14:52:54.847Z","level":"info","message":"🔄 [21] Starting data proxy"}
+{"timestamp":"2026-03-25T14:52:54.356Z","level":"info","message":"🌐 [21] Connecting to remote tun.testsprite.com:7300"}
+{"timestamp":"2026-03-25T14:52:54.356Z","level":"info","message":"TIME: remote-connect-21"}
+{"timestamp":"2026-03-25T14:52:54.848Z","level":"info","message":"TIME END: connection-21"}
+{"timestamp":"2026-03-25T14:52:54.600Z","level":"info","message":"📡 [21] Connecting to local localhost:62221"}
+{"timestamp":"2026-03-25T14:52:54.601Z","level":"info","message":"🔐 [21] Performing authentication"}
+{"timestamp":"2026-03-25T14:52:54.601Z","level":"info","message":"🤝 [21] Starting handshake"}
+{"timestamp":"2026-03-25T14:52:54.601Z","level":"info","message":"local-connect-21"}
+{"timestamp":"2026-03-25T14:52:54.601Z","level":"info","message":"✅ [21] Local connection established"}
+{"timestamp":"2026-03-25T14:52:54.847Z","level":"info","message":"✋ [21] Sending Accept message for db3e4e30-de8a-4baa-bd87-fc699b14f006"}
+{"timestamp":"2026-03-25T14:52:54.847Z","level":"info","message":"✅ [21] Connection db3e4e30-de8a-4baa-bd87-fc699b14f006 fully established and proxying"}
+{"timestamp":"2026-03-25T15:11:58.685Z","level":"info","message":"Tool invocation started","correlationId":"f6812c5a-68be-4279-b9b4-be2672f97014","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T15:11:58.688Z","level":"info","message":"Tool invocation completed","correlationId":"f6812c5a-68be-4279-b9b4-be2672f97014","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T15:11:58.688Z","level":"info","message":"Scope determined","correlationId":"f6812c5a-68be-4279-b9b4-be2672f97014","tool":"testsprite_generate_code_summary","context":{"scope":"codebase","type":"backend"}}
+{"timestamp":"2026-03-25T15:11:58.687Z","level":"debug","message":"Code analyze params","correlationId":"f6812c5a-68be-4279-b9b4-be2672f97014","tool":"testsprite_generate_code_summary","context":{"projectRootPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:12:05.682Z","level":"info","message":"Tool invocation started","correlationId":"9b5e5a4d-8349-491a-a9d1-a0fec012567e","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:12:05.683Z","level":"debug","message":"Generate standard PRD params","correlationId":"9b5e5a4d-8349-491a-a9d1-a0fec012567e","tool":"testsprite_generate_standardized_prd","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:12:05.683Z","level":"info","message":"PRD files loaded","correlationId":"9b5e5a4d-8349-491a-a9d1-a0fec012567e","tool":"testsprite_generate_standardized_prd","context":{"fileCount":1}}
+{"timestamp":"2026-03-25T15:12:15.685Z","level":"debug","message":"Generate backend test plan params","correlationId":"cb7b61cd-a81c-4f08-b41d-859e114c367f","tool":"testsprite_generate_backend_test_plan","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:12:15.684Z","level":"info","message":"Tool invocation started","correlationId":"cb7b61cd-a81c-4f08-b41d-859e114c367f","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:12:15.793Z","level":"info","message":"Tool invocation started","correlationId":"9bba2fa9-7a87-4917-845d-b1bb255da909","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T15:12:15.795Z","level":"debug","message":"Code analyze params","correlationId":"9bba2fa9-7a87-4917-845d-b1bb255da909","tool":"testsprite_generate_code_summary","context":{"projectRootPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:12:15.796Z","level":"info","message":"Scope determined","correlationId":"9bba2fa9-7a87-4917-845d-b1bb255da909","tool":"testsprite_generate_code_summary","context":{"scope":"codebase","type":"backend"}}
+{"timestamp":"2026-03-25T15:12:15.797Z","level":"info","message":"Tool invocation completed","correlationId":"9bba2fa9-7a87-4917-845d-b1bb255da909","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T15:12:22.798Z","level":"info","message":"Tool invocation started","correlationId":"1f3c3f51-0a04-4c10-9a40-21cae69e4084","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:12:22.799Z","level":"debug","message":"Generate standard PRD params","correlationId":"1f3c3f51-0a04-4c10-9a40-21cae69e4084","tool":"testsprite_generate_standardized_prd","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:12:22.799Z","level":"info","message":"PRD files loaded","correlationId":"1f3c3f51-0a04-4c10-9a40-21cae69e4084","tool":"testsprite_generate_standardized_prd","context":{"fileCount":1}}
+{"timestamp":"2026-03-25T15:12:25.684Z","level":"info","message":"Tool invocation started","correlationId":"d0385ada-7103-4a18-8e4b-dec3adc7590e","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:12:25.686Z","level":"info","message":"Deleted existing file: c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend\\testsprite_tests\\tmp\\raw_report.md","correlationId":"d0385ada-7103-4a18-8e4b-dec3adc7590e","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:12:25.687Z","level":"info","message":"Tool invocation completed","correlationId":"d0385ada-7103-4a18-8e4b-dec3adc7590e","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:12:27.648Z","level":"info","message":"Backend test plan generated successfully","correlationId":"cb7b61cd-a81c-4f08-b41d-859e114c367f","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:12:27.649Z","level":"info","message":"Tool invocation completed","correlationId":"cb7b61cd-a81c-4f08-b41d-859e114c367f","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:12:32.795Z","level":"info","message":"Tool invocation started","correlationId":"4c99144c-d7ff-45e9-821b-3a53175a8b1f","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:12:32.795Z","level":"debug","message":"Generate backend test plan params","correlationId":"4c99144c-d7ff-45e9-821b-3a53175a8b1f","tool":"testsprite_generate_backend_test_plan","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:12:42.795Z","level":"info","message":"Tool invocation started","correlationId":"ef1703ab-2bf5-4490-a79a-cee1f5c0c609","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:12:42.797Z","level":"info","message":"Tool invocation completed","correlationId":"ef1703ab-2bf5-4490-a79a-cee1f5c0c609","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:12:51.265Z","level":"info","message":"Backend test plan generated successfully","correlationId":"4c99144c-d7ff-45e9-821b-3a53175a8b1f","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:12:51.266Z","level":"info","message":"Tool invocation completed","correlationId":"4c99144c-d7ff-45e9-821b-3a53175a8b1f","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:12:57.201Z","level":"info","message":"Standard PRD generated successfully","correlationId":"9b5e5a4d-8349-491a-a9d1-a0fec012567e","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:12:57.202Z","level":"info","message":"Tool invocation completed","correlationId":"9b5e5a4d-8349-491a-a9d1-a0fec012567e","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:13:12.587Z","level":"info","message":"Tool invocation completed","correlationId":"1f3c3f51-0a04-4c10-9a40-21cae69e4084","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:13:12.586Z","level":"info","message":"Standard PRD generated successfully","correlationId":"1f3c3f51-0a04-4c10-9a40-21cae69e4084","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:13:54.024Z","level":"info","message":"Tool invocation started","correlationId":"2b01e8e5-8d5c-4bfa-9c50-60a5d91cf79e","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T15:13:54.027Z","level":"info","message":"Tool invocation completed","correlationId":"2b01e8e5-8d5c-4bfa-9c50-60a5d91cf79e","tool":"testsprite_generate_code_summary"}
+{"timestamp":"2026-03-25T15:13:54.026Z","level":"debug","message":"Code analyze params","correlationId":"2b01e8e5-8d5c-4bfa-9c50-60a5d91cf79e","tool":"testsprite_generate_code_summary","context":{"projectRootPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:13:54.027Z","level":"info","message":"Scope determined","correlationId":"2b01e8e5-8d5c-4bfa-9c50-60a5d91cf79e","tool":"testsprite_generate_code_summary","context":{"scope":"codebase","type":"backend"}}
+{"timestamp":"2026-03-25T15:14:01.017Z","level":"info","message":"Tool invocation started","correlationId":"7a7e2cbe-5e69-4d00-b6b7-ea30ba0d9c7d","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:14:01.017Z","level":"debug","message":"Generate standard PRD params","correlationId":"7a7e2cbe-5e69-4d00-b6b7-ea30ba0d9c7d","tool":"testsprite_generate_standardized_prd","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:14:01.018Z","level":"info","message":"PRD files loaded","correlationId":"7a7e2cbe-5e69-4d00-b6b7-ea30ba0d9c7d","tool":"testsprite_generate_standardized_prd","context":{"fileCount":1}}
+{"timestamp":"2026-03-25T15:14:11.020Z","level":"info","message":"Tool invocation started","correlationId":"f844883a-51be-4b34-80ec-8b6c8cdcb5d1","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:14:11.020Z","level":"debug","message":"Generate backend test plan params","correlationId":"f844883a-51be-4b34-80ec-8b6c8cdcb5d1","tool":"testsprite_generate_backend_test_plan","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:14:11.020Z","level":"error","message":"Tool invocation failed: Failed to generate backend test plan: Failed to read PRD file at c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend\\testsprite_tests\\standard_prd.json: ENOENT: no such file or directory, open 'c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend\\testsprite_tests\\standard_prd.json'","correlationId":"f844883a-51be-4b34-80ec-8b6c8cdcb5d1","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:14:21.028Z","level":"info","message":"Tool invocation started","correlationId":"6e02ac5a-fcc5-4ec9-b3f1-8e29cda18e36","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:14:21.030Z","level":"info","message":"Tool invocation completed","correlationId":"6e02ac5a-fcc5-4ec9-b3f1-8e29cda18e36","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:14:57.188Z","level":"info","message":"Standard PRD generated successfully","correlationId":"7a7e2cbe-5e69-4d00-b6b7-ea30ba0d9c7d","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:14:57.189Z","level":"info","message":"Tool invocation completed","correlationId":"7a7e2cbe-5e69-4d00-b6b7-ea30ba0d9c7d","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:15:33.940Z","level":"info","message":"Tool invocation started","correlationId":"1780259c-ab44-4a20-8705-b8f8ebcb7e3e","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:15:33.943Z","level":"error","message":"Tool invocation failed: Validation error:\ntestScope: Invalid input","correlationId":"1780259c-ab44-4a20-8705-b8f8ebcb7e3e","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:15:43.941Z","level":"info","message":"Tool invocation started","correlationId":"9e43f9f2-f6bb-4312-90a8-add84ce22fe6","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:15:43.941Z","level":"error","message":"Tool invocation failed: Validation error:\n: Invalid input","correlationId":"9e43f9f2-f6bb-4312-90a8-add84ce22fe6","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:15:56.942Z","level":"error","message":"Tool invocation failed: Validation error:\nserverMode: Invalid input","correlationId":"8c1b60d0-685b-441c-b087-8ba41d8de1a1","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:15:56.941Z","level":"info","message":"Tool invocation started","correlationId":"8c1b60d0-685b-441c-b087-8ba41d8de1a1","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:16:41.410Z","level":"info","message":"Tool invocation started","correlationId":"6074c029-75e3-45a1-921d-8412ac5c07e8","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:16:41.412Z","level":"error","message":"Tool invocation failed: Validation error:\ntestScope: Invalid input","correlationId":"6074c029-75e3-45a1-921d-8412ac5c07e8","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:16:51.403Z","level":"info","message":"Tool invocation started","correlationId":"5dd74072-f09a-4e3b-9636-33088c2e9209","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:16:51.403Z","level":"error","message":"Tool invocation failed: Validation error:\n: Invalid input","correlationId":"5dd74072-f09a-4e3b-9636-33088c2e9209","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:17:04.404Z","level":"info","message":"Tool invocation started","correlationId":"64aa8e90-163c-472f-a7ca-b084fce150ae","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:17:04.404Z","level":"error","message":"Tool invocation failed: Validation error:\nserverMode: Invalid input","correlationId":"64aa8e90-163c-472f-a7ca-b084fce150ae","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:17:13.217Z","level":"info","message":"Tool invocation started","correlationId":"b1fa17b9-ea6a-4105-8b68-8d5cd67b92b0","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:17:13.229Z","level":"info","message":"HTTP server started, config saved","correlationId":"b1fa17b9-ea6a-4105-8b68-8d5cd67b92b0","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:17:13.219Z","level":"debug","message":"Initialization params","correlationId":"b1fa17b9-ea6a-4105-8b68-8d5cd67b92b0","tool":"testsprite_bootstrap","context":{"localPort":3000,"type":"backend","projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend","testScope":"codebase"}}
+{"timestamp":"2026-03-25T15:17:13.221Z","level":"info","message":"Attempting to start server (attempt 1/3)","correlationId":"b1fa17b9-ea6a-4105-8b68-8d5cd67b92b0","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:17:13.228Z","level":"info","message":"HTTP server started successfully on port 64136","correlationId":"b1fa17b9-ea6a-4105-8b68-8d5cd67b92b0","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:17:13.714Z","level":"info","message":"GET /init?project_path=c%3A%5CUsers%5Cqingwen%5C.gemini%5Cantigravity%5Cworkspaces%5C%E5%9C%9F%E7%AA%9F%E8%A8%AD%E8%A8%88su%E6%B8%B2%E6%9F%93%E6%8F%92%E4%BB%B6%5Cloamlab_backend&default_type=backend 200 3ms","correlationId":"b1fa17b9-ea6a-4105-8b68-8d5cd67b92b0","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:17:13.760Z","level":"info","message":"GET /api/config?project_path=c%3A%5CUsers%5Cqingwen%5C.gemini%5Cantigravity%5Cworkspaces%5C%E5%9C%9F%E7%AA%9F%E8%A8%AD%E8%A8%88su%E6%B8%B2%E6%9F%93%E6%8F%92%E4%BB%B6%5Cloamlab_backend 200 1ms","correlationId":"b1fa17b9-ea6a-4105-8b68-8d5cd67b92b0","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:17:13.775Z","level":"info","message":"GET /favicon.ico 404 0ms","correlationId":"b1fa17b9-ea6a-4105-8b68-8d5cd67b92b0","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:17:23.214Z","level":"info","message":"Tool invocation started","correlationId":"3a9daf75-3c04-473f-af81-7e55fe2750fb","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:17:23.215Z","level":"error","message":"Tool invocation failed: Validation error:\n: Invalid input","correlationId":"3a9daf75-3c04-473f-af81-7e55fe2750fb","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:17:36.222Z","level":"error","message":"Tool invocation failed: Validation error:\nserverMode: Invalid input","correlationId":"837c99a5-c6e3-442b-b9c8-e54494014837","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:17:36.221Z","level":"info","message":"Tool invocation started","correlationId":"837c99a5-c6e3-442b-b9c8-e54494014837","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:18:12.999Z","level":"info","message":"Tool invocation started","correlationId":"6f63de83-0f24-46a5-8b9d-8303b5b878ac","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:18:13.010Z","level":"info","message":"HTTP server started, config saved","correlationId":"6f63de83-0f24-46a5-8b9d-8303b5b878ac","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:18:13.001Z","level":"debug","message":"Initialization params","correlationId":"6f63de83-0f24-46a5-8b9d-8303b5b878ac","tool":"testsprite_bootstrap","context":{"localPort":3000,"type":"backend","projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend","testScope":"codebase"}}
+{"timestamp":"2026-03-25T15:18:13.009Z","level":"info","message":"HTTP server started successfully on port 64193","correlationId":"6f63de83-0f24-46a5-8b9d-8303b5b878ac","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:18:13.482Z","level":"info","message":"GET /init?project_path=c%3A%5CUsers%5Cqingwen%5C.gemini%5Cantigravity%5Cworkspaces%5C%E5%9C%9F%E7%AA%9F%E8%A8%AD%E8%A8%88su%E6%B8%B2%E6%9F%93%E6%8F%92%E4%BB%B6%5Cloamlab_backend&default_type=backend 200 2ms","correlationId":"6f63de83-0f24-46a5-8b9d-8303b5b878ac","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:18:13.529Z","level":"info","message":"GET /api/config?project_path=c%3A%5CUsers%5Cqingwen%5C.gemini%5Cantigravity%5Cworkspaces%5C%E5%9C%9F%E7%AA%9F%E8%A8%AD%E8%A8%88su%E6%B8%B2%E6%9F%93%E6%8F%92%E4%BB%B6%5Cloamlab_backend 200 1ms","correlationId":"6f63de83-0f24-46a5-8b9d-8303b5b878ac","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:18:13.544Z","level":"info","message":"GET /favicon.ico 404 1ms","correlationId":"6f63de83-0f24-46a5-8b9d-8303b5b878ac","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:18:13.002Z","level":"info","message":"Attempting to start server (attempt 1/3)","correlationId":"6f63de83-0f24-46a5-8b9d-8303b5b878ac","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:18:23.010Z","level":"info","message":"Tool invocation started","correlationId":"496beffe-ea8a-4618-9249-eb37dd765562","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:18:23.010Z","level":"debug","message":"Generate standard PRD params","correlationId":"496beffe-ea8a-4618-9249-eb37dd765562","tool":"testsprite_generate_standardized_prd","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:18:23.011Z","level":"info","message":"PRD files loaded","correlationId":"496beffe-ea8a-4618-9249-eb37dd765562","tool":"testsprite_generate_standardized_prd","context":{"fileCount":1}}
+{"timestamp":"2026-03-25T15:18:36.004Z","level":"info","message":"Tool invocation started","correlationId":"d14adc0c-842b-44ef-8eb5-97446160908b","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:18:36.005Z","level":"error","message":"Tool invocation failed: Validation error:\nserverMode: Invalid input","correlationId":"d14adc0c-842b-44ef-8eb5-97446160908b","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:19:11.726Z","level":"info","message":"Standard PRD generated successfully","correlationId":"496beffe-ea8a-4618-9249-eb37dd765562","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:19:11.727Z","level":"info","message":"Tool invocation completed","correlationId":"496beffe-ea8a-4618-9249-eb37dd765562","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:19:19.486Z","level":"debug","message":"Initialization params","correlationId":"4548e082-c8bd-48ff-85b2-c08950e91f0b","tool":"testsprite_bootstrap","context":{"localPort":3000,"type":"backend","projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend","testScope":"codebase"}}
+{"timestamp":"2026-03-25T15:19:19.496Z","level":"info","message":"HTTP server started, config saved","correlationId":"4548e082-c8bd-48ff-85b2-c08950e91f0b","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:19:19.484Z","level":"info","message":"Tool invocation started","correlationId":"4548e082-c8bd-48ff-85b2-c08950e91f0b","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:19:19.487Z","level":"info","message":"Attempting to start server (attempt 1/3)","correlationId":"4548e082-c8bd-48ff-85b2-c08950e91f0b","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:19:19.968Z","level":"info","message":"GET /init?project_path=c%3A%5CUsers%5Cqingwen%5C.gemini%5Cantigravity%5Cworkspaces%5C%E5%9C%9F%E7%AA%9F%E8%A8%AD%E8%A8%88su%E6%B8%B2%E6%9F%93%E6%8F%92%E4%BB%B6%5Cloamlab_backend&default_type=backend 200 2ms","correlationId":"4548e082-c8bd-48ff-85b2-c08950e91f0b","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:19:20.014Z","level":"info","message":"GET /api/config?project_path=c%3A%5CUsers%5Cqingwen%5C.gemini%5Cantigravity%5Cworkspaces%5C%E5%9C%9F%E7%AA%9F%E8%A8%AD%E8%A8%88su%E6%B8%B2%E6%9F%93%E6%8F%92%E4%BB%B6%5Cloamlab_backend 200 1ms","correlationId":"4548e082-c8bd-48ff-85b2-c08950e91f0b","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:19:20.028Z","level":"info","message":"GET /favicon.ico 404 0ms","correlationId":"4548e082-c8bd-48ff-85b2-c08950e91f0b","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:19:19.495Z","level":"info","message":"HTTP server started successfully on port 64278","correlationId":"4548e082-c8bd-48ff-85b2-c08950e91f0b","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:19:29.488Z","level":"debug","message":"Generate standard PRD params","correlationId":"c60d0440-fb20-4526-aaa2-4ad21635bcbc","tool":"testsprite_generate_standardized_prd","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:19:29.487Z","level":"info","message":"Tool invocation started","correlationId":"c60d0440-fb20-4526-aaa2-4ad21635bcbc","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:19:29.488Z","level":"info","message":"PRD files loaded","correlationId":"c60d0440-fb20-4526-aaa2-4ad21635bcbc","tool":"testsprite_generate_standardized_prd","context":{"fileCount":1}}
+{"timestamp":"2026-03-25T15:19:39.486Z","level":"debug","message":"Generate backend test plan params","correlationId":"61865399-fb8f-4ffb-858b-1c1520d1e5cc","tool":"testsprite_generate_backend_test_plan","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:19:39.486Z","level":"info","message":"Tool invocation started","correlationId":"61865399-fb8f-4ffb-858b-1c1520d1e5cc","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:19:52.482Z","level":"info","message":"Tool invocation started","correlationId":"2cdb6730-3260-4e50-91b2-48011bffad13","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:19:52.484Z","level":"info","message":"Tool invocation completed","correlationId":"2cdb6730-3260-4e50-91b2-48011bffad13","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:20:10.870Z","level":"info","message":"Backend test plan generated successfully","correlationId":"61865399-fb8f-4ffb-858b-1c1520d1e5cc","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:20:10.871Z","level":"info","message":"Tool invocation completed","correlationId":"61865399-fb8f-4ffb-858b-1c1520d1e5cc","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:20:19.856Z","level":"info","message":"Tool invocation completed","correlationId":"c60d0440-fb20-4526-aaa2-4ad21635bcbc","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:20:19.856Z","level":"info","message":"Standard PRD generated successfully","correlationId":"c60d0440-fb20-4526-aaa2-4ad21635bcbc","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:20:34.974Z","level":"info","message":"Tool invocation started","correlationId":"f0047a8b-fbf9-4371-8646-a3e732e53683","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:20:34.986Z","level":"info","message":"HTTP server started, config saved","correlationId":"f0047a8b-fbf9-4371-8646-a3e732e53683","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:20:34.976Z","level":"debug","message":"Initialization params","correlationId":"f0047a8b-fbf9-4371-8646-a3e732e53683","tool":"testsprite_bootstrap","context":{"localPort":3000,"type":"backend","projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend","testScope":"codebase"}}
+{"timestamp":"2026-03-25T15:20:34.985Z","level":"info","message":"HTTP server started successfully on port 64351","correlationId":"f0047a8b-fbf9-4371-8646-a3e732e53683","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:20:35.454Z","level":"info","message":"GET /init?project_path=c%3A%5CUsers%5Cqingwen%5C.gemini%5Cantigravity%5Cworkspaces%5C%E5%9C%9F%E7%AA%9F%E8%A8%AD%E8%A8%88su%E6%B8%B2%E6%9F%93%E6%8F%92%E4%BB%B6%5Cloamlab_backend&default_type=backend 200 2ms","correlationId":"f0047a8b-fbf9-4371-8646-a3e732e53683","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:20:35.498Z","level":"info","message":"GET /api/config?project_path=c%3A%5CUsers%5Cqingwen%5C.gemini%5Cantigravity%5Cworkspaces%5C%E5%9C%9F%E7%AA%9F%E8%A8%AD%E8%A8%88su%E6%B8%B2%E6%9F%93%E6%8F%92%E4%BB%B6%5Cloamlab_backend 200 1ms","correlationId":"f0047a8b-fbf9-4371-8646-a3e732e53683","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:20:35.510Z","level":"info","message":"GET /favicon.ico 404 1ms","correlationId":"f0047a8b-fbf9-4371-8646-a3e732e53683","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:20:34.978Z","level":"info","message":"Attempting to start server (attempt 1/3)","correlationId":"f0047a8b-fbf9-4371-8646-a3e732e53683","tool":"testsprite_bootstrap"}
+{"timestamp":"2026-03-25T15:20:44.974Z","level":"debug","message":"Generate standard PRD params","correlationId":"2881c21b-4d65-463d-adfb-6ecebfaf58d6","tool":"testsprite_generate_standardized_prd","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:20:44.974Z","level":"info","message":"PRD files loaded","correlationId":"2881c21b-4d65-463d-adfb-6ecebfaf58d6","tool":"testsprite_generate_standardized_prd","context":{"fileCount":1}}
+{"timestamp":"2026-03-25T15:20:44.973Z","level":"info","message":"Tool invocation started","correlationId":"2881c21b-4d65-463d-adfb-6ecebfaf58d6","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:20:54.976Z","level":"info","message":"Tool invocation started","correlationId":"d26584a4-e6e2-458b-95ef-848d70e9de38","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:20:54.976Z","level":"debug","message":"Generate backend test plan params","correlationId":"d26584a4-e6e2-458b-95ef-848d70e9de38","tool":"testsprite_generate_backend_test_plan","context":{"projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}}
+{"timestamp":"2026-03-25T15:21:06.131Z","level":"info","message":"Tool invocation completed","correlationId":"d26584a4-e6e2-458b-95ef-848d70e9de38","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:21:06.130Z","level":"info","message":"Backend test plan generated successfully","correlationId":"d26584a4-e6e2-458b-95ef-848d70e9de38","tool":"testsprite_generate_backend_test_plan"}
+{"timestamp":"2026-03-25T15:21:07.963Z","level":"info","message":"Tool invocation started","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:07.973Z","level":"info","message":"HTTP proxy started successfully on port 64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:07.965Z","level":"debug","message":"Generate code and execute params","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute","context":{"projectName":"loamlab_backend_unified","projectPath":"c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend","testIds":[],"serverMode":"development"}}
+{"timestamp":"2026-03-25T15:21:07.972Z","level":"info","message":"Attempting to start HTTP proxy (attempt 1/3)","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:08.951Z","level":"info","message":"🚀 Starting tunnel client: d061a220-0ae5-4707-b18d-c2c3581b7b57","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:08.951Z","level":"info","message":"⏱️ Network timeout: 10000ms, Auth: enabled","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:08.951Z","level":"info","message":"📋 Config: localhost:64400 -> tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:09.527Z","level":"info","message":"Tunnel probe attempt 1/2 through tun.testsprite.com:8080 to http://localhost:3000/...","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:09.526Z","level":"info","message":"proxy: [REDACTED]tun.testsprite.com:8080","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:08.951Z","level":"info","message":"🔗 Establishing control connection...","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:09.526Z","level":"info","message":"Verifying tunnel connectivity...","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:10.019Z","level":"warn","message":"Tunnel probe attempt 1 failed: read ECONNRESET — retrying in 3s...","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:10.029Z","level":"info","message":"✅ Tunnel established, remote port: 8080","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.024Z","level":"info","message":"Tunnel probe attempt 2/2 through tun.testsprite.com:8080 to http://localhost:3000/...","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.522Z","level":"info","message":"🔄 [1] New connection request: b3159ce0-97c8-4ff7-8bfc-48730a996d0f","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.522Z","level":"info","message":"TIME: connection-1","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.759Z","level":"info","message":"TIME END: remote-connect-1","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.523Z","level":"info","message":"🌐 [1] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.759Z","level":"info","message":"📡 [1] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.995Z","level":"info","message":"✅ [1] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.759Z","level":"info","message":"✅ [1] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.995Z","level":"info","message":"✋ [1] Sending Accept message for b3159ce0-97c8-4ff7-8bfc-48730a996d0f","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.523Z","level":"info","message":"TIME: remote-connect-1","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.523Z","level":"info","message":"🔗 [1] Starting handleConnection for b3159ce0-97c8-4ff7-8bfc-48730a996d0f","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.996Z","level":"info","message":"TIME END: connection-1","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.760Z","level":"info","message":"TIME END: local-connect-1","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.760Z","level":"info","message":"✅ [1] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.760Z","level":"info","message":"🔐 [1] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.759Z","level":"info","message":"local-connect-1","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.760Z","level":"info","message":"🤝 [1] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.760Z","level":"info","message":"👋 [1] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.995Z","level":"info","message":"🔄 [1] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:13.996Z","level":"info","message":"✅ [1] Connection b3159ce0-97c8-4ff7-8bfc-48730a996d0f fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:15.040Z","level":"info","message":"Tunnel probe succeeded on attempt 2: status=404","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:15.040Z","level":"info","message":"Tunnel connectivity verified.","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.358Z","level":"info","message":"TIME: connection-2","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.358Z","level":"info","message":"🌐 [2] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.616Z","level":"info","message":"✅ [2] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.358Z","level":"info","message":"🔗 [2] Starting handleConnection for 99c09220-0f08-4b07-a131-ad8941ad1859","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.617Z","level":"info","message":"📡 [2] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.875Z","level":"info","message":"✋ [2] Sending Accept message for 99c09220-0f08-4b07-a131-ad8941ad1859","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.616Z","level":"info","message":"TIME END: remote-connect-2","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.875Z","level":"info","message":"TIME END: connection-2","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.358Z","level":"info","message":"TIME: remote-connect-2","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.358Z","level":"info","message":"🔄 [2] New connection request: 99c09220-0f08-4b07-a131-ad8941ad1859","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.875Z","level":"info","message":"✅ [2] Connection 99c09220-0f08-4b07-a131-ad8941ad1859 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.618Z","level":"info","message":"👋 [2] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.617Z","level":"info","message":"local-connect-2","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.618Z","level":"info","message":"🔐 [2] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.618Z","level":"info","message":"TIME END: local-connect-2","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.618Z","level":"info","message":"🤝 [2] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.618Z","level":"info","message":"✅ [2] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.875Z","level":"info","message":"🔄 [2] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:36.874Z","level":"info","message":"✅ [2] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:38.141Z","level":"info","message":"Standard PRD generated successfully","correlationId":"2881c21b-4d65-463d-adfb-6ecebfaf58d6","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:21:38.142Z","level":"info","message":"Tool invocation completed","correlationId":"2881c21b-4d65-463d-adfb-6ecebfaf58d6","tool":"testsprite_generate_standardized_prd"}
+{"timestamp":"2026-03-25T15:21:39.828Z","level":"info","message":"🔄 [3] New connection request: 35c9b1ee-9479-4afe-91fb-c70244f0c813","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:39.828Z","level":"info","message":"🌐 [3] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.084Z","level":"info","message":"TIME END: remote-connect-3","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:39.828Z","level":"info","message":"TIME: remote-connect-3","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.084Z","level":"info","message":"✅ [3] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.340Z","level":"info","message":"✅ [3] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.085Z","level":"info","message":"📡 [3] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.340Z","level":"info","message":"✋ [3] Sending Accept message for 35c9b1ee-9479-4afe-91fb-c70244f0c813","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:39.828Z","level":"info","message":"TIME: connection-3","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:39.828Z","level":"info","message":"🔗 [3] Starting handleConnection for 35c9b1ee-9479-4afe-91fb-c70244f0c813","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.341Z","level":"info","message":"TIME END: connection-3","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.086Z","level":"info","message":"🤝 [3] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.086Z","level":"info","message":"✅ [3] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.086Z","level":"info","message":"TIME END: local-connect-3","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.085Z","level":"info","message":"local-connect-3","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.086Z","level":"info","message":"🔐 [3] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.086Z","level":"info","message":"👋 [3] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.341Z","level":"info","message":"✅ [3] Connection 35c9b1ee-9479-4afe-91fb-c70244f0c813 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:40.340Z","level":"info","message":"🔄 [3] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.129Z","level":"info","message":"🔄 [4] New connection request: 2a015692-1eb4-4ae2-993c-e849a3c0b922","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.129Z","level":"info","message":"🔗 [4] Starting handleConnection for 2a015692-1eb4-4ae2-993c-e849a3c0b922","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.371Z","level":"info","message":"TIME END: remote-connect-4","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.373Z","level":"info","message":"🔐 [4] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.129Z","level":"info","message":"TIME: connection-4","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.372Z","level":"info","message":"✅ [4] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.618Z","level":"info","message":"✅ [4] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.372Z","level":"info","message":"📡 [4] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.618Z","level":"info","message":"✋ [4] Sending Accept message for 2a015692-1eb4-4ae2-993c-e849a3c0b922","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.129Z","level":"info","message":"TIME: remote-connect-4","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.129Z","level":"info","message":"🌐 [4] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.618Z","level":"info","message":"✅ [4] Connection 2a015692-1eb4-4ae2-993c-e849a3c0b922 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.373Z","level":"info","message":"TIME END: local-connect-4","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.373Z","level":"info","message":"✅ [4] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.373Z","level":"info","message":"🤝 [4] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.372Z","level":"info","message":"local-connect-4","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.373Z","level":"info","message":"👋 [4] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.618Z","level":"info","message":"🔄 [4] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:43.618Z","level":"info","message":"TIME END: connection-4","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.685Z","level":"info","message":"🔄 [5] New connection request: 87cb68d7-7845-4749-97f3-fc60b5bef870","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.686Z","level":"info","message":"TIME: connection-5","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.931Z","level":"info","message":"TIME END: remote-connect-5","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.932Z","level":"info","message":"🔐 [5] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.686Z","level":"info","message":"🔗 [5] Starting handleConnection for 87cb68d7-7845-4749-97f3-fc60b5bef870","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.931Z","level":"info","message":"local-connect-5","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:46.177Z","level":"info","message":"✅ [5] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.931Z","level":"info","message":"📡 [5] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:46.178Z","level":"info","message":"✋ [5] Sending Accept message for 87cb68d7-7845-4749-97f3-fc60b5bef870","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.686Z","level":"info","message":"TIME: remote-connect-5","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.686Z","level":"info","message":"🌐 [5] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:46.178Z","level":"info","message":"🔄 [5] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.932Z","level":"info","message":"TIME END: local-connect-5","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.931Z","level":"info","message":"✅ [5] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.932Z","level":"info","message":"✅ [5] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.932Z","level":"info","message":"👋 [5] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:45.932Z","level":"info","message":"🤝 [5] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:46.178Z","level":"info","message":"TIME END: connection-5","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:46.178Z","level":"info","message":"✅ [5] Connection 87cb68d7-7845-4749-97f3-fc60b5bef870 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.197Z","level":"info","message":"🔗 [6] Starting handleConnection for 170d3130-cd01-4dee-ad68-857a12cb3719","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.197Z","level":"info","message":"🔄 [6] New connection request: 170d3130-cd01-4dee-ad68-857a12cb3719","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.441Z","level":"info","message":"✅ [6] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.442Z","level":"info","message":"👋 [6] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.197Z","level":"info","message":"TIME: remote-connect-6","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.441Z","level":"info","message":"📡 [6] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.688Z","level":"info","message":"✅ [6] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.441Z","level":"info","message":"local-connect-6","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.688Z","level":"info","message":"🔄 [6] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.197Z","level":"info","message":"🌐 [6] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.197Z","level":"info","message":"TIME: connection-6","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.688Z","level":"info","message":"✋ [6] Sending Accept message for 170d3130-cd01-4dee-ad68-857a12cb3719","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.442Z","level":"info","message":"🤝 [6] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.442Z","level":"info","message":"✅ [6] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.442Z","level":"info","message":"TIME END: local-connect-6","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.441Z","level":"info","message":"TIME END: remote-connect-6","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.442Z","level":"info","message":"🔐 [6] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.689Z","level":"info","message":"✅ [6] Connection 170d3130-cd01-4dee-ad68-857a12cb3719 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:48.689Z","level":"info","message":"TIME END: connection-6","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.701Z","level":"info","message":"🔄 [7] New connection request: d9613342-48d1-43fe-b0d1-124f74eff087","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.702Z","level":"info","message":"🌐 [7] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.957Z","level":"info","message":"📡 [7] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.959Z","level":"info","message":"🔐 [7] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.702Z","level":"info","message":"🔗 [7] Starting handleConnection for d9613342-48d1-43fe-b0d1-124f74eff087","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.957Z","level":"info","message":"✅ [7] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:51.207Z","level":"info","message":"✅ [7] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.959Z","level":"info","message":"🤝 [7] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:51.207Z","level":"info","message":"✋ [7] Sending Accept message for d9613342-48d1-43fe-b0d1-124f74eff087","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.702Z","level":"info","message":"TIME: remote-connect-7","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.702Z","level":"info","message":"TIME: connection-7","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:51.208Z","level":"info","message":"✅ [7] Connection d9613342-48d1-43fe-b0d1-124f74eff087 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.957Z","level":"info","message":"local-connect-7","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.957Z","level":"info","message":"TIME END: remote-connect-7","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.959Z","level":"info","message":"👋 [7] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.958Z","level":"info","message":"✅ [7] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:50.958Z","level":"info","message":"TIME END: local-connect-7","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:51.208Z","level":"info","message":"TIME END: connection-7","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:51.208Z","level":"info","message":"🔄 [7] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.057Z","level":"info","message":"🌐 [8] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.057Z","level":"info","message":"TIME: remote-connect-8","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.308Z","level":"info","message":"✅ [8] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.309Z","level":"info","message":"✅ [8] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.057Z","level":"info","message":"🔗 [8] Starting handleConnection for 4a8a5a36-d6cf-4c60-8037-2d9b7eb6b410","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.308Z","level":"info","message":"TIME END: remote-connect-8","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.550Z","level":"info","message":"✅ [8] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.308Z","level":"info","message":"local-connect-8","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.551Z","level":"info","message":"✅ [8] Connection 4a8a5a36-d6cf-4c60-8037-2d9b7eb6b410 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.057Z","level":"info","message":"TIME: connection-8","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.057Z","level":"info","message":"🔄 [8] New connection request: 4a8a5a36-d6cf-4c60-8037-2d9b7eb6b410","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.551Z","level":"info","message":"✋ [8] Sending Accept message for 4a8a5a36-d6cf-4c60-8037-2d9b7eb6b410","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.308Z","level":"info","message":"📡 [8] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.309Z","level":"info","message":"TIME END: local-connect-8","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.309Z","level":"info","message":"🔐 [8] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.309Z","level":"info","message":"👋 [8] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.309Z","level":"info","message":"🤝 [8] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.551Z","level":"info","message":"🔄 [8] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:53.551Z","level":"info","message":"TIME END: connection-8","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.529Z","level":"info","message":"🔄 [9] New connection request: c9c2ee51-76c8-4234-a5bd-9fb049b0aa5f","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.529Z","level":"info","message":"🔗 [9] Starting handleConnection for c9c2ee51-76c8-4234-a5bd-9fb049b0aa5f","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.783Z","level":"info","message":"✅ [9] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.784Z","level":"info","message":"👋 [9] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.530Z","level":"info","message":"TIME: remote-connect-9","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.783Z","level":"info","message":"TIME END: remote-connect-9","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:56.035Z","level":"info","message":"✋ [9] Sending Accept message for c9c2ee51-76c8-4234-a5bd-9fb049b0aa5f","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.783Z","level":"info","message":"local-connect-9","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:56.035Z","level":"info","message":"✅ [9] Connection c9c2ee51-76c8-4234-a5bd-9fb049b0aa5f fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.529Z","level":"info","message":"TIME: connection-9","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.530Z","level":"info","message":"🌐 [9] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:56.035Z","level":"info","message":"✅ [9] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.784Z","level":"info","message":"🤝 [9] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.783Z","level":"info","message":"📡 [9] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.784Z","level":"info","message":"🔐 [9] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.784Z","level":"info","message":"✅ [9] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:55.784Z","level":"info","message":"TIME END: local-connect-9","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:56.035Z","level":"info","message":"TIME END: connection-9","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:56.035Z","level":"info","message":"🔄 [9] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:57.851Z","level":"info","message":"🔄 [10] New connection request: a0be574c-bd04-47d1-8ab7-6cfa36df0a24","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:57.851Z","level":"info","message":"🌐 [10] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.128Z","level":"info","message":"TIME END: remote-connect-10","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.129Z","level":"info","message":"🤝 [10] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:57.851Z","level":"info","message":"TIME: remote-connect-10","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.128Z","level":"info","message":"📡 [10] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.428Z","level":"info","message":"✋ [10] Sending Accept message for a0be574c-bd04-47d1-8ab7-6cfa36df0a24","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.128Z","level":"info","message":"✅ [10] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.428Z","level":"info","message":"🔄 [10] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:57.851Z","level":"info","message":"TIME: connection-10","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:57.851Z","level":"info","message":"🔗 [10] Starting handleConnection for a0be574c-bd04-47d1-8ab7-6cfa36df0a24","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.428Z","level":"info","message":"TIME END: connection-10","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.129Z","level":"info","message":"TIME END: local-connect-10","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.129Z","level":"info","message":"✅ [10] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.129Z","level":"info","message":"👋 [10] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.128Z","level":"info","message":"local-connect-10","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.129Z","level":"info","message":"🔐 [10] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.428Z","level":"info","message":"✅ [10] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:21:58.428Z","level":"info","message":"✅ [10] Connection a0be574c-bd04-47d1-8ab7-6cfa36df0a24 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.413Z","level":"info","message":"TIME: connection-11","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.413Z","level":"info","message":"🔗 [11] Starting handleConnection for b778c20a-d6fb-49b4-a772-136993bde413","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.658Z","level":"info","message":"TIME END: remote-connect-11","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.659Z","level":"info","message":"TIME END: local-connect-11","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.413Z","level":"info","message":"TIME: remote-connect-11","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.658Z","level":"info","message":"local-connect-11","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.903Z","level":"info","message":"✋ [11] Sending Accept message for b778c20a-d6fb-49b4-a772-136993bde413","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.658Z","level":"info","message":"✅ [11] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.903Z","level":"info","message":"🔄 [11] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.412Z","level":"info","message":"🔄 [11] New connection request: b778c20a-d6fb-49b4-a772-136993bde413","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.413Z","level":"info","message":"🌐 [11] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.903Z","level":"info","message":"✅ [11] Connection b778c20a-d6fb-49b4-a772-136993bde413 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.659Z","level":"info","message":"🔐 [11] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.659Z","level":"info","message":"✅ [11] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.658Z","level":"info","message":"📡 [11] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.659Z","level":"info","message":"👋 [11] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.659Z","level":"info","message":"🤝 [11] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.903Z","level":"info","message":"TIME END: connection-11","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:01.903Z","level":"info","message":"✅ [11] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.487Z","level":"info","message":"🌐 [12] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.487Z","level":"info","message":"🔗 [12] Starting handleConnection for e8ac5099-50d2-4802-aa0b-134a36b33898","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.729Z","level":"info","message":"📡 [12] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.730Z","level":"info","message":"🔐 [12] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.487Z","level":"info","message":"TIME: remote-connect-12","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.729Z","level":"info","message":"local-connect-12","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.967Z","level":"info","message":"✅ [12] Connection e8ac5099-50d2-4802-aa0b-134a36b33898 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.728Z","level":"info","message":"✅ [12] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.967Z","level":"info","message":"✋ [12] Sending Accept message for e8ac5099-50d2-4802-aa0b-134a36b33898","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.487Z","level":"info","message":"TIME: connection-12","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.487Z","level":"info","message":"🔄 [12] New connection request: e8ac5099-50d2-4802-aa0b-134a36b33898","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.967Z","level":"info","message":"TIME END: connection-12","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.729Z","level":"info","message":"TIME END: local-connect-12","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.730Z","level":"info","message":"👋 [12] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.728Z","level":"info","message":"TIME END: remote-connect-12","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.729Z","level":"info","message":"✅ [12] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.729Z","level":"info","message":"🤝 [12] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.967Z","level":"info","message":"✅ [12] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:03.967Z","level":"info","message":"🔄 [12] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.484Z","level":"info","message":"TIME: connection-13","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.485Z","level":"info","message":"TIME: remote-connect-13","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.484Z","level":"info","message":"🔗 [13] Starting handleConnection for f1ccbeea-94e7-4c81-95bb-bf0e8b053025","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.933Z","level":"info","message":"TIME END: remote-connect-13","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.934Z","level":"info","message":"🤝 [13] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.934Z","level":"info","message":"TIME END: local-connect-13","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:11.166Z","level":"info","message":"✋ [13] Sending Accept message for f1ccbeea-94e7-4c81-95bb-bf0e8b053025","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.484Z","level":"info","message":"🔄 [13] New connection request: f1ccbeea-94e7-4c81-95bb-bf0e8b053025","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.484Z","level":"info","message":"🌐 [13] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.933Z","level":"info","message":"✅ [13] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:11.165Z","level":"info","message":"✅ [13] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:11.166Z","level":"info","message":"✅ [13] Connection f1ccbeea-94e7-4c81-95bb-bf0e8b053025 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.934Z","level":"info","message":"🔐 [13] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.933Z","level":"info","message":"📡 [13] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.934Z","level":"info","message":"👋 [13] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.934Z","level":"info","message":"✅ [13] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:10.933Z","level":"info","message":"local-connect-13","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:11.166Z","level":"info","message":"🔄 [13] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:11.166Z","level":"info","message":"TIME END: connection-13","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.216Z","level":"info","message":"🔄 [14] New connection request: c0886125-ce8c-4f2c-b300-ceab1d39e3a6","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.216Z","level":"info","message":"TIME: connection-14","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.463Z","level":"info","message":"TIME END: remote-connect-14","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.216Z","level":"info","message":"🔗 [14] Starting handleConnection for c0886125-ce8c-4f2c-b300-ceab1d39e3a6","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.463Z","level":"info","message":"✅ [14] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.724Z","level":"info","message":"✅ [14] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.463Z","level":"info","message":"local-connect-14","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.724Z","level":"info","message":"TIME END: connection-14","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.216Z","level":"info","message":"TIME: remote-connect-14","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.216Z","level":"info","message":"🌐 [14] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.724Z","level":"info","message":"✅ [14] Connection c0886125-ce8c-4f2c-b300-ceab1d39e3a6 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.464Z","level":"info","message":"✅ [14] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.463Z","level":"info","message":"📡 [14] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.464Z","level":"info","message":"👋 [14] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.464Z","level":"info","message":"TIME END: local-connect-14","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.464Z","level":"info","message":"🤝 [14] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.464Z","level":"info","message":"🔐 [14] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.724Z","level":"info","message":"🔄 [14] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:13.724Z","level":"info","message":"✋ [14] Sending Accept message for c0886125-ce8c-4f2c-b300-ceab1d39e3a6","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.492Z","level":"info","message":"TIME: connection-15","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.493Z","level":"info","message":"🔗 [15] Starting handleConnection for 0f2e1154-0156-4d54-b33e-da2f399c44ed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.736Z","level":"info","message":"✅ [15] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.737Z","level":"info","message":"🤝 [15] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.493Z","level":"info","message":"🌐 [15] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.737Z","level":"info","message":"TIME END: local-connect-15","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.983Z","level":"info","message":"✅ [15] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.736Z","level":"info","message":"📡 [15] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.984Z","level":"info","message":"✋ [15] Sending Accept message for 0f2e1154-0156-4d54-b33e-da2f399c44ed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.493Z","level":"info","message":"TIME: remote-connect-15","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.492Z","level":"info","message":"🔄 [15] New connection request: 0f2e1154-0156-4d54-b33e-da2f399c44ed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.984Z","level":"info","message":"TIME END: connection-15","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.737Z","level":"info","message":"✅ [15] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.736Z","level":"info","message":"local-connect-15","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.737Z","level":"info","message":"🔐 [15] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.737Z","level":"info","message":"👋 [15] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.736Z","level":"info","message":"TIME END: remote-connect-15","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.984Z","level":"info","message":"✅ [15] Connection 0f2e1154-0156-4d54-b33e-da2f399c44ed fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:15.984Z","level":"info","message":"🔄 [15] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:20.952Z","level":"info","message":"🌐 [16] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:20.952Z","level":"info","message":"🔄 [16] New connection request: 263c6b79-1246-4547-8816-b8efee28aef9","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.198Z","level":"info","message":"TIME END: remote-connect-16","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.200Z","level":"info","message":"🤝 [16] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:20.952Z","level":"info","message":"🔗 [16] Starting handleConnection for 263c6b79-1246-4547-8816-b8efee28aef9","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.199Z","level":"info","message":"✅ [16] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.437Z","level":"info","message":"✋ [16] Sending Accept message for 263c6b79-1246-4547-8816-b8efee28aef9","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.199Z","level":"info","message":"TIME END: local-connect-16","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.437Z","level":"info","message":"🔄 [16] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:20.952Z","level":"info","message":"TIME: connection-16","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:20.952Z","level":"info","message":"TIME: remote-connect-16","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.437Z","level":"info","message":"TIME END: connection-16","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.200Z","level":"info","message":"✅ [16] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.199Z","level":"info","message":"📡 [16] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.199Z","level":"info","message":"local-connect-16","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.200Z","level":"info","message":"👋 [16] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.200Z","level":"info","message":"🔐 [16] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.437Z","level":"info","message":"✅ [16] Connection 263c6b79-1246-4547-8816-b8efee28aef9 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:21.437Z","level":"info","message":"✅ [16] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.255Z","level":"info","message":"🔄 [17] New connection request: cd4d31de-d494-4ff0-8c09-cfac18cf23e5","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.256Z","level":"info","message":"TIME: connection-17","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.472Z","level":"info","message":"✅ [17] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.256Z","level":"info","message":"🌐 [17] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.710Z","level":"info","message":"✅ [17] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.472Z","level":"info","message":"TIME END: remote-connect-17","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.710Z","level":"info","message":"✅ [17] Connection cd4d31de-d494-4ff0-8c09-cfac18cf23e5 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.256Z","level":"info","message":"TIME: remote-connect-17","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.256Z","level":"info","message":"🔗 [17] Starting handleConnection for cd4d31de-d494-4ff0-8c09-cfac18cf23e5","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.710Z","level":"info","message":"🔄 [17] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.472Z","level":"info","message":"local-connect-17","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.473Z","level":"info","message":"TIME END: local-connect-17","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.473Z","level":"info","message":"👋 [17] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.472Z","level":"info","message":"📡 [17] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.473Z","level":"info","message":"✅ [17] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.473Z","level":"info","message":"🤝 [17] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.473Z","level":"info","message":"🔐 [17] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.710Z","level":"info","message":"TIME END: connection-17","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:23.710Z","level":"info","message":"✋ [17] Sending Accept message for cd4d31de-d494-4ff0-8c09-cfac18cf23e5","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.352Z","level":"info","message":"🔄 [18] New connection request: 8f27e89c-2e37-4b88-a207-c964942beba8","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.352Z","level":"info","message":"🔗 [18] Starting handleConnection for 8f27e89c-2e37-4b88-a207-c964942beba8","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.608Z","level":"info","message":"TIME END: remote-connect-18","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.609Z","level":"info","message":"✅ [18] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.352Z","level":"info","message":"🌐 [18] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.608Z","level":"info","message":"✅ [18] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.865Z","level":"info","message":"✅ [18] Connection 8f27e89c-2e37-4b88-a207-c964942beba8 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.608Z","level":"info","message":"local-connect-18","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.865Z","level":"info","message":"✋ [18] Sending Accept message for 8f27e89c-2e37-4b88-a207-c964942beba8","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.352Z","level":"info","message":"TIME: connection-18","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.352Z","level":"info","message":"TIME: remote-connect-18","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.864Z","level":"info","message":"✅ [18] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.609Z","level":"info","message":"🤝 [18] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.609Z","level":"info","message":"👋 [18] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.609Z","level":"info","message":"TIME END: local-connect-18","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.608Z","level":"info","message":"📡 [18] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.609Z","level":"info","message":"🔐 [18] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.865Z","level":"info","message":"TIME END: connection-18","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:27.865Z","level":"info","message":"🔄 [18] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.131Z","level":"info","message":"TIME: remote-connect-19","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.131Z","level":"info","message":"TIME: connection-19","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.366Z","level":"info","message":"✅ [19] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.131Z","level":"info","message":"🔄 [19] New connection request: 5174e1fe-e3dc-4b0a-b33a-b16ba05e42ac","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.366Z","level":"info","message":"📡 [19] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.606Z","level":"info","message":"🔄 [19] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.366Z","level":"info","message":"TIME END: remote-connect-19","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.605Z","level":"info","message":"✋ [19] Sending Accept message for 5174e1fe-e3dc-4b0a-b33a-b16ba05e42ac","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.131Z","level":"info","message":"🔗 [19] Starting handleConnection for 5174e1fe-e3dc-4b0a-b33a-b16ba05e42ac","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.131Z","level":"info","message":"🌐 [19] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.606Z","level":"info","message":"✅ [19] Connection 5174e1fe-e3dc-4b0a-b33a-b16ba05e42ac fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.366Z","level":"info","message":"TIME END: local-connect-19","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.367Z","level":"info","message":"👋 [19] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.367Z","level":"info","message":"🤝 [19] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.366Z","level":"info","message":"✅ [19] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.366Z","level":"info","message":"local-connect-19","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.367Z","level":"info","message":"🔐 [19] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.605Z","level":"info","message":"✅ [19] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:31.606Z","level":"info","message":"TIME END: connection-19","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.604Z","level":"info","message":"🔄 [20] New connection request: d1b76f8b-85f7-44f2-9050-a61422690e1a","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.604Z","level":"info","message":"🔗 [20] Starting handleConnection for d1b76f8b-85f7-44f2-9050-a61422690e1a","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.838Z","level":"info","message":"TIME END: remote-connect-20","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.839Z","level":"info","message":"👋 [20] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.604Z","level":"info","message":"🌐 [20] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.838Z","level":"info","message":"✅ [20] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:35.091Z","level":"info","message":"✅ [20] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.838Z","level":"info","message":"local-connect-20","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:35.091Z","level":"info","message":"✋ [20] Sending Accept message for d1b76f8b-85f7-44f2-9050-a61422690e1a","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.604Z","level":"info","message":"TIME: connection-20","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.604Z","level":"info","message":"TIME: remote-connect-20","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:35.091Z","level":"info","message":"✅ [20] Connection d1b76f8b-85f7-44f2-9050-a61422690e1a fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.839Z","level":"info","message":"🔐 [20] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.838Z","level":"info","message":"📡 [20] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.839Z","level":"info","message":"✅ [20] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.839Z","level":"info","message":"TIME END: local-connect-20","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:34.839Z","level":"info","message":"🤝 [20] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:35.091Z","level":"info","message":"TIME END: connection-20","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:35.091Z","level":"info","message":"🔄 [20] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.665Z","level":"info","message":"TIME: connection-21","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.665Z","level":"info","message":"🔄 [21] New connection request: 73d23c3d-9032-40ff-972b-5ebbed43cf10","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.912Z","level":"info","message":"✅ [21] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.665Z","level":"info","message":"🌐 [21] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.912Z","level":"info","message":"TIME END: remote-connect-21","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:48.146Z","level":"info","message":"✋ [21] Sending Accept message for 73d23c3d-9032-40ff-972b-5ebbed43cf10","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.912Z","level":"info","message":"local-connect-21","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:48.146Z","level":"info","message":"🔄 [21] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.665Z","level":"info","message":"🔗 [21] Starting handleConnection for 73d23c3d-9032-40ff-972b-5ebbed43cf10","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.665Z","level":"info","message":"TIME: remote-connect-21","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:48.146Z","level":"info","message":"✅ [21] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.913Z","level":"info","message":"✅ [21] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.912Z","level":"info","message":"📡 [21] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.913Z","level":"info","message":"TIME END: local-connect-21","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.913Z","level":"info","message":"🤝 [21] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.913Z","level":"info","message":"👋 [21] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:47.913Z","level":"info","message":"🔐 [21] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:48.146Z","level":"info","message":"✅ [21] Connection 73d23c3d-9032-40ff-972b-5ebbed43cf10 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:48.146Z","level":"info","message":"TIME END: connection-21","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:49.947Z","level":"info","message":"🔄 [22] New connection request: ae607192-656e-46bc-bb5c-52fe46e16fdc","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:49.947Z","level":"info","message":"🌐 [22] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.191Z","level":"info","message":"TIME END: remote-connect-22","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.192Z","level":"info","message":"👋 [22] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:49.947Z","level":"info","message":"TIME: remote-connect-22","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.191Z","level":"info","message":"✅ [22] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.443Z","level":"info","message":"TIME END: connection-22","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.191Z","level":"info","message":"TIME END: local-connect-22","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.442Z","level":"info","message":"✅ [22] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:49.947Z","level":"info","message":"TIME: connection-22","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:49.947Z","level":"info","message":"🔗 [22] Starting handleConnection for ae607192-656e-46bc-bb5c-52fe46e16fdc","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.443Z","level":"info","message":"✅ [22] Connection ae607192-656e-46bc-bb5c-52fe46e16fdc fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.191Z","level":"info","message":"📡 [22] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.191Z","level":"info","message":"local-connect-22","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.191Z","level":"info","message":"✅ [22] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.192Z","level":"info","message":"🤝 [22] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.192Z","level":"info","message":"🔐 [22] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.443Z","level":"info","message":"🔄 [22] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:50.442Z","level":"info","message":"✋ [22] Sending Accept message for ae607192-656e-46bc-bb5c-52fe46e16fdc","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.040Z","level":"info","message":"🔄 [23] New connection request: 3b4511c9-30b0-41cb-b9c8-1107bf90b1e5","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.040Z","level":"info","message":"🔗 [23] Starting handleConnection for 3b4511c9-30b0-41cb-b9c8-1107bf90b1e5","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.255Z","level":"info","message":"TIME END: remote-connect-23","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.256Z","level":"info","message":"🔐 [23] Performing authentication","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.040Z","level":"info","message":"🌐 [23] Connecting to remote tun.testsprite.com:7300","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.460Z","level":"info","message":"✅ [23] Authentication completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.255Z","level":"info","message":"📡 [23] Connecting to local localhost:64400","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.040Z","level":"info","message":"TIME: remote-connect-23","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.040Z","level":"info","message":"TIME: connection-23","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.255Z","level":"info","message":"local-connect-23","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.256Z","level":"info","message":"TIME END: local-connect-23","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.255Z","level":"info","message":"✅ [23] Remote connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.256Z","level":"info","message":"✅ [23] Local connection established","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.256Z","level":"info","message":"🤝 [23] Starting handshake","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.256Z","level":"info","message":"👋 [23] Hello message sent","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.460Z","level":"info","message":"🔄 [23] Starting data proxy","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.460Z","level":"info","message":"✅ [23] Connection 3b4511c9-30b0-41cb-b9c8-1107bf90b1e5 fully established and proxying","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.460Z","level":"info","message":"TIME END: connection-23","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:22:57.460Z","level":"info","message":"✋ [23] Sending Accept message for 3b4511c9-30b0-41cb-b9c8-1107bf90b1e5","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:23:03.407Z","level":"info","message":"Test execution completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute","context":{"projectId":"c0e84c7c-d62d-4e6e-92ed-cccd9d57e017","totalTests":8}}
+{"timestamp":"2026-03-25T15:23:03.408Z","level":"info","message":"Tool invocation completed","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:23:03.407Z","level":"info","message":"HTTP proxy stopped","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:23:03.407Z","level":"info","message":"Tunnel has been closed.","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T15:23:03.408Z","level":"info","message":"🔌 Control connection closed. Was connected: true, Total connections handled: 23","correlationId":"8897bc26-fdd8-4cb0-bf01-a6fea762d232","tool":"testsprite_generate_code_and_execute"}
+{"timestamp":"2026-03-25T16:25:33.247Z","level":"info","message":"Auto-cleaning stale test results status for: c:\\Users\\qingwen\\.gemini\\antigravity\\workspaces\\土窟設計su渲染插件\\loamlab_backend"}

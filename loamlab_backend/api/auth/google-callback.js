@@ -56,7 +56,7 @@ export default async function handler(req, res) {
 
     // 2. 用 authorization code 換取 token（完全在伺服器端，不碰任何瀏覽器 Storage）
     const host = req.headers['x-forwarded-host'] || req.headers['host'];
-    const redirectUri = `https://${host}/api/auth/callback`;
+    const redirectUri = `https://${host}/api/auth/google-callback`;
 
     let tokenData;
     try {

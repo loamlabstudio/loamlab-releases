@@ -58,7 +58,7 @@ module LoamLabPlugin
         # --- Step A：Net::HTTP 跨平台下載（含 redirect 追蹤） ---
         UI.start_timer(0.1, false) do
           begin
-            self.http_download(url, zip_path)
+            http_download(url, zip_path)
 
             unless File.exist?(zip_path) && File.size(zip_path) > 10_000
               File.delete(zip_path) rescue nil

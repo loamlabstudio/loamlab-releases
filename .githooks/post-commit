@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# post-commit hook — 委派給 scripts/sync_tasks.sh
+# 安裝：git config core.hooksPath .githooks
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+bash "$REPO_ROOT/scripts/sync_tasks.sh"

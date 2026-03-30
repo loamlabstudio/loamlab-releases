@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>野人相機 | Wildman Camera - LoamLab Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Noto+Sans+TC:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --obsidian: #0D0E10;
+            --bone: #FBFBFA;
+            --wild-red: #DA1E1F;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: var(--obsidian);
+            color: var(--bone);
+            margin: 0;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* 噪點背景 */
+        .noise-bg {
+            position: fixed; inset: 0;
+            opacity: 0.04; pointer-events: none; z-index: 1;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        }
+
+        /* 驚奇感：快門閃光 */
+        .shutter-flash {
+            position: fixed; inset: 0; background: #ffffff; z-index: 9999;
+            pointer-events: none; opacity: 0; transition: opacity 0.1s ease-out;
+        }
+
+        /* Logo 動態核心 */
+        .logo-wrapper { position: relative; display: flex; align-items: center; cursor: pointer; }
+        .logo-img { height: 40px; filter: brightness(100); transition: all 0.5s ease; z-index: 10; }
+        .logo-wrapper:hover .logo-img { filter: brightness(1) drop-shadow(0 0 12px rgba(218, 30, 31, 0.5)); transform: scale(1.02); }
+        .logo-pulse {
+            position: absolute; left: 45%; top: 40%; width: 8px; height: 8px;
+            background: var(--wild-red); border-radius: 50%; filter: blur(4px);
+            opacity: 0; pointer-events: none; z-index: 5;
+        }
+        .logo-wrapper:hover .logo-pulse { animation: core-glow 1.5s infinite; }
+        @keyframes core-glow {
+            0% { transform: scale(1); opacity: 0; }
+            50% { transform: scale(3.5); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+
+        /* Before/After 滑動對比 */
+        .comparison-slider {
+            position: relative; width: 100%; height: 65vh; min-height: 400px;
+            border-radius: 32px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: ew-resize; user-select: none; touch-action: pan-y;
+            box-shadow: 0 30px 60px -15px rgba(0,0,0,0.8);
+        }
+        .img-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; pointer-events: none; }
+        .before-image { background-image: url('https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&q=80&w=2000&grayscale=true'); }
+        .after-image { 
+            background-image: url('https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&q=80&w=2000');
+            width: 50%; border-right: 2px solid rgba(255,255,255,0.8); z-index: 2;
+        }
+        .slider-handle {
+            position: absolute; top: 50%; right: -28px; transform: translateY(-50%);
+            width: 56px; height: 56px; background: rgba(255,255,255,0.1); backdrop-filter: blur(10px);
+            border: 2px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5); z-index: 10; cursor: grab;
+        }
+
+        /* 通用組件 */
+        .btn-wild {
+            background-color: var(--wild-red); color: white;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .btn-wild:hover { transform: translateY(-4px); box-shadow: 0 15px 30px rgba(218, 30, 31, 0.4); }
+        
+        .reveal { opacity: 0; transform: translateY(40px); transition: all 1s cubic-bezier(0.23, 1, 0.32, 1); }
+        .reveal.active { opacity: 1; transform: translateY(0); }
+
+        /* 藝廊卡片 */
+        .gallery-card { position: relative; overflow: hidden; border-radius: 32px; aspect-ratio: 4/3; background: #111; }
+        .gallery-card img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) brightness(0.6); transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1); }
+        .gallery-card:hover img { filter: grayscale(0) brightness(1); transform: scale(1.05); }
+        .gallery-content { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 60%); padding: 2rem; display: flex; flex-direction: column; justify-content: flex-end; opacity: 0; transition: opacity 0.5s ease; }
+        .gallery-card:hover .gallery-content { opacity: 1; }
+
+        /* 定價卡片 */
+        .price-card {
+            background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);
+            transition: all 0.4s ease;
+        }
+        .price-card:hover { border-color: var(--wild-red); background: rgba(218, 30, 31, 0.03); }
+    </style>
+</head>
+<body class="relative">
+
+    <div class="noise-bg"></div>
+    <div class="shutter-flash" id="flash"></div>
+
+    <!-- 導航列 -->
+    <nav class="fixed w-full z-[100] px-6 md:px-12 py-5 flex justify-between items-center backdrop-blur-2xl border-b border-white/5 bg-black/40">
+        <div class="logo-wrapper">
+            <div class="logo-pulse"></div>
+            <img src="https://api.typedream.com/v0/document/public/d166e053-b7cf-4d84-9e2b-059d9788537c_LoamLabwhite_0_png.png" alt="LoamLab" class="logo-img">
+            <div class="ml-4 hidden sm:flex flex-col">
+                <span class="text-xs font-bold tracking-[0.3em] uppercase">Wildman Camera</span>
+                <span class="text-[8px] tracking-[0.5em] text-white/30 uppercase mt-0.5">LoamLab Studio</span>
+            </div>
+        </div>
+        
+        <div class="hidden lg:flex space-x-10 text-[10px] font-bold tracking-[0.2em] uppercase text-white/40">
+            <a href="#core" class="hover:text-white transition-colors" data-i18n="navCore">美學核心</a>
+            <a href="#comparison" class="hover:text-white transition-colors" data-i18n="navComp">滑動對比</a>
+            <a href="#pricing" class="hover:text-white transition-colors" data-i18n="navPricing">方案費用</a>
+            <a href="#energy" class="hover:text-white transition-colors" data-i18n="navEnergy">能量循環</a>
+        </div>
+
+        <div class="flex items-center space-x-4">
+            <select id="langSwitcher" onchange="switchLanguage(this.value)" class="bg-transparent text-[10px] md:text-xs tracking-widest text-white/60 border border-white/10 rounded-full px-3 py-1.5 cursor-pointer outline-none hover:bg-white/10 transition-all appearance-none text-center">
+                <option value="zh-TW" class="bg-black text-white">繁體中文</option>
+                <option value="en" class="bg-black text-white">English</option>
+                <option value="pt" class="bg-black text-white">Português (BR)</option>
+                <option value="jp" class="bg-black text-white">日本語</option>
+                <option value="kr" class="bg-black text-white">한국어</option>
+                <option value="vi" class="bg-black text-white">Tiếng Việt</option>
+                <option value="th" class="bg-black text-white">ภาษาไทย</option>
+                <option value="zh-CN" class="bg-black text-white">简体中文</option>
+            </select>
+            <button onclick="triggerAuth()" class="hidden sm:block btn-wild px-6 py-2.5 rounded-full text-[10px] font-bold tracking-widest uppercase" data-i18n="navBtn">聯動通行證</button>
+        </div>
+    </nav>
+
+    <!-- 1. 首屏 (Hero) -->
+    <section id="core" class="relative min-h-screen flex flex-col justify-center items-center px-6 text-center pt-24 z-10">
+        <div class="reveal">
+            <div class="inline-flex items-center space-x-3 mb-10 px-5 py-2 bg-white/5 rounded-full border border-white/10 backdrop-blur-md">
+                <span class="w-2 h-2 bg-[#00FF66] rounded-full animate-pulse shadow-[0_0_10px_#00FF66]"></span>
+                <span class="text-[9px] md:text-xs font-bold tracking-[0.2em] text-white/60 uppercase">
+                    <span data-i18n="heroStatsPrefix">Live Report: Saved</span> 
+                    <span id="liveStats" class="text-white font-mono ml-1">14,280,452</span>
+                    <span data-i18n="heroStatsSuffix" class="ml-1">Seconds</span>
+                </span>
+            </div>
+            <h1 class="text-5xl md:text-7xl lg:text-9xl font-light tracking-tighter leading-tight mb-8">
+                <span data-i18n="heroTitle1">瞬息，轉譯</span><br>
+                <span class="italic font-normal text-wild-red" data-i18n="heroTitle2">空間靈魂</span>
+            </h1>
+            <p class="max-w-3xl mx-auto text-white/40 text-sm md:text-lg font-light leading-relaxed mb-16 tracking-wide" data-i18n="heroDesc">
+                別再把時間浪費在調整渲染器和 PBR 材質的參數。野人相機將兩週的工作流縮短至 30 秒，讓您在 SketchUp 介面中直接觸達電影級的敘事感。
+            </p>
+            <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-6 justify-center items-center">
+                <button onclick="triggerAuth()" class="w-full sm:w-auto btn-wild px-12 py-5 rounded-full text-xs font-bold tracking-[0.2em] uppercase" data-i18n="btnPass">領取通行證碼</button>
+                <button onclick="alert('Download started...')" class="w-full sm:w-auto px-10 py-5 rounded-full border border-white/20 text-xs font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all" data-i18n="btnDownload">下載 .RBZ 插件</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- 2. 滑動對比 -->
+    <section id="comparison" class="py-32 px-6 md:px-20 lg:px-32 relative z-10">
+        <div class="max-w-7xl mx-auto reveal">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl md:text-5xl font-light mb-4" data-i18n="compTitle">專業產出 vs 原始模型</h2>
+                <p class="text-white/30 text-[10px] md:text-xs tracking-[0.4em] uppercase" data-i18n="compDesc">Slide to see the magic of AI rendering</p>
+            </div>
+            <div class="comparison-slider" id="slider">
+                <div class="img-layer before-image"></div>
+                <div class="img-layer after-image" id="afterImage">
+                    <div class="slider-handle">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M18 8L22 12L18 16M6 8L2 12L6 16"/></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 3. 定價方案 (Pricing) - 商用核心 -->
+    <section id="pricing" class="py-32 px-6 md:px-20 lg:px-32 relative z-10 bg-white/[0.01]">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-20 reveal">
+                <h2 class="text-3xl md:text-5xl font-light mb-6" data-i18n="priceMainTitle">靈活方案，支撐您的創意野心</h2>
+                <p class="text-white/40 text-sm tracking-widest uppercase" data-i18n="priceSubTitle">No subscription required. Pay only for what you use.</p>
+            </div>
+            
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- 方案 1: 試用 -->
+                <div class="price-card p-10 rounded-[40px] reveal flex flex-col h-full">
+                    <div class="text-[10px] font-bold tracking-[0.3em] text-white/30 uppercase mb-8" data-i18n="plan1Name">Explorer / 探索者</div>
+                    <div class="text-4xl font-light mb-2">$0</div>
+                    <div class="text-white/40 text-xs mb-10" data-i18n="plan1Desc">首月體驗</div>
+                    <ul class="space-y-4 mb-12 flex-grow text-sm text-white/60">
+                        <li class="flex items-center"><span class="text-wild-red mr-3">✓</span> 500 Credits (一次性)</li>
+                        <li class="flex items-center"><span class="text-wild-red mr-3">✓</span> 基礎 4K 渲染</li>
+                        <li class="flex items-center"><span class="text-white/20 mr-3">✕</span> 聯名藝廊落地</li>
+                    </ul>
+                    <button class="w-full py-4 rounded-full border border-white/10 hover:bg-white hover:text-black transition-all text-xs font-bold tracking-widest uppercase" data-i18n="plan1Btn">立即開始</button>
+                </div>
+
+                <!-- 方案 2: 旗艦 (熱門) -->
+                <div class="price-card p-10 rounded-[40px] reveal flex flex-col h-full border-wild-red/30 bg-white/[0.04] scale-105 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 bg-wild-red text-[8px] px-4 py-1.5 font-bold uppercase tracking-widest">Most Popular</div>
+                    <div class="text-[10px] font-bold tracking-[0.3em] text-wild-red uppercase mb-8" data-i18n="plan2Name">Flagship / 旗艦</div>
+                    <div class="text-4xl font-light mb-2">$49<span class="text-sm text-white/40 ml-1">/mo</span></div>
+                    <div class="text-white/40 text-xs mb-10" data-i18n="plan2Desc">設計事務所首選</div>
+                    <ul class="space-y-4 mb-12 flex-grow text-sm text-white/80">
+                        <li class="flex items-center"><span class="text-wild-red mr-3">✓</span> 8,000 Credits / 月</li>
+                        <li class="flex items-center"><span class="text-wild-red mr-3">✓</span> 8K 超高清產出</li>
+                        <li class="flex items-center"><span class="text-wild-red mr-3">✓</span> 優先聯名畫廊露出</li>
+                    </ul>
+                    <button class="w-full py-4 rounded-full btn-wild text-xs font-bold tracking-widest uppercase" data-i18n="plan2Btn">領取旗艦權限</button>
+                </div>
+
+                <!-- 方案 3: 企業 -->
+                <div class="price-card p-10 rounded-[40px] reveal flex flex-col h-full">
+                    <div class="text-[10px] font-bold tracking-[0.3em] text-white/30 uppercase mb-8" data-i18n="plan3Name">Studio / 工作室</div>
+                    <div class="text-4xl font-light mb-2">$129<span class="text-sm text-white/40 ml-1">/mo</span></div>
+                    <div class="text-white/40 text-xs mb-10" data-i18n="plan3Desc">團隊規模化運作</div>
+                    <ul class="space-y-4 mb-12 flex-grow text-sm text-white/60">
+                        <li class="flex items-center"><span class="text-wild-red mr-3">✓</span> 無限制節點渲染</li>
+                        <li class="flex items-center"><span class="text-wild-red mr-3">✓</span> 團隊資源共享控制</li>
+                        <li class="flex items-center"><span class="text-wild-red mr-3">✓</span> LoamLab 專屬顧問</li>
+                    </ul>
+                    <button class="w-full py-4 rounded-full border border-white/10 hover:bg-white hover:text-black transition-all text-xs font-bold tracking-widest uppercase" data-i18n="plan3Btn">聯繫我們</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 4. 能量循環 (Energy Loop) -->
+    <section id="energy" class="py-32 px-6 text-center relative z-10 border-t border-white/5">
+        <div class="max-w-3xl mx-auto reveal">
+            <h2 class="text-4xl md:text-6xl font-light mb-8" data-i18n="energyTitle">能量循環：共享無界</h2>
+            <p class="text-white/40 text-sm md:text-lg mb-16 font-light leading-relaxed" data-i18n="energyDesc">
+                聯動 Google 帳號後獲取唯一標識。推薦同行聯動，雙方各獲得 5 點永久 Flagship 點數，開啟全自動專業產出工作流。
+            </p>
+            
+            <div id="tokenDisplay" class="hidden mb-16 p-10 md:p-16 bg-white/[0.02] border border-white/10 rounded-[40px] backdrop-blur-xl">
+                <div class="text-[10px] text-wild-red font-bold uppercase tracking-[0.4em] mb-6" data-i18n="energyTokenLabel">Professional Access Token</div>
+                <div class="text-2xl md:text-4xl font-mono text-white mb-10 tracking-widest break-all" id="userToken">WILD-XXXX-XXXX-2024</div>
+                <button class="px-10 py-4 bg-white/10 hover:bg-white hover:text-black rounded-full text-xs font-bold transition-all uppercase tracking-widest" onclick="copyToken()" data-i18n="energyCopy">點擊複製代碼</button>
+            </div>
+
+            <button onclick="triggerAuth()" class="btn-wild px-16 py-6 rounded-full text-xs md:text-sm font-bold tracking-[0.2em] uppercase shadow-[0_0_30px_rgba(218,30,31,0.3)]" data-i18n="energyBtn">
+                Google 帳號聯動
+            </button>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-16 text-center border-t border-white/5 relative z-10">
+        <div class="text-[9px] md:text-[10px] tracking-[0.5em] text-white/20 uppercase mb-4">
+            &copy; 2024 WILDMAN CAMERA.
+        </div>
+        <div class="text-[8px] md:text-[9px] tracking-[0.3em] text-white/10 uppercase">
+            Designed & Developed by LoamLab Studio. v1.6.0 Commercial Edition.
+        </div>
+    </footer>
+
+    <script>
+        /* === 動態數據實時跳動 === */
+        let baseSeconds = 14280452;
+        const statsEl = document.getElementById('liveStats');
+        setInterval(() => {
+            baseSeconds += Math.floor(Math.random() * 3) + 1;
+            statsEl.innerText = baseSeconds.toLocaleString();
+        }, 1500);
+
+        /* === 驚奇感：快門閃光與 Auth === */
+        function triggerAuth() {
+            const flash = document.getElementById('flash');
+            flash.style.opacity = '1';
+            setTimeout(() => {
+                flash.style.opacity = '0';
+                const tokenDisplay = document.getElementById('tokenDisplay');
+                tokenDisplay.classList.remove('hidden');
+                const randomCode = Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+                document.getElementById('userToken').innerText = `WILD-${randomCode}-2024`;
+                window.scrollTo({ top: document.getElementById('energy').offsetTop - 80, behavior: 'smooth' });
+            }, 100);
+        }
+
+        function copyToken() {
+            const token = document.getElementById('userToken').innerText;
+            navigator.clipboard.writeText(token).then(() => { alert('Token copied!'); });
+        }
+
+        /* === 滑動對比 === */
+        const slider = document.getElementById('slider');
+        const afterImg = document.getElementById('afterImage');
+        let isDown = false;
+        const move = (e) => {
+            if(!isDown && e.type !== 'click') return;
+            const rect = slider.getBoundingClientRect();
+            let x = (e.clientX || e.touches?.[0]?.clientX) - rect.left;
+            let percent = Math.max(0, Math.min((x / rect.width) * 100, 100));
+            afterImg.style.width = `${percent}%`;
+        };
+        slider.addEventListener('mousedown', () => isDown = true);
+        slider.addEventListener('touchstart', () => isDown = true);
+        window.addEventListener('mouseup', () => isDown = false);
+        window.addEventListener('touchend', () => isDown = false);
+        window.addEventListener('mousemove', move);
+        window.addEventListener('touchmove', move);
+        slider.addEventListener('click', move);
+
+        /* === 滾動動畫 === */
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('active'); });
+        }, { threshold: 0.1 });
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+        /* === i18n 系統 === */
+        const i18n = {
+            'zh-TW': {
+                navCore: '美學核心', navComp: '滑動對比', navPricing: '方案費用', navEnergy: '能量循環', navBtn: '聯動通行證',
+                heroStatsPrefix: '即時報告：已節省', heroStatsSuffix: '秒',
+                heroTitle1: '瞬息，轉譯', heroTitle2: '空間靈魂',
+                heroDesc: '別再把時間浪費在調整渲染器和 PBR 材質的參數。野人相機將兩週的工作流縮短至 30 秒，讓您在 SketchUp 介面中直接觸達電影級的敘事感。',
+                btnPass: '領取通行證碼', btnDownload: '下載 .RBZ 插件',
+                compTitle: '專業產出 vs 原始模型', compDesc: '滑動感受野人相機在 SU 內的原生渲染魅力',
+                priceMainTitle: '靈活方案，支撐您的創意野心', priceSubTitle: '無須訂閱，隨用隨付',
+                plan1Name: 'Explorer / 探索者', plan1Desc: '首月體驗', plan1Btn: '立即開始',
+                plan2Name: 'Flagship / 旗艦', plan2Desc: '設計事務所首選', plan2Btn: '領取旗艦權限',
+                plan3Name: 'Studio / 工作室', plan3Desc: '團隊規模化運作', plan3Btn: '聯繫我們',
+                energyTitle: '能量循環：共享無界', energyDesc: '聯動 Google 帳號後獲取唯一標識。推薦同行聯動，雙方各獲得 5 點永久 Flagship 點數。',
+                energyTokenLabel: '專屬授權碼', energyCopy: '點擊複製代碼', energyBtn: 'Google 帳號聯動'
+            },
+            'en': {
+                navCore: 'Aesthetics', navComp: 'Comparison', navPricing: 'Pricing', navEnergy: 'Energy Loop', navBtn: 'Access Pass',
+                heroStatsPrefix: 'Live Report: Saved', heroStatsSuffix: 'Secs',
+                heroTitle1: 'Instant, Transcribe', heroTitle2: 'Spatial Soul',
+                heroDesc: 'Stop wasting time tweaking renderer parameters. Wildman Camera condenses a 2-week workflow into 30 seconds inside SketchUp.',
+                btnPass: 'Get Access Pass', btnDownload: 'Download .RBZ',
+                compTitle: 'Output vs Raw Model', compDesc: 'Slide to feel the native rendering magic',
+                priceMainTitle: 'Flexible Plans for Your Ambition', priceSubTitle: 'No subscription required. Pay only for what you use.',
+                plan1Name: 'Explorer', plan1Desc: 'Monthly Experience', plan1Btn: 'Get Started',
+                plan2Name: 'Flagship', plan2Desc: 'Top Choice for Firms', plan2Btn: 'Go Flagship',
+                plan3Name: 'Studio', plan3Desc: 'Team Scalability', plan3Btn: 'Contact Us',
+                energyTitle: 'Energy Loop: Boundless Sharing', energyDesc: 'Connect Google to get ID. Refer a peer, both get 5 Flagship points.',
+                energyTokenLabel: 'Access Token', energyCopy: 'Copy Code', energyBtn: 'Connect Google Account'
+            }
+            // 其他語言可依此類推補充...
+        };
+
+        function switchLanguage(lang) {
+            const data = i18n[lang] || i18n['zh-TW'];
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (data[key]) el.innerHTML = data[key];
+            });
+            localStorage.setItem('wildman_lang_preference', lang);
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedLang = localStorage.getItem('wildman_lang_preference') || 'zh-TW';
+            document.getElementById('langSwitcher').value = savedLang;
+            switchLanguage(savedLang);
+        });
+    </script>
+</body>
+</html>

@@ -9,7 +9,44 @@ require_relative 'updater.rb'
 module LoamLab
 
   module AIURenderer
-    
+
+    # 截圖時需要關閉的邊線樣式（插件開啟時套用至所有場景，關閉時還原）
+    RENDER_KEYS = {
+      'DrawBackEdges'   => false,
+      'DrawSilhouettes' => false,
+      'DrawDepthQue'    => false
+    }.freeze
+
+    def self.safe_set_render_keys(ro, keys_hash)
+      valid_keys = ro.keys
+      keys_hash.each do |k, v|
+        begin
+          ro[k] = v if valid_keys.include?(k)
+        rescue
+        end
+      end
+    end
+
+    def self.apply_render_keys(model)
+      ro = model.rendering_options
+      RENDER_KEYS.keys.each { |k| model.set_attribute('LoamLabRenderOverride', k, ro[k]) rescue nil }
+      self.safe_set_render_keys(ro, RENDER_KEYS)
+      model.pages.each { |p| p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS) rescue nil }
+      model.set_attribute('LoamLabRenderOverride', 'applied', true)
+    end
+
+    def self.restore_render_keys(model)
+      ro = model.rendering_options
+      restore_hash = {}
+      RENDER_KEYS.keys.each do |k|
+        val = model.get_attribute('LoamLabRenderOverride', k)
+        restore_hash[k] = val unless val.nil?
+      end
+      self.safe_set_render_keys(ro, restore_hash)
+      model.pages.each { |p| p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS) rescue nil }
+      model.set_attribute('LoamLabRenderOverride', 'applied', false)
+    end
+
     def self.show_dialog
       # 防止重複打開視窗
       if @dialog && @dialog.visible?
@@ -45,6 +82,11 @@ module LoamLab
       # 註冊所有的 JS to Ruby Callback
       self.register_callbacks(@dialog)
 
+      @dialog.set_on_closed do
+        m = Sketchup.active_model
+        self.restore_render_keys(m) if m
+      end
+
       @dialog.show
     end
 
@@ -67,6 +109,13 @@ module LoamLab
         
         json_str = response.to_json
         dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(json_str)}')")
+
+        # 套用截圖邊線設定（關閉後側邊線、輪廓、深度提示）
+        # 若上次未正常還原（如強制關閉），先清除舊值再重新套用
+        if model.get_attribute('LoamLabRenderOverride', 'applied') == true
+          self.restore_render_keys(model)
+        end
+        self.apply_render_keys(model)
       end
 
       # 1.2 瀏覽器開啟與授權儲存
@@ -248,14 +297,18 @@ module LoamLab
               scenes.each do |scene_name|
                 if page = model.pages[scene_name]
                   model.pages.selected_page = page
+                  # 場景切換後 SketchUp 會還原場景儲存的 rendering_options，需重新套用
+                  self.safe_set_render_keys(model.rendering_options, RENDER_KEYS)
                   # 給予 SketchUp 毫秒級的 UI 刷新時間，避免畫面閃爍過快或主視窗卡死
-                  sleep(0.05) 
+                  sleep(0.05)
                   base64_img = self.get_preview_base64
                   batch_data << { scene: scene_name, image_data: base64_img }
                 end
               end
-              
+
               model.pages.selected_page = current_page if current_page
+              # 切回原場景後也重新套用（避免還原到原始樣式）
+              self.safe_set_render_keys(model.rendering_options, RENDER_KEYS)
               page_options['ShowTransition'] = old_transition if old_transition
               
               # 恢復原始顯示設定
@@ -291,7 +344,7 @@ module LoamLab
           require 'open-uri'
           timestamp  = Time.now.strftime("%Y%m%d_%H%M%S")
           safe_scene = scene.gsub(/[:*?"<>|\/\\]/, "_")[0, 30]
-          filename   = "#{timestamp}_#{res}_#{safe_scene}_loamlab_camera.jpg"
+          filename   = "#{timestamp}_#{safe_scene}_#{res}_loamlab_camera.jpg"
           full_path  = File.join(save_path, filename)
           File.open(full_path, "wb") { |f| URI.open(url) { |img| f.write(img.read) } }
           puts "[LoamLab] auto_save_render: #{filename}"
@@ -313,12 +366,12 @@ module LoamLab
             files = Dir.glob(File.join(save_path, "*_loamlab_camera.jpg")).sort_by { |f| -File.mtime(f).to_i }
             history = files.first(30).map do |f|
               fname = File.basename(f)
-              # 格式：YYYYMMDD_HHMMSS_RES_SCENE_loamlab_camera.jpg
-              m = fname.match(/^(\d{8})_(\d{6})_(\w+?)_(.+)_loamlab_camera\.jpg$/)
+              # 格式：YYYYMMDD_HHMMSS_SCENE_RES_loamlab_camera.jpg
+              m = fname.match(/^(\d{8})_(\d{6})_(.+)_(1k|2k|4k)_loamlab_camera\.jpg$/i)
               if m
-                ts   = "#{m[1]}_#{m[2]}"
-                res  = m[3]
-                scene = m[4].gsub('_', ' ')
+                ts    = "#{m[1]}_#{m[2]}"
+                scene = m[3].gsub('_', ' ')
+                res   = m[4]
               else
                 ts = File.mtime(f).strftime("%Y%m%d_%H%M%S")
                 res = ''; scene = fname
@@ -615,7 +668,7 @@ module LoamLab
 
       current_page = model.pages.selected_page
       
-      # 記錄並隱藏干擾元素
+      # 記錄並隱藏干擾元素（截圖後自動還原）
       safe_keys = ['DrawHidden', 'DrawHiddenObjects', 'DisplaySketchAxes', 'DisplayInstanceAxes']
       original_states = {}
       safe_keys.each do |k|
@@ -658,7 +711,9 @@ module LoamLab
         if page
           # 1. 切換場景
           model.pages.selected_page = page
-          
+          # 場景切換後 SketchUp 會還原場景儲存的 rendering_options，需重新套用
+          self.safe_set_render_keys(model.rendering_options, RENDER_KEYS)
+
           # 2. 產出暫存檔與備份 (此處 UI 可能會微卡，但因為是單張處理，結束後會交還主控權)
           temp_img_path = File.join(temp_dir, "loamlab_render_#{index}_#{Time.now.to_i}.jpg")
           

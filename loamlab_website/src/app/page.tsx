@@ -101,7 +101,7 @@ function CompareSlider() {
         }}
       >
         <div className="absolute top-6 left-6 px-4 py-2 bg-[var(--color-loam-primary)] text-white rounded-full text-[10px] md:text-xs font-bold tracking-widest uppercase shadow-[0_0_15px_rgba(218,30,31,0.5)]">
-          Wildman Camera
+          LoamLab Camera
         </div>
       </div>
 
@@ -135,7 +135,7 @@ export default function Home() {
              <path d="M42 85H58L50 72L42 85Z" fill="var(--color-loam-primary)"/>
           </svg>
           <div className="hidden sm:flex flex-col">
-            <span className="text-xs font-bold tracking-[0.2em] uppercase">Wildman Camera</span>
+            <span className="text-xs font-bold tracking-[0.2em] uppercase">LoamLab Camera</span>
             <span className="text-[8px] tracking-[0.4em] text-white/40 uppercase mt-0.5">By LoamLab Studio</span>
           </div>
         </div>
@@ -147,9 +147,9 @@ export default function Home() {
           <button onClick={() => scrollTo('referral')} className="hover:text-white transition-colors">永久能量</button>
         </div>
 
-        <button className="px-6 py-2 rounded-full border border-white/20 text-white text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all">
-          聯動 Google 帳號
-        </button>
+        <a href="https://github.com/loamlabstudio/loamlab-releases/releases/latest/download/loamlab_plugin.rbz" className="px-6 py-2 rounded-full bg-white text-black text-[10px] font-bold tracking-widest uppercase hover:bg-white/80 transition-all">
+          Get Started
+        </a>
       </nav>
 
       {/* 1. Hero Section */}
@@ -172,14 +172,14 @@ export default function Home() {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-6">
-          <button className="px-10 py-5 rounded-full bg-[var(--color-loam-primary)] text-white font-bold text-xs tracking-[0.2em] uppercase hover:scale-105 transition-transform shadow-[0_0_30px_rgba(218,30,31,0.3)] border border-[var(--color-loam-primary)]">
-            領取 免費通行證
-          </button>
-          
-          <button className="px-10 py-5 rounded-full border border-white/20 text-white font-bold text-xs tracking-[0.2em] uppercase hover:bg-white/10 transition-all flex items-center justify-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-            下載 .RBZ 插件
-          </button>
+          <a href="https://github.com/loamlabstudio/loamlab-releases/releases/latest/download/loamlab_plugin.rbz" className="px-10 py-5 rounded-full bg-[var(--color-loam-primary)] text-white font-bold text-xs tracking-[0.2em] uppercase hover:scale-105 transition-transform shadow-[0_0_30px_rgba(218,30,31,0.3)] border border-[var(--color-loam-primary)] text-center">
+            Download Free Plugin
+          </a>
+
+          <a href="https://buy.dodopayments.com/buy?variant_id=pdt_0NblmafncbUuGNrMRvJp4" target="_blank" className="px-10 py-5 rounded-full border border-white/20 text-white font-bold text-xs tracking-[0.2em] uppercase hover:bg-white/10 transition-all flex items-center justify-center gap-2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            升級 Pro 方案
+          </a>
         </div>
       </section>
 
@@ -234,45 +234,45 @@ export default function Home() {
           {/* Starter */}
           <div className="glass-panel p-10 rounded-[40px] flex flex-col border border-white/5 hover:border-white/20 transition-all">
             <div className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 font-bold mb-6">Starter / 基礎</div>
-            <div className="text-5xl font-light mb-2">$24 <span className="text-sm text-zinc-500">/mo</span></div>
-            <div className="text-xs text-zinc-500 line-through mb-8">原價 $35</div>
-            
+            <div className="text-5xl font-light mb-2">$17 <span className="text-sm text-zinc-500">/mo</span></div>
+            <div className="text-xs text-zinc-500 line-through mb-8">原價 $24</div>
+
             <ul className="space-y-4 mb-12 flex-grow text-sm text-zinc-400 font-light">
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 每月發放 300 Credits</li>
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 15 張 2K 渲染</li>
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> SketchUp 全版本支援</li>
             </ul>
-            <button className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all">選擇起航</button>
+            <a href="https://buy.dodopayments.com/buy?variant_id=pdt_0NblmUvFrwJe36ymTELWV" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Subscribe</a>
           </div>
 
           {/* Pro (Hot) */}
           <div className="glass-panel p-10 rounded-[40px] flex flex-col border border-[var(--color-loam-primary)]/50 bg-[var(--color-loam-primary)]/5 relative scale-105 shadow-[0_20px_50px_rgba(218,30,31,0.15)] z-20">
             <div className="absolute top-0 right-0 bg-[var(--color-loam-primary)] text-white text-[9px] px-4 py-2 font-bold tracking-[0.2em] uppercase rounded-bl-2xl">Most Popular</div>
             <div className="text-[10px] tracking-[0.3em] uppercase text-[var(--color-loam-primary)] font-bold mb-6">Pro / 專業</div>
-            <div className="text-5xl font-light mb-2 text-white">$52 <span className="text-sm text-zinc-500">/mo</span></div>
-            <div className="text-xs text-[var(--color-loam-primary)]/60 line-through mb-8">原價 $75</div>
-            
+            <div className="text-5xl font-light mb-2 text-white">$36 <span className="text-sm text-zinc-500">/mo</span></div>
+            <div className="text-xs text-[var(--color-loam-primary)]/60 line-through mb-8">原價 $52</div>
+
             <ul className="space-y-4 mb-12 flex-grow text-sm text-zinc-300 font-light">
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 每月高達 2,000 Credits</li>
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 100 張 2K 渲染</li>
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 支援 4K 影院級畫質擴展</li>
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 優先 AI 計算通道</li>
             </ul>
-            <button className="w-full py-5 rounded-full bg-[var(--color-loam-primary)] text-white text-[10px] font-bold tracking-widest uppercase hover:scale-105 transition-transform">成為開拓者</button>
+            <a href="https://buy.dodopayments.com/buy?variant_id=pdt_0NblmafncbUuGNrMRvJp4" target="_blank" className="w-full py-5 rounded-full bg-[var(--color-loam-primary)] text-white text-[10px] font-bold tracking-widest uppercase hover:scale-105 transition-transform text-center">Subscribe</a>
           </div>
 
           {/* Studio */}
           <div className="glass-panel p-10 rounded-[40px] flex flex-col border border-white/5 hover:border-white/20 transition-all">
             <div className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 font-bold mb-6">Studio / 工作室</div>
-            <div className="text-5xl font-light mb-2">$139 <span className="text-sm text-zinc-500">/mo</span></div>
-            <div className="text-xs text-zinc-500 line-through mb-8">原價 $199</div>
-            
+            <div className="text-5xl font-light mb-2">$97 <span className="text-sm text-zinc-500">/mo</span></div>
+            <div className="text-xs text-zinc-500 line-through mb-8">原價 $139</div>
+
             <ul className="space-y-4 mb-12 flex-grow text-sm text-zinc-400 font-light">
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 每月爆發 9,000 Credits</li>
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 450 張 2K 渲染</li>
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 團隊商用授權許可</li>
             </ul>
-            <button className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all">聯繫導入</button>
+            <a href="https://buy.dodopayments.com/buy?variant_id=pdt_0Nblmhwbr5WXfNyDHpaA2" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Subscribe</a>
           </div>
         </div>
       </section>
@@ -314,7 +314,7 @@ export default function Home() {
              <path d="M10 85L50 15L90 85" stroke="white" strokeWidth="8"/>
              <path d="M42 85H58L50 72L42 85Z" fill="var(--color-loam-primary)"/>
           </svg>
-          <span className="text-xs font-bold tracking-widest uppercase">Wildman Camera</span>
+          <span className="text-xs font-bold tracking-widest uppercase">LoamLab Camera</span>
         </div>
         <div className="text-[9px] tracking-[0.4em] uppercase text-zinc-600 space-x-6 mb-4">
           <a href="#" className="hover:text-white transition-colors">服務條款</a>

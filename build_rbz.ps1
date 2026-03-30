@@ -14,9 +14,42 @@ $prodContent = $configContent -replace 'BUILD_TYPE = "dev"', 'BUILD_TYPE = "rele
 Set-Content -Path $configFile -Value $prodContent -Encoding UTF8
 Write-Host "[Deploy] BUILD_TYPE → release" -ForegroundColor Cyan
 
-# 目前先打包所有明碼開發檔
-$itemsToCompress = @("$sourceDir\loamlab_plugin.rb", "$sourceDir\loamlab_plugin")
-Compress-Archive -Path $itemsToCompress -DestinationPath $outZip -Force
+# 手動建 zip，確保路徑分隔符為 /（跨平台相容 Mac）
+# 同時排除 node_modules、測試檔、開發工具
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+Add-Type -AssemblyName System.IO.Compression
+
+$stream = [System.IO.File]::Open($outZip, [System.IO.FileMode]::Create)
+$archive = [System.IO.Compression.ZipArchive]::new($stream, [System.IO.Compression.ZipArchiveMode]::Create)
+
+function Add-ToZip($archive, $filePath, $entryName) {
+    $entry = $archive.CreateEntry($entryName)
+    $entryStream = $entry.Open()
+    $fileStream = [System.IO.File]::OpenRead($filePath)
+    $fileStream.CopyTo($entryStream)
+    $fileStream.Dispose()
+    $entryStream.Dispose()
+}
+
+# 加入入口檔案
+Add-ToZip $archive "$sourceDir\loamlab_plugin.rb" "loamlab_plugin.rb"
+
+# 加入 loamlab_plugin/ 目錄，排除 node_modules、測試檔、開發工具
+$excludePatterns = @('node_modules', 'test_', 'package-lock.json', 'package.json', '.testsprite', 'test_screenshot')
+Get-ChildItem -Path "$sourceDir\loamlab_plugin" -Recurse -File | Where-Object {
+    $fullPath = $_.FullName
+    $skip = $false
+    foreach ($pat in $excludePatterns) {
+        if ($fullPath -like "*$pat*") { $skip = $true; break }
+    }
+    -not $skip
+} | ForEach-Object {
+    $relative = $_.FullName.Substring($sourceDir.Length + 1).Replace('\', '/')
+    Add-ToZip $archive $_.FullName $relative
+}
+
+$archive.Dispose()
+$stream.Dispose()
 
 # ★ 打包完畢後明確還原為 dev 模式（不依賴原始快照，硬編碼保證結果恆為 dev）
 $restoredContent = $prodContent -replace 'BUILD_TYPE = "release"', 'BUILD_TYPE = "dev"'

@@ -11,7 +11,7 @@ module LoamLab
     $LOAD_PATH.unshift(dev_dir) unless $LOAD_PATH.include?(dev_dir)
     
     unless file_loaded?(__FILE__)
-    ext = SketchupExtension.new('LoamLab Camera (野人相機)', 'loamlab_plugin/main')
+    ext = SketchupExtension.new('LoamLab Camera (野人相機)', File.join(File.dirname(__FILE__), 'loamlab_plugin', 'main'))
     ext.description = 'LoamLab Camera Architecture Rendering Plugin'
     ext.version     = '1.2.6'
     ext.creator     = 'LoamLab Studio'

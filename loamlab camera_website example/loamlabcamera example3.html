@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>野人相機 | Wildman Camera - 讓直覺領先於算力</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* 曜石偏色：深灰中帶有極微細冷青色 */
+            --obsidian: #0F1012;
+            /* 骨瓷偏色：純白中帶有極微細暖黃 */
+            --bone: #FBFBFA;
+            /* 核心紅：Logo 紅色調優 */
+            --blood-red: #E11D48;
+            /* 輔助灰色 */
+            --graphite: #2A2C30;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--obsidian);
+            color: var(--bone);
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        /* 細微底片顆粒感紋理 */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.03;
+            pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3 Visual & Technical Excellence%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            z-index: 9999;
+        }
+
+        .text-glow {
+            text-shadow: 0 0 20px rgba(251, 251, 250, 0.2);
+        }
+
+        .glass-card {
+            background: rgba(42, 44, 48, 0.3);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(251, 251, 250, 0.05);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .glass-card:hover {
+            border-color: rgba(225, 29, 72, 0.3);
+            transform: translateY(-5px);
+        }
+
+        .cta-button {
+            background-color: var(--blood-red);
+            transition: all 0.3s ease;
+        }
+
+        .cta-button:hover {
+            background-color: #f43f5e;
+            box-shadow: 0 0 25px rgba(225, 29, 72, 0.4);
+            transform: scale(1.02);
+        }
+
+        .gradient-border {
+            position: relative;
+            border-radius: 1rem;
+        }
+
+        .gradient-border::after {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            background: linear-gradient(to right, transparent, rgba(251, 251, 250, 0.1), transparent);
+            border-radius: 1rem;
+            z-index: -1;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-fade {
+            animation: fadeIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 導航欄 -->
+    <nav class="fixed w-full z-50 px-8 py-6 flex justify-between items-center backdrop-blur-sm">
+        <div class="flex items-center space-x-2">
+            <!-- 模擬 Logo -->
+            <div class="w-8 h-8 flex items-center justify-center">
+                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M20 80L50 20L80 80" stroke="white" stroke-width="6"/>
+                    <path d="M40 80H60L50 60L40 80Z" fill="#E11D48"/>
+                </svg>
+            </div>
+            <span class="text-xl font-semibold tracking-tighter uppercase">Wildman Camera</span>
+        </div>
+        <div class="hidden md:flex space-x-8 text-sm font-light tracking-widest uppercase text-white/60">
+            <a href="#features" class="hover:text-white transition-colors">美學核心</a>
+            <a href="#referral" class="hover:text-white transition-colors">永久能量</a>
+            <a href="#pricing" class="hover:text-white transition-colors">定價方案</a>
+        </div>
+        <button class="cta-button px-6 py-2 rounded-full text-xs font-bold tracking-widest uppercase">立即體驗</button>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative min-h-screen flex flex-col justify-center items-center px-4 overflow-hidden">
+        <div class="z-10 text-center animate-fade">
+            <h2 class="text-bone/40 text-sm md:text-base tracking-[0.5em] uppercase mb-4">LoamLab 專業出品</h2>
+            <h1 class="text-5xl md:text-8xl font-light tracking-tighter mb-8 text-glow">
+                讓直覺，領先於算力
+            </h1>
+            <p class="max-w-2xl mx-auto text-bone/60 text-lg md:text-xl font-light leading-relaxed mb-12">
+                野人相機：專為 SketchUp 打造的極簡 AI 渲染引擎。<br>
+                將兩小時的等待，濃縮成 30 秒的視覺爆發。
+            </p>
+            <div class="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-6 justify-center">
+                <button class="cta-button px-10 py-4 rounded-full text-sm font-bold tracking-widest uppercase">開始免費渲染</button>
+                <button class="px-10 py-4 rounded-full border border-bone/20 text-sm font-bold tracking-widest uppercase hover:bg-bone hover:text-obsidian transition-all">觀看演示</button>
+            </div>
+        </div>
+        
+        <!-- 背景裝飾 -->
+        <div class="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-blood-red/10 blur-[150px] rounded-full"></div>
+    </section>
+
+    <!-- 功能節點 -->
+    <section id="features" class="py-32 px-8 max-w-7xl mx-auto">
+        <div class="grid md:grid-cols-3 gap-12">
+            <div class="glass-card p-10 rounded-2xl">
+                <div class="text-blood-red mb-6 text-3xl">01</div>
+                <h3 class="text-2xl font-semibold mb-4">瞬時相機</h3>
+                <p class="text-bone/50 font-light leading-loose">
+                    30 秒產出 4K 雜誌級透視圖。不再需要調整數百個複雜參數，讓 AI 自動補全材質細節與自然光影。
+                </p>
+            </div>
+            <div class="glass-card p-10 rounded-2xl">
+                <div class="text-blood-red mb-6 text-3xl">02</div>
+                <h3 class="text-2xl font-semibold mb-4">原生工作流</h3>
+                <p class="text-bone/50 font-light leading-loose">
+                    深度嵌入 SketchUp。無需導出模型，在設計當下即可預覽成圖，保持創作靈感的連續性。
+                </p>
+            </div>
+            <div class="glass-card p-10 rounded-2xl">
+                <div class="text-blood-red mb-6 text-3xl">03</div>
+                <h3 class="text-2xl font-semibold mb-4">骨瓷級解析度</h3>
+                <p class="text-bone/50 font-light leading-loose">
+                    搭載超分辨率重建技術，自動修復邊緣鋸齒。每一張產出的作品，都具備直接對標國際標案的精緻感。
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 裂變邀請區 -->
+    <section id="referral" class="py-32 bg-white/[0.02]">
+        <div class="max-w-5xl mx-auto px-8 text-center">
+            <h2 class="text-3xl md:text-5xl font-light mb-8">永久能量補給</h2>
+            <p class="text-bone/60 mb-16 text-lg font-light">
+                設計師不應孤獨創作。分享野人相機，為彼此獲取永不失效的渲染能量。
+            </p>
+            
+            <div class="gradient-border glass-card p-12 relative overflow-hidden">
+                <div class="grid md:grid-cols-2 gap-12 items-center">
+                    <div class="text-left">
+                        <h4 class="text-xl font-semibold mb-4">邀請好友，雙方共贏</h4>
+                        <p class="text-bone/40 mb-8 font-light">
+                            當您的同行透過專屬連結註冊並完成首張渲染，系統將自動為雙方帳戶注入 5 張永久渲染點數。
+                        </p>
+                        <div class="bg-obsidian p-4 rounded-lg flex justify-between items-center border border-bone/10">
+                            <span class="text-xs text-bone/30 font-mono">wildman.cam/r/design_pro_2024</span>
+                            <button class="text-blood-red text-xs font-bold uppercase tracking-tighter">複製連結</button>
+                        </div>
+                    </div>
+                    <div class="flex justify-center">
+                        <div class="w-48 h-48 rounded-2xl bg-gradient-to-br from-blood-red to-obsidian flex flex-col items-center justify-center p-6 text-center border border-bone/20">
+                            <div class="text-4xl font-bold mb-2">+5</div>
+                            <div class="text-[10px] uppercase tracking-widest text-white/60">永久渲染點數</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 定價方案 -->
+    <section id="pricing" class="py-32 px-8 max-w-6xl mx-auto">
+        <div class="text-center mb-20">
+            <h2 class="text-4xl font-light mb-4">選擇您的創作幅度</h2>
+            <p class="text-bone/40 font-light">所有方案均包含 4K 輸出與雲端加速</p>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-8">
+            <!-- 入門 -->
+            <div class="glass-card p-12 rounded-3xl flex flex-col">
+                <div class="mb-8">
+                    <h4 class="text-sm tracking-widest uppercase text-bone/40 mb-2">探索者 Starter</h4>
+                    <div class="text-4xl font-light">$35 <span class="text-sm">/ 月</span></div>
+                </div>
+                <ul class="space-y-4 mb-12 flex-grow text-sm text-bone/60 font-light">
+                    <li>• 每月 15 張高清渲染</li>
+                    <li>• 基礎 AI 修復功能</li>
+                    <li>• 深度 SketchUp 整合</li>
+                    <li>• 支援永久能量點數加疊</li>
+                </ul>
+                <button class="w-full py-4 rounded-full border border-bone/20 text-xs font-bold uppercase tracking-widest hover:bg-bone hover:text-obsidian transition-all">開始試用</button>
+            </div>
+
+            <!-- 專業 (爆款) -->
+            <div class="glass-card p-12 rounded-3xl flex flex-col border-blood-red/40 bg-white/[0.05]">
+                <div class="mb-8">
+                    <span class="text-[10px] bg-blood-red px-2 py-1 rounded-full text-white font-bold mb-4 inline-block">MOST POPULAR</span>
+                    <h4 class="text-sm tracking-widest uppercase text-bone/40 mb-2">開拓者 Pro</h4>
+                    <div class="text-4xl font-light">$75 <span class="text-sm">/ 月</span></div>
+                </div>
+                <ul class="space-y-4 mb-12 flex-grow text-sm text-bone/80 font-light">
+                    <li>• 每月 100 張高清渲染</li>
+                    <li>• 包含超分辨率重建 (4K+)</li>
+                    <li>• 解鎖所有材質修復風格</li>
+                    <li>• 優先渲染處理通道</li>
+                </ul>
+                <button class="w-full cta-button py-4 rounded-full text-xs font-bold uppercase tracking-widest">立即訂閱</button>
+            </div>
+
+            <!-- 工作室 -->
+            <div class="glass-card p-12 rounded-3xl flex flex-col">
+                <div class="mb-8">
+                    <h4 class="text-sm tracking-widest uppercase text-bone/40 mb-2">工作室 Studio</h4>
+                    <div class="text-4xl font-light">$199 <span class="text-sm">/ 月</span></div>
+                </div>
+                <ul class="space-y-4 mb-12 flex-grow text-sm text-bone/60 font-light">
+                    <li>• 每月 450 張高清渲染</li>
+                    <li>• 專屬風格包自定義</li>
+                    <li>• 商業授權認證</li>
+                    <li>• 24/7 優先技術支援</li>
+                </ul>
+                <button class="w-full py-4 rounded-full border border-bone/20 text-xs font-bold uppercase tracking-widest hover:bg-bone hover:text-obsidian transition-all">聯繫我們</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- 頁腳 -->
+    <footer class="py-20 px-8 border-t border-bone/5">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center text-bone/20 text-xs tracking-widest">
+            <div class="mb-8 md:mb-0">
+                &copy; 2024 WILDMAN CAMERA. BY LOAMLAB STUDIO.
+            </div>
+            <div class="flex space-x-8">
+                <a href="#" class="hover:text-bone transition-colors">服務條款</a>
+                <a href="#" class="hover:text-bone transition-colors">隱私政策</a>
+                <a href="#" class="hover:text-bone transition-colors">INSTAGRAM</a>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

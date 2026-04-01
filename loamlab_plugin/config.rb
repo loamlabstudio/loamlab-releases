@@ -1,43 +1,20 @@
-﻿# frozen_string_literal: true
+# frozen_string_literal: true
 
 module LoamLab
   # ==============================================================================
-  # 闂佽崵濮靛姗€銆傞妸鈺傚殝闁搞儜鍐ㄤ紟闂佺硶鏅濋崰鏇″ⅴ闁?(Global Environment Config)
-  # - 闂傚倷绀侀鍥р枍閿曞倹鈷旈柕鍫濐槸閻╀線鏌￠崨顓炩偓浠嬫偟濞戞瑧鈹嶆繝闈涙搐閻?"development" (闂備緡鍋撶徊璺ㄧ玻閺冨牊鍤婃い蹇撴噺閹疯鲸鎱?localhost:3000)
-  # - 闂佸摜鍠庡Λ妤冣偓鍨叀楠炲秹骞橀崘鑼▉闂備焦褰冮鍛村吹?.rbz)闂佸憡鎸哥粙鍕濠靛绀嬫繛鍡楃箳缁犳垿鎮樿箛鎾村妞ゆ帗绻勯幏瀣節閸愨晜鐦庨梺琛″亾闁革富鍘兼禒?"production" (闂備緡鍋撶徊璺ㄧ玻閺冨牊鍤?Vercel 闂傚倸妫滅亸娆擃敂椤掍礁绶炵憸鎴﹀矗?
+  # 全局環境配置 (Global Environment Config)
+  # - ENV_MODE: "development" (本地開發) | "production" (正式環境)
+  # - BUILD_TYPE: "dev" | "release"
   # ==============================================================================
-  ENV_MODE = "production"   # 濮樻悂浠╅幍鎾舵埂鐎?Vercel閿涘牓鏋婇惂鑹板瀼閻х厧绔烽悧鍫熸拱娑撯偓閼疯揪绱?
-  BUILD_TYPE = "dev"            # "dev" | "release" 閳?build_rbz.ps1 閹垫挸瀵橀弲鍌濆殰閸曟洖鍨忛悙?release
+  ENV_MODE = "production"
+  BUILD_TYPE = "dev" # 開發模式
 
   if ENV_MODE == "production"
-    # ! 闂傚倸妫滅亸娆擃敂椤掍礁绶炵憸鎴﹀矗閸ヮ剚鍎嶉柛鏇ㄥ墻閸斺偓閻庢鍠栫换鎺楀箒椤愶箑閿ら柍?(闁荤姵绮岄鍡氥亹瀹€鍕闁归偊鍘兼禍鍫曟⒑椤斿搫濡块悹浣瑰絻椤曘儱鐣濋埀顒€鈻?Vercel 缂傚倸绉佃ぐ鍐偂濞嗘挻鏅悘鐐电摂濞?https://loamlab.vercel.app)
     API_BASE_URL = "https://loamlab-camera-backend.vercel.app"
   else
-    # ! 闂佸搫鐗滈崜姘垛€︽總鍛娾拺閻庯綆鍓氶锝嗙箾閹垮啫澧查柍鐟板€块幃褰掑级濞嗙偓娈?
     API_BASE_URL = "http://localhost:3001"
   end
 
-  # 闁伙綀娉涙晶鐘绘惞閻旇　鎸€ (闂侇偓绲界€?updater 闁绘鐗婂﹢鏉啃掗弬璺ㄦ瘑婵鍠庨崺?
-  VERSION = '1.2.8'
+  # 插件版本號 (用於 updater 檢查與 API 請求標頭)
+  VERSION = '1.2.9-beta'
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

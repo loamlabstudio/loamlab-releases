@@ -1,8 +1,14 @@
+const HIDE_UNFINISHED_FEATURES = true;
+console.log('[LoamLab] app.js initialized (v1.2.7-compat)');
+
 // i18n helper — 自動 fallback: 當前語言 → en-US → key 名稱（便於 debug）
 function t(key) {
-    return (UI_LANG[currentLang] || UI_LANG['en-US'])[key]
-        ?? UI_LANG['en-US'][key]
-        ?? key;
+    var langSet = UI_LANG[currentLang] || UI_LANG['en-US'];
+    var val = langSet[key];
+    if (val === undefined || val === null) {
+        val = UI_LANG['en-US'][key];
+    }
+    return (val !== undefined && val !== null) ? val : key;
 }
 
 // 實時進度條計時器與背景列隊計數器
@@ -102,8 +108,8 @@ function setActiveTool(n) {
     if (hintBanner) hintBanner.classList.add('hidden');
     if (shotStyleSelector) shotStyleSelector.classList.add('hidden');
     if (materialTagsDiv) materialTagsDiv.classList.remove('hidden');
-    // 重置：隱藏參考圖選擇器（工具 2 才顯示）
-    document.getElementById('reference-image-picker')?.classList.add('hidden');
+    var refPicker = document.getElementById('reference-image-picker');
+    if (refPicker) refPicker.classList.add('hidden');
     clearReferenceImage();
     // 重置：切換工具時恢復 scenes-container，恢復按鈕文字，恢復 picker 樣式
     if (scenesContainer) scenesContainer.classList.remove('hidden');
@@ -119,7 +125,8 @@ function setActiveTool(n) {
     if (gridEl0 && gridEl0.querySelector('[data-base-preview]')) {
         gridEl0.innerHTML = '';
         gridEl0.classList.add('hidden');
-        document.getElementById('preview-placeholder')?.classList.remove('hidden');
+        var placeholder = document.getElementById('preview-placeholder');
+        if (placeholder) placeholder.classList.remove('hidden');
     }
     const baseThumb0 = document.getElementById('base-image-thumb');
     if (baseThumb0) { baseThumb0.style.maxHeight = '96px'; baseThumb0.style.display = ''; }
@@ -351,7 +358,7 @@ window.receiveFromRuby = function (data) {
             document.querySelectorAll('.dev-only-tool').forEach(el => el.classList.remove('hidden'));
         }
         const langStr = data.lang || 'en-US';
-        document.getElementById('lang-select').value = langStr;
+        (document.getElementById('lang-select') || document.createElement('div')).value = langStr;
         window.setLanguage(langStr);
         if (data.save_path) window.updateSaveDir(data.save_path);
 
@@ -403,7 +410,8 @@ window.receiveFromRuby = function (data) {
     } else if (data.status === 'update_available') {
         stopUpdateSpinner();
         window._silentUpdateCheck = false;
-        document.getElementById('update-dot')?.classList.remove('hidden');
+        var updateDot = document.getElementById('update-dot');
+        if (updateDot) updateDot.classList.remove('hidden');
         showUpdateBanner(data.version, data.notes, data.url);
     } else if (data.status === 'update_downloading') {
         showUpdateToast('⬇️ 下載更新中，請稍候...');
@@ -498,21 +506,25 @@ window.receiveFromRuby = function (data) {
         if (targetScene && targetUrl) {
             // Session 快取：記錄本次 session 的渲染結果，確保歷史面板即使未設定存檔資料夾也能顯示
             window._sessionRenders = window._sessionRenders || [];
+            var resEl = document.querySelector('input[name="resolution"]:checked');
+            var promptEl = document.getElementById('user-prompt-input');
             window._sessionRenders.unshift({
                 cloud_url: targetUrl,
                 scene: targetScene,
-                resolution: document.querySelector('input[name="resolution"]:checked')?.value || '2k',
-                prompt: document.getElementById('user-prompt-input')?.value || '',
+                resolution: (resEl ? resEl.value : '2k'),
+                prompt: (promptEl ? promptEl.value : ''),
                 timestamp: new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15).replace(/(\d{8})(\d{6})/, '$1_$2')
             });
 
             // AI 渲染結果自動存檔（Ruby 下載圖片 → save_path + 更新 JSON 索引）
             if (window.sketchup) {
+                var resEl2 = document.querySelector('input[name="resolution"]:checked');
+                var promptEl2 = document.getElementById('user-prompt-input');
                 sketchup.auto_save_render({
                     url: targetUrl,
                     scene: targetScene,
-                    resolution: document.querySelector('input[name="resolution"]:checked')?.value || '2k',
-                    prompt: document.getElementById('user-prompt-input')?.value || ''
+                    resolution: (resEl2 ? resEl2.value : '2k'),
+                    prompt: (promptEl2 ? promptEl2.value : '')
                 });
             }
 
@@ -520,7 +532,8 @@ window.receiveFromRuby = function (data) {
             if (currentActiveTool === 2) {
                 const gridEl2 = document.getElementById('preview-grid');
                 if (gridEl2) {
-                    const baseThumbSrc = document.getElementById('base-image-thumb')?.src || '';
+                    var thumbEl = document.getElementById('base-image-thumb');
+                    const baseThumbSrc = (thumbEl ? thumbEl.src : '') || '';
                     gridEl2.className = 'w-full h-full px-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar pb-6 pt-4';
                     gridEl2.innerHTML = `
                         <div data-tool2-result="true" class="relative w-full rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
@@ -536,17 +549,17 @@ window.receiveFromRuby = function (data) {
                                 </div>
                             </div>` : `<img src="${targetUrl}" class="w-full object-contain animate-blur-clear" onclick="window.open('${targetUrl}', '_blank')">`}
                             <div class="px-4 py-3 flex items-center justify-between border-t border-white/[0.05] bg-black/40">
-                                <span class="text-[10px] text-white/30 truncate max-w-[60%]">${document.getElementById('user-prompt-input')?.value || 'Furniture Swap'}</span>
+                                <span class="text-[10px] text-white/30 truncate max-w-[60%]">${(document.getElementById('user-prompt-input') ? (document.getElementById('user-prompt-input') || document.createElement('div')).value : '') || 'Furniture Swap'}</span>
                                 <div class="flex items-center gap-2">
-                                    <button id="tool2-swap-btn" class="text-[9px] px-2.5 py-1 rounded border border-amber-500/30 text-amber-300/80 hover:bg-amber-500/20 hover:text-amber-200 hover:border-amber-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> SWAP</button>
+                                    ${!HIDE_UNFINISHED_FEATURES ? `<button id="tool2-swap-btn" class="text-[9px] px-2.5 py-1 rounded border border-amber-500/30 text-amber-300/80 hover:bg-amber-500/20 hover:text-amber-200 hover:border-amber-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> SWAP</button>` : ''}
                                     <button id="tool2-save-btn" class="text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> SAVE</button>
                                 </div>
                             </div>
                         </div>
                     `;
-                    document.getElementById('tool2-swap-btn')?.addEventListener('click', () => openSmartCanvas(channelB64, targetUrl, targetScene));
-                    document.getElementById('tool2-save-btn')?.addEventListener('click', () => {
-                        const p = document.getElementById('user-prompt-input')?.value || '';
+                    (document.getElementById('tool2-swap-btn') || document.createElement('div')).addEventListener('click', () => openSmartCanvas(channelB64, targetUrl, targetScene));
+                    (document.getElementById('tool2-save-btn') || document.createElement('div')).addEventListener('click', () => {
+                        const p = (document.getElementById('user-prompt-input') || document.createElement('div')).value || '';
                         if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
                     });
                 }
@@ -557,7 +570,7 @@ window.receiveFromRuby = function (data) {
             if (currentActiveTool === 3) {
                 const gridEl3 = document.getElementById('preview-grid');
                 if (gridEl3) {
-                    const promptText3 = document.getElementById('user-prompt-input')?.value || '';
+                    const promptText3 = (document.getElementById('user-prompt-input') || document.createElement('div')).value || '';
                     gridEl3.className = 'w-full h-full px-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar pb-6 pt-4';
                     gridEl3.innerHTML = `
                         <div data-ninegrid-result="true" class="relative w-full rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
@@ -569,8 +582,8 @@ window.receiveFromRuby = function (data) {
                             </div>
                         </div>
                     `;
-                    document.getElementById('ninegrid-save-btn')?.addEventListener('click', () => {
-                        const p = document.getElementById('user-prompt-input')?.value || '';
+                    (document.getElementById('ninegrid-save-btn') || document.createElement('div')).addEventListener('click', () => {
+                        const p = (document.getElementById('user-prompt-input') || document.createElement('div')).value || '';
                         if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
                     });
                 }
@@ -619,7 +632,8 @@ window.receiveFromRuby = function (data) {
 
                             saveBtn.onclick = (e) => {
                                 e.stopPropagation(); // 防止點擊事件擴散
-                                const promptText = document.getElementById('user-prompt-input')?.value || "";
+                                var promptEl = document.getElementById('user-prompt-input');
+                                const promptText = (promptEl ? promptEl.value : "") || "";
                                 // 呼叫 Ruby 後端的 save_image
                                 if (window.sketchup) {
                                     sketchup.save_image({ url: targetUrl, prompt: promptText, lang: currentLang });
@@ -632,7 +646,7 @@ window.receiveFromRuby = function (data) {
                             btnContainer.appendChild(saveBtn);
 
                             // SWAP 按鈕（工具 1/2 才顯示，工具 3 九宮格不做局部替換）
-                            if (currentActiveTool !== 3) {
+                            if (!HIDE_UNFINISHED_FEATURES && currentActiveTool !== 3) {
                                 const swapBtn = document.createElement('button');
                                 swapBtn.className = "text-[9px] px-2.5 py-1 rounded border border-amber-500/30 text-amber-300/80 hover:bg-amber-500/20 hover:text-amber-200 hover:border-amber-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm";
                                 swapBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> SWAP`;
@@ -924,7 +938,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // 渲染按鈕綁定與額度攔截 (Paywall)
-    document.getElementById('btn-render').addEventListener('click', () => {
+    (document.getElementById('btn-render') || document.createElement('div')).addEventListener('click', () => {
         // 未登入攔截：直接開啟登入流程，不發送任何請求
         if (!window.loamlabUserEmail) {
             openLoginModal();
@@ -1072,7 +1086,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // 工具 3：Advanced Settings 開合時，同步切換底圖縮圖顯示
-    document.querySelector('details.group')?.addEventListener('toggle', (e) => {
+    (document.querySelector('details.group') || document.createElement('div')).addEventListener('toggle', (e) => {
         if (currentActiveTool !== 3) return;
         const thumb = document.getElementById('base-image-thumb');
         const filled = document.getElementById('base-image-filled');
@@ -1089,9 +1103,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Swap Modal 控制按鈕
-    document.getElementById('btn-close-swap')?.addEventListener('click', closeSwapModal);
-    document.getElementById('btn-clear-mask')?.addEventListener('click', clearSwapMask);
-    document.getElementById('btn-execute-swap')?.addEventListener('click', executeSwap);
+    (document.getElementById('btn-close-swap') || document.createElement('div')).addEventListener('click', closeSwapModal);
+    (document.getElementById('btn-clear-mask') || document.createElement('div')).addEventListener('click', clearSwapMask);
+    (document.getElementById('btn-execute-swap') || document.createElement('div')).addEventListener('click', executeSwap);
 
     // Swap Modal Tag 群組：資料驅動初始化（預設顯示軟裝）
     renderSwapTags('soft');
@@ -1126,7 +1140,7 @@ if (btnSync) {
 }
 
 // 語言切換事件
-document.getElementById('lang-select').addEventListener('change', (e) => {
+(document.getElementById('lang-select') || document.createElement('div')).addEventListener('change', (e) => {
     window.setLanguage(e.target.value);
 });
 
@@ -1255,13 +1269,13 @@ function applyConfigToUI() {
     if (!cfg) return;
 
     if (cfg.render_costs) {
-        if (document.getElementById('ui-cost-1k')) document.getElementById('ui-cost-1k').textContent = cfg.render_costs['1k'] + ' pts';
-        if (document.getElementById('ui-cost-2k')) document.getElementById('ui-cost-2k').textContent = cfg.render_costs['2k'] + ' pts';
-        if (document.getElementById('ui-cost-4k')) document.getElementById('ui-cost-4k').textContent = cfg.render_costs['4k'] + ' pts';
+        if (document.getElementById('ui-cost-1k')) (document.getElementById('ui-cost-1k') || document.createElement('div')).textContent = cfg.render_costs['1k'] + ' pts';
+        if (document.getElementById('ui-cost-2k')) (document.getElementById('ui-cost-2k') || document.createElement('div')).textContent = cfg.render_costs['2k'] + ' pts';
+        if (document.getElementById('ui-cost-4k')) (document.getElementById('ui-cost-4k') || document.createElement('div')).textContent = cfg.render_costs['4k'] + ' pts';
         
-        if (document.getElementById('ui-pricing-cost-1k')) document.getElementById('ui-pricing-cost-1k').textContent = cfg.render_costs['1k'];
-        if (document.getElementById('ui-pricing-cost-2k')) document.getElementById('ui-pricing-cost-2k').textContent = cfg.render_costs['2k'];
-        if (document.getElementById('ui-pricing-cost-4k')) document.getElementById('ui-pricing-cost-4k').textContent = cfg.render_costs['4k'];
+        if (document.getElementById('ui-pricing-cost-1k')) (document.getElementById('ui-pricing-cost-1k') || document.createElement('div')).textContent = cfg.render_costs['1k'];
+        if (document.getElementById('ui-pricing-cost-2k')) (document.getElementById('ui-pricing-cost-2k') || document.createElement('div')).textContent = cfg.render_costs['2k'];
+        if (document.getElementById('ui-pricing-cost-4k')) (document.getElementById('ui-pricing-cost-4k') || document.createElement('div')).textContent = cfg.render_costs['4k'];
         
         const r1k = document.querySelector('input[name="resolution"][value="1k"]');
         if (r1k) r1k.setAttribute('data-cost', cfg.render_costs['1k']);
@@ -1293,7 +1307,7 @@ function openFeedbackModal() {
     const modal = document.getElementById('feedback-modal');
     if (modal) {
         modal.classList.remove('hidden');
-        setTimeout(() => modal.querySelector('.feedback-modal-box')?.classList.remove('scale-95', 'opacity-0'), 10);
+        setTimeout(() => modal.querySelector('.feedback-modal-box').classList.remove('scale-95', 'opacity-0'), 10);
     }
 }
 
@@ -1311,8 +1325,10 @@ window.closeFeedbackModal = closeFeedbackModal;
 window.sendFeedbackModal = function() {
     const modal = document.getElementById('feedback-modal');
     if (!modal) return;
-    const type = modal.querySelector('#feedback-type-select')?.value || 'general';
-    const content = modal.querySelector('#feedback-content-input')?.value?.trim() || '';
+    var typeEl = modal.querySelector('#feedback-type-select');
+    const type = (typeEl ? typeEl.value : '') || 'general';
+    var contentEl = modal.querySelector('#feedback-content-input');
+    const content = (contentEl && contentEl.value ? contentEl.value.trim() : '') || '';
     if (!content) return;
     submitFeedback({ type, content });
     const box = modal.querySelector('.feedback-modal-box');
@@ -1490,7 +1506,8 @@ window.fetchUserPoints = function (email) {
                     if (!data.referred_by) {
                         setTimeout(() => {
                             openReferralModal();
-                            document.getElementById('input-referral-code')?.focus();
+                            var refCodeInput = document.getElementById('input-referral-code');
+                            if (refCodeInput) refCodeInput.focus();
                         }, 1500);
                     }
                 }
@@ -1509,13 +1526,18 @@ function openHistoryModal() {
     if (!modal) return;
     const grid = document.getElementById('history-grid');
     if (grid) grid.innerHTML = '<div class="text-center text-white/30 text-[12px] py-10">⏳</div>';
+    
     modal.classList.remove('hidden');
-    if (window.sketchup) {
-        sketchup.list_saved_renders({});
-    } else {
-        const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
-        if (grid) grid.innerHTML = `<div class="text-center text-white/30 text-[12px] py-10">${lang['history_empty'] || 'No renders yet'}</div>`;
-    }
+    
+    // Yield to let the browser paint the modal before the potentially heavy Ruby IPC call
+    setTimeout(function() {
+        if (window.sketchup) {
+            sketchup.list_saved_renders({});
+        } else {
+            const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
+            if (grid) grid.innerHTML = `<div class="text-center text-white/30 text-[12px] py-10">${lang['history_empty'] || 'No renders yet'}</div>`;
+        }
+    }, 50);
 }
 
 function renderHistoryGrid(files) {
@@ -1567,7 +1589,8 @@ function renderHistoryGrid(files) {
 
 function closeHistoryModal() {
     window._historyPickMode = false;
-    document.getElementById('history-modal')?.classList.add('hidden');
+    var histModal = document.getElementById('history-modal');
+    if (histModal) histModal.classList.add('hidden');
 }
 
 // 底圖選取模式：從 History 選一張圖作為工具 2/3/4 的底圖
@@ -1634,7 +1657,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const refInput = document.getElementById('ref-image-input');
     if (refInput) {
         refInput.addEventListener('change', (e) => {
-            const file = e.target.files?.[0];
+            var fileArr = e.target.files;
+            const file = (fileArr && fileArr.length > 0) ? fileArr[0] : null;
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (ev) => {
@@ -1655,7 +1679,8 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('paste', (e) => {
     const refPicker = document.getElementById('reference-image-picker');
     if (!refPicker || refPicker.classList.contains('hidden')) return;
-    const items = e.clipboardData?.items;
+    var clipData = e.clipboardData;
+    const items = clipData ? clipData.items : null;
     if (!items) return;
     for (const item of items) {
         if (!item.type.startsWith('image/')) continue;
@@ -1723,8 +1748,10 @@ function openSharePlatform(platform) {
 }
 
 // Invite Modal LINE/WA 按鈕
-document.getElementById('btn-share-line-referral')?.addEventListener('click', () => openSharePlatform('line'));
-document.getElementById('btn-share-wa-referral')?.addEventListener('click', () => openSharePlatform('wa'));
+    var btnShareLine = document.getElementById('btn-share-line-referral');
+    if (btnShareLine) btnShareLine.addEventListener('click', function() { openSharePlatform('line'); });
+    var btnShareWa = document.getElementById('btn-share-wa-referral');
+    if (btnShareWa) btnShareWa.addEventListener('click', function() { openSharePlatform('wa'); });
 
 function showWelcomeToast() {
     const toast = document.getElementById('welcome-toast');
@@ -1764,7 +1791,7 @@ function showUpdateBanner(version, notes, url) {
 }
 
 function executeUpdate(url) {
-    document.getElementById('update-banner')?.classList.add('hidden');
+    (document.getElementById('update-banner') || document.createElement('div')).classList.add('hidden');
     showUpdateToast('⬇️ 下載更新中，請稍候...');
     if (window.sketchup) {
         sketchup.execute_update({ url });
@@ -1801,7 +1828,7 @@ window.openCheckout = function (variantId) {
     // 根據平台選擇 Store URL 與參數
     let finalUrl = "";
     if (CURRENT_PAYMENT_PLATFORM === 'DODO') {
-        const storeUrl = "https://buy.dodopayments.com/buy";
+        const storeUrl = "https://checkout.dodopayments.com/buy";
         finalUrl = `${storeUrl}?variant_id=${variantId}&customer_email=${encodeURIComponent(window.loamlabUserEmail)}`;
     } else {
         const storeUrl = "https://loamlabstudio.lemonsqueezy.com/checkout/buy/";
@@ -1820,7 +1847,7 @@ window.openCheckout = function (variantId) {
 
     // 支付後輪詢：用 last_topup_at 時間戳偵測充值成功（解決同值無法偵測的問題）
     const topupBefore = window.loamlabLastTopupAt;
-    const pointsBefore = parseInt(document.getElementById('point-balance').textContent) || 0;
+    const pointsBefore = parseInt((document.getElementById('point-balance') || document.createElement('div')).textContent) || 0;
     let pollCount = 0;
     const paymentPollTimer = setInterval(async () => {
         pollCount++;
@@ -1840,7 +1867,7 @@ window.openCheckout = function (variantId) {
                 window.loamlabLastTopupAt = d.last_topup_at;
                 updatePlanBadge(window.loamlabSubscriptionPlan);
                 const newPoints = d.points || 0;
-                document.getElementById('point-balance').textContent = newPoints;
+                (document.getElementById('point-balance') || document.createElement('div')).textContent = newPoints;
                 const delta = newPoints - pointsBefore;
                 const deltaStr = delta > 0 ? `+${delta} 點` : '';
                 showUpdateToast(`🎉 付款成功！${deltaStr} 已入帳，目前共 ${newPoints} 點`);
@@ -1955,9 +1982,9 @@ function startOAuthFlow() {
 // =========================================================
 // Email OTP 工作流 (方案B)
 // =========================================================
-document.getElementById('btn-google-login')?.addEventListener('click', startOAuthFlow);
+(document.getElementById('btn-google-login') || document.createElement('div')).addEventListener('click', startOAuthFlow);
 
-document.getElementById('btn-cancel-polling')?.addEventListener('click', () => {
+(document.getElementById('btn-cancel-polling') || document.createElement('div')).addEventListener('click', () => {
     if (authPollTimer) clearInterval(authPollTimer);
     const optView = document.getElementById('login-options-view');
     const pollView = document.getElementById('login-polling-view');
@@ -1965,7 +1992,7 @@ document.getElementById('btn-cancel-polling')?.addEventListener('click', () => {
     if (optView) { optView.classList.remove('hidden'); optView.classList.add('flex'); }
 });
 
-document.getElementById('btn-send-otp')?.addEventListener('click', async () => {
+(document.getElementById('btn-send-otp') || document.createElement('div')).addEventListener('click', async () => {
     const emailInput = document.getElementById('login-email-input');
     const email = emailInput ? emailInput.value.trim() : '';
     const statusMsg = document.getElementById('otp-status-msg');
@@ -1984,7 +2011,7 @@ document.getElementById('btn-send-otp')?.addEventListener('click', async () => {
     if (statusMsg) statusMsg.classList.add('hidden');
 
     try {
-        const res = await fetch(`${API_BASE}/api/auth/otp-send`, {
+        const res = await fetch(`${API_BASE}/api/auth/otp`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email })
@@ -2020,7 +2047,7 @@ document.getElementById('btn-send-otp')?.addEventListener('click', async () => {
     }
 });
 
-document.getElementById('btn-otp-back')?.addEventListener('click', () => {
+(document.getElementById('btn-otp-back') || document.createElement('div')).addEventListener('click', () => {
     const optView = document.getElementById('login-options-view');
     const otpView = document.getElementById('login-otp-view');
     if (otpView) { otpView.classList.remove('flex'); otpView.classList.add('hidden'); }
@@ -2033,9 +2060,9 @@ document.getElementById('btn-otp-back')?.addEventListener('click', () => {
     }
 });
 
-document.getElementById('btn-verify-otp')?.addEventListener('click', async () => {
-    const email = document.getElementById('login-email-input')?.value.trim();
-    const token = document.getElementById('login-code-input')?.value.trim();
+(document.getElementById('btn-verify-otp') || document.createElement('div')).addEventListener('click', async () => {
+    const email = (document.getElementById('login-email-input') || document.createElement('div')).value.trim();
+    const token = (document.getElementById('login-code-input') || document.createElement('div')).value.trim();
     const btn = document.getElementById('btn-verify-otp');
     
     if (!token || token.length < 6) return;
@@ -2044,7 +2071,7 @@ document.getElementById('btn-verify-otp')?.addEventListener('click', async () =>
     btn.textContent = 'VERIFYING...';
     
     try {
-        const res = await fetch(`${API_BASE}/api/auth/otp-verify`, {
+        const res = await fetch(`${API_BASE}/api/auth/otp`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, token })
@@ -2177,7 +2204,7 @@ if (referralModal) referralModal.addEventListener('click', (e) => {
 const btnCopyReferral = document.getElementById('btn-copy-referral');
 if (btnCopyReferral) {
     btnCopyReferral.addEventListener('click', () => {
-        const codeText = document.getElementById('my-referral-code')?.textContent;
+        const codeText = (document.getElementById('my-referral-code') || document.createElement('div')).textContent;
         if (codeText && codeText !== '------') {
             navigator.clipboard.writeText(codeText).then(() => {
                 const ogText = btnCopyReferral.textContent;
@@ -2413,7 +2440,7 @@ function startExtractMode(imgUrl) {
 
 function confirmExtract(imgUrl, rect) {
     const name = window.prompt('為此材質命名：', '未命名材質');
-    if (!name) { document.getElementById('extract-overlay')?.remove(); return; }
+    if (!name) { (document.getElementById('extract-overlay') || document.createElement('div')).remove(); return; }
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -2435,7 +2462,7 @@ function confirmExtract(imgUrl, rect) {
         const thumbnail = canvas.toDataURL('image/jpeg', 0.82);
 
         saveMaterial(name.trim(), thumbnail);
-        document.getElementById('extract-overlay')?.remove();
+        (document.getElementById('extract-overlay') || document.createElement('div')).remove();
         showUpdateToast('材質已存入，請在素材庫選取後塗遮罩執行替換');
         openSwapModal(imgUrl, imgUrl);
     };
@@ -2452,7 +2479,7 @@ function confirmExtract(imgUrl, rect) {
         ctx.fillText(name.slice(0, 8), 32, 36);
         const thumbnail = canvas.toDataURL('image/png');
         saveMaterial(name.trim(), thumbnail);
-        document.getElementById('extract-overlay')?.remove();
+        (document.getElementById('extract-overlay') || document.createElement('div')).remove();
         showUpdateToast('材質已存入，請在素材庫選取後塗遮罩執行替換');
         openSwapModal(imgUrl, imgUrl);
     };
@@ -2498,10 +2525,10 @@ function renderMaterialLibrary() {
 function selectMaterialTile(tile) {
     document.querySelectorAll('.material-tile').forEach(t => {
         t.classList.remove('border-sky-400/60');
-        t.querySelector('.material-selected-dot')?.classList.add('hidden');
+        t.querySelector('.material-selected-dot').classList.add('hidden');
     });
     tile.classList.add('border-sky-400/60');
-    tile.querySelector('.material-selected-dot')?.classList.remove('hidden');
+    tile.querySelector('.material-selected-dot').classList.remove('hidden');
     selectedMaterialName = tile.getAttribute('data-name');
     const promptInput = document.getElementById('swap-prompt-input');
     if (promptInput && !promptInput.value.trim()) {
@@ -2512,6 +2539,9 @@ function selectMaterialTile(tile) {
 function closeSwapModal() {
     // swap-modal 已移除，保留此函數作為向後相容空殼
 }
+function clearSwapMask() {}
+function executeSwap() {}
+function renderSwapTags() {}
 
 function appendInpaintResultCard(url, promptText = 'Inpaint Result') {
     const gridEl = document.getElementById('preview-grid');
@@ -2610,21 +2640,33 @@ const SmartCanvas = {
 
 function _scHandleKey(e) {
     const modal = document.getElementById('smart-canvas-modal');
-    if (modal?.classList.contains('hidden')) return;
+    if (modal.classList.contains('hidden')) return;
     // Alt：啟動筆刷大小調整模式
     if (e.key === 'Alt') { SmartCanvas._altKey = true; e.preventDefault(); return; }
     // 若焦點在文字輸入框，不攔截
-    const tag = document.activeElement?.tagName;
+    var activeEl = document.activeElement;
+    var tag = activeEl ? activeEl.tagName : '';
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-    // Ctrl+Z undo / Ctrl+Y or Ctrl+Shift+Z redo
+
     if (e.ctrlKey) {
-        if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); document.getElementById('sc-undo')?.click(); return; }
-        if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); document.getElementById('sc-redo')?.click(); return; }
+        if (e.key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            var undoBtn = document.getElementById('sc-undo');
+            if (undoBtn) undoBtn.click();
+            return;
+        }
+        if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+            e.preventDefault();
+            var redoBtn = document.getElementById('sc-redo');
+            if (redoBtn) redoBtn.click();
+            return;
+        }
     }
     // 工具切換：B=筆刷 E=橡皮擦 W=魔術棒 G=填充
     const toolMap = { b: 'brush', e: 'eraser', w: 'wand', g: 'fill' };
     const tool = toolMap[e.key.toLowerCase()];
-    if (tool) { document.querySelector(`.sc-tool-btn[data-tool="${tool}"]`)?.click(); return; }
+    var toolBtn = document.querySelector('.sc-tool-btn[data-tool="' + tool + '"]');
+    if (tool && toolBtn) { toolBtn.click(); return; }
     // [ ] 調整筆刷大小
     const sizeEl = document.getElementById('sc-brush-size');
     if (e.key === '[' && sizeEl) { sizeEl.value = Math.max(5, +sizeEl.value - 5); sizeEl.dispatchEvent(new Event('input')); }
@@ -2633,13 +2675,13 @@ function _scHandleKey(e) {
 
 function _scHandlePaste(e) {
     const modal = document.getElementById('smart-canvas-modal');
-    if (modal?.classList.contains('hidden')) return;
-    const items = e.clipboardData?.items || [];
+    if (modal.classList.contains('hidden')) return;
+    const items = e.clipboardData.items || [];
     for (const item of items) {
         if (!item.type.startsWith('image/')) continue;
         const file = item.getAsFile();
         if (!file) continue;
-        const idx = SmartCanvas.focusedRegionIdx ?? (SmartCanvas.regions.length - 1);
+        const idx = SmartCanvas.focusedRegionIdx || (SmartCanvas.regions.length - 1);
         if (idx < 0) break;
         const reader = new FileReader();
         reader.onload = (ev) => {
@@ -2692,7 +2734,7 @@ function openSmartCanvas(channelBase64, renderedUrl, sceneName) {
     }
     SmartCanvas.activeTool = 'wand';
     document.querySelectorAll('.sc-tool-btn').forEach(b => b.classList.remove('sc-active'));
-    document.querySelector('.sc-tool-btn[data-tool="wand"]')?.classList.add('sc-active');
+    document.querySelector('.sc-tool-btn[data-tool="wand"]').classList.add('sc-active');
 
     // 載入渲染圖
     SmartCanvas.baseImg = document.getElementById('sc-base-img');
@@ -2743,7 +2785,7 @@ function _scInitCanvases(w, h, channelBase64) {
     SmartCanvas.edgeMap = null;
     SmartCanvas.hoveredMask = null;
     SmartCanvas.lastWandX = -1; SmartCanvas.lastWandY = -1;
-    if (SmartCanvas.baseImg?.complete) {
+    if (SmartCanvas.baseImg && SmartCanvas.baseImg.complete) {
         SmartCanvas.edgeMap = _scComputeEdgeMap();
     } else {
         SmartCanvas.baseImg.addEventListener('load', () => {
@@ -3084,8 +3126,9 @@ function _scRenderRegionList() {
         card.querySelector('.sc-region-label-input').oninput = (e) => {
             SmartCanvas.regions[idx].label = e.target.value;
         };
-        card.querySelector('.sc-ref-file-input')?.addEventListener('change', (e) => {
-            const file = e.target.files?.[0];
+        card.querySelector('.sc-ref-file-input').addEventListener('change', (e) => {
+            var fileArr = e.target.files;
+            const file = (fileArr && fileArr.length > 0) ? fileArr[0] : null;
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (ev) => {
@@ -3094,11 +3137,14 @@ function _scRenderRegionList() {
             };
             reader.readAsDataURL(file);
         });
-        card.querySelector('.sc-ref-clear')?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            SmartCanvas.regions[idx].refImageBase64 = null;
-            _scRenderRegionList();
-        });
+        var scRefClear = card.querySelector('.sc-ref-clear');
+        if (scRefClear) {
+            scRefClear.addEventListener('click', function(e) {
+                e.stopPropagation();
+                SmartCanvas.regions[idx].refImageBase64 = null;
+                _scRenderRegionList();
+            });
+        }
         list.appendChild(card);
     });
 
@@ -3109,7 +3155,7 @@ function _scRenderRegionList() {
         addBtn.textContent = '＋ 新增描述區（換色）';
         addBtn.onclick = () => {
             // 清除 drawCanvas 上的未提交筆跡，避免干擾新區域
-            SmartCanvas.drawCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+            if (SmartCanvas.drawCtx) SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
             _scPickNextColor();
             showUpdateToast('已換色，開始繪製下一個區域');
         };
@@ -3151,7 +3197,7 @@ function scSetTagGroup(groupKey) {
     ).join('');
     container.querySelectorAll('[data-tag]').forEach(span => {
         span.addEventListener('click', () => {
-            const idx = SmartCanvas.focusedRegionIdx ?? (SmartCanvas.regions.length - 1);
+            const idx = (SmartCanvas.focusedRegionIdx !== undefined && SmartCanvas.focusedRegionIdx !== null) ? SmartCanvas.focusedRegionIdx : (SmartCanvas.regions.length - 1);
             const region = SmartCanvas.regions[idx];
             if (!region || region.inputMode === 'image') return;
             const val = span.getAttribute('data-tag');
@@ -3521,8 +3567,8 @@ function _scConfirmSelections() {
         return;
     }
     SmartCanvas.pendingSwap = true;
-    document.getElementById('smart-canvas-modal')?.classList.add('hidden');
-    document.getElementById('smart-canvas-modal')?.classList.remove('flex');
+    (document.getElementById('smart-canvas-modal') || document.createElement('div')).classList.add('hidden');
+    (document.getElementById('smart-canvas-modal') || document.createElement('div')).classList.remove('flex');
     _scUpdatePendingIndicator();
     showUpdateToast('✅ 選取已確認，點擊渲染鍵執行替換');
 }
@@ -3537,7 +3583,7 @@ async function executeSmartSwap(overrideBody = null) {
     if (renderLabel) renderLabel.textContent = t('btn_render_processing') || 'Processing...';
     const statusText = document.getElementById('status-text');
     if (statusText) { statusText.textContent = t('status_rendering') || 'AI is processing your scene...'; statusText.classList.replace('text-white/40', 'text-red-400'); }
-    document.getElementById('main-preview-area')?.classList.add('is-rendering');
+    (document.getElementById('main-preview-area') || document.createElement('div')).classList.add('is-rendering');
     startRenderTimer();
 
     try {
@@ -3559,7 +3605,7 @@ async function executeSmartSwap(overrideBody = null) {
             let refImgIdx = 3;
             const prompt = SmartCanvas.regions.map(r => {
                 const hasRef = !!r.refImageBase64;
-                const hasText = !!(r.label?.trim());
+                const hasText = !!(r.label && r.label.trim());
                 const color = r.colorHex || '#ff6432';
                 if (!hasRef && !hasText) return null;
                 if (hasRef && hasText)  return `${color}: ${r.label.trim()} (see image ${refImgIdx++} as visual reference)`;
@@ -3578,7 +3624,7 @@ async function executeSmartSwap(overrideBody = null) {
             resolution = resRadio ? resRadio.value : '1k';
 
             let originalParam = { original_image_url: SmartCanvas.renderedUrl };
-            if (SmartCanvas.baseImg?.complete && SmartCanvas.baseImg.naturalWidth > 0) {
+            if (SmartCanvas.baseImg && SmartCanvas.baseImg.complete && SmartCanvas.baseImg.naturalWidth > 0) {
                 try {
                     const oc = document.createElement('canvas');
                     oc.width = SmartCanvas.baseImg.naturalWidth;
@@ -3629,7 +3675,7 @@ async function executeSmartSwap(overrideBody = null) {
             appendInpaintResultCard(result.url, displayLabel);
             if (window.sketchup) sketchup.auto_save_render({ url: result.url, scene: SmartCanvas.baseScene || 'render', resolution, prompt: displayLabel });
             showUpdateToast('✅ 替換完成！');
-            if (window._isDev) document.getElementById('dev-retest-btn')?.classList.remove('hidden');
+            if (window._isDev) (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
         } else {
             showUpdateToast('❌ ' + (result.msg || '替換失敗'));
         }
@@ -3649,23 +3695,27 @@ async function executeSmartSwap(overrideBody = null) {
 // Smart Canvas 控制器初始化（DOM ready 後掛載）
 document.addEventListener('DOMContentLoaded', () => {
     // 關閉按鈕
-    document.getElementById('sc-close')?.addEventListener('click', () => {
-        document.getElementById('smart-canvas-modal')?.classList.add('hidden');
-        document.getElementById('smart-canvas-modal')?.classList.remove('flex');
+    var scCloseBtn = document.getElementById('sc-close');
+    if (scCloseBtn) scCloseBtn.addEventListener('click', () => {
+        var scModal = document.getElementById('smart-canvas-modal');
+        if (scModal) {
+            scModal.classList.add('hidden');
+            scModal.classList.remove('flex');
+        }
     });
 
     // 執行替換按鈕：確認選取 → 關閉 modal → 等待渲染鍵
-    document.getElementById('btn-execute-smart-swap')?.addEventListener('click', _scConfirmSelections);
+    (document.getElementById('btn-execute-smart-swap') || document.createElement('div')).addEventListener('click', _scConfirmSelections);
 
     // Smart Canvas pending 取消鍵
-    document.getElementById('sc-pending-cancel')?.addEventListener('click', () => {
+    (document.getElementById('sc-pending-cancel') || document.createElement('div')).addEventListener('click', () => {
         SmartCanvas.pendingSwap = false;
         SmartCanvas.regions = [];
         _scUpdatePendingIndicator();
     });
 
     // Smart Canvas pending 點擊編輯鍵 → 重開 modal 繼續編輯
-    document.getElementById('sc-pending-edit')?.addEventListener('click', () => {
+    (document.getElementById('sc-pending-edit') || document.createElement('div')).addEventListener('click', () => {
         const modal = document.getElementById('smart-canvas-modal');
         if (!modal) return;
         modal.classList.remove('hidden');
@@ -3683,54 +3733,57 @@ document.addEventListener('DOMContentLoaded', () => {
             SmartCanvas.isDrawing = false;
             // 切換工具時清空草稿層並恢復持久 region 遮罩
             SmartCanvas.hoveredColor = null;
-            SmartCanvas.drawCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+            if (SmartCanvas.drawCtx) SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
             _scRenderOverlays();
         });
     });
 
     // 筆刷顏色
-    document.getElementById('sc-color-picker')?.addEventListener('input', (e) => {
+    var scColorPicker = document.getElementById('sc-color-picker');
+    if (scColorPicker) scColorPicker.addEventListener('input', function(e) {
         SmartCanvas.brushColor = e.target.value;
     });
 
     // 筆刷大小
-    document.getElementById('sc-brush-size')?.addEventListener('input', (e) => {
+    var scBrushSize = document.getElementById('sc-brush-size');
+    if (scBrushSize) scBrushSize.addEventListener('input', function(e) {
         SmartCanvas.brushSize = parseInt(e.target.value, 10);
     });
 
     // 復原
-    document.getElementById('sc-undo')?.addEventListener('click', () => {
+    (document.getElementById('sc-undo') || document.createElement('div')).addEventListener('click', () => {
         if (SmartCanvas.undoStack.length === 0) return;
         const cur = {
-            canvas: SmartCanvas.drawCtx?.getImageData(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH),
+            canvas: (SmartCanvas.drawCtx ? SmartCanvas.drawCtx.getImageData(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH) : null),
             regions: SmartCanvas.regions.map(r => ({ ...r }))
         };
         SmartCanvas.redoStack.push(cur);
         const snap = SmartCanvas.undoStack.pop();
-        SmartCanvas.drawCtx?.putImageData(snap.canvas, 0, 0);
+        if (SmartCanvas.drawCtx) SmartCanvas.drawCtx.putImageData(snap.canvas, 0, 0);
         SmartCanvas.regions = snap.regions;
         _scRenderRegionList();
         _scRenderOverlays();
     });
 
     // 重做
-    document.getElementById('sc-redo')?.addEventListener('click', () => {
+    (document.getElementById('sc-redo') || document.createElement('div')).addEventListener('click', () => {
         if (SmartCanvas.redoStack.length === 0) return;
         const cur = {
-            canvas: SmartCanvas.drawCtx?.getImageData(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH),
+            canvas: (SmartCanvas.drawCtx ? SmartCanvas.drawCtx.getImageData(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH) : null),
             regions: SmartCanvas.regions.map(r => ({ ...r }))
         };
         SmartCanvas.undoStack.push(cur);
         const snap = SmartCanvas.redoStack.pop();
-        SmartCanvas.drawCtx?.putImageData(snap.canvas, 0, 0);
+        if (SmartCanvas.drawCtx) SmartCanvas.drawCtx.putImageData(snap.canvas, 0, 0);
         SmartCanvas.regions = snap.regions;
         _scRenderRegionList();
         _scRenderOverlays();
     });
 
     // 清空
-    document.getElementById('sc-clear')?.addEventListener('click', () => {
-        SmartCanvas.drawCtx?.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+    var scClearBtn = document.getElementById('sc-clear');
+    if (scClearBtn) scClearBtn.addEventListener('click', () => {
+        if (SmartCanvas.drawCtx) SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
         SmartCanvas.regions = [];
         SmartCanvas.undoStack = [];
         SmartCanvas.redoStack = [];

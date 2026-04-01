@@ -44,7 +44,7 @@ function LiveTicker() {
       </div>
 
       <div className="text-sm md:text-base text-zinc-400 font-light max-w-lg text-center">
-        傳統渲染需耗時超過 60 分鐘，野人相機將每張高畫質出圖<br className="hidden md:block" />
+        傳統渲染需耗時超過 60 分鐘，LoamLab Camera 將每張高畫質出圖<br className="hidden md:block" />
         <span className="text-white font-medium">縮短至驚人的 30 秒</span>。
       </div>
     </div>
@@ -176,7 +176,7 @@ export default function Home() {
             Download Free Plugin
           </a>
 
-          <a href="https://buy.dodopayments.com/buy?variant_id=pdt_0NblmafncbUuGNrMRvJp4" target="_blank" className="px-10 py-5 rounded-full border border-white/20 text-white font-bold text-xs tracking-[0.2em] uppercase hover:bg-white/10 transition-all flex items-center justify-center gap-2">
+          <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NblmafncbUuGNrMRvJp4" target="_blank" className="px-10 py-5 rounded-full border border-white/20 text-white font-bold text-xs tracking-[0.2em] uppercase hover:bg-white/10 transition-all flex items-center justify-center gap-2">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
             升級 Pro 方案
           </a>
@@ -187,7 +187,7 @@ export default function Home() {
       <section id="features" className="w-full py-32 px-6 max-w-7xl mx-auto z-10 relative border-t border-white/5">
         <div className="text-center mb-20">
           <h2 className="text-3xl md:text-5xl font-light tracking-tight mb-6">我們拒絕死板的「計算物理」</h2>
-          <p className="text-zinc-400 font-light text-lg">野人相機模擬的是人類的「空間直覺」，彌補模型中缺失的情緒維度。</p>
+          <p className="text-zinc-400 font-light text-lg">LoamLab Camera 模擬的是人類的「空間直覺」，彌補模型中缺失的情緒維度。</p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-8">
@@ -242,7 +242,7 @@ export default function Home() {
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 15 張 2K 渲染</li>
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> SketchUp 全版本支援</li>
             </ul>
-            <a href="https://buy.dodopayments.com/buy?variant_id=pdt_0NblmUvFrwJe36ymTELWV" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Subscribe</a>
+            <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NblmUvFrwJe36ymTELWV" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Subscribe</a>
           </div>
 
           {/* Pro (Hot) */}
@@ -258,7 +258,7 @@ export default function Home() {
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 支援 4K 影院級畫質擴展</li>
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 優先 AI 計算通道</li>
             </ul>
-            <a href="https://buy.dodopayments.com/buy?variant_id=pdt_0NblmafncbUuGNrMRvJp4" target="_blank" className="w-full py-5 rounded-full bg-[var(--color-loam-primary)] text-white text-[10px] font-bold tracking-widest uppercase hover:scale-105 transition-transform text-center">Subscribe</a>
+            <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NblmafncbUuGNrMRvJp4" target="_blank" className="w-full py-5 rounded-full bg-[var(--color-loam-primary)] text-white text-[10px] font-bold tracking-widest uppercase hover:scale-105 transition-transform text-center">Subscribe</a>
           </div>
 
           {/* Studio */}
@@ -272,7 +272,7 @@ export default function Home() {
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 450 張 2K 渲染</li>
               <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 團隊商用授權許可</li>
             </ul>
-            <a href="https://buy.dodopayments.com/buy?variant_id=pdt_0Nblmhwbr5WXfNyDHpaA2" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Subscribe</a>
+            <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0Nblmhwbr5WXfNyDHpaA2" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Subscribe</a>
           </div>
         </div>
       </section>

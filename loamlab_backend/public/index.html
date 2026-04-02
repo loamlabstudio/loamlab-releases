@@ -381,15 +381,9 @@
         const bgTicker = document.getElementById('bgTicker');
         const fgTicker = document.getElementById('fgTicker');
 
-        // 時間差位算法：以 2024/04/01 為啟動點，每秒模擬節省時間
-        const startTime = new Date('2024-04-01T00:00:00Z').getTime();
-        const getBaseHours = () => {
-            const now = Date.now();
-            const elapsedHours = (now - startTime) / (1000 * 3600);
-            return Math.floor(elapsedHours * 0.42 + 3240); // 基準速度與偏移
-        };
+        // 基準數據：由真實算圖次數換算的節省小時數 (約幾百小時)
+        let baseHours = 428; 
 
-        let baseHours = getBaseHours();
         const updateTickers = (val) => {
             const formatted = val.toLocaleString();
             bgTicker.innerText = formatted;
@@ -401,16 +395,14 @@
         fgTicker.style.opacity = '1';
 
         const tickNext = () => {
-            // 每隔 1.5s ~ 4s 隨機增加一點點跳動感
-            if (Math.random() > 0.4) {
-                baseHours += (Math.random() > 0.8 ? 2 : 1);
-            } else {
-                baseHours = getBaseHours(); // 回到基準
+            // 隨機增量模擬真實工作流
+            if (Math.random() > 0.6) {
+                baseHours += 1;
             }
             updateTickers(baseHours);
-            setTimeout(tickNext, 1500 + Math.random() * 2500);
+            setTimeout(tickNext, 2000 + Math.random() * 3000);
         };
-        setTimeout(tickNext, 2000);
+        setTimeout(tickNext, 1500);
 
         // --- 2. Before/After 滑動邏輯 ---
         const compSlider = document.getElementById('compareSlider');

@@ -79,7 +79,7 @@ function CompareSlider() {
   return (
     <div 
       ref={containerRef}
-      className="relative w-full h-[50vh] min-h-[400px] md:h-[70vh] rounded-[40px] overflow-hidden border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.8)] cursor-ew-resize select-none mx-auto max-w-6xl"
+      className="relative w-full aspect-[4/3] md:aspect-[16/9] rounded-[20px] overflow-hidden border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.8)] cursor-ew-resize select-none mx-auto max-w-7xl"
       onMouseDown={(e) => handleDrag(e.clientX)}
       onTouchMove={(e) => handleDrag(e.touches[0].clientX)}
     >
@@ -88,8 +88,8 @@ function CompareSlider() {
         className="absolute inset-0 bg-cover bg-center pointer-events-none" 
         style={{ backgroundImage: "url('/images/before.jpg?v=88')" }}
       />
-      <div className="absolute top-6 left-6 px-4 py-2 bg-black/50 backdrop-blur rounded-full text-[10px] md:text-xs font-bold tracking-widest uppercase border border-white/20 text-white/70">
-        Raw SketchUp
+      <div className="absolute top-6 right-6 px-4 py-2 bg-black/50 backdrop-blur rounded-full text-[10px] md:text-xs font-bold tracking-widest uppercase border border-white/20 text-white/70 z-10">
+        SketchUp Viewport
       </div>
 
       {/* After Image (Rendered) */}
@@ -100,8 +100,8 @@ function CompareSlider() {
           backgroundImage: "url('/images/after.jpg?v=88')" 
         }}
       >
-        <div className="absolute top-6 left-6 px-4 py-2 bg-[var(--color-loam-primary)] text-white rounded-full text-[10px] md:text-xs font-bold tracking-widest uppercase shadow-[0_0_15px_rgba(218,30,31,0.5)]">
-          LoamLab Camera
+        <div className="absolute top-6 left-6 px-4 py-2 bg-[var(--color-loam-primary)] text-white rounded-full text-[10px] md:text-xs font-bold tracking-widest uppercase shadow-[0_0_15px_rgba(218,30,31,0.5)] z-10">
+          LoamLab Render
         </div>
       </div>
 

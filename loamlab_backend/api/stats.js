@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-    // CDN 快取 60s，背景 revalidate 120s — ticker 不需要即時精確
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
     res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
 
     if (req.method === 'OPTIONS') return res.status(200).end();

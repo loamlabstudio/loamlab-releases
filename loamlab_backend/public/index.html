@@ -380,9 +380,7 @@
         // --- 1. 動態算圖計數器 (高頻持續跳動) ---
         const bgTicker = document.getElementById('bgTicker');
         const fgTicker = document.getElementById('fgTicker');
-
-        // 基準數據：由真實算圖次數換算的節省小時數 (約幾百小時)
-        let baseHours = 428; 
+        let baseHours = 428; // 保底基準值
 
         const updateTickers = (val) => {
             const formatted = val.toLocaleString();
@@ -390,17 +388,25 @@
             fgTicker.innerText = formatted;
         };
 
-        // 初始渲染
-        updateTickers(baseHours);
-        fgTicker.style.opacity = '1';
+        // 實時數據：獲取 Supabase 1.5h/3h/5h 加權後的數據
+        fetch('https://loamlab-camera-backend.vercel.app/api/stats')
+            .then(r => r.json())
+            .then(d => {
+                if (d.hours_saved != null && d.hours_saved > 0) {
+                    baseHours = Math.round(d.hours_saved);
+                    updateTickers(baseHours);
+                }
+            })
+            .catch(err => console.error('Supabase Sync Error:', err))
+            .finally(() => { fgTicker.style.opacity = '1'; });
 
         const tickNext = () => {
-            // 隨機增量模擬真實工作流
-            if (Math.random() > 0.6) {
+            // 模擬活耀感的隨機增量
+            if (Math.random() > 0.7) {
                 baseHours += 1;
+                updateTickers(baseHours);
             }
-            updateTickers(baseHours);
-            setTimeout(tickNext, 2000 + Math.random() * 3000);
+            setTimeout(tickNext, 2000 + Math.random() * 3500);
         };
         setTimeout(tickNext, 1500);
 

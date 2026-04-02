@@ -384,7 +384,7 @@
         const fgTicker = document.getElementById('fgTicker');
 
         // Fetch real data from API; start ticker from actual value
-        fetch('/api/stats').then(r => r.json()).then(d => {
+        fetch('https://loamlab-camera-backend.vercel.app/api/stats').then(r => r.json()).then(d => {
             if (d.hours_saved != null) {
                 baseHours = Math.round(d.hours_saved);
                 const formatted = baseHours.toLocaleString();

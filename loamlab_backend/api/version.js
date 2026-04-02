@@ -5,8 +5,9 @@ export default function handler(req, res) {
     res.setHeader('Cache-Control', 'no-cache');
     return res.status(200).json({
         latest_version: "1.3.0",
-        release_notes: "修復安裝異常與檔案體積過大問題 (14MB -> 140KB)",
+        release_notes: "Fix installation failure and oversized RBZ",
         download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.3.0/loamlab_plugin.rbz"
     });
 }
+
 

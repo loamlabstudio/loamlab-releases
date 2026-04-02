@@ -86,7 +86,7 @@ function CompareSlider() {
       {/* Before Image (SketchUp Model) */}
       <div 
         className="absolute inset-0 bg-cover bg-center pointer-events-none" 
-        style={{ backgroundImage: "url('/images/before.jpg?v=2')" }}
+        style={{ backgroundImage: "url('/images/before.jpg?v=10')" }}
       />
       <div className="absolute top-6 left-6 px-4 py-2 bg-black/50 backdrop-blur rounded-full text-[10px] md:text-xs font-bold tracking-widest uppercase border border-white/20 text-white/70">
         Raw SketchUp
@@ -97,7 +97,7 @@ function CompareSlider() {
         className="absolute top-0 left-0 bottom-0 bg-cover bg-center border-r-2 border-[var(--color-loam-primary)] pointer-events-none"
         style={{ 
           width: `${sliderPos}%`,
-          backgroundImage: "url('/images/after.jpg?v=2')" 
+          backgroundImage: "url('/images/after.jpg?v=10')" 
         }}
       >
         <div className="absolute top-6 left-6 px-4 py-2 bg-[var(--color-loam-primary)] text-white rounded-full text-[10px] md:text-xs font-bold tracking-widest uppercase shadow-[0_0_15px_rgba(218,30,31,0.5)]">

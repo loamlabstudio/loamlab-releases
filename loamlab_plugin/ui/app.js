@@ -2011,7 +2011,7 @@ function startOAuthFlow() {
     if (statusMsg) statusMsg.classList.add('hidden');
 
     try {
-        const res = await fetch(`${API_BASE}/api/auth/otp`, {
+        const res = await fetch(`${API_BASE}/api/auth/otp?action=send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email })
@@ -2071,7 +2071,7 @@ function startOAuthFlow() {
     btn.textContent = 'VERIFYING...';
     
     try {
-        const res = await fetch(`${API_BASE}/api/auth/otp`, {
+        const res = await fetch(`${API_BASE}/api/auth/otp?action=verify`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, token })
@@ -2233,7 +2233,7 @@ if (btnSubmitReferral && inputReferralCode) {
         btnSubmitReferral.disabled = true;
 
         try {
-            const res = await fetch(`${API_BASE}/api/referral`, {
+            const res = await fetch(`${API_BASE}/api/user`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: window.loamlabUserEmail, code: code })

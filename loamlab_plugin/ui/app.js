@@ -1248,7 +1248,7 @@ function closePricingModal() {
 window.openPricingModal = openPricingModal; // 讓共用邏輯呼叫
 
 let authPollTimer = null;
-let API_BASE = "https://loamlab-camera-backend.vercel.app";
+let API_BASE = "https://loamlabbackend.vercel.app";
 
 window.LOAMLAB_CONFIG = null;
 async function fetchGlobalConfig() {

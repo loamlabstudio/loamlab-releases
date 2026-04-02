@@ -16,6 +16,7 @@ module LoamLab
   end
 
   # 鎻掍欢鐗堟湰铏?(鐢ㄦ柤 updater 妾㈡煡鑸?API 璜嬫眰妯欓牠)
-  VERSION = '1.2.9-beta'
+  VERSION = '1.3.0'
 end
+
 

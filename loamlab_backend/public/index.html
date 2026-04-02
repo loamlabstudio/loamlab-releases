@@ -378,38 +378,39 @@
     <!-- JS 邏輯區 -->
     <script>
         // --- 1. 動態算圖計數器 (高頻持續跳動) ---
-        // === SYNC POINT: hours_saved — driven by /api/stats (real render count from Supabase) ===
-        let baseHours = 3240; // 同步 Next.js 的初始基準值
         const bgTicker = document.getElementById('bgTicker');
         const fgTicker = document.getElementById('fgTicker');
 
-        // Fetch real data from API; start ticker from actual value
-        fetch('https://loamlab-camera-backend.vercel.app/api/stats').then(r => r.json()).then(d => {
-            if (d.hours_saved != null && d.hours_saved > 0) {
-                baseHours = Math.round(d.hours_saved);
-                const formatted = baseHours.toLocaleString();
-                bgTicker.innerText = formatted;
-                fgTicker.innerText = formatted;
-            }
-        }).catch(() => {
-            // 失敗時保持 3240 並手動填入，確保不顯示預設值
-            const formatted = baseHours.toLocaleString();
+        // 時間差位算法：以 2024/04/01 為啟動點，每秒模擬節省時間
+        const startTime = new Date('2024-04-01T00:00:00Z').getTime();
+        const getBaseHours = () => {
+            const now = Date.now();
+            const elapsedHours = (now - startTime) / (1000 * 3600);
+            return Math.floor(elapsedHours * 0.42 + 3240); // 基準速度與偏移
+        };
+
+        let baseHours = getBaseHours();
+        const updateTickers = (val) => {
+            const formatted = val.toLocaleString();
             bgTicker.innerText = formatted;
             fgTicker.innerText = formatted;
-        }).finally(() => { fgTicker.style.opacity = '1'; });
+        };
+
+        // 初始渲染
+        updateTickers(baseHours);
+        fgTicker.style.opacity = '1';
 
         const tickNext = () => {
-            // 50% 機率跳動，讓數字明顯活著但不像機器人
-            if (Math.random() > 0.5) {
-                baseHours += 1;
-                const formatted = baseHours.toLocaleString();
-                bgTicker.innerText = formatted;
-                fgTicker.innerText = formatted;
+            // 每隔 1.5s ~ 4s 隨機增加一點點跳動感
+            if (Math.random() > 0.4) {
+                baseHours += (Math.random() > 0.8 ? 2 : 1);
+            } else {
+                baseHours = getBaseHours(); // 回到基準
             }
-            // 0.6s ~ 2.5s 不規則節奏，平均約 2.6s 跳一次
-            setTimeout(tickNext, 600 + Math.random() * 1900);
+            updateTickers(baseHours);
+            setTimeout(tickNext, 1500 + Math.random() * 2500);
         };
-        setTimeout(tickNext, 1500);
+        setTimeout(tickNext, 2000);
 
         // --- 2. Before/After 滑動邏輯 ---
         const compSlider = document.getElementById('compareSlider');

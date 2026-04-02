@@ -5,9 +5,10 @@ export default function handler(req, res) {
     res.setHeader('Cache-Control', 'no-cache');
     return res.status(200).json({
         latest_version: "1.3.0",
-        release_notes: "Fix installation failure and oversized RBZ",
+        release_notes: "Fix Vercel domain and installation issues",
         download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.3.0/loamlab_plugin.rbz"
     });
 }
+
 
 

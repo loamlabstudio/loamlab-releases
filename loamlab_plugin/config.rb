@@ -1,4 +1,4 @@
-﻿# frozen_string_literal: true
+# frozen_string_literal: true
 
 module LoamLab
   # ==============================================================================
@@ -10,7 +10,7 @@ module LoamLab
   BUILD_TYPE = "dev" # 闂佸娅﹀Ο鈥崇础
 
   if ENV_MODE == "production"
-    API_BASE_URL = "https://loamlabbackend.vercel.app"
+    API_BASE_URL = "https://loamlab-camera.vercel.app"
   else
     API_BASE_URL = "http://localhost:3001"
   end

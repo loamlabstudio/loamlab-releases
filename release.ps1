@@ -193,7 +193,7 @@ Set-Location $ROOT
 
 $gitStatus = git status --porcelain 2>&1
 if ($gitStatus) {
-    git add loamlab_backend/api/version.js loamlab_plugin/config.rb loamlab_plugin.rb docs/generated/
+    git add loamlab_backend/api/version.js loamlab_plugin/config.rb loamlab_plugin.rb loamlab_plugin/main.rb loamlab_plugin/updater.rb docs/generated/
     git commit -m "release: v$version - $notes"
     git push origin main
     if ($LASTEXITCODE -eq 0) {

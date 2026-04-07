@@ -13,7 +13,7 @@ module LoamLab
     unless file_loaded?(__FILE__)
     ext = SketchupExtension.new('LoamLab Camera (闁插簼姹夐惄鍛婎熂)', File.join(File.dirname(__FILE__), 'loamlab_plugin', 'main'))
     ext.description = 'LoamLab Camera Architecture Rendering Plugin'
-    ext.version     = '1.4.4'
+    ext.version     = '1.4.5'
     ext.creator     = 'LoamLab Studio'
       ext.copyright   = '2026 LoamLab Inc.'
       
@@ -24,6 +24,7 @@ module LoamLab
     end
   end
 end
+
 
 
 

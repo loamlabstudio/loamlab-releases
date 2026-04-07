@@ -398,16 +398,19 @@ module LoamLab
 
         next unless url
 
-        model     = Sketchup.active_model
-        save_path = self.get_effective_save_path(model)
+        model        = Sketchup.active_model
+        project_name = (model.title.empty? ? "未命名專案" : model.title).to_s.dup.force_encoding("UTF-8")
+        save_path    = self.get_effective_save_path(model)
         next if !File.directory?(save_path)
 
         begin
           require 'open-uri'
-          timestamp  = Time.now.strftime("%Y%m%d_%H%M%S")
-          safe_scene = scene.gsub(/[:*?"<>|\/\\]/, "_")[0, 30]
-          filename   = "#{timestamp}_#{safe_scene}_#{res}_loamlab_camera.jpg"
-          full_path  = File.join(save_path, filename)
+          timestamp         = Time.now.strftime("%Y%m%d_%H%M%S")
+          safe_project_name = project_name.gsub(/[:*?"<>|\\\/]/, "_")
+          safe_scene        = scene.gsub(/[:*?"<>|\\\/]/, "_")[0, 30]
+          # 檔名範例：20231027_120000_專案名稱_場景名稱_渲染圖.jpg
+          filename          = "#{timestamp}_#{safe_project_name}_#{safe_scene}_渲染圖.jpg"
+          full_path         = File.join(save_path, filename)
           File.open(full_path, "wb") { |f| URI.open(url) { |img| f.write(img.read) } }
           puts "[LoamLab] auto_save_render: #{filename}"
         rescue => e
@@ -423,9 +426,11 @@ module LoamLab
 
           history = []
           if !save_path.empty? && File.directory?(save_path)
-            # 只掃描 AI 渲染結果（命名慣例：YYYYMMDD_HHMMSS_RES_SCENE_loamlab_camera.jpg）
-            # 原始 SketchUp 截圖命名為 *_原圖.jpg，不納入
-            files = Dir.glob(File.join(save_path, "*_loamlab_camera.jpg")).sort_by { |f| -File.mtime(f).to_i }
+            # 優先掃描帶有「渲染圖」後綴的結果
+            files = Dir.glob(File.join(save_path, "*_渲染圖.jpg"))
+            # 向後相容舊版的命名 (loamlab_camera.jpg)
+            files += Dir.glob(File.join(save_path, "*_loamlab_camera.jpg"))
+            files = files.uniq.sort_by { |f| -File.mtime(f).to_i }
             history = files.first(30).map do |f|
               fname = File.basename(f)
               # 格式：YYYYMMDD_HHMMSS_SCENE_RES_loamlab_camera.jpg
@@ -857,30 +862,8 @@ module LoamLab
                   { status: 'render_failed', message: data['msg'] || "HTTP #{response.code}",
                     points_refunded: data['points_refunded'], error: data['error'] }
 
-                # [v1.4.4 Auto-Save] 自動下載渲染圖並存到指定的存檔目錄 (預設為 Downloads)
-                if data['code'] == 0 && data['url']
-                  begin
-                    save_path_auto = self.get_effective_save_path(Sketchup.active_model)
-                    if File.directory?(save_path_auto)
-                      safe_project_name = project_name.gsub(/[:*?"<>|\\\/]/, "_")
-                      safe_scene_name = scene_name.gsub(/[:*?"<>|\\\/]/, "_")
-                      after_name = "#{timestamp}_#{safe_project_name}_#{safe_scene_name}_渲染圖.jpg"
-                      after_path = File.join(save_path_auto, after_name)
-                      
-                      # 使用現有的 http 連線下載 (GitHub 的 URL 可能是 redirect，但 Vercel 吐回的通常是直連或 S3)
-                      uri_img = URI.parse(data['url'])
-                      http_img = Net::HTTP.new(uri_img.host, uri_img.host == uri.host ? uri.port : uri_img.port)
-                      http_img.use_ssl = (uri_img.scheme == 'https')
-                      img_resp = http_img.get(uri_img.request_uri)
-                      if img_resp.code.to_i == 200
-                        File.open(after_path, "wb") { |f| f.write(img_resp.body) }
-                        puts "[LoamLab] 渲染圖已自動備份: #{after_name}"
-                      end
-                    end
-                  rescue => e
-                    puts "[LoamLab] 自動存檔失敗: #{e.message}"
-                  end
-                end
+                # [Consolidated] Tool 1 Auto-Save is now handled by the 'auto_save_render' callback 
+                # called from app.js to prevent double file creation and ensure project name inclusion.
               rescue => e
                 puts "[LoamLab] Thread 錯誤: #{e.class} #{e.message}"
                 result = { status: 'render_failed', message: "請求失敗: #{e.message}" }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import Announcement from "../components/Announcement";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -19,7 +20,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-TW" className="dark">
-      <body className={`${inter.variable} antialiased bg-[#09090b]`}>
+      <body className={`${inter.variable} antialiased bg-[#09090b] flex flex-col min-h-screen`}>
+        <Announcement />
         {children}
       </body>
     </html>

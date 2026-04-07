@@ -72,38 +72,41 @@ module LoamLabPlugin
             # loamlab_plugin/ 的上一層 = SketchUp Plugins 目錄
             plugins_dir = File.dirname(File.dirname(__FILE__))
 
+            # --- Step B：解壓覆蓋（跨平台）---
+            # loamlab_plugin/ 的上一層 = SketchUp Plugins 目錄
+            plugins_dir = File.dirname(File.dirname(__FILE__))
+
             if Sketchup.platform == :platform_osx
               unzip_ok = system("unzip -o '#{zip_path}' -d '#{plugins_dir}'")
+              File.delete(zip_path) rescue nil
             else
-              zip_win  = zip_path.gsub('/', '\\')
+              # PS 5.1 的 Expand-Archive 只認 .zip 副檔名；multi-arg system() 繞過 cmd.exe 引號
+              zip_as_zip = zip_path.sub(/\.[^.]+$/, '.zip')
+              File.rename(zip_path, zip_as_zip) rescue (zip_as_zip = zip_path)
+              zip_win  = zip_as_zip.gsub('/', '\\')
               dest_win = plugins_dir.gsub('/', '\\')
               unzip_ok = system(
-                "powershell -ExecutionPolicy Bypass -NoProfile -Command " \
-                "\"Expand-Archive -Path '#{zip_win}' -DestinationPath '#{dest_win}' -Force\""
+                'powershell', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command',
+                "Expand-Archive -LiteralPath '#{zip_win}' -DestinationPath '#{dest_win}' -Force"
               )
+              File.delete(zip_as_zip) rescue nil
             end
-            File.delete(zip_path) rescue nil
 
             unless unzip_ok
               send_to_js(dialog, status: 'update_error',
-                         msg: '解壓縮失敗，請手動重新安裝 .rbz 檔案')
+                         msg: '安裝失敗，請手動下載後重新安裝 .rbz 檔案')
               next
             end
             puts "[Updater] 解壓完成 → #{plugins_dir}"
 
-            # --- Step C：重載所有 Ruby 模組，並重開 dialog ---
+            # --- Step C：熱重載 Ruby 模組並重開 dialog（不需重啟 SketchUp）---
             UI.start_timer(0.3, false) do
               plugin_dir = File.dirname(__FILE__)
-              # 依序重載支援模組，最後重載 main.rb（含 register_callbacks）
               %w[config.rb coze_api.rb updater.rb main.rb].each do |f|
                 fp = File.join(plugin_dir, f)
                 load fp if File.exist?(fp)
               end
-              # 關閉舊 dialog → show_dialog 會建立帶新程式碼的新視窗
-              begin
-                dialog.close
-              rescue
-              end
+              begin; dialog.close; rescue; end
               LoamLab::AIURenderer.show_dialog
             end
 

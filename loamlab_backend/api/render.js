@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { PRICING_CONFIG } from '../config.js';
 
+export const maxDuration = 300; // Allow Vercel to run up to 5 minutes to poll AtlasCloud
+
 // Node 18+ 內建 fetch，無需 require('node-fetch')
 
 export default async function handler(req, res) {
@@ -22,7 +24,6 @@ export default async function handler(req, res) {
     const COZE_PAT = process.env.COZE_PAT;
     const WORKFLOW_ID = process.env.WORKFLOW_ID || "7613251981235208197";
     const NINEGRID_WORKFLOW_ID = process.env.NINEGRID_WORKFLOW_ID || "7620780480431030325";
-    const FURNITURE_WORKFLOW_ID = process.env.FURNITURE_WORKFLOW_ID || "7620803784345157685";
     const SMART_CANVAS_WORKFLOW_ID = process.env.SMART_CANVAS_WORKFLOW_ID || '7621816572496478261';
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
@@ -159,20 +160,15 @@ export default async function handler(req, res) {
             const base64Data = imageUrls[0].split(',')[1] || imageUrls[0];
             const imgBuffer = Buffer.from(base64Data, 'base64');
             const fileName = `tmp/${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
-
-            // 確保 bucket 存在（第一次會建立，之後 ignore already-exists error）
             await supabaseAdmin.storage.createBucket('render-temp', { public: false }).catch(() => {});
-
             const { error: upErr } = await supabaseAdmin.storage
                 .from('render-temp')
                 .upload(fileName, imgBuffer, { contentType: 'image/jpeg' });
             if (upErr) throw new Error(`Storage 上傳失敗: ${upErr.message}`);
-
             const { data: signedData, error: signErr } = await supabaseAdmin.storage
                 .from('render-temp')
-                .createSignedUrl(fileName, 3600); // 1 小時有效期，夠 Coze 使用
+                .createSignedUrl(fileName, 3600);
             if (signErr || !signedData?.signedUrl) throw new Error('簽名 URL 生成失敗');
-
             userPayload.parameters.image = [signedData.signedUrl];
             tempStorageFile = fileName;
         } catch (uploadErr) {
@@ -182,25 +178,31 @@ export default async function handler(req, res) {
         }
     }
 
-    // 5-A. 工具 2 → Coze Universal_Image_Editor (SMART_CANVAS_WORKFLOW_ID)
-    if (activeTool === 2) {
-        let tempBase = null, tempRef = null;
-        const tempRefImages = [];
-        const cleanTemp2 = async () => {
-            const paths = [tempBase, tempRef, ...tempRefImages].filter(Boolean);
-            if (paths.length && supabaseAdmin) {
-                try { await supabaseAdmin.storage.from('render-temp').remove(paths); } catch(e) {}
-            }
-        };
-        try {
-            const baseImageB64 = userPayload.parameters?.base_image;
-            const baseImageUrl = userPayload.parameters?.base_image_url || '';
-            const originalImageB64 = userPayload.parameters?.original_image_b64;
-            let originalImageUrl = userPayload.parameters?.original_image_url || '';
-            const userPrompt   = (userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '').trim();
-            if (!baseImageB64 && !baseImageUrl) throw new Error('base_image 未提供');
+    // 5. 處理圖片與提取參數
+    let tempBase = null, tempRef = null;
+    const tempRefImages = [];
+    const cleanTemp2 = async () => {
+        const paths = [tempBase, tempRef, ...tempRefImages].filter(Boolean);
+        if (paths.length && supabaseAdmin) {
+            try { await supabaseAdmin.storage.from('render-temp').remove(paths); } catch(e) {}
+        }
+    };
 
-            // 原始底圖：若前端傳來 base64（本地檔案路徑無法被 AtlasCloud 訪問），上傳取得公開 URL
+    let originalImageUrl = '';
+    let baseForCoze = ''; // (實際上是供 AtlasCloud 使用)
+    const refImageUrls = [];
+    const userPrompt = (userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '').trim();
+
+    try {
+        if (activeTool === 2) {
+            const baseImageB64 = userPayload.parameters?.base_image;
+            const baseImageUrlPayload = userPayload.parameters?.base_image_url || '';
+            const originalImageB64 = userPayload.parameters?.original_image_b64;
+            originalImageUrl = userPayload.parameters?.original_image_url || '';
+            
+            if (!baseImageB64 && !baseImageUrlPayload) throw new Error('base_image 未提供');
+
+            // 原始底圖
             if (originalImageB64 && !originalImageUrl) {
                 const cleanOrig = originalImageB64.replace(/^data:image\/\w+;base64,/, '');
                 if (supabaseAdmin) {
@@ -213,64 +215,31 @@ export default async function handler(req, res) {
                         if (origSign?.signedUrl) originalImageUrl = origSign.signedUrl;
                     }
                 }
-                if (!originalImageUrl) {
-                    const form = new FormData();
-                    form.append('key', '6d207e02198a847aa98d0a2a901485a5');
-                    form.append('action', 'upload'); form.append('source', cleanOrig); form.append('format', 'json');
-                    const r = await fetch('https://freeimage.host/api/1/upload', { method: 'POST', body: form });
-                    const d = await r.json();
-                    if (d.status_code === 200 && d.image?.url) originalImageUrl = d.image.url;
-                }
                 if (!originalImageUrl) throw new Error('原始底圖上傳失敗');
             }
 
-            // 合成疊加圖：優先用遠端 URL，否則上傳 base64（Supabase 優先，fallback freeimage.host）
-            let baseForCoze = baseImageUrl;
+            // 合成疊加圖 (Mask)
+            baseForCoze = baseImageUrlPayload;
             if (baseImageB64) {
                 const cleanB64 = baseImageB64.replace(/^data:image\/\w+;base64,/, '');
                 if (supabaseAdmin) {
-                    await supabaseAdmin.storage.createBucket('render-temp', { public: false }).catch(() => {});
-                    const baseRaw = cleanB64;
                     const baseName = `tmp/${Date.now()}_base_${Math.random().toString(36).slice(2)}.jpg`;
-                    const { error: upBase } = await supabaseAdmin.storage.from('render-temp').upload(baseName, Buffer.from(baseRaw, 'base64'), { contentType: 'image/jpeg' });
+                    const { error: upBase } = await supabaseAdmin.storage.from('render-temp').upload(baseName, Buffer.from(cleanB64, 'base64'), { contentType: 'image/jpeg' });
                     if (upBase) throw new Error(`底圖上傳失敗: ${upBase.message}`);
                     tempBase = baseName;
                     const { data: baseSign } = await supabaseAdmin.storage.from('render-temp').createSignedUrl(baseName, 3600);
                     baseForCoze = baseSign?.signedUrl || '';
                 } else {
-                    // Fallback: freeimage.host（無需 auth，與 inpaint.js 相同邏輯）
-                    let uploaded = false;
-                    try {
-                        const form = new FormData();
-                        form.append('key', '6d207e02198a847aa98d0a2a901485a5');
-                        form.append('action', 'upload');
-                        form.append('source', cleanB64);
-                        form.append('format', 'json');
-                        const r = await fetch('https://freeimage.host/api/1/upload', { method: 'POST', body: form });
-                        const d = await r.json();
-                        if (d.status_code === 200 && d.image?.url) { baseForCoze = d.image.url; uploaded = true; }
-                    } catch (_) {}
-                    if (!uploaded) {
-                        const IMGBB_KEY = process.env.IMGBB_API_KEY || '';
-                        const form2 = new FormData();
-                        form2.append('image', cleanB64);
-                        const r2 = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: form2 });
-                        const d2 = await r2.json();
-                        if (d2.success && d2.data?.url) baseForCoze = d2.data.url;
-                        else throw new Error('底圖上傳失敗（freeimage.host 與 ImgBB 均失敗）');
-                    }
+                    throw new Error('Storage 服務不可用');
                 }
             }
 
-            // 上傳用戶的參考圖（image-mode region）— 對應 prompt 中的 "image 3, 4..." 索引
+            // 用戶的上傳參考圖
             const refImagesB64 = (userPayload.parameters?.ref_images || []).filter(Boolean);
-            console.log('[Tool2] ref_images received:', refImagesB64.length, refImagesB64.map(b => b?.slice(0, 30)));
-            const refImageUrls = [];
             for (const b64 of refImagesB64) {
                 const clean = b64.replace(/^data:image\/\w+;base64,/, '');
                 let url = '';
                 if (supabaseAdmin) {
-                    await supabaseAdmin.storage.createBucket('render-temp', { public: false }).catch(() => {});
                     const fname = `tmp/${Date.now()}_ref_${Math.random().toString(36).slice(2)}.jpg`;
                     const { error: upRef } = await supabaseAdmin.storage.from('render-temp').upload(fname, Buffer.from(clean, 'base64'), { contentType: 'image/jpeg' });
                     if (!upRef) {
@@ -279,146 +248,206 @@ export default async function handler(req, res) {
                         if (s?.signedUrl) url = s.signedUrl;
                     }
                 }
-                if (!url) {
-                    try {
-                        const form = new FormData();
-                        form.append('key', '6d207e02198a847aa98d0a2a901485a5');
-                        form.append('action', 'upload'); form.append('source', clean); form.append('format', 'json');
-                        const r = await fetch('https://freeimage.host/api/1/upload', { method: 'POST', body: form });
-                        const d = await r.json();
-                        if (d.status_code === 200 && d.image?.url) url = d.image.url;
-                    } catch (_) {}
-                }
                 if (url) refImageUrls.push(url);
             }
-
-            // 呼叫 Coze Universal_Image_Editor（統一使用 SMART_CANVAS_WORKFLOW_ID）
-            const SMART_CANVAS_SPACE_ID = process.env.SMART_CANVAS_SPACE_ID || '7612576046118010896';
-            // image 1=original（模型主要編輯目標）, image 2=composite（定位指引）, image 3+=用戶參考圖
-            const cozeImages = [originalImageUrl, baseForCoze, ...refImageUrls].filter(Boolean);
-            const cozePayload = {
-                workflow_id: SMART_CANVAS_WORKFLOW_ID,
-                space_id: SMART_CANVAS_SPACE_ID,
-                // prompt = color codes only (e.g. "#ff6432: replace sofa; #00b4d8: wood floor")
-                // Coze Code node wraps with default_prompt template
-                parameters: { image: cozeImages, prompt: userPrompt, user_prompt: userPrompt, resolution: resVal || '2k', aspect_ratio: '16:9', reference_image_url: originalImageUrl }
-            };
-            console.log('[Tool2] Coze payload:', JSON.stringify({ ...cozePayload, parameters: { ...cozePayload.parameters, image: cozeImages.map(u => u.slice(0, 80)) } }));
-
-            const cozeRes = await fetch('https://api.coze.com/v1/workflow/stream_run', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${COZE_PAT}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(cozePayload),
-                signal: AbortSignal.timeout(240000)  // 4 分鐘，比 Vercel maxDuration 提前結束
-            });
-            if (!cozeRes.ok) {
-                const errBody = await cozeRes.text().catch(() => '');
-                throw new Error(`Coze HTTP ${cozeRes.status}: ${errBody.slice(0, 300)}`);
-            }
-
-            let sseText = '';
-            for await (const chunk of cozeRes.body) sseText += Buffer.from(chunk).toString('utf8');
-            console.log('[Tool2] SSE full:', sseText);
-            const finalUrl = parseUrlFromSse(sseText);
-
-            await cleanTemp2();
-            if (finalUrl) {
-                return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: monthlyPoints + lifetimePoints, transaction_id: transactionId });
-            } else {
-                await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
-                return res.status(500).json({ code: -1, msg: '算圖完成但未收到圖片 URL', points_refunded: true });
-            }
-        } catch (err2) {
-            await cleanTemp2();
-            await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
-            try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_TOOL2_ERROR' }]); } catch(e) {}
-            return res.status(500).json({ code: -1, msg: `工具 2 失敗: ${err2.message}`, points_refunded: true });
         }
-    }
 
-    // 5-B. 工具 1/3/4 → Coze，緩衝完整回應後解析 URL
-    try {
-        const cozeResponse = await fetch('https://api.coze.com/v1/workflow/stream_run', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${COZE_PAT}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ workflow_id: activeWorkflowId, parameters: userPayload.parameters })
+        // ==========================================
+        // 從 Supabase 取得動態工作流設定 (若無則套用預設)
+        // ==========================================
+        let systemPrompts = {};
+        try {
+            const pRes = await supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_PROMPTS').order('created_at', { ascending: false }).limit(1).maybeSingle();
+            if (pRes.data) systemPrompts = pRes.data.metadata?.prompts || {};
+        } catch(e) {}
+        
+        const defaultP1 = "這是sketchup室內建模的模型（圖1），最後的目的是要轉換成iPhone拍的照片：先在後端生成一張鎖死空間感的深度圖（圖2）和一張所有元素鎖死並且轉換成色彩分明的通道圖（圖三），使用圖1參考圖2和圖3，在不改變模型材質和結構的情況下，99%還原圖片的空間感、相機位置、材質紋理方向，轉換成iPhone拍攝室內空間寫實照片，自然的光感，補充其他區域的漫反射光線，避免局部死黑或過曝，根據室內空間合理化極小不合理的元素，專業攝影級色彩，照片整體有自然的明暗過渡的層次,ultra-detailed";
+        const defaultP2 = "Edit IMAGE 1 (the original scene photo) by replacing objects as specified below.\nThe colored areas in IMAGE 2 are only location markers — do not use these marker colors in the final result.\n{{REF_TEXT}}\nChanges:\n{{CHANGES}}\n\nStrict Guidelines:\n① Final result must be based on IMAGE 1, appearing as a natural, original photograph — not based on IMAGE 2\n② Perspective & Proportion: Render all objects from IMAGE 1's camera angle, adjust orientation to match scene perspective; do not keep the reference photo's original angle\n③ Lighting & Color Temperature: Strictly follow IMAGE 1's light direction, intensity, shadows and color temperature; remove all color casts, glows and artificial lighting from references\n④ Boundary Control: Stay mainly within marked zones; minor edge feathering is allowed for seamless blending, but do not affect unrelated objects or surfaces\n⑤ Realism & Aesthetics: Replaced objects must have realistic materials, correct scale, elegant composition, and blend harmoniously into the original space with consistent style";
+        const defaultP3 = "Based on the uploaded reference image, generate a single high-quality 3x3 interior visualization collage in exact 1:1 square aspect ratio. Output only the clean collage - no text, no titles, no watermarks, no borders, no labels.\nHighest priority: Faithfully extract and reproduce all details from the reference image, including material textures, light and shadow characteristics, color tones, object qualities, and unique atmosphere. All 9 panels must maintain the exact same spatial structure, furniture layout, and lighting direction. Accurate perspective with zero distortion or shifting.\n3x3 Mixed Grid Layout:\nTop Row Left: Left 45 wide long shot showing the full spatial layout and depth\nTop Row Center: Exact same viewpoint and framing as the uploaded reference image (visual anchor)\nTop Row Right: Close-up detail 1 - highly faithful reproduction of material textures and craftsmanship from the reference image\nMiddle Row Left: Medium shot focusing on main furniture arrangement and functional area, preserving the original light and shadow atmosphere\nMiddle Row Center: Close-up detail 2 - emphasizing light and shadow interaction and surface qualities from the reference image\nMiddle Row Right: Right 45 wide long shot showing the other side of the space\nBottom Row Left: Close-up detail 3 - faithfully presenting another dimension of details from the reference image (e.g., decorative elements, corner craftsmanship, or material contrast)\nBottom Row Center: Medium shot from an alternative angle showing spatial transparency and overall atmosphere, faithful to the original tone\nBottom Row Right: Balanced medium shot concluding with overall harmony and high-end quality\n\nTechnical Requirements:\nStrictly faithful to the reference image's materials, lighting, colors, and fine details; 8K ultra-high resolution with extreme detail; photorealistic material rendering with accurate reflections, refractions, and micro-surface details; professional multi-layer lighting; cinematic color grading with sophisticated, soft, and luxurious tones; extremely sharp, clean, noise-free, and distortion-free.\nGenerate a single cohesive 3x3 collage with strong visual rhythm and dramatic scale contrast, while perfectly capturing the unique details and atmosphere of the reference image.";
+        
+        const p1 = systemPrompts.TOOL_1 || defaultP1;
+        const p2 = systemPrompts.TOOL_2 || defaultP2;
+        const p3 = systemPrompts.TOOL_3 || defaultP3;
+
+        // ── 提示詞組裝 ──
+        let finalPrompt = "";
+        let finalModel = 'google/nano-banana-2/edit';
+        
+        if (activeTool === 2) {
+            let changes = [];
+            for (const part of (userPrompt || "").split(';')) {
+                const p = part.trim();
+                if (p.includes(': ')) {
+                    const spl = p.split(/: (.+)/);
+                    if (spl[1]) changes.push(`• ${spl[1].trim()}`);
+                }
+            }
+            if (changes.length === 0) {
+                finalPrompt = "Enhance this interior design photo naturally with realistic, high-end visual quality.";
+            } else {
+                const hasRefs = refImageUrls.length >= 1; 
+                const refText = hasRefs ? "IMAGE 3+ are reference objects: use only their shape, style and form; match lighting to IMAGE 1's environment.\n" : "";
+                finalPrompt = p2.replace("{{REF_TEXT}}", refText).replace("{{CHANGES}}", changes.join('\n'));
+            }
+        } else if (activeTool === 3) {
+            finalPrompt = userPrompt.trim() ? p3 + ", " + userPrompt : p3;
+        } else {
+            finalPrompt = userPrompt.trim() ? p1 + "，" + userPrompt : p1;
+        }
+
+        // ==========================================
+        // 呼叫 AtlasCloud (取代 Coze)
+        // ==========================================
+        const ATLASCLOUD_API_KEY = process.env.ATLASCLOUD_API_KEY;
+        if (!ATLASCLOUD_API_KEY) throw new Error("遺失 ATLASCLOUD_API_KEY，請在 Vercel 環境變數中設定。");
+
+        const resolutionMap = { '1k': '1k', '1K': '1k', '2k': '2k', '2K': '2k', '4k': '4k', '4K': '4k' };
+        const resVal = userPayload.resolution || '1k';
+        
+        // 收集要傳送給 AtlasCloud 的影像
+        let allImagesStrArray = [];
+        if (activeTool === 2) {
+            allImagesStrArray = [originalImageUrl, baseForCoze, ...refImageUrls];
+        } else {
+            allImagesStrArray = userPayload.parameters?.image || [];
+        }
+
+        // 將所有參考圖片確保為 URL 或 base64 data URL 容錯機制
+        const atlasImages = allImagesStrArray.filter(Boolean).map(img => {
+            if (img.startsWith('http')) return img;
+            if (img.startsWith('data:image')) return img;
+            return `data:image/jpeg;base64,${img}`;
         });
 
-        if (!cozeResponse.ok) {
-            await cleanTemp();
-            await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
-            try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_COZE_ERROR' }]); } catch(e) {}
-            return res.status(cozeResponse.status).json({ code: -1, msg: `Coze Server Error: ${cozeResponse.status}`, points_refunded: true });
+        const reqBody = {
+            model: finalModel,
+            images: atlasImages,
+            prompt: finalPrompt,
+            resolution: resolutionMap[resVal] || '2k',
+            aspect_ratio: '16:9',
+            output_format: 'jpeg'
+        };
+
+        const response = await fetch('https://api.atlascloud.ai/api/v1/model/generateImage', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${ATLASCLOUD_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(reqBody)
+        });
+
+        if (!response.ok) {
+            const errText = await response.text().catch(() => '');
+            throw new Error(`AtlasCloud API error: ${response.status} - ${errText.slice(0, 200)}`);
         }
 
-        // 緩衝完整 SSE 回應，解析出圖片 URL 後直接返回 JSON
-        let sseText = '';
-        for await (const chunk of cozeResponse.body) {
-            sseText += Buffer.from(chunk).toString('utf8');
+        const data = await response.json();
+        let finalUrl = data?.data?.image_url || data?.data?.images?.[0] || null;
+
+        if (!finalUrl && data?.data?.id) {
+            const taskId = data.data.id;
+            console.log('[AtlasCloud] Task started async, polling ID:', taskId);
+            const pollUrl = `https://api.atlascloud.ai/api/v1/model/prediction/${taskId}`;
+            
+            let attempts = 0;
+            while (attempts < 40 && !finalUrl) {
+                attempts++;
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                try {
+                    const pRes = await fetch(pollUrl, { headers: { 'Authorization': `Bearer ${ATLASCLOUD_API_KEY}` } });
+                    if (pRes.status === 200) {
+                        const pData = await pRes.json();
+                        // support multiple potential finished states
+                        const state = (pData?.data?.state || pData?.data?.status || '').toLowerCase();
+                        if (state === 'succeeded' || state === 'completed' || pData?.data?.outputs) {
+                            finalUrl = pData.data.outputs?.[0] || pData.data.image_url || pData.data.images?.[0];
+                            break;
+                        } else if (state === 'failed' || state === 'error') {
+                            throw new Error(`AtlasCloud task failed: ${pData?.data?.error || 'unknown error'}`);
+                        }
+                    }
+                } catch(e) {
+                    console.error('[Polling Error]', e.message);
+                }
+            }
         }
 
-        const finalUrl = parseUrlFromSse(sseText);
+        console.log('[AtlasCloud] finalUrl:', finalUrl);
+
+        await cleanTemp2();
+        await cleanTemp();
+
         if (finalUrl) {
-            await cleanTemp();
-            return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: monthlyPoints + lifetimePoints, transaction_id: transactionId });
+            saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool });
+            return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: user.points + user.lifetime_points, transaction_id: transactionId });
         } else {
-            await cleanTemp();
             await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
             try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL' }]); } catch(e) {}
-            return res.status(500).json({ code: -1, msg: '算圖完成但未收到圖片 URL', points_refunded: true });
+            return res.status(500).json({ code: -1, msg: `API 成功但未回傳網址: ${JSON.stringify(data).slice(0,100)}`, points_refunded: true });
         }
-
-    } catch (error) {
+    } catch (apiError) {
+        await cleanTemp2();
         await cleanTemp();
         await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
         try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NETWORK_ERROR' }]); } catch(e) {}
-        return res.status(500).json({ code: -1, msg: error.message, points_refunded: true });
+        return res.status(500).json({ code: -1, msg: `出圖出錯/API 超時: ${apiError.message}`, points_refunded: true });
     }
 }
 
-// 從 Coze SSE 文字中提取圖片 URL
-function parseUrlFromSse(sseText) {
-    let currentEvent = null;
-    for (const line of sseText.split('\n')) {
-        const t = line.trim();
-        if (t.startsWith('event:')) {
-            currentEvent = t.slice(6).trim();
-        } else if (t.startsWith('data:')) {
-            const jsonStr = t.slice(5).trim();
-            if (!jsonStr || jsonStr === '[DONE]') continue;
-            try {
-                const obj = JSON.parse(jsonStr);
-                if (obj.code && obj.code !== 0) return null;
-                if (currentEvent === 'workflow_finished') {
-                    const outputs = obj.outputs || obj.data?.outputs || {};
-                    const imgs = outputs.images || outputs.image;
-                    if (Array.isArray(imgs) && imgs[0]) {
-                        const u = typeof imgs[0] === 'string' ? imgs[0] : (imgs[0].url || imgs[0].image || '');
-                        if (u.startsWith('http')) return u;
-                    }
-                    if (outputs.url && String(outputs.url).startsWith('http')) return String(outputs.url);
+// 非同步寫入渲染歷史（fire-and-forget，不阻塞回應）
+function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal, cost, activeTool }) {
+    const prompt = userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '';
+    const style  = userPayload.parameters?.style || '';
+    supabase.from('render_history').insert([{
+        user_email:    userEmail,
+        full_url:      url,
+        thumbnail_url: url,
+        prompt,
+        style,
+        resolution:    resVal || '1k',
+        tool_id:       activeTool || 1,
+        points_cost:   cost
+    }]).then(({ error }) => {
+        if (error) console.error('[render_history] save failed:', error.message);
+    });
+}
+// 支援非同步 API (Banana 2 / Replicate) 的動態輪詢
+async function pollAsyncUrl(pollUrl) {
+    console.log('[Polling] Started for URL:', pollUrl);
+    let attempts = 0;
+    while (attempts < 60) {
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        try {
+            const r = await fetch(pollUrl);
+            if (r.status === 401 || r.status === 403) {
+                console.error('[Polling] Access Denied. Auth token required for polling.');
+                return null;
+            }
+            const data = await r.json();
+            
+            // Replicate / Banana standard
+            if (data.status === 'succeeded' || data.status === 'success' || data.status === 'COMPLETED') {
+                let imgUrl = null;
+                if (Array.isArray(data.output) && data.output.length > 0) imgUrl = data.output[0];
+                else if (typeof data.output === 'string') imgUrl = data.output;
+                else {
+                    const match = JSON.stringify(data).match(/https?:\/\/[^\s"'\\]+?\.(?:jpg|jpeg|png|webp)/i);
+                    if (match) imgUrl = match[0];
                 }
-                if (currentEvent === 'Message' || currentEvent === 'message') {
-                    const content = obj.content || obj.answer || obj.data || '';
-                    let parsed;
-                    try { parsed = JSON.parse(content); } catch { parsed = content; }
-                    const out = (parsed && typeof parsed === 'object')
-                        ? (parsed.images || parsed.image || parsed.output || parsed.data || parsed.url || content)
-                        : content;
-                    let final;
-                    try { final = typeof out === 'string' ? JSON.parse(out) : out; } catch { final = out; }
-                    let url = null;
-                    if (Array.isArray(final) && final[0]) {
-                        url = typeof final[0] === 'object' ? (final[0].url || final[0].image) : String(final[0]);
-                    } else if (final && typeof final === 'object') {
-                        url = final.url || final.image;
-                    } else if (typeof final === 'string' && final.startsWith('http')) {
-                        url = final;
-                    }
-                    if (url && url.startsWith('http')) return url;
-                }
-            } catch {}
+                if (imgUrl) return imgUrl;
+            } else if (data.status === 'failed' || data.status === 'FAILED' || data.error) {
+                console.error('[Polling] Task failed remotely:', data.error);
+                return null;
+            }
+            
+            // Fallback for custom APIs mapping directly to output
+            if (data.output && !data.status) {
+                if (Array.isArray(data.output)) return data.output[0];
+                if (typeof data.output === 'string') return data.output;
+            }
+        } catch (e) {
+            console.log('[Polling] Check attempt failed:', e.message);
         }
     }
+    console.error('[Polling] Exceeded maximum attempts (180s timeout)');
     return null;
 }

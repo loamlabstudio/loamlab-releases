@@ -1,4 +1,4 @@
-﻿require 'sketchup.rb'
+require 'sketchup.rb'
 require 'extensions.rb'
 
 module LoamLab
@@ -13,7 +13,7 @@ module LoamLab
     unless file_loaded?(__FILE__)
     ext = SketchupExtension.new('LoamLab Camera (閲庝汉鐩告)', File.join(File.dirname(__FILE__), 'loamlab_plugin', 'main'))
     ext.description = 'LoamLab Camera Architecture Rendering Plugin'
-    ext.version     = '1.3.0'
+    ext.version     = '1.4.0'
     ext.creator     = 'LoamLab Studio'
       ext.copyright   = '2026 LoamLab Inc.'
       

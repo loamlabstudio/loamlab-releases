@@ -1,4 +1,4 @@
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -14,6 +14,42 @@ export default async function handler(req, res) {
         return res.status(500).json({ code: -1, msg: 'Missing SUPABASE env vars' });
     }
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // --- GET: presets list / render history ---
+    if (req.method === 'GET' && req.query.action === 'presets') {
+        const email = req.query.email || req.headers['x-user-email'];
+        if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });
+        try {
+            const { data, error } = await supabase
+                .from('user_presets')
+                .select('id, name, prompt, style, resolution, tool_id, created_at')
+                .eq('user_email', email)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return res.status(200).json({ code: 0, presets: data || [] });
+        } catch (e) {
+            return res.status(500).json({ code: -1, msg: e.message });
+        }
+    }
+
+    if (req.method === 'GET' && req.query.action === 'history') {
+        const email = req.query.email || req.headers['x-user-email'];
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = parseInt(req.query.offset) || 0;
+        if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });
+        try {
+            const { data, error, count } = await supabase
+                .from('render_history')
+                .select('id, thumbnail_url, full_url, prompt, style, resolution, tool_id, points_cost, user_rating, created_at', { count: 'exact' })
+                .eq('user_email', email)
+                .order('created_at', { ascending: false })
+                .range(offset, offset + limit - 1);
+            if (error) throw error;
+            return res.status(200).json({ code: 0, history: data || [], total: count || 0 });
+        } catch (e) {
+            return res.status(500).json({ code: -1, msg: e.message });
+        }
+    }
 
     // --- GET: Fetch user info / Auto-register ---
     if (req.method === 'GET') {
@@ -62,6 +98,57 @@ export default async function handler(req, res) {
                 referral_success_count: referralSuccessCount || 0,
                 is_new_user: error && error.code === 'PGRST116' ? true : false
             });
+        } catch (e) {
+            return res.status(500).json({ code: -1, msg: e.message });
+        }
+    }
+
+    // --- POST: presets CRUD + history rating ---
+    if (req.method === 'POST' && req.body?.action === 'save_preset') {
+        const { email, name, prompt, style, resolution, tool_id } = req.body;
+        if (!email || !name) return res.status(400).json({ code: -1, msg: 'Missing email or name' });
+        try {
+            const { data, error } = await supabase
+                .from('user_presets')
+                .insert([{ user_email: email, name, prompt, style, resolution, tool_id: tool_id || 1 }])
+                .select('id, name').single();
+            if (error) throw error;
+            return res.status(200).json({ code: 0, preset: data });
+        } catch (e) {
+            return res.status(500).json({ code: -1, msg: e.message });
+        }
+    }
+
+    if (req.method === 'POST' && req.body?.action === 'delete_preset') {
+        const { email, preset_id } = req.body;
+        if (!email || !preset_id) return res.status(400).json({ code: -1, msg: 'Missing email or preset_id' });
+        try {
+            const { error } = await supabase
+                .from('user_presets')
+                .delete()
+                .eq('id', preset_id)
+                .eq('user_email', email);  // 確保只能刪自己的
+            if (error) throw error;
+            return res.status(200).json({ code: 0 });
+        } catch (e) {
+            return res.status(500).json({ code: -1, msg: e.message });
+        }
+    }
+
+    if (req.method === 'POST' && req.body?.action === 'rate_history') {
+        const { email, history_id, rating, is_approved } = req.body;
+        if (!email || !history_id) return res.status(400).json({ code: -1, msg: 'Missing email or history_id' });
+        try {
+            const update = {};
+            if (rating !== undefined) update.user_rating = rating;
+            if (is_approved !== undefined) update.is_approved = is_approved;
+            const { error } = await supabase
+                .from('render_history')
+                .update(update)
+                .eq('id', history_id)
+                .eq('user_email', email);
+            if (error) throw error;
+            return res.status(200).json({ code: 0 });
         } catch (e) {
             return res.status(500).json({ code: -1, msg: e.message });
         }

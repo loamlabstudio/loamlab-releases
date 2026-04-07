@@ -31,7 +31,7 @@ export default async function handler(req, res) {
             const event = JSON.parse(rawBody.toString());
             console.log('[Dodo] Event received:', event.type);
 
-            if (event.type === 'payment.succeeded' || event.type === 'subscription.active') {
+            if (event.type === 'payment.succeeded' || event.type === 'subscription.active' || event.type === 'subscription.renewed') {
                 const data = event.data;
                 const customerEmail = data.customer?.email;
                 // Dodo 的商品 ID 在 product_cart[0].product_id，或直接在 data.product_id
@@ -86,10 +86,10 @@ async function processTopup(customerEmail, variantId, orderId, platform) {
     const IDS = {
         LS: { TOPUP: 1432023, STARTER: 1432194, PRO: 1432198, STUDIO: 1432205 },
         DODO: {
-            TOPUP: 'pdt_0NblIvgNSETSCveL7Xmk',
-            STARTER: 'pdt_0NblmUvFrwJe36ymTELWV',
-            PRO: 'pdt_0NblmafncbUuGNrMRvJp4',
-            STUDIO: 'pdt_0Nblmhwbr5WXfNyDHpaA2'
+            TOPUP: 'pdt_0NbIlveGNSETSOveL7Xmk',
+            STARTER: 'pdt_0NbImUvFnwJe36ymTELWV',
+            PRO: 'pdt_0NbImafnebUuGNrMRvJp4',
+            STUDIO: 'pdt_0NbImhwhr5WXfNyDHpaA2'
         }
     };
 

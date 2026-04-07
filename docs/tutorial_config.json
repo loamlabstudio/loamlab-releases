@@ -1,0 +1,420 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "updated_at": "2026-04-04",
+    "description": "Single source of truth for all tutorial content. Used by tutorial.js (in-plugin) and gen_docs.py (marketing docs)."
+  },
+  "tools": [
+    {
+      "id": "ai-render",
+      "icon": "✦",
+      "live": true,
+      "since": "1.0.0",
+      "deprecated": null,
+      "pts_label": "15–25 pts / render",
+      "title": {
+        "zh-TW": "真實渲染",
+        "en-US": "AI Render",
+        "zh-CN": "AI 渲染",
+        "es-ES": "AI Render",
+        "pt-BR": "AI Render",
+        "ja-JP": "リアルレンダー"
+      },
+      "short_desc": {
+        "zh-TW": "一鍵生成真實感渲染圖，60 秒出圖",
+        "en-US": "Photorealistic renders from SketchUp in 60 seconds",
+        "zh-CN": "一键生成真实感渲染图，60 秒出图",
+        "es-ES": "Renderizados fotorrealistas desde SketchUp en 60 segundos",
+        "pt-BR": "Renders fotorrealistas do SketchUp em 60 segundos",
+        "ja-JP": "SketchUp から 60 秒でフォトリアルなレンダリング"
+      },
+      "steps": [
+        {
+          "step": 1,
+          "title": {
+            "zh-TW": "建立 SketchUp 場景",
+            "en-US": "Create a SketchUp Scene",
+            "zh-CN": "建立 SketchUp 场景",
+            "es-ES": "Crea una escena en SketchUp",
+            "pt-BR": "Crie uma cena no SketchUp",
+            "ja-JP": "SketchUp シーンを作成"
+          },
+          "desc": {
+            "zh-TW": "在 SketchUp 中調好視角，點選「視圖 → 動畫 → 新增場景」，場景會出現在插件列表中。",
+            "en-US": "Set your desired angle in SketchUp, then go to View → Animation → Add Scene. It will appear in the plugin.",
+            "zh-CN": "在 SketchUp 中调好视角，点选「视图 → 动画 → 添加场景」，场景会出现在插件列表中。",
+            "es-ES": "Ajusta el ángulo en SketchUp, luego ve a Ver → Animación → Agregar escena. Aparecerá en el plugin.",
+            "pt-BR": "Ajuste o ângulo no SketchUp, depois vá em Exibir → Animação → Adicionar cena. Aparecerá no plugin.",
+            "ja-JP": "SketchUp でアングルを設定し、表示 → アニメーション → シーンを追加。プラグインに表示されます。"
+          },
+          "visual": { "type": "card", "icon": "🎬", "highlight_area": "scene-list" },
+          "since": "1.0.0"
+        },
+        {
+          "step": 2,
+          "title": {
+            "zh-TW": "勾選場景 & 設定解析度",
+            "en-US": "Select Scene & Resolution",
+            "zh-CN": "勾选场景 & 设定分辨率",
+            "es-ES": "Selecciona escena y resolución",
+            "pt-BR": "Selecione cena e resolução",
+            "ja-JP": "シーンと解像度を選択"
+          },
+          "desc": {
+            "zh-TW": "在場景列表勾選要渲染的視角。免費版支援 1K / 2K，Pro 及以上可解鎖 4K。",
+            "en-US": "Check the scene(s) you want to render. Free plan supports 1K / 2K. Unlock 4K with Pro or above.",
+            "zh-CN": "在场景列表勾选要渲染的视角。免费版支持 1K / 2K，Pro 及以上可解锁 4K。",
+            "es-ES": "Marca las escenas que quieres renderizar. El plan gratuito soporta 1K / 2K. Desbloquea 4K con Pro.",
+            "pt-BR": "Marque as cenas que quer renderizar. O plano gratuito suporta 1K / 2K. Desbloqueie 4K com Pro.",
+            "ja-JP": "レンダリングするシーンにチェックを入れます。無料プランは 1K / 2K 対応。Pro 以上で 4K 解放。"
+          },
+          "visual": { "type": "card", "icon": "🖼️", "img": "https://loamlab-camera-backend.vercel.app/images/before.jpg", "highlight_area": "resolution-selector" },
+          "since": "1.0.0"
+        },
+        {
+          "step": 3,
+          "title": {
+            "zh-TW": "點擊「開始渲染」",
+            "en-US": "Click 'Start Engine'",
+            "zh-CN": "点击「开始渲染」",
+            "es-ES": "Haz clic en 'Iniciar motor'",
+            "pt-BR": "Clique em 'Iniciar motor'",
+            "ja-JP": "「レンダリング開始」をクリック"
+          },
+          "desc": {
+            "zh-TW": "點擊按鈕後，AI 開始處理，約 60~120 秒完成。結果自動存入本地資料夾，並出現在歷史記錄。",
+            "en-US": "After clicking, AI begins processing. Takes 60~120 seconds. Results are saved locally and appear in history.",
+            "zh-CN": "点击按钮后，AI 开始处理，约 60~120 秒完成。结果自动存入本地文件夹，并出现在历史记录。",
+            "es-ES": "Al hacer clic, la IA comienza a procesar. Tarda 60~120 segundos. Los resultados se guardan localmente.",
+            "pt-BR": "Ao clicar, a IA começa a processar. Leva 60~120 segundos. Os resultados são salvos localmente.",
+            "ja-JP": "クリック後、AI が処理を開始します。60~120 秒かかります。結果はローカルに保存されます。"
+          },
+          "visual": { "type": "card", "icon": "⚡", "img": "https://loamlab-camera-backend.vercel.app/images/after.jpg", "highlight_area": "render-button" },
+          "since": "1.0.0"
+        }
+      ],
+      "marketing": {
+        "tagline": {
+          "zh-TW": "真實感渲染，60 秒出圖",
+          "en-US": "Photorealistic in 60 seconds",
+          "zh-CN": "真实感渲染，60 秒出图",
+          "es-ES": "Fotorrealismo en 60 segundos",
+          "pt-BR": "Fotorrealismo em 60 segundos",
+          "ja-JP": "60 秒でフォトリアル"
+        },
+        "social_caption": {
+          "zh-TW": "SketchUp 一鍵出圖！✨ AI 真實渲染，60 秒生成建築級效果圖，免費試用 👇",
+          "en-US": "SketchUp renders in 60 seconds! ✨ AI photorealistic rendering, free to try 👇",
+          "zh-CN": "SketchUp 一键出图！✨ AI 真实渲染，60 秒生成建筑级效果图，免费试用 👇",
+          "es-ES": "¡SketchUp en 60 segundos! ✨ Renderizado fotorrealista con IA, prueba gratis 👇",
+          "pt-BR": "SketchUp em 60 segundos! ✨ Renderização fotorrealista com IA, teste grátis 👇",
+          "ja-JP": "SketchUp が 60 秒でリアルに！✨ AI フォトリアルレンダリング、無料お試し 👇"
+        },
+        "gif_filename": "ai-render-demo.gif"
+      }
+    },
+    {
+      "id": "spacereform",
+      "icon": "✏️",
+      "live": true,
+      "since": "1.1.0",
+      "deprecated": null,
+      "pts_label": "15–25 pts / render",
+      "title": {
+        "zh-TW": "空間改造",
+        "en-US": "SpaceReform",
+        "zh-CN": "空间改造",
+        "es-ES": "SpaceReform",
+        "pt-BR": "SpaceReform",
+        "ja-JP": "スペース改造"
+      },
+      "short_desc": {
+        "zh-TW": "選一張底圖，AI 精準改造風格，保留空間結構與光影",
+        "en-US": "Pick a base render, AI redesigns style while preserving structure and lighting",
+        "zh-CN": "选一张底图，AI 精准改造风格，保留空间结构与光影",
+        "es-ES": "Elige una imagen base, la IA rediseña el estilo preservando estructura e iluminación",
+        "pt-BR": "Escolha uma imagem base, a IA redesenha o estilo preservando estrutura e iluminação",
+        "ja-JP": "ベース画像を選択し、AI がスタイルを再設計しつつ構造と照明を保持"
+      },
+      "steps": [
+        {
+          "step": 1,
+          "title": {
+            "zh-TW": "先完成一張真實渲染",
+            "en-US": "Complete an AI Render first",
+            "zh-CN": "先完成一张真实渲染",
+            "es-ES": "Primero completa un AI Render",
+            "pt-BR": "Primeiro complete um AI Render",
+            "ja-JP": "まず AI レンダーを完成させる"
+          },
+          "desc": {
+            "zh-TW": "切換到工具 1「真實渲染」，完成至少一張渲染圖作為改造底圖。",
+            "en-US": "Switch to Tool 1 'AI Render' and complete at least one render to use as the base image.",
+            "zh-CN": "切换到工具 1「真实渲染」，完成至少一张渲染图作为改造底图。",
+            "es-ES": "Cambia a la herramienta 1 'AI Render' y completa al menos un render para usarlo como imagen base.",
+            "pt-BR": "Mude para a ferramenta 1 'AI Render' e complete pelo menos um render para usar como imagem base.",
+            "ja-JP": "ツール 1「リアルレンダー」に切り替え、少なくとも 1 枚レンダリングしてベース画像にします。"
+          },
+          "visual": { "type": "card", "icon": "🎬", "highlight_area": "tool-switcher" },
+          "since": "1.1.0"
+        },
+        {
+          "step": 2,
+          "title": {
+            "zh-TW": "選擇底圖",
+            "en-US": "Select base image",
+            "zh-CN": "选择底图",
+            "es-ES": "Selecciona la imagen base",
+            "pt-BR": "Selecione a imagem base",
+            "ja-JP": "ベース画像を選択"
+          },
+          "desc": {
+            "zh-TW": "點擊底圖選擇區，從歷史記錄中選取要改造的渲染圖。",
+            "en-US": "Click the base image picker and select a render from your history.",
+            "zh-CN": "点击底图选择区，从历史记录中选取要改造的渲染图。",
+            "es-ES": "Haz clic en el selector de imagen base y selecciona un render de tu historial.",
+            "pt-BR": "Clique no seletor de imagem base e selecione um render do seu histórico.",
+            "ja-JP": "ベース画像セレクターをクリックし、履歴からレンダーを選択します。"
+          },
+          "visual": { "type": "card", "icon": "🖼️", "img": "https://loamlab-camera-backend.vercel.app/images/spacereform_before.jpg", "highlight_area": "base-image-picker" },
+          "since": "1.1.0"
+        },
+        {
+          "step": 3,
+          "title": {
+            "zh-TW": "輸入改造描述並渲染",
+            "en-US": "Enter style description & render",
+            "zh-CN": "输入改造描述并渲染",
+            "es-ES": "Ingresa descripción de estilo y renderiza",
+            "pt-BR": "Insira descrição do estilo e renderize",
+            "ja-JP": "スタイルを入力してレンダリング"
+          },
+          "desc": {
+            "zh-TW": "在提示詞欄輸入風格描述（如：北歐風格、暖木色），AI 保留空間結構與光影，精準改造軟裝。",
+            "en-US": "Enter a style description (e.g. Scandinavian, warm wood tones). AI preserves structure and lighting while reforming the space.",
+            "zh-CN": "在提示词栏输入风格描述（如：北欧风格、暖木色），AI 保留空间结构与光影，精准改造软装。",
+            "es-ES": "Ingresa una descripción de estilo (ej: escandinavo, tonos madera cálida). La IA preserva estructura e iluminación.",
+            "pt-BR": "Insira uma descrição de estilo (ex: escandinavo, tons de madeira quente). A IA preserva estrutura e iluminação.",
+            "ja-JP": "スタイルを入力します（例：北欧、温かい木のトーン）。AI は構造と照明を保ちながら改造します。"
+          },
+          "visual": { "type": "card", "icon": "✨", "highlight_area": "prompt-input" },
+          "since": "1.1.0"
+        }
+      ],
+      "marketing": {
+        "tagline": {
+          "zh-TW": "保留結構，改造風格",
+          "en-US": "Keep the structure, change the style",
+          "zh-CN": "保留结构，改造风格",
+          "es-ES": "Mantén la estructura, cambia el estilo",
+          "pt-BR": "Mantenha a estrutura, mude o estilo",
+          "ja-JP": "構造を保ちながらスタイルを変える"
+        },
+        "social_caption": {
+          "zh-TW": "同一個空間，不同風格 ✏️ AI 智能改造，保留光影結構！",
+          "en-US": "Same space, different styles ✏️ AI redesigns while keeping structure and lighting!",
+          "zh-CN": "同一个空间，不同风格 ✏️ AI 智能改造，保留光影结构！",
+          "es-ES": "Mismo espacio, diferentes estilos ✏️ La IA rediseña preservando estructura e iluminación!",
+          "pt-BR": "Mesmo espaço, estilos diferentes ✏️ A IA redesenha preservando estrutura e iluminação!",
+          "ja-JP": "同じ空間、違うスタイル ✏️ AI が構造と照明を保ちながら改造！"
+        },
+        "gif_filename": "spacereform-demo.gif"
+      }
+    },
+    {
+      "id": "multiangle",
+      "icon": "📸",
+      "live": true,
+      "since": "1.2.0",
+      "deprecated": null,
+      "pts_label": "15–25 pts / render",
+      "title": {
+        "zh-TW": "多角度生成",
+        "en-US": "Multi-angle",
+        "zh-CN": "多角度生成",
+        "es-ES": "Multi-ángulo",
+        "pt-BR": "Multi-ângulo",
+        "ja-JP": "多角生成"
+      },
+      "short_desc": {
+        "zh-TW": "一次生成 9 個鏡頭角度的九宮格構圖，快速呈現多視角效果",
+        "en-US": "Generate a 3×3 nine-panel grid with 9 dramatic camera angles in one shot",
+        "zh-CN": "一次生成 9 个镜头角度的九宫格构图，快速呈现多视角效果",
+        "es-ES": "Genera una cuadrícula 3×3 con 9 ángulos dramáticos en un solo paso",
+        "pt-BR": "Gere uma grade 3×3 com 9 ângulos dramáticos em um único render",
+        "ja-JP": "9 つのカメラアングルを 3×3 グリッドで一度に生成"
+      },
+      "steps": [
+        {
+          "step": 1,
+          "title": {
+            "zh-TW": "選擇底圖",
+            "en-US": "Select base image",
+            "zh-CN": "选择底图",
+            "es-ES": "Selecciona imagen base",
+            "pt-BR": "Selecione imagem base",
+            "ja-JP": "ベース画像を選択"
+          },
+          "desc": {
+            "zh-TW": "點擊底圖選擇區，從歷史記錄選取一張已渲染的圖作為九宮格的參考底圖。",
+            "en-US": "Click the base image picker and select a rendered image from history as the reference for the nine-grid.",
+            "zh-CN": "点击底图选择区，从历史记录选取一张已渲染的图作为九宫格的参考底图。",
+            "es-ES": "Haz clic en el selector y elige una imagen renderizada del historial como referencia.",
+            "pt-BR": "Clique no seletor e escolha uma imagem renderizada do histórico como referência.",
+            "ja-JP": "セレクターをクリックし、履歴からレンダー済み画像を選択します。"
+          },
+          "visual": { "type": "card", "icon": "🖼️", "img": "https://loamlab-camera-backend.vercel.app/images/multiangle_source.jpg", "highlight_area": "base-image-picker" },
+          "since": "1.2.0"
+        },
+        {
+          "step": 2,
+          "title": {
+            "zh-TW": "點擊渲染，取得 9 個角度",
+            "en-US": "Render to get 9 camera angles",
+            "zh-CN": "点击渲染，获得 9 个角度",
+            "es-ES": "Renderiza para obtener 9 ángulos",
+            "pt-BR": "Renderize para obter 9 ângulos",
+            "ja-JP": "レンダリングで 9 アングルを取得"
+          },
+          "desc": {
+            "zh-TW": "點擊渲染，AI 輸出一張 3×3 九宮格大圖，包含廣角/鳥瞰/蟲眼/黃金時刻等 9 個戲劇性角度。",
+            "en-US": "Click render. AI outputs a 3×3 grid with 9 dramatic angles: wide, bird's eye, worm's eye, golden hour, and more.",
+            "zh-CN": "点击渲染，AI 输出一张 3×3 九宫格大图，包含广角/鸟瞰/虫眼/黄金时刻等 9 个戏剧性角度。",
+            "es-ES": "Haz clic en renderizar. La IA genera una cuadrícula 3×3 con 9 ángulos: gran angular, aéreo, a ras de suelo, etc.",
+            "pt-BR": "Clique em renderizar. A IA gera uma grade 3×3 com 9 ângulos: grande angular, aéreo, rés do chão, etc.",
+            "ja-JP": "レンダリングをクリック。AI が広角、俯瞰、接地など 9 アングルの 3×3 グリッドを出力します。"
+          },
+          "visual": { "type": "card", "icon": "📸", "img": "https://loamlab-camera-backend.vercel.app/images/multiangle_grid.jpg", "highlight_area": "render-button" },
+          "since": "1.2.0"
+        }
+      ],
+      "marketing": {
+        "tagline": {
+          "zh-TW": "一次出圖，9 個戲劇角度",
+          "en-US": "One render, 9 dramatic angles",
+          "zh-CN": "一次出图，9 个戏剧角度",
+          "es-ES": "Un render, 9 ángulos dramáticos",
+          "pt-BR": "Um render, 9 ângulos dramáticos",
+          "ja-JP": "1 回のレンダーで 9 つのアングル"
+        },
+        "social_caption": {
+          "zh-TW": "9 個角度一次搞定！📸 LoamLab 多角度生成，建築提案必備神器",
+          "en-US": "9 camera angles in one shot! 📸 LoamLab Multi-angle — essential for architectural presentations",
+          "zh-CN": "9 个角度一次搞定！📸 LoamLab 多角度生成，建筑提案必备神器",
+          "es-ES": "¡9 ángulos en un solo render! 📸 LoamLab Multi-ángulo — esencial para presentaciones",
+          "pt-BR": "9 ângulos em um único render! 📸 LoamLab Multi-ângulo — essencial para apresentações",
+          "ja-JP": "1 回で 9 アングル！📸 LoamLab 多角生成 — 建築プレゼンに必須"
+        },
+        "gif_filename": "multiangle-demo.gif"
+      }
+    },
+    {
+      "id": "smartcanvas",
+      "icon": "🖌️",
+      "live": false,
+      "since": "1.3.0",
+      "deprecated": null,
+      "pts_label": "coming soon",
+      "title": {
+        "zh-TW": "智能語義畫布",
+        "en-US": "Smart Canvas",
+        "zh-CN": "智能语义画布",
+        "es-ES": "Smart Canvas",
+        "pt-BR": "Smart Canvas",
+        "ja-JP": "スマートキャンバス"
+      },
+      "short_desc": {
+        "zh-TW": "點擊物件或塗抹選區，AI 精準替換指定材質或家具",
+        "en-US": "Click objects or brush to select, AI precisely replaces materials or furniture",
+        "zh-CN": "点击物件或涂抹选区，AI 精准替换指定材质或家具",
+        "es-ES": "Haz clic en objetos o pinta para seleccionar, la IA reemplaza materiales o muebles",
+        "pt-BR": "Clique em objetos ou pinte para selecionar, a IA substitui materiais ou móveis",
+        "ja-JP": "オブジェクトをクリックまたはブラシで選択し、AI が素材や家具を精密に置換"
+      },
+      "steps": [
+        {
+          "step": 1,
+          "title": {
+            "zh-TW": "選擇底圖",
+            "en-US": "Select base image",
+            "zh-CN": "选择底图",
+            "es-ES": "Selecciona imagen base",
+            "pt-BR": "Selecione imagem base",
+            "ja-JP": "ベース画像を選択"
+          },
+          "desc": {
+            "zh-TW": "從歷史記錄選取一張渲染圖作為編輯底圖，Smart Canvas 將在此基礎上進行局部替換。",
+            "en-US": "Select a rendered image from history as your editing base. Smart Canvas performs local replacements on top of it.",
+            "zh-CN": "从历史记录选取一张渲染图作为编辑底图，Smart Canvas 将在此基础上进行局部替换。",
+            "es-ES": "Selecciona una imagen renderizada del historial. Smart Canvas realiza reemplazos locales sobre ella.",
+            "pt-BR": "Selecione uma imagem renderizada do histórico. Smart Canvas realiza substituições locais sobre ela.",
+            "ja-JP": "履歴からレンダー済み画像を選択します。Smart Canvas はその上でローカル置換を行います。"
+          },
+          "visual": { "type": "card", "icon": "🖼️", "highlight_area": "base-image-picker" },
+          "since": "1.3.0"
+        },
+        {
+          "step": 2,
+          "title": {
+            "zh-TW": "選取要替換的區域",
+            "en-US": "Select the area to replace",
+            "zh-CN": "选取要替换的区域",
+            "es-ES": "Selecciona el área a reemplazar",
+            "pt-BR": "Selecione a área a substituir",
+            "ja-JP": "置換するエリアを選択"
+          },
+          "desc": {
+            "zh-TW": "使用魔術棒點擊物件自動選取，或用筆刷手動塗抹選區。可選取多個區域同時替換。",
+            "en-US": "Use the magic wand to click and auto-select objects, or brush manually. Multiple areas can be selected at once.",
+            "zh-CN": "使用魔术棒点击物件自动选取，或用笔刷手动涂抹选区。可选取多个区域同时替换。",
+            "es-ES": "Usa la varita mágica para selección automática, o el pincel manualmente. Puedes seleccionar múltiples áreas.",
+            "pt-BR": "Use a varinha mágica para seleção automática, ou o pincel manualmente. Selecione múltiplas áreas.",
+            "ja-JP": "マジックワンドでオブジェクトをクリックして自動選択、またはブラシで手動選択。複数エリア同時選択可能。"
+          },
+          "visual": { "type": "card", "icon": "🖌️", "highlight_area": "sc-tools" },
+          "since": "1.3.0"
+        },
+        {
+          "step": 3,
+          "title": {
+            "zh-TW": "輸入替換指令並執行",
+            "en-US": "Enter replacement command & execute",
+            "zh-CN": "输入替换指令并执行",
+            "es-ES": "Ingresa comando de reemplazo y ejecuta",
+            "pt-BR": "Insira comando de substituição e execute",
+            "ja-JP": "置換コマンドを入力して実行"
+          },
+          "desc": {
+            "zh-TW": "在文字框輸入替換描述（如：白色大理石地板、木質牆面），點擊「執行替換」，AI 僅修改選取區域。",
+            "en-US": "Enter a replacement description (e.g. white marble floor, wood wall panels). Click 'Execute' — AI only modifies the selected area.",
+            "zh-CN": "在文字框输入替换描述（如：白色大理石地板、木质墙面），点击「执行替换」，AI 仅修改选取区域。",
+            "es-ES": "Ingresa una descripción (ej: suelo de mármol blanco). Haz clic en 'Ejecutar' — la IA solo modifica el área seleccionada.",
+            "pt-BR": "Insira uma descrição (ex: piso de mármore branco). Clique em 'Executar' — a IA só modifica a área selecionada.",
+            "ja-JP": "説明を入力（例：白い大理石の床）して「置換実行」をクリック。AI は選択エリアのみを変更します。"
+          },
+          "visual": { "type": "card", "icon": "✨", "highlight_area": "sc-execute" },
+          "since": "1.3.0"
+        }
+      ],
+      "marketing": {
+        "tagline": {
+          "zh-TW": "點哪裡，改哪裡",
+          "en-US": "Click anywhere, change anything",
+          "zh-CN": "点哪里，改哪里",
+          "es-ES": "Haz clic donde quieras, cambia lo que quieras",
+          "pt-BR": "Clique onde quiser, mude o que quiser",
+          "ja-JP": "どこでもクリックして変更"
+        },
+        "social_caption": {
+          "zh-TW": "點哪裡改哪裡！🖌️ Smart Canvas 局部替換，保持整體空間不變",
+          "en-US": "Click to change anything! 🖌️ Smart Canvas local replacement — keep the overall space intact",
+          "zh-CN": "点哪里改哪里！🖌️ Smart Canvas 局部替换，保持整体空间不变",
+          "es-ES": "¡Haz clic para cambiar! 🖌️ Smart Canvas reemplaza localmente manteniendo el espacio intacto",
+          "pt-BR": "Clique para mudar! 🖌️ Smart Canvas substituição local — mantendo o espaço intacto",
+          "ja-JP": "クリックして変更！🖌️ Smart Canvas ローカル置換 — 全体の空間はそのまま"
+        },
+        "gif_filename": "smartcanvas-demo.gif"
+      }
+    }
+  ]
+}

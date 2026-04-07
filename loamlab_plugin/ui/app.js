@@ -67,7 +67,7 @@ const SWAP_TAG_GROUPS = {
     }
 };
 
-function setActiveTool(n) {
+function setActiveTool(n, skipTutorial) {
     currentActiveTool = n;
 
     // Smart Canvas pending indicator：只在 Tool 2/4 時顯示
@@ -197,6 +197,12 @@ function setActiveTool(n) {
     clearBaseImageSelection();
 
     updateCostPreview();
+
+    // Tutorial: fire checkFirstUse on tool switch (skip when called from language change)
+    if (!skipTutorial) {
+        const TOOL_IDS = { 1: 'ai-render', 2: 'spacereform', 3: 'multiangle', 4: 'smartcanvas' };
+        document.dispatchEvent(new CustomEvent('loamlab:tool-switch', { detail: { toolId: TOOL_IDS[n] } }));
+    }
 }
 
 function rebuildMaterialTags() {
@@ -283,6 +289,20 @@ function finalizeRenderUI() {
         if (previewArea) previewArea.classList.remove('is-rendering');
 
         // [KPI 2] 移除自動開啟資料夾（會觸發 UI.openURL 中文路徑導致 SU 凍結）
+
+        // Aha moment：首次渲染完成後顯示升級引導 toast
+        if (!localStorage.getItem('loamlab_first_render_done')) {
+            localStorage.setItem('loamlab_first_render_done', '1');
+            setTimeout(() => {
+                showUpdateToast(t('aha_render_done') + ' →');
+                // Toast 點擊 → 開升級 modal
+                const toast = document.getElementById('update-toast');
+                if (toast) {
+                    toast.style.cursor = 'pointer';
+                    toast.onclick = () => { openPricingModal({ highlight: 'topup' }); toast.onclick = null; toast.style.cursor = ''; };
+                }
+            }, 1800);
+        }
     }, 1000);
 }
 
@@ -356,8 +376,16 @@ window.receiveFromRuby = function (data) {
             document.body.appendChild(badge);
             // Dev 模式：顯示所有開發中工具
             document.querySelectorAll('.dev-only-tool').forEach(el => el.classList.remove('hidden'));
+            // 還原上次選區（localStorage 持久化，熱重載後立即顯示重測按鈕）
+            try {
+                const saved = localStorage.getItem('_devLastScBody');
+                if (saved) {
+                    window._devLastScBody = JSON.parse(saved);
+                    (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
+                }
+            } catch(_) {}
         }
-        const langStr = data.lang || 'en-US';
+        const langStr = data.lang || localStorage.getItem('loamlab_lang') || 'en-US';
         (document.getElementById('lang-select') || document.createElement('div')).value = langStr;
         window.setLanguage(langStr);
         if (data.save_path) window.updateSaveDir(data.save_path);
@@ -410,14 +438,20 @@ window.receiveFromRuby = function (data) {
     } else if (data.status === 'update_available') {
         stopUpdateSpinner();
         window._silentUpdateCheck = false;
+        window._pendingUpdateUrl = data.url || '';
         var updateDot = document.getElementById('update-dot');
         if (updateDot) updateDot.classList.remove('hidden');
-        showUpdateBanner(data.version, data.notes, data.url);
+        showUpdateBanner(data.version, data.notes, data.url, data.manual_url || data.url);
     } else if (data.status === 'update_downloading') {
         showUpdateToast('⬇️ 下載更新中，請稍候...');
     } else if (data.status === 'update_error') {
         stopUpdateSpinner();
-        showUpdateToast(`⚠️ ${data.msg || '更新失敗'}`);
+        // 自動更新失敗：重新顯示 banner 並露出「手動下載」按鈕
+        const manualBtn = document.getElementById('update-banner-manual');
+        if (manualBtn) manualBtn.classList.remove('hidden');
+        const banner = document.getElementById('update-banner');
+        if (banner) banner.classList.remove('hidden');
+        showUpdateToast(`⚠️ ${data.msg || '更新失敗'} — 請點下方「手動下載」`, true);
     } else if (data.status === 'update_checked') {
         // legacy fallback
         stopUpdateSpinner();
@@ -484,6 +518,23 @@ window.receiveFromRuby = function (data) {
         if (data.points_remaining !== undefined) {
             const pb = document.getElementById('point-balance');
             if (pb) pb.textContent = data.points_remaining;
+            // 低點數警告（剩 20 點以下，且非首次 aha moment，60 秒內只警告一次）
+            const _now = Date.now();
+            if (data.points_remaining > 0 && data.points_remaining <= 20 &&
+                localStorage.getItem('loamlab_first_render_done') &&
+                (!window._lowPointsWarnedAt || _now - window._lowPointsWarnedAt > 60000)) {
+                window._lowPointsWarnedAt = _now;
+                const renders = Math.floor(data.points_remaining / 20) || 1;
+                const msg = t('low_points_warning').replace('{n}', data.points_remaining).replace('{renders}', renders) + ' →';
+                setTimeout(() => {
+                    showUpdateToast(msg);
+                    const toast = document.getElementById('update-toast');
+                    if (toast) {
+                        toast.style.cursor = 'pointer';
+                        toast.onclick = () => { openPricingModal({ highlight: 'starter' }); toast.onclick = null; toast.style.cursor = ''; };
+                    }
+                }, 600);
+            }
         }
 
         if (finishedScenesCount >= totalScenesToRender) {
@@ -545,9 +596,9 @@ window.receiveFromRuby = function (data) {
                                 </div>
                                 <div class="relative w-full overflow-hidden bg-black aspect-video border-t border-white/[0.05]">
                                     <div class="absolute top-2 left-2 bg-blue-600 text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest">AFTER</div>
-                                    <img src="${targetUrl}" class="w-full h-full object-cover animate-blur-clear" onclick="window.open('${targetUrl}', '_blank')">
+                                    <img src="${targetUrl}" class="w-full h-full object-cover animate-blur-clear" onclick="openImagePreview('${targetUrl}')">
                                 </div>
-                            </div>` : `<img src="${targetUrl}" class="w-full object-contain animate-blur-clear" onclick="window.open('${targetUrl}', '_blank')">`}
+                            </div>` : `<img src="${targetUrl}" class="w-full object-contain animate-blur-clear" onclick="openImagePreview('${targetUrl}')">`}
                             <div class="px-4 py-3 flex items-center justify-between border-t border-white/[0.05] bg-black/40">
                                 <span class="text-[10px] text-white/30 truncate max-w-[60%]">${(document.getElementById('user-prompt-input') ? (document.getElementById('user-prompt-input') || document.createElement('div')).value : '') || 'Furniture Swap'}</span>
                                 <div class="flex items-center gap-2">
@@ -575,7 +626,7 @@ window.receiveFromRuby = function (data) {
                     gridEl3.innerHTML = `
                         <div data-ninegrid-result="true" class="relative w-full rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
                             <div class="absolute top-3 left-3 bg-[#dc2626] text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest">9-GRID · AI RENDERED</div>
-                            <img src="${targetUrl}" class="w-full object-contain animate-blur-clear" title="點擊檢視大圖" onclick="window.open('${targetUrl}', '_blank')">
+                            <img src="${targetUrl}" class="w-full object-contain animate-blur-clear" title="點擊檢視大圖" onclick="openImagePreview('${targetUrl}')">
                             <div class="px-4 py-3 flex items-center justify-between border-t border-white/[0.05] bg-black/40">
                                 <span class="text-[10px] text-white/30 truncate max-w-[60%]">${promptText3 || 'Multi-angle Gen'}</span>
                                 <button id="ninegrid-save-btn" class="text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black hover:border-white transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> SAVE</button>
@@ -604,7 +655,7 @@ window.receiveFromRuby = function (data) {
                             // 保持 aspect-video 高度，改用 overlay 疊加對比（hover 查看 SKETCHUP 原圖）
                             imgContainer.className = "relative w-full overflow-hidden bg-black aspect-video flex-shrink-0";
                             imgContainer.innerHTML = `
-                                <img src="${targetUrl}" class="w-full h-full object-cover transition-transform duration-[3s] hover:scale-[1.04]" onclick="window.open('${targetUrl}', '_blank')" title="點擊開大圖" style="cursor:pointer">
+                                <img src="${targetUrl}" class="w-full h-full object-cover transition-transform duration-[3s] hover:scale-[1.04]" onclick="openImagePreview('${targetUrl}')" title="點擊開大圖" style="cursor:pointer">
                                 <div class="absolute top-2 left-2 bg-[#dc2626] text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest pointer-events-none">AI RENDERED</div>
                                 <div class="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none">
                                     <img src="${originalImgSrc}" class="w-full h-full object-cover opacity-90">
@@ -1043,22 +1094,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // 資料夾按鈕（綠色圖示）= 開啟資料夾
-    // 路徑文字顯示區（藍色）= 點擊更改路徑
-    const btnChooseDir = document.getElementById('btn-choose-dir');
-    const saveDirDisplay = document.getElementById('save-dir-display');
-    if (btnChooseDir) {
-        btnChooseDir.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (window.sketchup) sketchup.open_save_dir({});
-        });
-    }
-    if (saveDirDisplay) {
-        saveDirDisplay.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (window.sketchup) sketchup.choose_save_dir({});
-        });
-    }
+    // 資料夾按鈕 & 路徑顯示區：onclick 已直接寫在 index.html，無需 addEventListener
 
     // 顯眼的 Debug API 按鈕
     const btnDebugApi = document.getElementById('btn-debug-api');
@@ -1142,6 +1178,8 @@ if (btnSync) {
 // 語言切換事件
 (document.getElementById('lang-select') || document.createElement('div')).addEventListener('change', (e) => {
     window.setLanguage(e.target.value);
+    try { localStorage.setItem('loamlab_lang', e.target.value); } catch (_) {}
+    if (window.sketchup) try { sketchup.save_ui_lang({ lang: e.target.value }); } catch (_) {}
 });
 
 // 更新存檔目錄路徑顯示
@@ -1185,7 +1223,17 @@ function updatePlanBadge(plan) {
 function refreshPricingModalBadge() {
     const plan = window.loamlabSubscriptionPlan;
     const planBtnMap = { starter: 'btn-plan-starter', pro: 'btn-plan-pro', studio: 'btn-plan-studio' };
-    const originalText = { 'btn-plan-topup': 'BUY NOW', 'btn-plan-starter': 'SUBSCRIBE', 'btn-plan-pro': 'UPGRADE NOW', 'btn-plan-studio': 'SUBSCRIBE' };
+    // btn-plan-topup 排除在外（內含 span#btn-plan-topup-label，不能用 textContent 覆蓋）
+    const originalText = { 'btn-plan-starter': 'SUBSCRIBE', 'btn-plan-pro': 'UPGRADE NOW', 'btn-plan-studio': 'SUBSCRIBE' };
+    // 單獨重設 topup label span（保留 DOM 結構）
+    const topupLabel = document.getElementById('btn-plan-topup-label');
+    if (topupLabel) {
+        const qty = document.getElementById('qty-topup');
+        const n = qty ? parseInt(qty.value) || 1 : 1;
+        topupLabel.textContent = n > 1 ? 'BUY ' + n + ' UNITS' : 'BUY NOW';
+    }
+    const topupBtn = document.getElementById('btn-plan-topup');
+    if (topupBtn) { topupBtn.disabled = false; topupBtn.style.opacity = ''; topupBtn.style.cursor = ''; }
 
     // 重設所有按鈕
     Object.entries(originalText).forEach(([id, txt]) => {
@@ -1213,7 +1261,7 @@ function openPricingModal(ctx = null) {
     const banner = document.getElementById('paywall-context-banner');
     if (banner) {
         if (ctx && ctx.cost !== undefined && ctx.balance !== undefined && ctx.cost > ctx.balance) {
-            banner.textContent = `⚡ 此次渲染需 ${ctx.cost} 點，目前餘額 ${ctx.balance} 點，差 ${ctx.cost - ctx.balance} 點`;
+            banner.textContent = t('paywall_banner').replace('{cost}', ctx.cost).replace('{balance}', ctx.balance);
             banner.classList.remove('hidden');
         } else {
             banner.classList.add('hidden');
@@ -1226,12 +1274,19 @@ function openPricingModal(ctx = null) {
     setTimeout(() => {
         pricingModal.classList.remove('opacity-0');
         pricingModalContent.classList.remove('scale-95');
-        if (ctx && ctx.highlight === 'pro') {
-            const proBtn = document.getElementById('btn-plan-pro');
-            const proCard = proBtn && proBtn.closest('[class*="gradient-to-b"]');
-            if (proCard) {
-                proCard.classList.add('ring-2', 'ring-white/60');
-                setTimeout(() => proCard.classList.remove('ring-2', 'ring-white/60'), 1200);
+        const highlightMap = {
+            pro: { btnId: 'btn-plan-pro', color: 'ring-white/60' },
+            topup: { btnId: 'btn-plan-topup', color: 'ring-blue-400/60' },
+            starter: { btnId: 'btn-plan-starter', color: 'ring-emerald-400/60' },
+        };
+        if (ctx && ctx.highlight && highlightMap[ctx.highlight]) {
+            const { btnId, color } = highlightMap[ctx.highlight];
+            const btn = document.getElementById(btnId);
+            const card = btn && btn.closest('.rounded-xl');
+            if (card) {
+                card.classList.add('ring-2', color);
+                card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                setTimeout(() => card.classList.remove('ring-2', color), 1800);
             }
         }
     }, 10);
@@ -1382,10 +1437,10 @@ const LS_VARIANTS = {
 };
 
 const DODO_VARIANTS = {
-    TOPUP: 'pdt_0NblIvgNSETSCveL7Xmk',
-    STARTER: 'pdt_0NblmUvFrwJe36ymTELWV',
-    PRO: 'pdt_0NblmafncbUuGNrMRvJp4',
-    STUDIO: 'pdt_0Nblmhwbr5WXfNyDHpaA2'
+    TOPUP: 'pdt_0NbIlveGNSETSOveL7Xmk',
+    STARTER: 'pdt_0NbImUvFnwJe36ymTELWV',
+    PRO: 'pdt_0NbImafnebUuGNrMRvJp4',
+    STUDIO: 'pdt_0NbImhwhr5WXfNyDHpaA2'
 };
 const BETA_DISCOUNT_CODE = 'LOAM_BETA_30';
 const BETA_DISCOUNT_RATE = 0.70; // 公測 -30% 折扣
@@ -1475,17 +1530,19 @@ window.logoutUser = function (e) {
     window.updateLoginUI(null, null, null, null);
 }
 
-window.fetchUserPoints = function (email) {
+// 內部實作：帶 retry 的 user fetch（最多 3 次，1s/3s backoff）
+function _doFetchUserPoints(email, attempt) {
     const targetUrl = `${API_BASE}/api/user?email=${encodeURIComponent(email)}`;
-    console.log('[LoamLab] fetchUserPoints ->', targetUrl);
+    const pb = document.getElementById('point-balance');
     fetch(targetUrl)
         .then(r => {
-            if (!r.ok) throw new Error(`HTTP ${r.status} from ${targetUrl}`);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
             return r.json();
         })
         .then(data => {
-            console.log('[LoamLab] user data:', data);
             if (data && data.points !== undefined) {
+                // 清除 retry click handler（如果之前設置過）
+                if (pb) { pb.style.cursor = ''; pb.title = ''; pb.onclick = null; }
                 window.loamlabSubscriptionPlan = data.subscription_plan || null;
                 window.loamlabLastTopupAt = data.last_topup_at || null;
                 updatePlanBadge(window.loamlabSubscriptionPlan);
@@ -1502,7 +1559,6 @@ window.fetchUserPoints = function (email) {
 
                 if (data.is_new_user) {
                     showWelcomeToast();
-                    // 新用戶且尚未綁定邀請碼 → 1.5 秒後自動開 modal，提示輸入好友邀請碼
                     if (!data.referred_by) {
                         setTimeout(() => {
                             openReferralModal();
@@ -1510,15 +1566,60 @@ window.fetchUserPoints = function (email) {
                             if (refCodeInput) refCodeInput.focus();
                         }, 1500);
                     }
+                } else {
+                    // Returning users: show what's new once per version
+                    setTimeout(() => {
+                        if (window.TutorialSystem) TutorialSystem.checkWhatsNew();
+                    }, 2000);
                 }
             } else {
-                alert('[LoamLab] /api/user 回傳了資料但沒有 points 欄位: ' + JSON.stringify(data));
+                // 資料格式異常：靜默降級，不用 alert
+                console.warn('[LoamLab] /api/user missing points field:', data);
+                if (pb) pb.textContent = '—';
             }
-        }).catch(e => {
-            console.error('[LoamLab] fetchUserPoints failed:', targetUrl, e);
-            const pb = document.getElementById('point-balance');
-            if (pb) pb.textContent = 'ERR';
+        })
+        .catch(e => {
+            const delays = [1000, 3000];
+            if (attempt < delays.length) {
+                // 自動 retry（顯示 loading 狀態）
+                if (pb) pb.textContent = '...';
+                setTimeout(() => _doFetchUserPoints(email, attempt + 1), delays[attempt]);
+            } else {
+                // 最終失敗：顯示 — + click-to-retry
+                console.error('[LoamLab] fetchUserPoints failed after retries:', e);
+                if (pb) {
+                    pb.textContent = '—';
+                    pb.style.cursor = 'pointer';
+                    pb.title = 'Click to retry';
+                    pb.onclick = () => { pb.textContent = '...'; pb.onclick = null; _doFetchUserPoints(email, 0); };
+                }
+            }
         });
+}
+
+window.fetchUserPoints = function (email) {
+    const pb = document.getElementById('point-balance');
+    if (pb) pb.textContent = '...';
+    _doFetchUserPoints(email, 0);
+}
+
+function openImagePreview(url) {
+    const modal = document.getElementById('image-preview-modal');
+    const img = document.getElementById('image-preview-img');
+    const loader = document.getElementById('image-preview-loader');
+    if (!modal || !img || !loader) return;
+    
+    img.classList.add('opacity-0');
+    loader.classList.remove('hidden');
+    img.src = '';
+    
+    img.src = url;
+    modal.classList.remove('hidden');
+}
+
+function closeImagePreview() {
+    const modal = document.getElementById('image-preview-modal');
+    if (modal) modal.classList.add('hidden');
 }
 
 function openHistoryModal() {
@@ -1555,13 +1656,13 @@ function renderHistoryGrid(files) {
         const imgSrc = e.file_url || e.cloud_url || '';
         return `
         <div class="relative group rounded-xl overflow-hidden border border-white/8 hover:border-white/20 transition-colors bg-black/40 flex flex-col">
-            <div class="relative aspect-video bg-white/5 overflow-hidden">
+            <div class="relative aspect-video bg-white/5 overflow-hidden cursor-pointer" onclick="if('${imgSrc}') { openImagePreview('${imgSrc}'); }">
                 ${imgSrc
                     ? `<img src="${imgSrc}" class="w-full h-full object-cover block" draggable="false"
                             onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-white/20 text-[10px]\\'>No Preview</div>'">`
                     : `<div class="w-full h-full flex items-center justify-center text-white/20 text-[10px]">No Preview</div>`
                 }
-                <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3" onclick="event.stopPropagation()">
                     ${window._historyPickMode
                         ? `<button onclick="pickBaseImage(window._historyFiles[${i}])"
                             class="text-[10px] px-4 py-1.5 rounded-full bg-green-500/90 hover:bg-green-400 text-black font-bold tracking-wider transition-all shadow-lg">
@@ -1770,10 +1871,11 @@ function stopUpdateSpinner() {
     if (svg) svg.classList.remove('animate-spin');
 }
 
-function showUpdateToast(msg) {
+function showUpdateToast(msg, useHtml) {
     const toast = document.getElementById('update-toast');
     if (!toast) return;
-    toast.querySelector('#update-toast-msg').textContent = msg;
+    const msgEl = toast.querySelector('#update-toast-msg');
+    if (useHtml) { msgEl.innerHTML = msg; } else { msgEl.textContent = msg; }
     toast.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
     clearTimeout(window._updateToastTimer);
     window._updateToastTimer = setTimeout(() => {
@@ -1781,12 +1883,15 @@ function showUpdateToast(msg) {
     }, 4000);
 }
 
-function showUpdateBanner(version, notes, url) {
+function showUpdateBanner(version, notes, url, manualUrl) {
     const banner = document.getElementById('update-banner');
     if (!banner) return;
     banner.querySelector('#update-banner-version').textContent = `v${version}`;
     banner.querySelector('#update-banner-notes').textContent = notes;
     banner.setAttribute('data-url', url);
+    // manual_url：更新失敗後出現的手動下載按鈕
+    const mu = manualUrl || url;
+    banner.setAttribute('data-manual-url', mu);
     banner.classList.remove('hidden');
 }
 
@@ -1809,8 +1914,8 @@ function openLoginModal() {
     startOAuthFlow();
 }
 
-// 結帳並跳轉 LemonSqueezy
-window.openCheckout = function (variantId) {
+// 結帳並跳轉付款頁面（接受 planKey: 'TOPUP'/'STARTER'/'PRO'/'STUDIO'）
+window.openCheckout = function (planKey, quantity = 1) {
     if (!window.loamlabUserEmail) {
         showUpdateToast('⚠️ 請先登入 Google 帳號再進行儲值');
         openLoginModal();
@@ -1818,18 +1923,24 @@ window.openCheckout = function (variantId) {
     }
 
     // 已訂閱相同方案 guard（防止誤觸重複購買）
-    const planMap = { [LS_VARIANTS.STARTER]: 'starter', [LS_VARIANTS.PRO]: 'pro', [LS_VARIANTS.STUDIO]: 'studio' };
-    const targetPlan = planMap[variantId];
-    if (targetPlan && window.loamlabSubscriptionPlan === targetPlan) {
+    const planKeyLower = planKey.toLowerCase();
+    if (planKeyLower !== 'topup' && window.loamlabSubscriptionPlan === planKeyLower) {
         showUpdateToast('✓ ' + i18n('already_subscribed'));
         return;
     }
+
+    // planKey → 實際 variant ID
+    const variantId = CURRENT_PAYMENT_PLATFORM === 'DODO'
+        ? (DODO_VARIANTS[planKey] || planKey)
+        : (LS_VARIANTS[planKey] !== undefined ? LS_VARIANTS[planKey] : planKey);
+
+    const qty = Math.max(1, parseInt(quantity) || 1);
 
     // 根據平台選擇 Store URL 與參數
     let finalUrl = "";
     if (CURRENT_PAYMENT_PLATFORM === 'DODO') {
         const storeUrl = "https://checkout.dodopayments.com/buy";
-        finalUrl = `${storeUrl}?variant_id=${variantId}&customer_email=${encodeURIComponent(window.loamlabUserEmail)}`;
+        finalUrl = `${storeUrl}/${variantId}?quantity=${qty}&customer_email=${encodeURIComponent(window.loamlabUserEmail)}`;
     } else {
         const storeUrl = "https://loamlabstudio.lemonsqueezy.com/checkout/buy/";
         finalUrl = `${storeUrl}${variantId}?checkout[email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[custom][user_email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[discount_code]=${BETA_DISCOUNT_CODE}`;
@@ -2641,12 +2752,12 @@ const SmartCanvas = {
 function _scHandleKey(e) {
     const modal = document.getElementById('smart-canvas-modal');
     if (modal.classList.contains('hidden')) return;
-    // Alt：啟動筆刷大小調整模式
-    if (e.key === 'Alt') { SmartCanvas._altKey = true; e.preventDefault(); return; }
-    // 若焦點在文字輸入框，不攔截
+    // 若焦點在文字輸入框，不攔截任何快捷鍵（包括 Alt，防止 _altKey 卡住）
     var activeEl = document.activeElement;
     var tag = activeEl ? activeEl.tagName : '';
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    // Alt：啟動筆刷大小調整模式
+    if (e.key === 'Alt') { SmartCanvas._altKey = true; e.preventDefault(); return; }
 
     if (e.ctrlKey) {
         if (e.key === 'z' && !e.shiftKey) {
@@ -2738,7 +2849,22 @@ function openSmartCanvas(channelBase64, renderedUrl, sceneName) {
 
     // 載入渲染圖
     SmartCanvas.baseImg = document.getElementById('sc-base-img');
+    const loadingEl = document.getElementById('sc-loading');
+    const errorEl = document.getElementById('sc-error');
+
+    // 清理舊處理器（防止多次開啟時閉包疊加）
+    SmartCanvas.baseImg.onload = null;
+    SmartCanvas.baseImg.onerror = null;
+
+    // 重置狀態
+    if (loadingEl) loadingEl.classList.remove('hidden');
+    if (errorEl) errorEl.classList.add('hidden');
+    SmartCanvas.baseImg.classList.add('opacity-0');
+
     SmartCanvas.baseImg.onload = () => {
+        if (loadingEl) loadingEl.classList.add('hidden');
+        SmartCanvas.baseImg.classList.remove('opacity-0');
+        
         // rAF 確保 layout 完成後再讀尺寸，避免快取圖片同步觸發 onload 時 getBoundingClientRect 回傳 0
         requestAnimationFrame(() => {
             const w = SmartCanvas.baseImg.naturalWidth;
@@ -2752,13 +2878,35 @@ function openSmartCanvas(channelBase64, renderedUrl, sceneName) {
             _scBindEvents();
         });
     };
+
+    SmartCanvas.baseImg.onerror = () => {
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (errorEl) errorEl.classList.remove('hidden');
+        console.error("[SmartCanvas] Failed to load image:", renderedUrl);
+    };
+
     SmartCanvas.renderedUrl = renderedUrl;
     SmartCanvas.baseImg.src = renderedUrl;
 }
 
+function retryScImageLoad() {
+    if (!SmartCanvas.renderedUrl || !SmartCanvas.baseImg) return;
+    const loadingEl = document.getElementById('sc-loading');
+    const errorEl = document.getElementById('sc-error');
+    if (loadingEl) loadingEl.classList.remove('hidden');
+    if (errorEl) errorEl.classList.add('hidden');
+    
+    // 加上時間戳防止快取
+    const retryUrl = SmartCanvas.renderedUrl.includes('?') 
+        ? `${SmartCanvas.renderedUrl}&t=${Date.now()}` 
+        : `${SmartCanvas.renderedUrl}?t=${Date.now()}`;
+    SmartCanvas.baseImg.src = retryUrl;
+}
+
 function _scInitCanvases(w, h, channelBase64) {
-    ['sc-channel-canvas', 'sc-highlight-canvas', 'sc-draw-canvas'].forEach(id => {
+    ['sc-channel-canvas', 'sc-highlight-canvas', 'sc-draw-canvas', 'sc-cursor-canvas'].forEach(id => {
         const c = document.getElementById(id);
+        if (!c) return;
         c.width = w; c.height = h;
         c.style.width = w + 'px'; c.style.height = h + 'px';
     });
@@ -2769,6 +2917,8 @@ function _scInitCanvases(w, h, channelBase64) {
     SmartCanvas.highlightCtx    = SmartCanvas.highlightCanvas.getContext('2d');
     SmartCanvas.drawCanvas = document.getElementById('sc-draw-canvas');
     SmartCanvas.drawCtx    = SmartCanvas.drawCanvas.getContext('2d');
+    SmartCanvas.cursorCanvas = document.getElementById('sc-cursor-canvas');
+    SmartCanvas.cursorCtx    = SmartCanvas.cursorCanvas ? SmartCanvas.cursorCanvas.getContext('2d') : null;
 
     // 清空 draw/highlight canvas
     SmartCanvas.highlightCtx.clearRect(0, 0, w, h);
@@ -3107,14 +3257,20 @@ function _scRenderRegionList() {
             <div class="flex items-center gap-2">
                 <div class="sc-region-swatch" style="background:${region.colorHex || '#ff6432'}"></div>
                 <span class="text-[10px] text-white/50 font-semibold uppercase tracking-wide">區域 ${idx + 1}</span>
-                <label class="ml-auto cursor-pointer text-[10px] px-1.5 py-0.5 rounded border ${hasRef ? 'border-[#ff6432]/60 text-[#ff6432]' : 'border-white/15 text-white/30'} hover:border-[#ff6432]/60 hover:text-[#ff6432] transition-all" title="${hasRef ? '已附加參考圖 (Ctrl+V 可替換)' : '附加參考圖'}">
-                    ${hasRef ? '🖼' : '📎'}<input type="file" accept="image/*" class="hidden sc-ref-file-input" />
-                </label>
-                ${hasRef ? `<img src="${region.refImageBase64}" class="w-6 h-6 object-cover rounded border border-[#ff6432]/30 flex-shrink-0 cursor-pointer sc-ref-clear" title="點擊移除參考圖" />` : ''}
-                <button class="text-white/20 hover:text-rose-400 text-[11px] leading-none sc-del-btn">✕</button>
+                <button class="ml-auto text-white/20 hover:text-rose-400 text-[11px] leading-none sc-del-btn">✕</button>
             </div>
-            <input type="text" class="sc-region-label-input w-full bg-transparent border-b border-white/10 text-[11px] text-white/80 outline-none placeholder-white/25 pb-0.5 mt-1"
+            <input type="text" class="sc-region-label-input w-full bg-transparent border-b border-white/10 text-[11px] text-white/80 outline-none placeholder-white/25 pb-0.5 mt-1.5"
                 value="${region.label || ''}" placeholder="描述替換內容（可選）..." />
+            <label class="mt-2 flex items-center gap-2 w-full rounded-lg border border-dashed cursor-pointer transition-all ${hasRef ? 'border-blue-500/30 bg-blue-500/5 px-2 py-1.5' : 'border-white/10 hover:border-blue-500/40 hover:bg-blue-500/5 justify-center py-2'}">
+                <input type="file" accept="image/*" class="hidden sc-ref-file-input" />
+                ${hasRef
+                    ? `<img src="${region.refImageBase64}" class="h-10 w-10 object-cover rounded flex-shrink-0 border border-blue-500/30" />
+                       <span class="text-[9px] text-blue-300/60 flex-1 truncate">風格參考圖已附加</span>
+                       <button class="text-[10px] text-white/30 hover:text-rose-400 sc-ref-clear px-1 leading-none" title="移除">✕</button>`
+                    : `<svg class="w-3 h-3 text-white/25 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                       <span class="text-[9px] text-white/25">附加風格參考圖 <span class="text-blue-400/40">（可選）</span></span>`
+                }
+            </label>
         `;
         // 點擊任意卡片區域即更新焦點 index（供 Ctrl+V 貼圖使用）
         card.addEventListener('mousedown', () => { SmartCanvas.focusedRegionIdx = idx; });
@@ -3140,6 +3296,7 @@ function _scRenderRegionList() {
         var scRefClear = card.querySelector('.sc-ref-clear');
         if (scRefClear) {
             scRefClear.addEventListener('click', function(e) {
+                e.preventDefault();
                 e.stopPropagation();
                 SmartCanvas.regions[idx].refImageBase64 = null;
                 _scRenderRegionList();
@@ -3217,6 +3374,28 @@ function scSetTagGroup(groupKey) {
     });
 }
 
+// PS 風格筆刷游標：空心圓（黑色外框 + 白色內框），顯示在 cursor canvas 上
+function _scDrawCursorCircle(x, y) {
+    const cCtx = SmartCanvas.cursorCtx;
+    if (!cCtx) return;
+    cCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+    const tool = SmartCanvas.activeTool;
+    if (tool === 'wand' || tool === 'fill') return; // 這兩個工具保留預設游標
+    const r = Math.max(2, SmartCanvas.brushSize / 2);
+    // 外圈黑色（確保在亮色背景可見）
+    cCtx.beginPath();
+    cCtx.arc(x, y, r, 0, Math.PI * 2);
+    cCtx.strokeStyle = 'rgba(0,0,0,0.65)';
+    cCtx.lineWidth = 2;
+    cCtx.stroke();
+    // 內圈白色（確保在暗色背景可見）
+    cCtx.beginPath();
+    cCtx.arc(x, y, r, 0, Math.PI * 2);
+    cCtx.strokeStyle = 'rgba(255,255,255,0.9)';
+    cCtx.lineWidth = 1;
+    cCtx.stroke();
+}
+
 function _scBindEvents() {
     const dc = SmartCanvas.drawCanvas;
     // 解除舊的 listeners（簡單起見：clone & replace）
@@ -3249,6 +3428,7 @@ function _scBindEvents() {
         SmartCanvas.hoveredMask = null;
         SmartCanvas.lastWandX = -1; SmartCanvas.lastWandY = -1;
         _scRenderOverlays();
+        if (SmartCanvas.cursorCtx) SmartCanvas.cursorCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
     });
 
     // --- 魔術棒 click → 選取區域 → 彈出 label ---
@@ -3339,8 +3519,11 @@ function _scBindEvents() {
         }
     });
     fresh.addEventListener('mousemove', (e) => {
+        const { x, y } = _scGetXY(e);
         // Alt + 拖曳：水平移動調整筆刷大小（PS 同款體驗）
-        if (SmartCanvas._altKey && SmartCanvas.isDrawing) {
+        // 改用 e.altKey（MouseEvent 即時狀態），防止 _altKey 卡住導致誤觸
+        if (e.altKey && SmartCanvas.isDrawing) {
+            SmartCanvas._altKey = true; // 同步狀態
             if (SmartCanvas._altResizeStartX === null) {
                 SmartCanvas._altResizeStartX = e.clientX;
                 SmartCanvas._altResizeStartSize = SmartCanvas.brushSize;
@@ -3350,12 +3533,14 @@ function _scBindEvents() {
             SmartCanvas.brushSize = newSize;
             const sizeEl = document.getElementById('sc-brush-size');
             if (sizeEl) sizeEl.value = newSize;
+            _scDrawCursorCircle(x, y); // Alt 調整大小時即時顯示圓圈
             return;
         }
         if (SmartCanvas.activeTool !== 'wand' && SmartCanvas.isDrawing) {
             SmartCanvas._hasDragged = true;  // 有移動才算拖曳
             _scDraw(e);
         }
+        _scDrawCursorCircle(x, y); // 筆刷/橡皮擦工具：持續顯示游標圓圈
     });
 }
 
@@ -3636,9 +3821,10 @@ async function executeSmartSwap(overrideBody = null) {
 
             fetchBody = { tool: 2, parameters: { ...originalParam, base_image: compositeBase64, prompt, resolution, ...(refImages.length > 0 && { ref_images: refImages }) } };
 
-            // DEV：儲存供重測使用，並顯示區域數量
+            // DEV：儲存供重測使用，並顯示區域數量（localStorage 持久化，熱重載後仍可使用）
             if (window._isDev) {
                 window._devLastScBody = { _body: fetchBody, _label: displayLabel, _resolution: resolution };
+                try { localStorage.setItem('_devLastScBody', JSON.stringify(window._devLastScBody)); } catch(_) {}
                 showUpdateToast(`[DEV] 送出 ${SmartCanvas.regions.length} 區域，參考圖 ${refImages.length} 張`);
             }
         }
@@ -3658,7 +3844,7 @@ async function executeSmartSwap(overrideBody = null) {
                     'X-Plugin-Version': '1.2.5'
                 },
                 body: JSON.stringify(fetchBody),
-                signal: AbortSignal.timeout(240000)  // 4 分鐘上限，比 Vercel 300s 提前終止
+                signal: AbortSignal.timeout(400000)  // 6.7 分鐘安全網（Vercel 300s 504 會先回來，前端拿到正確 JSON 錯誤）
             });
         } finally {
             clearTimeout(slowToastTimer);
@@ -3677,11 +3863,22 @@ async function executeSmartSwap(overrideBody = null) {
             showUpdateToast('✅ 替換完成！');
             if (window._isDev) (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
         } else {
-            showUpdateToast('❌ ' + (result.msg || '替換失敗'));
+            // 失敗時清除 pendingSwap，避免再點 Start Engine 重複發送相同請求
+            SmartCanvas.pendingSwap = false;
+            SmartCanvas.regions = [];
+            _scUpdatePendingIndicator();
+            showUpdateToast('❌ ' + (result.msg || '替換失敗') + '，請至 Render History 確認是否已完成');
+            if (window._isDev) (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
         }
     } catch (err) {
-        const msg = err.name === 'TimeoutError' ? '請求超時，請重試（AI 渲染需 1–2 分鐘）' : '網路錯誤: ' + err.message;
+        // 失敗時清除 pendingSwap，避免再點 Start Engine 重複發送相同請求
+        SmartCanvas.pendingSwap = false;
+        SmartCanvas.regions = [];
+        _scUpdatePendingIndicator();
+        const isTimeout = err.name === 'TimeoutError' || err.name === 'AbortError';
+        const msg = isTimeout ? '渲染超時（AI 需 4–5 分鐘），請至 Render History 查看是否已完成，勿重試' : '網路錯誤: ' + err.message;
         showUpdateToast('❌ ' + msg);
+        if (window._isDev) (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
     } finally {
         finalizeRenderUI();
         SmartCanvas._executing = false;
@@ -3735,6 +3932,10 @@ document.addEventListener('DOMContentLoaded', () => {
             SmartCanvas.hoveredColor = null;
             if (SmartCanvas.drawCtx) SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
             _scRenderOverlays();
+            // 筆刷/橡皮擦：隱藏預設游標（改用 cursor canvas 圓圈）；魔術棒/填充：恢復十字游標
+            const isBrushLike = (SmartCanvas.activeTool === 'brush' || SmartCanvas.activeTool === 'eraser');
+            if (SmartCanvas.drawCanvas) SmartCanvas.drawCanvas.style.cursor = isBrushLike ? 'none' : 'crosshair';
+            if (SmartCanvas.cursorCtx) SmartCanvas.cursorCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
         });
     });
 

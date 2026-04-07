@@ -77,7 +77,8 @@ Get-ChildItem -Path "$ROOT\loamlab_plugin" -Recurse -File | Where-Object {
     }
     -not $skip
 } | ForEach-Object {
-    $relative = $_.FullName.Replace($ROOT, "").TrimStart("\").Replace('\', '/')
+    # 使用 Substring(Length) 避開 Replace 可能產生的編碼/規範化比對失敗 (尤其是中文路徑)
+    $relative = $_.FullName.Substring($ROOT.Length).TrimStart("\").Replace('\', '/')
     Add-ToArchive $archive $_.FullName $relative
 }
 
@@ -276,13 +277,12 @@ Write-Host ""
 Write-Host "  前往：https://extensions.sketchup.com/developer" -ForegroundColor Cyan
 Write-Host "  上傳檔案：$OUT_RBZ" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  填寫欄位：" -ForegroundColor Yellow
+Write-Host "  Fields to fill:" -ForegroundColor Yellow
 Write-Host "    Version Number  : $version" -ForegroundColor White
 Write-Host "    Encryption Type : Encrypt" -ForegroundColor White
 Write-Host "    Release Notes   : $notes" -ForegroundColor White
-Write-Host "    SketchUp Compat : 2021 / 2022 / 2023 / 2024 / 2025 / 2026" -ForegroundColor White
-Write-Host "    OS Compat       : Windows + Mac OS X" -ForegroundColor White
-Write-Host "    Languages       : Chinese(Trad) / English / Chinese(Simplified) / Spanish / Portuguese / Japanese" -ForegroundColor White
+Write-Host "    SketchUp Compat : All" -ForegroundColor White
+Write-Host "    OS Compat       : Win + Mac" -ForegroundColor White
 Write-Host ""
-Write-Host "  Note: EW review takes 1-3 business days, cannot be automated" -ForegroundColor Yellow
+Write-Host "  Note: Review takes 1-3 days." -ForegroundColor Yellow
 Write-Host ""

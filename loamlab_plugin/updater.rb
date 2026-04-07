@@ -100,14 +100,16 @@ module LoamLabPlugin
             puts "[Updater] 解壓完成 → #{plugins_dir}"
 
             # --- Step C：熱重載 Ruby 模組並重開 dialog（不需重啟 SketchUp）---
-            UI.start_timer(0.3, false) do
+            # 重要：增加延遲並強制重開視窗 (LoamLab::AIURenderer.show_dialog(true))
+            # 確保新加載的 Ruby 與 index.html 可以正確綁定
+            UI.start_timer(1.0, false) do
               plugin_dir = File.dirname(__FILE__)
               %w[config.rb coze_api.rb updater.rb main.rb].each do |f|
                 fp = File.join(plugin_dir, f)
                 load fp if File.exist?(fp)
               end
               begin; dialog.close; rescue; end
-              LoamLab::AIURenderer.show_dialog
+              LoamLab::AIURenderer.show_dialog(true)
             end
 
           rescue => e

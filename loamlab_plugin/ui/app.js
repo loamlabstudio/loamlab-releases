@@ -1741,7 +1741,7 @@ function pickBaseImage(entry) {
             gridEl.innerHTML = `
                 <div data-base-preview="true" class="relative w-full rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
                     <div class="absolute top-3 left-3 bg-black/60 backdrop-blur-sm text-white/50 text-[9px] px-2.5 py-1 rounded z-10 font-mono tracking-widest">BASE IMAGE</div>
-                    <img src="${entry.file_url}" class="w-full object-cover">
+                    <img src="${entry.file_url}" class="w-full object-cover cursor-zoom-in" onclick="openImagePreview('${entry.file_url}')" title="點擊檢視大圖">
                 </div>
             `;
         }
@@ -2668,7 +2668,7 @@ function appendInpaintResultCard(url, promptText = 'Inpaint Result') {
     imgWrap.className = 'relative overflow-hidden';
     imgWrap.innerHTML = `
         <div class="absolute top-2 left-2 bg-sky-500 text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest uppercase">SWAPPED</div>
-        <img src="${url}" class="w-full object-cover block cursor-zoom-in" onclick="window.open('${url}','_blank')" draggable="false">
+        <img src="${url}" class="w-full object-cover block cursor-zoom-in" onclick="openImagePreview('${url}')" draggable="false" title="點擊檢視大圖">
     `;
 
     const footer = document.createElement('div');

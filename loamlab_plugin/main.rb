@@ -24,6 +24,14 @@ module LoamLab
     @@pending_results   = []
     @@polling_dialog    = nil
 
+    # [v1.4.2 Hotfix] 如果正在重載代碼（更新或熱重載），且舊視窗還在，強制清除它
+    # 這樣可以確保 1.3.3 -> 1.4.2 的用戶能看到新版介面（因其 updater.rb 呼叫 show_dialog 不帶參數）
+    if @dialog
+      begin; @dialog.close; rescue; end
+      @dialog = nil
+      @@polling_dialog = nil
+    end
+
     # 主執行緒輪詢器：從 Thread 接收結果並傳給 JS（每 0.5 秒）
     UI.start_timer(0.5, true) do
       until @@pending_results.empty?
@@ -71,7 +79,13 @@ module LoamLab
       model.set_attribute('LoamLabRenderOverride', 'applied', false)
     end
 
-    def self.show_dialog
+    def self.show_dialog(force = false)
+      # 如果強制重開，先關閉存在的視窗
+      if force && @dialog
+        begin; @dialog.close; rescue; end
+        @dialog = nil
+      end
+
       # 防止重複打開視窗
       if @dialog && @dialog.visible?
         @dialog.bring_to_front
@@ -109,8 +123,11 @@ module LoamLab
       @dialog.set_on_closed do
         m = Sketchup.active_model
         self.restore_render_keys(m) if m
+        @dialog = nil
+        @@polling_dialog = nil
       end
 
+      @@polling_dialog = @dialog
       @dialog.show
     end
 

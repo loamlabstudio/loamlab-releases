@@ -2,6 +2,9 @@ require 'sketchup.rb'
 require 'json'
 require 'base64'
 require 'tmpdir'
+require 'net/http'
+require 'uri'
+require 'openssl'
 require_relative 'config.rb'
 require_relative 'coze_api.rb'
 require_relative 'updater.rb'
@@ -16,6 +19,27 @@ module LoamLab
       'DrawSilhouettes' => false,
       'DrawDepthQue'    => false
     }.freeze
+
+    @@requests        ||= []
+    @@pending_results   = []
+    @@polling_dialog    = nil
+
+    # 主執行緒輪詢器：從 Thread 接收結果並傳給 JS（每 0.5 秒）
+    UI.start_timer(0.5, true) do
+      until @@pending_results.empty?
+        res = @@pending_results.shift
+        begin
+          d = @@polling_dialog
+          if d
+            b64 = Base64.strict_encode64(res.to_json)
+            d.execute_script("window.receiveFromRubyBase64('#{b64}')")
+            puts "[LoamLab] Poll 送出結果: #{res[:status]} url=#{res[:url]} msg=#{res[:message]}"
+          end
+        rescue => e
+          puts "[LoamLab] Poll 傳送失敗: #{e.message}"
+        end
+      end
+    end
 
     def self.safe_set_render_keys(ro, keys_hash)
       valid_keys = ro.keys
@@ -65,8 +89,8 @@ module LoamLab
         :height => 800,
         :left => 100,
         :top => 100,
-        :min_width => 800,
-        :min_height => 600,
+        :min_width => 1050,
+        :min_height => 700,
         :style => UI::HtmlDialog::STYLE_DIALOG
       }
 
@@ -96,12 +120,13 @@ module LoamLab
         model = Sketchup.active_model
         save_path = model.get_attribute("LoamLabAI", "save_path", "")
         user_email = Sketchup.read_default("LoamLabAI", "user_email", "")
+        saved_lang = Sketchup.read_default("LoamLabAI", "ui_lang", "")
         response = {
           status: 'success',
           version: LoamLab::VERSION,
           api_base: LoamLab::API_BASE_URL,
           build_type: LoamLab::BUILD_TYPE,
-          lang: 'en-US',
+          lang: saved_lang.empty? ? nil : saved_lang,
           scenes: self.get_scene_names,
           save_path: save_path,
           user_email: user_email
@@ -129,6 +154,11 @@ module LoamLab
       
       dialog.add_action_callback("logout_user") do |action_context|
         Sketchup.write_default("LoamLabAI", "user_email", "")
+      end
+
+      dialog.add_action_callback("save_ui_lang") do |action_context, params|
+        lang = params.is_a?(Hash) ? params["lang"] : params.to_s
+        Sketchup.write_default("LoamLabAI", "ui_lang", lang) unless lang.nil? || lang.empty?
       end
 
       # 1.5. 讓使用者指定專案存檔目錄
@@ -563,6 +593,7 @@ module LoamLab
     def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1, base_image_url="", base_image_scene="底圖", reference_image_base64="")
       model = Sketchup.active_model
       return unless model
+      @@polling_dialog = dialog
 
       # 工具 2 (Smart Canvas)：遠端 URL 直接透傳 render.js，不讀本地檔案
       if tool == 2 && !base_image_url.empty? && base_image_url.start_with?("http")
@@ -760,22 +791,44 @@ module LoamLab
               }
             })
 
-            req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
-            req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
-            req.body = request_body
-
-            captured_scene      = scene_name
+            # 改用 Net::HTTP + Thread，完全繞過 Sketchup::Http::Request 的事件迴圈問題
+            captured_scene       = scene_name
             captured_channel_b64 = channel_b64
-            req.start do |_, response|
+            captured_dialog      = dialog
+            captured_body        = request_body.dup
+            captured_email       = user_email.dup
+            captured_version     = ::LoamLab::VERSION.dup
+            captured_url         = "#{::LoamLab::API_BASE_URL}/api/render"
+            puts "[LoamLab] 啟動 Thread 送出請求: #{scene_name}"
+
+            Thread.new do
+              result = nil
               begin
-                data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
+                uri  = URI.parse(captured_url)
+                http = Net::HTTP.new(uri.host, uri.port)
+                http.use_ssl      = (uri.scheme == 'https')
+                http.verify_mode  = OpenSSL::SSL::VERIFY_NONE
+                http.read_timeout = 300
+                http.open_timeout = 30
+                response = http.post(uri.path, captured_body, {
+                  'Content-Type'      => 'application/json',
+                  'x-user-email'      => captured_email,
+                  'x-plugin-version'  => captured_version
+                })
+                body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
+                puts "[LoamLab] Thread 回應 status=#{response.code} len=#{body_str.length} body=#{body_str[0..300]}"
+                data   = JSON.parse(body_str)
                 result = (data['code'] == 0 && data['url']) ?
-                  { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'], channel_base64: captured_channel_b64 } :
-                  { status: 'render_failed', message: data['msg'] || "HTTP #{response.status_code}", points_refunded: data['points_refunded'], error: data['error'] }
+                  { status: 'render_success', scene_name: captured_scene, url: data['url'],
+                    points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
+                    channel_base64: captured_channel_b64 } :
+                  { status: 'render_failed', message: data['msg'] || "HTTP #{response.code}",
+                    points_refunded: data['points_refunded'], error: data['error'] }
               rescue => e
-                result = { status: 'render_failed', message: "解析失敗: #{e.message}" }
+                puts "[LoamLab] Thread 錯誤: #{e.class} #{e.message}"
+                result = { status: 'render_failed', message: "請求失敗: #{e.message}" }
               end
-              UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
+              @@pending_results << result if result
             end
 
             puts "[LoamLab] 第 #{index+1}/#{total_count} 個場景請求中: #{scene_name}"
@@ -865,7 +918,7 @@ module LoamLab
     unless file_loaded?(__FILE__)
       main_menu = UI.menu('Plugins').add_submenu('LoamLab Camera (野人相機)')
       main_menu.add_item('啟動相機 (Start)') do
-        self.show_dialog
+        LoamLab::AIURenderer.show_dialog
       end
       # 新增「重新載入 (開發用)」— 安全版：不移除模組常數，避免 SketchUp 當機
       if LoamLab::BUILD_TYPE == "dev"
@@ -893,7 +946,7 @@ module LoamLab
       # 註冊快捷工具列 (Toolbar)
       toolbar = UI::Toolbar.new "LoamLab"
       cmd = UI::Command.new("AI Render") {
-        self.show_dialog
+        LoamLab::AIURenderer.show_dialog
       }
       cmd.tooltip = "啟動 LoamLab AI 渲染器"
       cmd.status_bar_text = "打開 AI 渲染器大屏介面"

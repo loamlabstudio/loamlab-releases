@@ -4,8 +4,9 @@ import hashlib
 import json
 import time
 
+import os
 BASE_URL = "http://localhost:3000"
-LEMON_WEBHOOK_SECRET = "test_lemon_secret_for_hmac"  # Test secret; replace with actual secret for real tests
+LEMON_WEBHOOK_SECRET = os.getenv("LEMON_WEBHOOK_SECRET", "test_lemon_secret_placeholder")  # 使用環境變數或預設展位符
 TEST_USER_EMAIL = "testuser@example.com"
 TIMEOUT = 30
 

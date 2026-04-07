@@ -31,6 +31,7 @@
 | T12 | 用戶/點數 | fix_anomalies.js 重建：ESM import，ADMIN_KEY 必驗，修復負點數 | `loamlab_backend/api/fix_anomalies.js` | `[DONE]` | `main` |
 | T13 | Plugin UI | i18n.js 補全缺失 key：res_1k/2k/4k（index.html 已引用但未定義，視覺空白 bug）+ 驗證 SWAP/Extract key 中英文完整 | `loamlab_plugin/ui/i18n.js` | `[DONE]` | `main` |
 | T14 | 反饋系統 | feedback.js 品牌修正：郵件模板殘留「野人相機」→「LoamLab AI Renderer」 | `loamlab_backend/api/feedback.js` | `[DONE]` | `main` |
+| T16 | Smart Canvas | 修復圖片載入失敗問題：加入 Loading Spinner、Error Retry 及其自動與手動重試機制 | `loamlab_plugin/ui/index.html`, `loamlab_plugin/ui/app.js` | `[DONE]` | `main` |
 
 ---
 
@@ -47,6 +48,7 @@
 - [x] T14 — feedback.js 品牌修正（代碼已正確，標記完成）
 - [x] Phase 3 — render.js 原子扣款 RPC + supabase_setup.sql（main）— ✅ 已 commit（2026-03-24）；待：Supabase SQL Editor 執行新 RPC 段落
 - [x] Phase 1 — Paywall 見證文字 + Blur-to-Clear 動畫（main）— ✅ 已 commit（2026-03-24）
+- [x] T16 — Smart Canvas 圖片載入修復（main）— ✅ 已 commit（2026-04-02）
 
 ---
 

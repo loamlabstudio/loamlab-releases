@@ -43,10 +43,22 @@
             background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
         }
         .comparison-slider { cursor: ew-resize; user-select: none; touch-action: pan-y; }
+        .sr-layer { transition: opacity 0.6s ease; }
+        @keyframes sr-zone-in {
+            from { opacity: 0; transform: scale(1.04); }
+            to   { opacity: 1; transform: scale(1); }
+        }
+        .sr-zone { animation: sr-zone-in 0.5s ease forwards; }
+        @keyframes sr-zone-pulse {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: 0.55; }
+        }
+        .sr-zone-pulse { animation: sr-zone-pulse 2s ease-in-out infinite; }
         #mobileMenu { transition: opacity 0.25s ease, transform 0.25s ease; }
         #mobileMenu.hidden { opacity: 0; transform: translateY(-8px); pointer-events: none; }
         #mobileMenu.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
     </style>
+    <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body class="relative min-h-screen font-sans selection:bg-w-red selection:text-white">
 
@@ -132,13 +144,16 @@
             
             <p class="text-base md:text-lg text-zinc-400 max-w-2xl mx-auto mb-16 font-light leading-relaxed" data-i18n="hero_desc">
                 From a 3-hour struggle to a 30-second masterpiece.<br class="hidden md:block">
-                LoamLab Camera is a native SketchUp AI rendering engine that brutally compresses your workflow.
+                LoamLab Camera is a native SketchUp AI rendering engine — no exports, no setup, no waiting.
             </p>
 
-            <div class="flex flex-col sm:flex-row gap-8 justify-center items-center mb-16">
-                <a href="https://github.com/loamlabstudio/loamlab-releases/releases/latest/download/loamlab_plugin.rbz" class="w-full sm:w-auto px-10 py-4 rounded-full bg-w-red text-white text-[10px] font-bold tracking-[0.2em] uppercase hover:bg-red-600 transition-colors shadow-[0_10px_30px_rgba(218,30,31,0.2)] text-center" data-i18n="btn_download">
-                    Download Free Plugin
-                </a>
+            <div class="flex flex-col sm:flex-row gap-8 justify-center items-center mb-4">
+                <div class="flex flex-col items-center gap-1">
+                    <a href="https://github.com/loamlabstudio/loamlab-releases/releases/latest/download/loamlab_plugin.rbz" class="w-full sm:w-auto px-10 py-4 rounded-full bg-w-red text-white text-[10px] font-bold tracking-[0.2em] uppercase hover:bg-red-600 transition-colors shadow-[0_10px_30px_rgba(218,30,31,0.2)] text-center" data-i18n="btn_download">
+                        Try Free — 60 Points Included
+                    </a>
+                    <span id="plugin-version" class="text-[9px] text-zinc-500 tracking-widest"></span>
+                </div>
                 <div class="hidden sm:block w-[1px] h-10 bg-white/10"></div>
                 
                 <!-- 直覺合一的跳動計時器 -->
@@ -153,6 +168,8 @@
                 </div>
             </div>
             
+            <p class="text-[10px] text-zinc-500 tracking-[0.15em] mb-12" data-i18n="hero_trial_note">60 free points included · No credit card required</p>
+
             <div class="text-[10px] text-zinc-600 font-mono tracking-widest max-w-md mx-auto" data-i18n="math_calc">
                 * Estimated based on a workflow reduction from 3 hours to 30 seconds.
             </div>
@@ -225,6 +242,146 @@
             <p class="text-sm text-zinc-500 font-light" data-i18n="feat_sub">Four powerful tools. One seamless panel.</p>
         </div>
         <div id="featuresGrid" class="grid md:grid-cols-2 gap-6"></div>
+    </section>
+
+    <!-- 4.5 Tool Spotlight — SpaceReform + Multi-Angle -->
+    <section id="tool-spotlight" class="max-w-6xl mx-auto py-24 px-6 border-b border-white/5">
+
+        <!-- SpaceReform: 上文下圖 (全寬圖) -->
+        <div class="mb-32">
+            <!-- 上方：左欄說明 + 右欄 input card -->
+            <div class="grid md:grid-cols-[3fr_2fr] gap-12 items-start mb-8">
+                <div>
+                    <span class="text-w-red text-2xl font-light">◈</span>
+                    <h2 class="text-2xl md:text-4xl font-light mt-5 mb-5 leading-tight" data-i18n="spot_sr_h">One render. Multiple redesigns. Zero restarts.</h2>
+                    <p class="text-sm text-zinc-400 font-light leading-relaxed" data-i18n="spot_sr_p">Mark any number of zones on an existing render. AI rebuilds each area precisely — simultaneously — while everything else stays exactly as you left it.</p>
+                    <div class="mt-8 flex flex-col gap-3 border-t border-white/5 pt-6">
+                        <p class="text-[9px] font-mono tracking-[0.3em] uppercase text-zinc-600" data-i18n="spot_sr_how">How it works</p>
+                        <div class="flex items-start gap-3 text-[11px] text-zinc-500 font-light">
+                            <span class="text-w-red font-bold shrink-0">①</span>
+                            <span data-i18n="spot_sr_s1">Draw a mask over any area — one zone or many.</span>
+                        </div>
+                        <div class="flex items-start gap-3 text-[11px] text-zinc-500 font-light">
+                            <span class="text-w-red font-bold shrink-0">②</span>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span data-i18n="spot_sr_s2_pre">Type a style instruction:</span>
+                                <span class="px-2 py-0.5 rounded border border-white/10 text-[10px] text-zinc-400 font-mono">concrete wall</span>
+                                <span class="px-2 py-0.5 rounded border border-white/10 text-[10px] text-zinc-400 font-mono">warm oak floor</span>
+                                <span class="px-2 py-0.5 rounded border border-white/10 text-[10px] text-zinc-400 font-mono">nordic minimal</span>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3 text-[11px] text-zinc-500 font-light">
+                            <span class="text-blue-400/70 font-bold shrink-0">+</span>
+                            <span data-i18n="spot_sr_s3">Or upload a reference photo. AI learns both your words and the visual.</span>
+                        </div>
+                    </div>
+                    <div class="mt-5 text-[10px] font-mono tracking-widest text-l-green">SpaceReform · 15–25 pts / render</div>
+                    <div class="mt-1.5 text-[9px] font-mono tracking-wider text-zinc-600" data-i18n="auto_save_tag">⬇ Auto-saves to your project folder — no manual download</div>
+                </div>
+
+                <!-- Mock input card: 4-zone example -->
+                <div class="rounded-xl border border-white/8 bg-white/[0.02] p-3 flex flex-col gap-2 mt-14">
+                    <p class="text-[9px] font-mono tracking-[0.3em] uppercase text-zinc-600" data-i18n="spot_sr_ex_label">Example · 4 zones active</p>
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-orange-400/80 shrink-0"></div>
+                        <div class="flex-1 bg-black/40 border border-white/8 rounded px-2.5 py-1.5 text-[11px] text-zinc-300 font-light" data-i18n="spot_sr_ex_a">Add a grey cat foreground (codename: Ah-Tang, not for resale)</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-purple-400/80 shrink-0"></div>
+                        <div class="flex items-center gap-2 flex-1 bg-purple-500/5 border border-purple-500/20 rounded px-2 py-1.5">
+                            <div class="w-7 h-7 rounded bg-white/10 border border-purple-500/20 overflow-hidden shrink-0 flex items-center justify-center text-[13px]">
+                                <img src="/images/spacereform_before.jpg" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='🛋'">
+                            </div>
+                            <span class="text-[10px] text-purple-300/60" data-i18n="spot_sr_ex_b">Rebuild furniture by visual reference</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-red-400/80 shrink-0"></div>
+                        <div class="flex-1 bg-black/40 border border-white/8 rounded px-2.5 py-1.5 text-[11px] text-zinc-300 font-light" data-i18n="spot_sr_ex_c">Replace ceiling lights with red round pendants</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-emerald-400/80 shrink-0"></div>
+                        <div class="flex-1 bg-black/40 border border-white/8 rounded px-2.5 py-1.5 text-[11px] text-zinc-300 font-light" data-i18n="spot_sr_ex_d">Swap planters with bamboo</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 下方：3-state interactive showcase -->
+            <div id="sr-showcase" class="relative w-full rounded-2xl overflow-hidden aspect-video border border-white/10 bg-black cursor-pointer select-none"
+                 onclick="srAdvance()"
+                 onmouseenter="srPause(true)"
+                 onmouseleave="srPause(false)">
+
+                <!-- Layer 0: before 乾淨 -->
+                <img id="sr-img-before" class="sr-layer absolute inset-0 w-full h-full object-cover" src="/images/spacereform_before.jpg" alt="SpaceReform before">
+
+                <!-- Layer 1: 遮罩框 (state=1 才顯示) -->
+                <div id="sr-zones" class="sr-layer absolute inset-0 pointer-events-none opacity-0">
+                    <!-- A · 前景 (貓，左側空地) -->
+                    <div class="sr-zone absolute" style="left:2%;top:45%;width:28%;height:52%">
+                        <div class="absolute inset-0 rounded-lg border-2 border-orange-400/75 bg-orange-400/8 sr-zone-pulse"></div>
+                        <span class="absolute top-1.5 left-1.5 text-[9px] font-mono text-orange-300 bg-black/75 px-1.5 py-0.5 rounded" data-i18n="spot_sr_zone_a">A · 前景</span>
+                    </div>
+                    <!-- B · 家具 (餐桌+椅凳) -->
+                    <div class="sr-zone absolute" style="left:24%;top:35%;width:52%;height:52%">
+                        <div class="absolute inset-0 rounded-lg border-2 border-purple-400/75 bg-purple-400/8 sr-zone-pulse" style="animation-delay:0.3s"></div>
+                        <span class="absolute top-1.5 left-1.5 text-[9px] font-mono text-purple-300 bg-black/75 px-1.5 py-0.5 rounded" data-i18n="spot_sr_zone_b">B · 家具</span>
+                    </div>
+                    <!-- C · 燈具 (右上白圓吊燈) -->
+                    <div class="sr-zone absolute" style="left:58%;top:2%;width:26%;height:30%">
+                        <div class="absolute inset-0 rounded-lg border-2 border-red-400/75 bg-red-400/8 sr-zone-pulse" style="animation-delay:0.6s"></div>
+                        <span class="absolute top-1.5 left-1.5 text-[9px] font-mono text-red-300 bg-black/75 px-1.5 py-0.5 rounded" data-i18n="spot_sr_zone_c">C · 燈具</span>
+                    </div>
+                    <!-- D · 植物 (最右側大樹) -->
+                    <div class="sr-zone absolute" style="left:83%;top:10%;width:15%;height:80%">
+                        <div class="absolute inset-0 rounded-lg border-2 border-emerald-400/75 bg-emerald-400/8 sr-zone-pulse" style="animation-delay:0.9s"></div>
+                        <span class="absolute top-1.5 left-1.5 text-[9px] font-mono text-emerald-300 bg-black/75 px-1.5 py-0.5 rounded" data-i18n="spot_sr_zone_d">D · 盆栽</span>
+                    </div>
+                </div>
+
+                <!-- Layer 2: after -->
+                <img id="sr-img-after" class="sr-layer absolute inset-0 w-full h-full object-cover opacity-0" src="/images/spacereform_after.jpg" alt="SpaceReform after">
+
+                <!-- 左下角狀態標籤 -->
+                <div id="sr-label" class="absolute bottom-4 left-4 text-[9px] font-mono tracking-widest transition-colors duration-300"></div>
+
+                <!-- 右下角 3 點導航 -->
+                <div class="absolute bottom-4 right-4 flex gap-2 z-10" onclick="event.stopPropagation()">
+                    <button class="sr-dot w-2.5 h-2.5 rounded-full transition-all" onclick="srGoto(0)"></button>
+                    <button class="sr-dot w-2.5 h-2.5 rounded-full transition-all" onclick="srGoto(1)"></button>
+                    <button class="sr-dot w-2.5 h-2.5 rounded-full transition-all" onclick="srGoto(2)"></button>
+                </div>
+
+                <!-- 右上角 click hint (state=0 才顯示) -->
+                <div id="sr-hint" class="absolute top-4 right-4 text-[9px] font-mono text-white/30 tracking-widest pointer-events-none">CLICK TO MARK ZONES →</div>
+            </div>
+        </div>
+
+        <!-- Multi-Angle: 上文字 + 下全寬圖 -->
+        <div class="flex flex-col gap-10">
+            <div class="grid md:grid-cols-2 gap-10 items-end">
+                <div>
+                    <span class="text-w-red text-2xl font-light">⊞</span>
+                    <h2 class="text-2xl md:text-4xl font-light mt-5 mb-5 leading-tight" data-i18n="spot_ma_h">One model. Nine framings. One click.</h2>
+                    <p class="text-sm text-zinc-400 font-light leading-relaxed" data-i18n="spot_ma_p">From a single SketchUp scene, AI generates a full 3×3 board of camera compositions simultaneously — dramatic overheads, intimate close-ups, wide establishing shots. Four visual styles: Dramatic Tension, Industrial Edge, Soft Natural, Minimal Whitespace.</p>
+                    <div class="mt-6 text-[10px] font-mono tracking-widest text-l-green">Multi-Angle · 15–25 pts / render</div>
+                    <div class="mt-1.5 text-[9px] font-mono tracking-wider text-zinc-600" data-i18n="auto_save_tag">⬇ Auto-saves to your project folder — no manual download</div>
+                </div>
+                <!-- 來源圖：右上角 -->
+                <div class="flex items-center gap-3 justify-end">
+                    <span class="text-zinc-600 text-sm font-mono tracking-widest">1 scene</span>
+                    <div class="rounded-xl overflow-hidden border border-white/10 bg-black" style="width:180px; aspect-ratio:4/3;">
+                        <img src="/images/multiangle_source.jpg" class="w-full h-full object-contain" alt="Single SketchUp scene">
+                    </div>
+                    <span class="text-zinc-600 text-3xl font-extralight select-none">→</span>
+                </div>
+            </div>
+            <!-- 九宮格全寬展示 -->
+            <div class="w-full rounded-2xl overflow-hidden border border-white/10 bg-black" style="aspect-ratio:3/2;">
+                <img src="/images/multiangle_grid.jpg" class="w-full h-full object-contain" alt="9-angle grid output">
+            </div>
+        </div>
+
     </section>
 
     <!-- 5. 滑動對比 (Before & After) -->
@@ -449,8 +606,9 @@
                 nav_vision: "Vision", nav_compare: "Compare", nav_pricing: "Plans", nav_referral: "Rewards", nav_login: "Download",
                 hero_subtitle: "The New Standard of Rendering", 
                 hero_title: "Intuition <br class='md:hidden'/>Ahead of <span class='italic font-normal text-w-red'>Computation</span>",
-                hero_desc: "From a 3-hour struggle to a 30-second masterpiece.<br class='hidden md:block'>LoamLab Camera is a native SketchUp AI rendering engine that brutally compresses your workflow.",
-                btn_download: "Download Free Plugin", 
+                hero_desc: "From a 3-hour struggle to a 30-second masterpiece.<br class='hidden md:block'>LoamLab Camera is a native SketchUp AI rendering engine — no exports, no setup, no waiting.",
+                btn_download: "Try Free — 60 Points Included",
+                hero_trial_note: "60 free points included · No credit card required",
                 ticker_unit: "HOURS", ticker_label: "Saved Globally", math_calc: "* Estimated based on a workflow reduction from 3 hours to 30 seconds.",
                 vision_title: "30 Seconds. Redefine Narrative.", 
                 vision_1_h: "Seamless Native Workflow", vision_1_p: "Fully embedded in SketchUp. No model exports, no external software. Keep your creative flow uninterrupted.",
@@ -471,13 +629,29 @@
                 feat_title: "What LoamLab Camera Can Do", feat_sub: "Four powerful tools. One seamless panel.",
                 faq_title: "Frequently Asked Questions",
                 tos_title: "Terms of Service", tos_updated: "Last updated: March 2026",
-                pp_title: "Privacy Policy", pp_updated: "Last updated: March 2026"
+                pp_title: "Privacy Policy", pp_updated: "Last updated: March 2026",
+                spot_sr_how: "How it works",
+                spot_sr_s1: "Draw a mask over any area — one zone or many.",
+                spot_sr_s2_pre: "Type a style instruction:",
+                spot_sr_s3: "Or upload a reference photo. AI learns both your words and the visual.",
+                spot_sr_h: "One render. Multiple redesigns. Zero restarts.",
+                spot_sr_p: "Mark any number of zones on an existing render. AI rebuilds each area precisely — simultaneously — while everything else stays exactly as you left it.",
+                spot_ma_h: "One model. Nine framings. One click.",
+                spot_ma_p: "From a single SketchUp scene, AI generates a full 3×3 board of camera compositions simultaneously — dramatic overheads, intimate close-ups, wide establishing shots. Four visual styles: Dramatic Tension, Industrial Edge, Soft Natural, Minimal Whitespace.",
+                spot_sr_ex_label: "Example · 4 zones active",
+                spot_sr_ex_a: "Add a grey cat foreground (codename: Ah-Tang, not for resale)",
+                spot_sr_ex_b: "Rebuild furniture by visual reference",
+                spot_sr_ex_c: "Replace ceiling lights with red round pendants",
+                spot_sr_ex_d: "Swap planters with bamboo",
+                spot_sr_zone_a: "A · Foreground", spot_sr_zone_b: "B · Furniture", spot_sr_zone_c: "C · Lights", spot_sr_zone_d: "D · Plants",
+                auto_save_tag: "⬇ Auto-saves to your project folder — no manual download"
             },
             tw: {
                 nav_vision: "核心組件", nav_compare: "原生對比", nav_pricing: "升級方案", nav_referral: "邀請裂變", nav_login: "立即下載",
                 hero_subtitle: "渲染工具的新標竿", hero_title: "讓直覺，<br class='md:hidden'/>領先於<span class='italic font-normal text-w-red'>算力</span>",
-                hero_desc: "從冗長的的 3 小時等待，跳躍至 30 秒的視覺直出。<br class='hidden md:block'>LoamLab Camera 是直接安裝於 SketchUp 的 AI 渲染引擎，將繁雜工作極限濃縮。",
-                btn_download: "下載首發外掛版 (免費)", 
+                hero_desc: "從冗長的 3 小時等待，跳躍至 30 秒直出。<br class='hidden md:block'>LoamLab Camera 直接嵌入 SketchUp — 無需匯出，無需設定，無需等待。",
+                btn_download: "免費試用 — 內含 60 點",
+                hero_trial_note: "包含 60 免費點數 · 無需信用卡",
                 ticker_unit: "小時", ticker_label: "為全球設計師累計節省", math_calc: "* 依照平均每張渲染從 3 小時縮減為 30 秒之粗估值",
                 vision_title: "30 秒，改變設計敘事。", 
                 vision_1_h: "原生無界", vision_1_p: "完全嵌入 SketchUp。無需匯出模型，無需啟動外部軟體。保持您的靈感連續，建構與渲染同步。",
@@ -498,13 +672,29 @@
                 feat_title: "LoamLab Camera 能做什麼", feat_sub: "四大強力工具，一個完整面板。",
                 faq_title: "常見問題",
                 tos_title: "服務條款", tos_updated: "最後更新：2026 年 3 月",
-                pp_title: "隱私權政策", pp_updated: "最後更新：2026 年 3 月"
+                pp_title: "隱私權政策", pp_updated: "最後更新：2026 年 3 月",
+                spot_sr_how: "使用流程",
+                spot_sr_s1: "在任意區域畫出遮罩——單個或多個區域皆可。",
+                spot_sr_s2_pre: "輸入改造指令：",
+                spot_sr_s3: "或上傳參考圖，AI 同時學習你的文字描述與視覺風格。",
+                spot_sr_h: "同一張圖，多處改動，不必重渲。",
+                spot_sr_p: "在已有的渲染圖上標記任意區域，AI 同時精準重建每一處——其餘細節原封不動。",
+                spot_ma_h: "一個模型，九種構圖，一次完成。",
+                spot_ma_p: "從單一 SketchUp 場景，AI 同時生成完整 3×3 九種構圖——俯瞰、特寫、廣角全部涵蓋。風格可選：戲劇張力、硬朗工業、柔和自然、極簡留白。",
+                spot_sr_ex_label: "範例 · 4 個塗抹區域",
+                spot_sr_ex_a: "前景加入一隻灰貓（型號：阿湯，非賣品）",
+                spot_sr_ex_b: "替換家具風格，依參考圖重建",
+                spot_sr_ex_c: "燈具改為紅色小圓吊燈",
+                spot_sr_ex_d: "盆栽替換為竹子",
+                spot_sr_zone_a: "A · 前景", spot_sr_zone_b: "B · 家具", spot_sr_zone_c: "C · 燈具", spot_sr_zone_d: "D · 盆栽",
+                auto_save_tag: "⬇ 渲染完自動存入你的專案資料夾，無需手動下載"
             },
             cn: {
                 nav_vision: "核心组件", nav_compare: "原生对比", nav_pricing: "升级方案", nav_referral: "邀请裂变", nav_login: "立即下载",
                 hero_subtitle: "渲染工具的新标杆", hero_title: "让直觉，<br class='md:hidden'/>领先于<span class='italic font-normal text-w-red'>算力</span>",
-                hero_desc: "从冗长的 3 小时等待，跳跃至 30 秒的视觉直出。<br class='hidden md:block'>LoamLab Camera 是直接安装于 SketchUp 的 AI 渲染引擎，将繁杂工作极限浓缩。",
-                btn_download: "下载首发版插件 (免费)", 
+                hero_desc: "从冗长的 3 小时等待，跳跃至 30 秒直出。<br class='hidden md:block'>LoamLab Camera 直接内嵌 SketchUp — 无需导出，无需设置，无需等待。",
+                btn_download: "免费试用 — 包含 60 点",
+                hero_trial_note: "包含 60 免费点数 · 无需信用卡",
                 ticker_unit: "小时", ticker_label: "为全球设计师累计节省", math_calc: "* 依照平均每张渲染从 3 小时缩减为 30 秒之估算值",
                 vision_title: "30 秒，改变设计叙事。", 
                 vision_1_h: "原生无界", vision_1_p: "完全嵌入 SketchUp。无需导出模型，无须启动外部软件。保持您的灵感连续，建构与渲染同步。",
@@ -525,13 +715,26 @@
                 feat_title: "LoamLab Camera 能做什么", feat_sub: "四大强力工具，一个完整面板。",
                 faq_title: "常见问题",
                 tos_title: "服务条款", tos_updated: "最后更新：2026 年 3 月",
-                pp_title: "隐私政策", pp_updated: "最后更新：2026 年 3 月"
+                pp_title: "隐私政策", pp_updated: "最后更新：2026 年 3 月",
+                spot_sr_how: "使用流程", spot_sr_s1: "在任意区域画出遮罩——单个或多个区域皆可。", spot_sr_s2_pre: "输入改造指令：", spot_sr_s3: "或上传参考图，AI 同时学习文字描述与视觉风格。",
+                spot_sr_h: "同一张图，多处改动，无需重渲。",
+                spot_sr_p: "在已有的渲染图上标记任意区域，AI 同时精准重建每一处——其余细节原封不动。",
+                spot_ma_h: "一个模型，九种构图，一次完成。",
+                spot_ma_p: "从单一 SketchUp 场景，AI 同时生成完整 3×3 九种构图——俯瞰、特写、广角全部涵盖。风格可选：戏剧张力、硬朗工业、柔和自然、极简留白。",
+                spot_sr_ex_label: "示例 · 4 个涂抹区域",
+                spot_sr_ex_a: "前景加入一只灰猫（型号：阿汤，非卖品）",
+                spot_sr_ex_b: "替换家具风格，依参考图重建",
+                spot_sr_ex_c: "灯具改为红色小圆吊灯",
+                spot_sr_ex_d: "盆栽替换为竹子",
+                spot_sr_zone_a: "A · 前景", spot_sr_zone_b: "B · 家具", spot_sr_zone_c: "C · 灯具", spot_sr_zone_d: "D · 盆栽",
+                auto_save_tag: "⬇ 渲染完自动存入你的项目文件夹，无需手动下载"
             },
             es: {
                 nav_vision: "Visión", nav_compare: "Comparar", nav_pricing: "Planes", nav_referral: "Premios", nav_login: "Descargar",
                 hero_subtitle: "El Nuevo Estándar de Renderizado", hero_title: "Intuición <br class='md:hidden'/>Sobre <span class='italic font-normal text-w-red'>Computación</span>",
-                hero_desc: "De una lucha de 3 horas a una obra maestra en 30 segundos.<br class='hidden md:block'>LoamLab Camera es un motor de renderizado AI nativo de SketchUp.",
-                btn_download: "Descargar Plugin Gratis", 
+                hero_desc: "De 3 horas de espera a una obra maestra en 30 segundos.<br class='hidden md:block'>LoamLab Camera está integrado en SketchUp — sin exportar, sin configurar, sin esperar.",
+                btn_download: "Probar Gratis — 60 Puntos Incluidos",
+                hero_trial_note: "60 puntos gratis incluidos · Sin tarjeta de crédito",
                 ticker_unit: "HORAS", ticker_label: "Ahorradas Globalmente", math_calc: "* Estimado basado en la reducción de flujo de trabajo de 3 horas a 30 segundos.",
                 vision_title: "Redefine la Narrativa en 30 Segundos.", 
                 vision_1_h: "Flujo de Trabajo Nativo", vision_1_p: "Totalmente integrado en SketchUp. Sin exportaciones, sin software externo. Mantén tu flujo ininterrumpido.",
@@ -552,13 +755,26 @@
                 feat_title: "Qué Puede Hacer LoamLab Camera", feat_sub: "Cuatro herramientas poderosas. Un panel.",
                 faq_title: "Preguntas Frecuentes",
                 tos_title: "Términos de Servicio", tos_updated: "Última actualización: Marzo 2026",
-                pp_title: "Política de Privacidad", pp_updated: "Última actualización: Marzo 2026"
+                pp_title: "Política de Privacidad", pp_updated: "Última actualización: Marzo 2026",
+                spot_sr_how: "Cómo funciona", spot_sr_s1: "Dibuja una máscara sobre cualquier zona.", spot_sr_s2_pre: "Escribe una instrucción de estilo:", spot_sr_s3: "O sube una foto de referencia. La IA aprende de ambos.",
+                spot_sr_h: "Un render. Múltiples rediseños. Sin reiniciar.",
+                spot_sr_p: "Marca cualquier zona en un render existente. La IA reconstruye cada área con precisión — simultáneamente — mientras todo lo demás permanece intacto.",
+                spot_ma_h: "Un modelo. Nueve encuadres. Un clic.",
+                spot_ma_p: "Desde una escena de SketchUp, la IA genera una cuadrícula 3×3 de 9 composiciones simultáneamente. Cuatro estilos: Tensión Dramática, Industrial, Natural Suave, Espacio Mínimo.",
+                spot_sr_ex_label: "Ejemplo · 4 zonas activas",
+                spot_sr_ex_a: "Añadir gato gris al primer plano (alias: Sr. Tang, no se vende)",
+                spot_sr_ex_b: "Reconstruir muebles según imagen de referencia",
+                spot_sr_ex_c: "Cambiar luces por colgantes redondos rojos",
+                spot_sr_ex_d: "Cambiar macetas por bambú",
+                spot_sr_zone_a: "A · Primer plano", spot_sr_zone_b: "B · Mobiliario", spot_sr_zone_c: "C · Luces", spot_sr_zone_d: "D · Plantas",
+                auto_save_tag: "⬇ Se guarda automáticamente en tu carpeta de proyecto"
             },
             br: {
                 nav_vision: "Visão", nav_compare: "Comparar", nav_pricing: "Planos", nav_referral: "Prêmios", nav_login: "Baixar",
                 hero_subtitle: "O Novo Padrão de Renderização", hero_title: "Intuição <br class='md:hidden'/>Sobre <span class='italic font-normal text-w-red'>Computação</span>",
-                hero_desc: "De uma luta de 3 horas para uma obra-prima em 30 segundos.<br class='hidden md:block'>LoamLab Camera é um motor de renderização nativo para SketchUp.",
-                btn_download: "Baixar Plugin Grátis", 
+                hero_desc: "De 3 horas de espera para uma obra-prima em 30 segundos.<br class='hidden md:block'>LoamLab Camera está embutido no SketchUp — sem exportar, sem configurar, sem esperar.",
+                btn_download: "Experimentar Grátis — 60 Pontos Incluídos",
+                hero_trial_note: "60 pontos grátis incluídos · Sem cartão de crédito",
                 ticker_unit: "HORAS", ticker_label: "Economizadas Globalmente", math_calc: "* Estimativa de 3 horas reduzidas para 30 segundos por visualização.",
                 vision_title: "Redefina a Narrativa em 30 Segs.", 
                 vision_1_h: "Fluxo de Trabalho Nativo", vision_1_p: "Totalmente incorporado no SketchUp. Não exporte modelos. Mantenha seu fluxo criativo ininterrupto.",
@@ -579,13 +795,26 @@
                 feat_title: "O Que o LoamLab Camera Faz", feat_sub: "Quatro ferramentas poderosas. Um painel.",
                 faq_title: "Perguntas Frequentes",
                 tos_title: "Termos de Serviço", tos_updated: "Última atualização: Março 2026",
-                pp_title: "Política de Privacidade", pp_updated: "Última atualização: Março 2026"
+                pp_title: "Política de Privacidade", pp_updated: "Última atualização: Março 2026",
+                spot_sr_how: "Como funciona", spot_sr_s1: "Desenhe uma máscara sobre qualquer zona.", spot_sr_s2_pre: "Digite uma instrução de estilo:", spot_sr_s3: "Ou envie uma foto de referência. A IA aprende dos dois.",
+                spot_sr_h: "Um render. Vários redesenhos. Sem recomeçar.",
+                spot_sr_p: "Marque qualquer zona em um render existente. A IA reconstrói cada área com precisão — simultaneamente — enquanto tudo mais permanece intacto.",
+                spot_ma_h: "Um modelo. Nove enquadramentos. Um clique.",
+                spot_ma_p: "De uma cena do SketchUp, a IA gera uma grade 3×3 de 9 composições simultâneas. Quatro estilos: Tensão Dramática, Industrial, Natural Suave, Espaço Mínimo.",
+                spot_sr_ex_label: "Exemplo · 4 zonas ativas",
+                spot_sr_ex_a: "Adicionar gato cinza ao primeiro plano (codinome: Sr. Tang, não está à venda)",
+                spot_sr_ex_b: "Reconstruir móveis com base na imagem de referência",
+                spot_sr_ex_c: "Trocar luminárias por pendentes redondos vermelhos",
+                spot_sr_ex_d: "Trocar vasos por bambu",
+                spot_sr_zone_a: "A · Primeiro plano", spot_sr_zone_b: "B · Móveis", spot_sr_zone_c: "C · Luzes", spot_sr_zone_d: "D · Plantas",
+                auto_save_tag: "⬇ Salvo automaticamente na pasta do projeto — sem download manual"
             },
             jp: {
                 nav_vision: "ビジョン", nav_compare: "品質比較", nav_pricing: "料金プラン", nav_referral: "リワード", nav_login: "ダウンロード",
                 hero_subtitle: "次世代のレンダリング標準", hero_title: "直感が、<br class='md:hidden'/>計算を<span class='italic font-normal text-w-red'>越える</span>",
-                hero_desc: "3時間の苦闘をたった30秒のマスターピースへ。<br class='hidden md:block'>LoamLab CameraはSketchUp専用のAIレンダリングエンジンです。あなたのインスピレーションを即座に映画品質に。",
-                btn_download: "プラグインのダウンロード", 
+                hero_desc: "3時間の苦闘からたった30秒の傑作へ。<br class='hidden md:block'>LoamLab CameraはSketchUp内蔵のAIレンダリングエンジン — エクスポート不要、設定不要、待ち時間なし。",
+                btn_download: "無料で試す — 60ポイント付き",
+                hero_trial_note: "60無料ポイント付き · クレジットカード不要",
                 ticker_unit: "時間 (HOURS)", ticker_label: "世界中で節約された総時間", math_calc: "* 3時間の作業が30秒に短縮された場合の推定値",
                 vision_title: "30秒で、デザインが変わる。", 
                 vision_1_h: "シームレスな体験", vision_1_p: "100% SketchUp 統合。モデルのエクスポートは不要。クリエイティビティを遮りません。",
@@ -606,7 +835,19 @@
                 feat_title: "LoamLab Camera でできること", feat_sub: "4つの強力なツール。1つのパネル。",
                 faq_title: "よくある質問",
                 tos_title: "利用規約", tos_updated: "最終更新：2026年3月",
-                pp_title: "プライバシーポリシー", pp_updated: "最終更新：2026年3月"
+                pp_title: "プライバシーポリシー", pp_updated: "最終更新：2026年3月",
+                spot_sr_how: "使い方", spot_sr_s1: "任意のゾーンにマスクを描く — 1つでも複数でも。", spot_sr_s2_pre: "スタイル指示を入力：", spot_sr_s3: "または参照画像をアップロード。AIがテキストと画像の両方を学習します。",
+                spot_sr_h: "1枚のレンダーで、複数を改造。",
+                spot_sr_p: "既存のレンダリング画像の任意のゾーンをマーク。AIが各エリアを正確に再構築します — 同時に — 他はすべてそのままで。",
+                spot_ma_h: "1つのモデル。9つのカット。1クリック。",
+                spot_ma_p: "単一のSketchUpシーンから、AIが3×3グリッドで9つのカメラ構図を同時生成。4つのスタイル：ドラマチック、インダストリアル、ソフトナチュラル、ミニマル。",
+                spot_sr_ex_label: "例 · 4つのゾーン",
+                spot_sr_ex_a: "前景にグレーの猫を追加（コードネーム：アー・タン、非売品）",
+                spot_sr_ex_b: "参照画像をもとに家具を再構築",
+                spot_sr_ex_c: "天井照明を赤い丸型ペンダントに変更",
+                spot_sr_ex_d: "植木を竹に変更",
+                spot_sr_zone_a: "A · 前景", spot_sr_zone_b: "B · 家具", spot_sr_zone_c: "C · 照明", spot_sr_zone_d: "D · 植物",
+                auto_save_tag: "⬇ レンダリング後にプロジェクトフォルダへ自動保存"
             }
         };
 
@@ -623,21 +864,21 @@
               pts: "15–25 pts / render" },
             { id: "spacereform", live: true, icon: "◈",
               title: {us:"SpaceReform", tw:"空間改造", cn:"空间改造", es:"SpaceReform", br:"SpaceReform", jp:"スペース改造"},
-              desc: {us:"Select a rendered image, mask any area — AI reforms the space precisely while preserving structure and lighting.",
-                     tw:"選取已渲染的底圖，框選局部或整體，AI 精準改造空間風格，保留結構與光影。",
-                     cn:"选取已渲染的底图，框选局部或整体，AI 精准改造空间风格，保留结构与光影。",
-                     es:"Selecciona una imagen renderizada, enmascara cualquier zona — la IA reforma con precisión.",
-                     br:"Selecione uma imagem renderizada, mascare qualquer área — a IA reforma com precisão.",
-                     jp:"レンダリング画像の任意の範囲を指定するとAIが構造と光を保ちながら改造します。"},
+              desc: {us:"Redesign any surface without touching the rest. Mask multiple zones at once — AI rebuilds each independently while structure, light, and proportion stay intact.",
+                     tw:"改動任意區域，其餘保持不變。同時框選多個位置，AI 分別重建各區，結構、光影、比例完整保留。",
+                     cn:"改动任意区域，其余保持不变。同时框选多个位置，AI 分别重建各区，结构、光影、比例完整保留。",
+                     es:"Rediseña cualquier superficie sin tocar el resto. Enmascara múltiples zonas — la IA reconstruye cada una independientemente.",
+                     br:"Redesenhe qualquer superfície sem tocar no resto. Mascare várias zonas — a IA reconstrói cada uma independentemente.",
+                     jp:"他に触れずに任意の面を再設計。複数のゾーンを同時にマスク — AIが構造・光・比率を維持しながら各エリアを再構築。"},
               pts: "15–25 pts / render" },
             { id: "multiangle", live: true, icon: "⊞",
               title: {us:"Multi-Angle Shots", tw:"九宮格鏡頭", cn:"九宫格镜头", es:"Tomas Múltiples", br:"Ângulos Múltiplos", jp:"マルチアングル"},
-              desc: {us:"Generate a 3×3 grid of 9 dramatic camera angles in a single click. Styles: Dramatic Tension, Industrial Edge, Soft Natural, Minimal Whitespace.",
-                     tw:"一鍵生成 3×3 九宮格合圖，包含 9 個不同戲劇鏡頭角度。支援：戲劇張力、硬朗工業、柔和自然、極簡留白。",
-                     cn:"一键生成 3×3 九宫格合图，包含 9 个不同风格镜头角度。",
-                     es:"Genera 9 ángulos dramáticos en cuadrícula 3×3 con un clic.",
-                     br:"Gere 9 ângulos dramáticos em grade 3×3 com um clique.",
-                     jp:"1クリックで3×3グリッドの9つのドラマチックな角度を生成。"},
+              desc: {us:"One scene. Nine angles. A single render delivers a full 3×3 grid — overhead, eye-level, close-up, wide. The complete visual story of a space, in one click.",
+                     tw:"一個場景，九種構圖。單次渲染生成完整 3×3 九宮格，俯瞰、平視、特寫、廣角一次俱備。",
+                     cn:"一个场景，九种构图。单次渲染生成完整 3×3 九宫格，俯瞰、平视、特写、广角一次俱备。",
+                     es:"Una escena. Nueve ángulos. Un render genera una cuadrícula 3×3 completa — cenital, frontal, primer plano, gran angular.",
+                     br:"Uma cena. Nove ângulos. Um render gera uma grade 3×3 completa — aéreo, nível dos olhos, close, grande angular.",
+                     jp:"1シーン、9アングル。1回のレンダリングで3×3グリッドを完全生成 — 俯瞰・アイレベル・クローズアップ・広角。"},
               pts: "15–25 pts / render" },
             { id: "smartcanvas", live: false, icon: "◎",
               title: {us:"Smart Canvas", tw:"智能語義畫布", cn:"智能语义画布", es:"Lienzo Inteligente", br:"Canvas Inteligente", jp:"スマートキャンバス"},
@@ -732,24 +973,25 @@
 
         const PricingConfig = [
             { id: "top-up", title: {us:"TOP-UP", tw:"TOP-UP 加值", cn:"TOP-UP 加值", es:"RECARGA", br:"RECARGA", jp:"TOP-UP"}, origPrice: 18, price: 13, per: {"us":"one-time", "tw":"/次", "cn":"/次", "es":"/una vez", "br":"/uma vez", "jp":"/回"}, isPopular: false,
+                isQuantifiable: true,
                 exchText: {us:"2K ≈ $1.30", tw:"2K ≈ NT$42", cn:"2K ≈ ¥8.5", es:"2K ≈ €1.20", br:"2K ≈ R$6.50", jp:"2K ≈ ¥195"},
                 feats: [{k:'t_perm', v:"200 ", ok:true}, {k:'t_res2', v:"", ok:true}, {k:'t_dev1', v:"", ok:true}, {k:'t_comF', v:"", ok:false}], btn: {us:"BUY NOW",tw:"BUY NOW",cn:"BUY NOW",es:"COMPRAR",br:"COMPRAR",jp:"購入する"},
-                checkoutUrl: `${_DODO}?variant_id=pdt_0NblIvgNSETSCveL7Xmk`
+                checkoutUrl: `pdt_0NbIlveGNSETSOveL7Xmk`
             },
             { id: "starter", title: {us:"STARTER", tw:"STARTER", cn:"STARTER", es:"STARTER", br:"STARTER", jp:"STARTER"}, origPrice: 24, price: 17, per: {"us":"/mo", "tw":"/月", "cn":"/月", "es":"/mes", "br":"/mês", "jp":" /月"}, isPopular: false,
                 exchText: {us:"2K ≈ $1.15", tw:"2K ≈ NT$37", cn:"2K ≈ ¥7.5", es:"2K ≈ €1.05", br:"2K ≈ R$5.80", jp:"2K ≈ ¥170"},
                 feats: [{k:'t_mo1', v:"300 ", ok:true}, {k:'t_res2', v:"", ok:true}, {k:'t_dev1', v:"", ok:true}, {k:'t_comF', v:"", ok:false}], btn: {us:"SUBSCRIBE",tw:"SUBSCRIBE",cn:"SUBSCRIBE",es:"SUSCRIBIRSE",br:"ASSINAR",jp:"サブスクライブ"},
-                checkoutUrl: `${_DODO}?variant_id=pdt_0NblmUvFrwJe36ymTELWV`
+                checkoutUrl: `pdt_0NbImUvFnwJe36ymTELWV`
             },
             { id: "pro", title: {us:"PRO", tw:"PRO", cn:"PRO", es:"PRO", br:"PRO", jp:"PRO"}, origPrice: 52, price: 36, per: {"us":"/mo", "tw":"/月", "cn":"/月", "es":"/mes", "br":"/mês", "jp":" /月"}, isPopular: true,
                 exchText: {us:"2K ≈ $0.36", tw:"2K ≈ NT$12", cn:"2K ≈ ¥2.5", es:"2K ≈ €0.34", br:"2K ≈ R$1.85", jp:"2K ≈ ¥54"},
                 feats: [{k:'t_mo1', v:"2,000 ", ok:true}, {k:'t_res4', v:"", ok:true}, {k:'t_dev2', v:"", ok:true}, {k:'t_comT', v:"", ok:true}], btn: {us:"SUBSCRIBE",tw:"SUBSCRIBE",cn:"SUBSCRIBE",es:"SUSCRIBIRSE",br:"ASSINAR",jp:"サブスクライブ"},
-                checkoutUrl: `${_DODO}?variant_id=pdt_0NblmafncbUuGNrMRvJp4`
+                checkoutUrl: `pdt_0NbImafnebUuGNrMRvJp4`
             },
             { id: "studio", title: {us:"STUDIO", tw:"STUDIO", cn:"STUDIO", es:"ESTUDIO", br:"ESTÚDIO", jp:"STUDIO"}, origPrice: 139, price: 97, per: {"us":"/mo", "tw":"/月", "cn":"/月", "es":"/mes", "br":"/mês", "jp":" /月"}, isPopular: false,
                 exchText: {us:"2K ≈ $0.21", tw:"2K ≈ NT$7", cn:"2K ≈ ¥1.5", es:"2K ≈ €0.20", br:"2K ≈ R$1.10", jp:"2K ≈ ¥30"},
                 feats: [{k:'t_mo1', v:"9,000 ", ok:true}, {k:'t_res4', v:"", ok:true}, {k:'t_dev5', v:"", ok:true}, {k:'t_comT', v:"", ok:true}], btn: {us:"SUBSCRIBE",tw:"SUBSCRIBE",cn:"SUBSCRIBE",es:"SUSCRIBIRSE",br:"ASSINAR",jp:"サブスクライブ"},
-                checkoutUrl: `${_DODO}?variant_id=pdt_0Nblmhwbr5WXfNyDHpaA2`
+                checkoutUrl: `pdt_0NbImhwhr5WXfNyDHpaA2`
             }
         ];
 
@@ -790,9 +1032,20 @@
                         `).join('')}
                     </ul>
                     
-                    <div class="text-[10px] text-l-green mb-6 font-mono font-bold tracking-widest">${plan.exchText[currentLang]}</div>
+                    <div class="text-[10px] text-l-green mb-4 font-mono font-bold tracking-widest">${plan.exchText[currentLang]}</div>
                     
-                    <button onclick="window.open('${plan.checkoutUrl}','_blank')" class="w-full py-4 rounded text-[10px] font-bold tracking-[0.2em] uppercase transition-colors cursor-pointer ${plan.isPopular ? 'bg-w-red text-white hover:bg-red-600' : 'bg-white/10 text-white border border-white/5 hover:bg-white hover:text-black'}">
+                    ${plan.isQuantifiable ? `
+                    <div class="flex items-center justify-between gap-2 mb-4 bg-white/5 rounded-lg p-2 border border-white/5">
+                        <span class="text-[10px] text-zinc-500 font-bold tracking-widest uppercase ml-1">Quantity</span>
+                        <div class="flex items-center gap-3">
+                            <button onclick="let inp = document.getElementById('qty-${plan.id}'); inp.value = Math.max(1, parseInt(inp.value)-1)" class="w-6 h-6 rounded bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 text-xs">-</button>
+                            <input id="qty-${plan.id}" type="number" value="1" min="1" class="bg-transparent border-none text-white text-xs font-mono w-6 text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
+                            <button onclick="let inp = document.getElementById('qty-${plan.id}'); inp.value = parseInt(inp.value)+1" class="w-6 h-6 rounded bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 text-xs">+</button>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <button onclick="let q = document.getElementById('qty-${plan.id}'); let qv = q ? q.value : 1; window.open('${_DODO}/' + '${plan.checkoutUrl}' + '?quantity=' + qv,'_blank')" class="w-full py-4 rounded text-[10px] font-bold tracking-[0.2em] uppercase transition-colors cursor-pointer ${plan.isPopular ? 'bg-w-red text-white hover:bg-red-600' : 'bg-white/10 text-white border border-white/5 hover:bg-white hover:text-black'}">
                         ${plan.btn[currentLang]}
                     </button>
                 </div>
@@ -838,7 +1091,79 @@
             // Slider: force 50% start position (defensive JS init, avoids CSS CDN timing issue)
             compAfter.style.width = '50%';
             compBtn.style.left = '50%';
+            // Dynamic version badge
+            fetch('/api/version').then(r => r.json()).then(d => {
+                const el = document.getElementById('plugin-version');
+                if (el && d.latest_version) el.textContent = 'v' + d.latest_version;
+            }).catch(() => {});
         });
+    </script>
+
+    <!-- SpaceReform 3-state showcase -->
+    <script>
+    (function () {
+        var srState = 0, srTimer = null, srPaused = false;
+        var srDurations = [3000, 4000, 4000];
+
+        function srShow(s) {
+            srState = s;
+            var before = document.getElementById('sr-img-before');
+            var zones  = document.getElementById('sr-zones');
+            var after  = document.getElementById('sr-img-after');
+            var label  = document.getElementById('sr-label');
+            var hint   = document.getElementById('sr-hint');
+            var dots   = document.querySelectorAll('.sr-dot');
+
+            if (!before) return;
+
+            // Layer opacities
+            before.style.opacity = s < 2 ? '1' : '0';
+            zones.style.opacity  = s === 1 ? '1' : '0';
+            after.style.opacity  = s === 2 ? '1' : '0';
+
+            // Re-trigger zone animations on state=1
+            if (s === 1) {
+                document.querySelectorAll('.sr-zone').forEach(function (z) {
+                    z.style.animation = 'none';
+                    z.offsetHeight; // reflow
+                    z.style.animation = '';
+                });
+            }
+
+            // Label
+            if (label) {
+                if (s === 0) { label.textContent = 'ORIGINAL'; label.style.color = 'rgba(255,255,255,0.35)'; }
+                else if (s === 1) { label.textContent = 'MARKING ZONES'; label.style.color = '#f59e0b'; }
+                else { label.textContent = 'AFTER'; label.style.color = '#4ade80'; }
+            }
+
+            // Hint
+            if (hint) hint.style.opacity = s === 0 ? '1' : '0';
+
+            // Dots
+            dots.forEach(function (d, i) {
+                d.style.background = i === s ? '#f59e0b' : 'rgba(255,255,255,0.2)';
+                d.style.transform  = i === s ? 'scale(1.3)' : 'scale(1)';
+            });
+
+            scheduleNext();
+        }
+
+        function scheduleNext() {
+            clearTimeout(srTimer);
+            if (!srPaused) srTimer = setTimeout(function () { srShow((srState + 1) % 3); }, srDurations[srState]);
+        }
+
+        window.srAdvance = function () { srShow((srState + 1) % 3); };
+        window.srGoto    = function (s) { srShow(s); };
+        window.srPause   = function (p) {
+            srPaused = p;
+            if (p) clearTimeout(srTimer);
+            else scheduleNext();
+        };
+
+        document.addEventListener('DOMContentLoaded', function () { srShow(0); });
+    })();
     </script>
 </body>
 </html>

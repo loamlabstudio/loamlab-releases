@@ -116,6 +116,50 @@ Phase 19: 原子扣款 RPC — 防止並發 Race Condition
 
 -- 瀑布流原子扣款：月費點數 (points) 優先，不足再扣永久點數 (lifetime_points)
 -- SECURITY DEFINER 使函數以建立者權限執行，繞過 RLS，可用 anon key 呼叫
+/*
+===================================================
+護城河強化：用戶風格庫 + 渲染歷史（切換成本護城河）
+在 Supabase Dashboard → SQL Editor 執行此段
+===================================================
+*/
+
+-- 用戶個人風格預設庫
+CREATE TABLE IF NOT EXISTS public.user_presets (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_email  TEXT NOT NULL REFERENCES public.users(email) ON DELETE CASCADE,
+  name        TEXT NOT NULL,          -- 預設名稱，如「我的北歐極簡」
+  prompt      TEXT,
+  style       TEXT,
+  resolution  TEXT,
+  tool_id     INT DEFAULT 1,          -- 1=真實渲染 2=SpaceReform 3=九宮格
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_user_presets_email ON public.user_presets(user_email);
+ALTER TABLE public.user_presets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Enable all access for service role" ON public.user_presets;
+CREATE POLICY "Enable all access for service role" ON public.user_presets FOR ALL USING (true);
+
+-- 渲染歷史記錄
+CREATE TABLE IF NOT EXISTS public.render_history (
+  id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_email   TEXT NOT NULL REFERENCES public.users(email) ON DELETE CASCADE,
+  thumbnail_url TEXT,                 -- freeimage.host 縮圖 URL
+  full_url     TEXT,                  -- 完整圖片 URL
+  prompt       TEXT,
+  style        TEXT,
+  resolution   TEXT,
+  tool_id      INT DEFAULT 1,
+  points_cost  INT,
+  user_rating  INT,                   -- 1-5（未來 LoRA 數據飛輪用）
+  is_approved  BOOLEAN DEFAULT FALSE, -- 用戶標記「這張很好」
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_render_history_email ON public.render_history(user_email);
+CREATE INDEX IF NOT EXISTS idx_render_history_created ON public.render_history(created_at DESC);
+ALTER TABLE public.render_history ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Enable all access for service role" ON public.render_history;
+CREATE POLICY "Enable all access for service role" ON public.render_history FOR ALL USING (true);
+
 CREATE OR REPLACE FUNCTION deduct_render_points(p_email TEXT, p_cost INT)
 RETURNS JSON
 LANGUAGE plpgsql

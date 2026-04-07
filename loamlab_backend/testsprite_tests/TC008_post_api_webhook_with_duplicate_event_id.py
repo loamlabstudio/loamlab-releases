@@ -4,8 +4,9 @@ import hashlib
 import json
 import uuid
 
+import os
 BASE_URL = "http://localhost:3000"
-LEMON_WEBHOOK_SECRET = "test_lemon_secret_123"  # This secret must match the one used by the server for HMAC verification
+LEMON_WEBHOOK_SECRET = os.getenv("LEMON_WEBHOOK_SECRET", "test_lemon_secret_placeholder")  # 使用環境變數或預設展位符
 TIMEOUT = 30
 
 def generate_hmac_signature(secret: str, payload: str) -> str:

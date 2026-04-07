@@ -79,6 +79,25 @@ module LoamLab
       model.set_attribute('LoamLabRenderOverride', 'applied', false)
     end
 
+    # 取得系統的 Downloads 資料夾路徑
+    def self.get_downloads_folder
+      if Sketchup.platform == :platform_win
+        folder = File.join(ENV['USERPROFILE'], 'Downloads')
+      else
+        folder = File.expand_path('~/Downloads')
+      end
+      folder.force_encoding("UTF-8").gsub("\\", "/")
+    end
+
+    # 取得當前有效的儲存路徑，若無則回傳 Downloads
+    def self.get_effective_save_path(model)
+      path = model.get_attribute("LoamLabAI", "save_path", "")
+      if path.empty? || !File.directory?(path)
+        path = self.get_downloads_folder
+      end
+      path
+    end
+
     def self.show_dialog(force = false)
       # 如果強制重開，先關閉存在的視窗
       if force && @dialog
@@ -135,7 +154,7 @@ module LoamLab
       # 1. 初始化資料請求 (由 JS 呼叫)
       dialog.add_action_callback("getInitialData") do |action_context, params|
         model = Sketchup.active_model
-        save_path = model.get_attribute("LoamLabAI", "save_path", "")
+        save_path = self.get_effective_save_path(model)
         user_email = Sketchup.read_default("LoamLabAI", "user_email", "")
         saved_lang = Sketchup.read_default("LoamLabAI", "ui_lang", "")
         response = {
@@ -181,15 +200,10 @@ module LoamLab
       # 1.5. 讓使用者指定專案存檔目錄
       dialog.add_action_callback("choose_save_dir") do |action_context, params|
         model = Sketchup.active_model
-        current_path = model.get_attribute("LoamLabAI", "save_path", "")
+        current_path = self.get_effective_save_path(model)
         
         # 安全機制：當路徑不存在或為空時，不帶 directory 參數，以免 SU 崩潰
-        chosen_dir = nil
-        if current_path && !current_path.empty? && File.directory?(current_path)
-          chosen_dir = UI.select_directory(title: "選擇專案 AI 輸出資料夾", directory: current_path)
-        else
-          chosen_dir = UI.select_directory(title: "選擇專案 AI 輸出資料夾")
-        end
+        chosen_dir = UI.select_directory(title: "選擇專案 AI 輸出資料夾", directory: current_path)
         
         if chosen_dir && !chosen_dir.empty?
           model.set_attribute("LoamLabAI", "save_path", chosen_dir)
@@ -297,7 +311,8 @@ module LoamLab
         next unless url
 
         default_name = "AI_Render_#{Time.now.strftime('%H%M%S')}.jpg"
-        file_path = UI.savepanel("保存渲染圖", "", default_name)
+        save_path = self.get_effective_save_path(Sketchup.active_model)
+        file_path = UI.savepanel("保存渲染圖", save_path, default_name)
         if file_path
           begin
             require 'open-uri'
@@ -384,8 +399,8 @@ module LoamLab
         next unless url
 
         model     = Sketchup.active_model
-        save_path = model.get_attribute("LoamLabAI", "save_path", "").to_s.dup.force_encoding("UTF-8")
-        next if save_path.empty? || !File.directory?(save_path)
+        save_path = self.get_effective_save_path(model)
+        next if !File.directory?(save_path)
 
         begin
           require 'open-uri'
@@ -404,7 +419,7 @@ module LoamLab
       dialog.add_action_callback("list_saved_renders") do |action_context, params|
         begin
           model     = Sketchup.active_model
-          save_path = model.get_attribute("LoamLabAI", "save_path", "").to_s.dup.force_encoding("UTF-8")
+          save_path = self.get_effective_save_path(model)
 
           history = []
           if !save_path.empty? && File.directory?(save_path)
@@ -441,8 +456,8 @@ module LoamLab
       # 7. 自動開啟儲存路徑 (算圖完成後觸發)
       dialog.add_action_callback("open_save_dir") do |action_context, params|
         model = Sketchup.active_model
-        save_path = model.get_attribute("LoamLabAI", "save_path", "")
-        if save_path && !save_path.empty? && File.directory?(save_path)
+        save_path = self.get_effective_save_path(model)
+        if File.directory?(save_path)
           UI.openURL(path_to_file_uri(save_path))
         end
       end
@@ -731,7 +746,7 @@ module LoamLab
 
       temp_dir     = Dir.tmpdir
       project_name = (model.title.empty? ? "未命名專案" : model.title).to_s.dup.force_encoding("UTF-8")
-      save_path = model.get_attribute("LoamLabAI", "save_path", "").to_s.dup.force_encoding("UTF-8")
+      save_path = self.get_effective_save_path(model)
       timestamp = Time.now.strftime("%Y%m%d_%H%M%S")
 
       # --- [非阻塞佇列實作] ---
@@ -787,7 +802,7 @@ module LoamLab
             end
 
             # 自動備份
-            if !save_path.empty? && File.directory?(save_path)
+            if File.directory?(save_path)
               safe_project_name = project_name.gsub(/[:*?"<>|\/\\]/, "_")
               safe_scene_name = scene_name.gsub(/[:*?"<>|\/\\]/, "_")
               before_name = "#{timestamp}_#{safe_project_name}_#{safe_scene_name}_原圖.jpg"
@@ -841,6 +856,31 @@ module LoamLab
                     channel_base64: captured_channel_b64 } :
                   { status: 'render_failed', message: data['msg'] || "HTTP #{response.code}",
                     points_refunded: data['points_refunded'], error: data['error'] }
+
+                # [v1.4.4 Auto-Save] 自動下載渲染圖並存到指定的存檔目錄 (預設為 Downloads)
+                if data['code'] == 0 && data['url']
+                  begin
+                    save_path_auto = self.get_effective_save_path(Sketchup.active_model)
+                    if File.directory?(save_path_auto)
+                      safe_project_name = project_name.gsub(/[:*?"<>|\\\/]/, "_")
+                      safe_scene_name = scene_name.gsub(/[:*?"<>|\\\/]/, "_")
+                      after_name = "#{timestamp}_#{safe_project_name}_#{safe_scene_name}_渲染圖.jpg"
+                      after_path = File.join(save_path_auto, after_name)
+                      
+                      # 使用現有的 http 連線下載 (GitHub 的 URL 可能是 redirect，但 Vercel 吐回的通常是直連或 S3)
+                      uri_img = URI.parse(data['url'])
+                      http_img = Net::HTTP.new(uri_img.host, uri_img.host == uri.host ? uri.port : uri_img.port)
+                      http_img.use_ssl = (uri_img.scheme == 'https')
+                      img_resp = http_img.get(uri_img.request_uri)
+                      if img_resp.code.to_i == 200
+                        File.open(after_path, "wb") { |f| f.write(img_resp.body) }
+                        puts "[LoamLab] 渲染圖已自動備份: #{after_name}"
+                      end
+                    end
+                  rescue => e
+                    puts "[LoamLab] 自動存檔失敗: #{e.message}"
+                  end
+                end
               rescue => e
                 puts "[LoamLab] Thread 錯誤: #{e.class} #{e.message}"
                 result = { status: 'render_failed', message: "請求失敗: #{e.message}" }

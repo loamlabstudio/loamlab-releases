@@ -16,8 +16,9 @@ module LoamLab
   end
 
   # Update version for 1.3.3 -> 1.4.0
-  VERSION = '1.4.5'
+  VERSION = '1.4.6'
 end
+
 
 
 

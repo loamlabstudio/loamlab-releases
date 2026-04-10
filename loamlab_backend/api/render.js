@@ -5,6 +5,18 @@ export const maxDuration = 300; // Allow Vercel to run up to 5 minutes to poll A
 
 // Node 18+ 內建 fetch，無需 require('node-fetch')
 
+function sanitizeError(msg) {
+    if (!msg || typeof msg !== 'string') return msg;
+    // 隱藏技術棧字眼
+    return msg
+        .replace(/AtlasCloud API error/gi, 'AI 渲染引擎錯誤')
+        .replace(/AtlasCloud/gi, 'AI 渲染引擎')
+        .replace(/nano-banana-2\/edit/gi, 'AI-Renderer-Pro')
+        .replace(/nano-banana/gi, 'AI-Engine')
+        .replace(/google\/nano-banana-2\/edit/gi, 'AI-Renderer-Pro')
+        .replace(/google/gi, 'AI');
+}
+
 export default async function handler(req, res) {
     // 1. 允許跨域請求 (CORS)
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -33,7 +45,7 @@ export default async function handler(req, res) {
         if (!COZE_PAT) missing.push('COZE_PAT');
         if (!SUPABASE_URL) missing.push('SUPABASE_URL');
         if (!SUPABASE_KEY) missing.push('SUPABASE_ANON_KEY');
-        return res.status(500).json({ code: -1, msg: `伺服器設定不完整：Vercel 說他找不到這幾把鑰匙 ${missing.join(', ')}。請確認已 Redeploy 過。` });
+        return res.status(500).json({ code: -1, msg: sanitizeError(`伺服器設定不完整：Vercel 說他找不到這幾把鑰匙 ${missing.join(', ')}。請確認已 Redeploy 過。`) });
     }
 
     // 從 Header 取得 SketchUp 用戶信箱與插件版本
@@ -59,6 +71,13 @@ export default async function handler(req, res) {
     const userPayload = req.body;
     const activeTool = userPayload.tool || 1;
     const activeWorkflowId = (activeTool === 3 && NINEGRID_WORKFLOW_ID) ? NINEGRID_WORKFLOW_ID : WORKFLOW_ID;
+
+    // 記錄原始輸入 URL（僅保存穩定的外部 URL，不保存 base64 或臨時簽名 URL）
+    let inputUrlForHistory = null;
+    const _firstInputImg = userPayload.parameters?.image?.[0];
+    if (_firstInputImg && _firstInputImg.startsWith('http') && !_firstInputImg.includes('supabase.co')) {
+        inputUrlForHistory = _firstInputImg;
+    }
 
     // 整理 payload：統一 prompt 欄位，相容新版 JS (傳 user_prompt) 與舊版 Ruby (傳 prompt)
     if (userPayload.parameters) {
@@ -94,11 +113,11 @@ export default async function handler(req, res) {
             .single();
 
         if (insertError) {
-            return res.status(500).json({ code: -1, msg: `自動註冊失敗: ${insertError.message}` });
+            return res.status(500).json({ code: -1, msg: sanitizeError(`自動註冊失敗: ${insertError.message}`) });
         }
         user = newUser;
     } else if (dbErr) {
-        return res.status(403).json({ code: -1, msg: `帳戶查詢失敗: ${dbErr.message}` });
+        return res.status(403).json({ code: -1, msg: sanitizeError(`帳戶查詢失敗: ${dbErr.message}`) });
     }
 
     if (!user) {
@@ -125,13 +144,13 @@ export default async function handler(req, res) {
     });
 
     if (deductErr) {
-        return res.status(500).json({ code: -1, msg: `系統錯誤：扣款失敗 ${deductErr.message}` });
+        return res.status(500).json({ code: -1, msg: sanitizeError(`系統錯誤：扣款失敗 ${deductErr.message}`) });
     }
     if (!deductResult?.success) {
         if (deductResult?.error === 'insufficient_points') {
-            return res.status(402).json({ code: -1, msg: `點數不足！本次渲染需 ${cost} 點，您的餘額僅剩 ${deductResult.balance} 點。` });
+            return res.status(402).json({ code: -1, msg: sanitizeError(`點數不足！本次渲染需 ${cost} 點，您的餘額僅剩 ${deductResult.balance} 點。`) });
         }
-        return res.status(403).json({ code: -1, msg: `扣款失敗：${deductResult?.error}` });
+        return res.status(403).json({ code: -1, msg: sanitizeError(`扣款失敗：${deductResult?.error}`) });
     }
 
     let monthlyPoints = deductResult.points;
@@ -174,7 +193,7 @@ export default async function handler(req, res) {
         } catch (uploadErr) {
             await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
             try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_UPLOAD_FAIL' }]); } catch(e) {}
-            return res.status(500).json({ code: -1, msg: `圖床代傳失敗: ${uploadErr.message}`, points_refunded: true });
+            return res.status(500).json({ code: -1, msg: sanitizeError(`圖床代傳失敗: ${uploadErr.message}`), points_refunded: true });
         }
     }
 
@@ -376,28 +395,29 @@ export default async function handler(req, res) {
         await cleanTemp();
 
         if (finalUrl) {
-            saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool });
+            saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool, inputUrl: inputUrlForHistory });
             return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: user.points + user.lifetime_points, transaction_id: transactionId });
         } else {
             await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
             try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL' }]); } catch(e) {}
-            return res.status(500).json({ code: -1, msg: `API 成功但未回傳網址: ${JSON.stringify(data).slice(0,100)}`, points_refunded: true });
+            return res.status(500).json({ code: -1, msg: sanitizeError(`API 成功但未回傳網址: ${JSON.stringify(data).slice(0,100)}`), points_refunded: true });
         }
     } catch (apiError) {
         await cleanTemp2();
         await cleanTemp();
         await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
         try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NETWORK_ERROR' }]); } catch(e) {}
-        return res.status(500).json({ code: -1, msg: `出圖出錯/API 超時: ${apiError.message}`, points_refunded: true });
+        return res.status(500).json({ code: -1, msg: sanitizeError(`出圖出錯/API 超時: ${apiError.message}`), points_refunded: true });
     }
 }
 
 // 非同步寫入渲染歷史（fire-and-forget，不阻塞回應）
-function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal, cost, activeTool }) {
+function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal, cost, activeTool, inputUrl }) {
     const prompt = userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '';
     const style  = userPayload.parameters?.style || '';
     supabase.from('render_history').insert([{
         user_email:    userEmail,
+        input_url:     inputUrl || null,
         full_url:      url,
         thumbnail_url: url,
         prompt,

@@ -57,6 +57,15 @@
         #mobileMenu { transition: opacity 0.25s ease, transform 0.25s ease; }
         #mobileMenu.hidden { opacity: 0; transform: translateY(-8px); pointer-events: none; }
         #mobileMenu.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
+        @media (max-width: 767px) {
+            #sliderButton { animation: swipe-hint 1.6s ease-in-out 1.2s 2; }
+        }
+        @keyframes swipe-hint {
+            0%   { transform: translateY(-50%) translateX(-50%); }
+            25%  { transform: translateY(-50%) translateX(calc(-50% - 22px)); }
+            75%  { transform: translateY(-50%) translateX(calc(-50% + 22px)); }
+            100% { transform: translateY(-50%) translateX(-50%); }
+        }
     </style>
     <script defer src="/_vercel/insights/script.js"></script>
 </head>
@@ -142,7 +151,7 @@
                 Intuition <br class="md:hidden"/>Ahead of <span class="italic font-normal text-w-red">Computation</span>
             </h1>
             
-            <p class="text-base md:text-lg text-zinc-400 max-w-2xl mx-auto mb-16 font-light leading-relaxed" data-i18n="hero_desc">
+            <p class="text-base md:text-lg text-zinc-400 max-w-2xl mx-auto mb-8 md:mb-16 font-light leading-relaxed" data-i18n="hero_desc">
                 From a 3-hour struggle to a 30-second masterpiece.<br class="hidden md:block">
                 LoamLab Camera is a native SketchUp AI rendering engine — no exports, no setup, no waiting.
             </p>
@@ -168,7 +177,7 @@
                 </div>
             </div>
             
-            <p class="text-[10px] text-zinc-500 tracking-[0.15em] mb-12" data-i18n="hero_trial_note">60 free points included · No credit card required</p>
+            <p class="text-[10px] text-zinc-500 tracking-[0.15em] mb-6 md:mb-12" data-i18n="hero_trial_note">60 free points included · No credit card required</p>
 
             <div class="text-[10px] text-zinc-600 font-mono tracking-widest max-w-md mx-auto" data-i18n="math_calc">
                 * Estimated based on a workflow reduction from 3 hours to 30 seconds.
@@ -181,9 +190,9 @@
     </section>
 
     <!-- 2. 核心願景 (Vision) -->
-    <section id="vision" class="max-w-5xl mx-auto py-32 md:py-40 px-6 border-b border-white/5 flex flex-col items-center text-center">
-        <h2 class="text-3xl md:text-5xl font-light mb-16" data-i18n="vision_title">30 Seconds. Redefine Narrative.</h2>
-        <div class="grid md:grid-cols-3 gap-12 md:gap-16 text-left">
+    <section id="vision" class="max-w-5xl mx-auto py-16 md:py-40 px-6 border-b border-white/5 flex flex-col items-center text-center">
+        <h2 class="text-3xl md:text-5xl font-light mb-10 md:mb-16" data-i18n="vision_title">30 Seconds. Redefine Narrative.</h2>
+        <div class="grid md:grid-cols-3 gap-8 md:gap-16 text-left">
             <div>
                 <div class="text-w-red text-2xl font-light mb-6">01.</div>
                 <h3 class="text-lg mb-3 tracking-widest" data-i18n="vision_1_h">Seamless Native Workflow</h3>
@@ -203,41 +212,41 @@
     </section>
 
     <!-- 3. 使用流程 (How It Works) -->
-    <section id="how" class="max-w-5xl mx-auto py-32 md:py-40 px-6 border-b border-white/5">
-        <div class="text-center mb-20">
-            <p class="text-w-red text-[10px] tracking-[0.4em] uppercase mb-6 font-semibold" data-i18n="how_eyebrow">Quick Start</p>
+    <section id="how" class="max-w-5xl mx-auto py-16 md:py-40 px-6 border-b border-white/5">
+        <div class="text-center mb-12 md:mb-20">
+            <p class="text-w-red text-[10px] tracking-[0.4em] uppercase mb-3 md:mb-6 font-semibold" data-i18n="how_eyebrow">Quick Start</p>
             <h2 class="text-3xl md:text-5xl font-light mb-4" data-i18n="how_title">Up and Running in 3 Steps</h2>
             <p class="text-sm text-zinc-500 font-light" data-i18n="how_sub">No complex setup. Works inside SketchUp directly.</p>
         </div>
-        <div class="grid md:grid-cols-3 gap-12 md:gap-16 relative">
+        <div class="grid md:grid-cols-3 gap-8 md:gap-16 relative">
             <div class="hidden md:block absolute top-6 left-[16%] right-[16%] h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
             <div class="flex flex-col">
                 <div class="flex items-center gap-4 mb-6">
                     <div class="w-12 h-12 shrink-0 rounded-full border border-w-red/50 bg-w-red/10 flex items-center justify-center text-w-red text-sm font-bold">01</div>
                     <h3 class="text-base font-semibold" data-i18n="how_step1_h">Download & Install</h3>
                 </div>
-                <p class="text-xs text-zinc-500 leading-relaxed font-light pl-16" data-i18n="how_step1_p">Download the free .rbz plugin and install via SketchUp › Extension Manager. Compatible with SketchUp 2021+.</p>
+                <p class="text-xs text-zinc-500 leading-relaxed font-light pl-0 md:pl-16" data-i18n="how_step1_p">Download the free .rbz plugin and install via SketchUp › Extension Manager. Compatible with SketchUp 2021+.</p>
             </div>
             <div class="flex flex-col">
                 <div class="flex items-center gap-4 mb-6">
                     <div class="w-12 h-12 shrink-0 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-white text-sm font-bold">02</div>
                     <h3 class="text-base font-semibold" data-i18n="how_step2_h">Open Your Scene</h3>
                 </div>
-                <p class="text-xs text-zinc-500 leading-relaxed font-light pl-16" data-i18n="how_step2_p">Log in with Google, position your SketchUp camera, choose resolution and style. No exports needed.</p>
+                <p class="text-xs text-zinc-500 leading-relaxed font-light pl-0 md:pl-16" data-i18n="how_step2_p">Log in with Google, position your SketchUp camera, choose resolution and style. No exports needed.</p>
             </div>
             <div class="flex flex-col">
                 <div class="flex items-center gap-4 mb-6">
                     <div class="w-12 h-12 shrink-0 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-white text-sm font-bold">03</div>
                     <h3 class="text-base font-semibold" data-i18n="how_step3_h">Render in 30 Seconds</h3>
                 </div>
-                <p class="text-xs text-zinc-500 leading-relaxed font-light pl-16" data-i18n="how_step3_p">Click Render. Within 30 seconds, a photorealistic AI image is generated and displayed in the panel. Download instantly.</p>
+                <p class="text-xs text-zinc-500 leading-relaxed font-light pl-0 md:pl-16" data-i18n="how_step3_p">Click Render. Within 30 seconds, a photorealistic AI image is generated and displayed in the panel. Download instantly.</p>
             </div>
         </div>
     </section>
 
     <!-- 4. 功能展示 (Features) -->
-    <section id="features" class="max-w-6xl mx-auto py-32 md:py-40 px-6 border-b border-white/5">
-        <div class="text-center mb-20">
+    <section id="features" class="max-w-6xl mx-auto py-16 md:py-40 px-6 border-b border-white/5">
+        <div class="text-center mb-12 md:mb-20">
             <h2 class="text-3xl md:text-5xl font-light mb-6" data-i18n="feat_title">What LoamLab Camera Can Do</h2>
             <p class="text-sm text-zinc-500 font-light" data-i18n="feat_sub">Four powerful tools. One seamless panel.</p>
         </div>
@@ -245,10 +254,10 @@
     </section>
 
     <!-- 4.5 Tool Spotlight — SpaceReform + Multi-Angle -->
-    <section id="tool-spotlight" class="max-w-6xl mx-auto py-24 px-6 border-b border-white/5">
+    <section id="tool-spotlight" class="max-w-6xl mx-auto py-12 md:py-24 px-6 border-b border-white/5">
 
         <!-- SpaceReform: 上文下圖 (全寬圖) -->
-        <div class="mb-32">
+        <div class="mb-16 md:mb-32">
             <!-- 上方：左欄說明 + 右欄 input card -->
             <div class="grid md:grid-cols-[3fr_2fr] gap-12 items-start mb-8">
                 <div>
@@ -280,7 +289,7 @@
                 </div>
 
                 <!-- Mock input card: 4-zone example -->
-                <div class="rounded-xl border border-white/8 bg-white/[0.02] p-3 flex flex-col gap-2 mt-14">
+                <div class="rounded-xl border border-white/8 bg-white/[0.02] p-3 flex flex-col gap-2 mt-0 md:mt-14">
                     <p class="text-[9px] font-mono tracking-[0.3em] uppercase text-zinc-600" data-i18n="spot_sr_ex_label">Example · 4 zones active</p>
                     <div class="flex items-center gap-2">
                         <div class="w-2 h-2 rounded-full bg-orange-400/80 shrink-0"></div>
@@ -385,11 +394,11 @@
     </section>
 
     <!-- 5. 滑動對比 (Before & After) -->
-    <section id="comparison" class="w-full py-32 md:py-40 px-4 z-10 relative">
+    <section id="comparison" class="w-full py-16 md:py-40 px-4 z-10 relative">
         <div class="max-w-7xl mx-auto">
-            <div class="text-center mb-16">
+            <div class="text-center mb-8 md:mb-16">
                 <h2 class="text-3xl md:text-5xl font-light tracking-tight mb-4" data-i18n="comp_title">1-Click Native Quality.</h2>
-                <p class="text-[9px] md:text-[10px] text-zinc-600 tracking-[0.4em] uppercase" data-i18n="comp_sub">Slide left and right to reveal the magic</p>
+                <p class="text-[9px] md:text-[10px] text-zinc-600 tracking-[0.4em] uppercase"><span class="md:hidden" data-i18n="comp_sub_mobile">Swipe to reveal</span><span class="hidden md:inline" data-i18n="comp_sub">Slide left and right to reveal the magic</span></p>
             </div>
             
             <div class="relative w-full max-w-7xl mx-auto rounded-2xl p-[1px] bg-gradient-to-b from-white/10 to-transparent shadow-[0_45px_100px_-20px_rgba(0,0,0,1)]">
@@ -412,7 +421,7 @@
     </section>
 
     <!-- 4. 定價方案 -->
-    <section id="pricing" class="w-full py-32 px-4 max-w-7xl mx-auto z-10 relative">
+    <section id="pricing" class="w-full py-16 md:py-32 px-4 max-w-7xl mx-auto z-10 relative">
         <div class="text-center mb-16">
             <h2 class="text-3xl md:text-5xl font-light tracking-tight mb-4 uppercase tracking-[0.1em]" data-i18n="pay_title">LOAMLAB PRICING PLANS</h2>
             <p class="text-sm text-zinc-500 font-light mb-8" data-i18n="pay_subtitle">Choose the optimal plan for your workflow.<br>Subscription points reset monthly (Use it or lose it). Top-up points are permanent.</p>
@@ -440,11 +449,11 @@
     </section>
 
     <!-- 5. 邀請裂變 -->
-    <section id="referral" class="max-w-5xl mx-auto py-32 px-6 border-t border-white/5 text-center">
+    <section id="referral" class="max-w-5xl mx-auto py-16 md:py-32 px-6 border-t border-white/5 text-center">
         <h2 class="text-3xl md:text-5xl font-light mb-6" data-i18n="ref_title">Share Code. Earn Power.</h2>
         <p class="text-sm text-zinc-500 font-light mb-16 max-w-2xl mx-auto leading-relaxed" data-i18n="ref_desc">We understand the influence of designers. Share your exclusive code with peers. Once they bind their account, both receive permanent bonus credits seamlessly.</p>
         
-        <div class="flex justify-center items-center gap-16 md:gap-32">
+        <div class="flex justify-center items-center gap-10 md:gap-32">
             <div>
                 <div class="text-5xl text-w-red font-light mb-2">+300</div>
                 <div class="text-[9px] tracking-[0.2em] uppercase text-zinc-500" data-i18n="ref_inviter">You Receive</div>
@@ -458,8 +467,8 @@
     </section>
 
     <!-- 7. 常見問題 (FAQ) -->
-    <section id="faq" class="max-w-3xl mx-auto py-32 px-6 border-t border-white/5">
-        <div class="text-center mb-16">
+    <section id="faq" class="max-w-3xl mx-auto py-16 md:py-32 px-6 border-t border-white/5">
+        <div class="text-center mb-10 md:mb-16">
             <h2 class="text-3xl md:text-5xl font-light mb-4" data-i18n="faq_title">Frequently Asked Questions</h2>
         </div>
         <div id="faqContainer" class="divide-y divide-white/10"></div>

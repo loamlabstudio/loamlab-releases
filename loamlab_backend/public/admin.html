@@ -26,6 +26,11 @@
   .pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e; animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
   ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #1e2440; border-radius: 2px; }
+  .kpi-card { background: #0f1320; border: 1px solid #1e2440; border-radius: 12px; padding: 16px 20px; }
+  .kpi-value { font-size: 1.75rem; font-weight: 800; letter-spacing: -1px; color: #fff; line-height: 1.1; margin: 4px 0; }
+  .kpi-trend { font-size: 11px; color: #4b5577; margin-top: 4px; }
+  .trend-up { color: #22c55e; }
+  .trend-down { color: #ef4444; }
 </style>
 </head>
 <body class="min-h-screen">
@@ -140,48 +145,34 @@
     </div>
   </div>
 
-  <!-- KPI 卡片列 -->
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-    <div class="card-sm">
-      <div class="kpi-label mb-3">Total Users</div>
-      <div id="kpi-users" class="kpi-num">—</div>
-    </div>
-    <div class="card-sm">
-      <div class="kpi-label mb-3">7-Day Active</div>
-      <div id="kpi-active" class="kpi-num">—</div>
-      <div id="kpi-active-today" class="kpi-sub"></div>
-    </div>
-    <div class="card-sm">
-      <div class="kpi-label mb-3">Renders (30d)</div>
-      <div id="kpi-renders" class="kpi-num">—</div>
-    </div>
-    <div class="card-sm">
-      <div class="kpi-label mb-3">Revenue (30d)</div>
-      <div id="kpi-revenue" class="kpi-num text-green-400">—</div>
-      <div id="kpi-arpu" class="kpi-sub"></div>
-    </div>
-  </div>
+  <!-- KPI 區域已載入至下方新版面板 (Line 200+) -->
 
-  <!-- 次要 KPI -->
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-    <div class="card-sm">
-      <div class="kpi-label mb-3">Paywall Hits (30d)</div>
-      <div id="kpi-paywall" class="text-2xl font-bold text-yellow-400">—</div>
+  <!-- 核心 KPI -->
+  <section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+    <div class="kpi-card">
+      <div class="kpi-label">總用戶數</div>
+      <div class="kpi-value" id="kpi-users">--</div>
+      <div class="kpi-trend trend-up">新增 <span id="kpi-users-today">0</span></div>
     </div>
-    <div class="card-sm">
-      <div class="kpi-label mb-3">Avg Rating</div>
-      <div id="kpi-rating" class="text-2xl font-bold text-emerald-400">—</div>
+    <div class="kpi-card">
+      <div class="kpi-label">30天 渲染數</div>
+      <div class="kpi-value" id="kpi-renders">--</div>
+      <div class="kpi-trend" id="kpi-error-rate">錯誤率 --</div>
     </div>
-    <div class="card-sm col-span-2">
-      <div class="kpi-label mb-2">User Tiers</div>
-      <div id="tier-summary" class="flex flex-wrap gap-2 mt-1"></div>
+    <div class="kpi-card">
+      <div class="kpi-label">30天 總收入</div>
+      <div class="kpi-value text-green-400" id="kpi-revenue">--</div>
+      <div class="kpi-trend" id="kpi-arpu">ARPU --</div>
     </div>
-  </div>
+    <div class="kpi-card">
+      <div class="kpi-label">用戶評分</div>
+      <div class="kpi-value text-yellow-400" id="kpi-rating">--</div>
+      <div class="kpi-trend">平均 <span id="kpi-rating-count">0</span> 筆</div>
+    </div>
+  </section>
 
-  <!-- 圖表列：折線圖 + 兩個甜甜圈 -->
+  <!-- 圖表第一列：渲染趨勢 + 風格排行 -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
-
-    <!-- 30 天渲染趨勢折線圖 -->
     <div class="card lg:col-span-2">
       <div class="flex items-center justify-between mb-4">
         <div class="text-sm font-semibold text-white">渲染趨勢（30 天）</div>
@@ -192,121 +183,66 @@
       </div>
     </div>
 
-    <!-- 工具使用甜甜圈 -->
     <div class="card">
-      <div class="text-sm font-semibold text-white mb-4">工具分佈</div>
-      <div style="height:140px; position:relative;">
-        <canvas id="chart-tools"></canvas>
-      </div>
-      <div id="tool-legend" class="mt-3 space-y-1.5"></div>
+      <div class="text-sm font-semibold text-white mb-4">風格偏好排行 (TOP 5)</div>
+      <div class="space-y-3 mt-2" id="style-ranking"></div>
     </div>
-
   </div>
 
-  <!-- 第二圖表列：解析度 + Paywall 趨勢 -->
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
-
-    <!-- 解析度甜甜圈 -->
+  <!-- 圖表第二列：解析度 + 工具分佈 + 收入趨勢 -->
+  <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-5">
     <div class="card">
-      <div class="text-sm font-semibold text-white mb-4">解析度分佈</div>
-      <div style="height:140px; position:relative;">
+      <div class="text-xs font-semibold text-gray-400 mb-4">解析度分佈</div>
+      <div style="height:120px; position:relative;">
         <canvas id="chart-res"></canvas>
       </div>
-      <div id="res-legend" class="mt-3 space-y-1.5"></div>
+      <div id="res-legend" class="mt-3 space-y-1"></div>
+    </div>
+    
+    <div class="card">
+      <div class="text-xs font-semibold text-gray-400 mb-4">工具使用佔比</div>
+      <div style="height:120px; position:relative;">
+        <canvas id="chart-tools"></canvas>
+      </div>
+      <div id="tool-legend" class="mt-3 space-y-1"></div>
     </div>
 
-    <!-- 收入趨勢 -->
     <div class="card lg:col-span-2">
-      <div class="flex items-center justify-between mb-4">
-        <div class="text-sm font-semibold text-white">收入趨勢（90 天）</div>
-        <div class="text-xs text-gray-600">累積儲值</div>
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-xs font-semibold text-gray-400">收入趨勢 (90天)</div>
+        <div class="text-[10px] text-gray-600">累積收益</div>
       </div>
-      <div style="height:180px; position:relative;">
+      <div style="height:160px; position:relative;">
         <canvas id="chart-revenue"></canvas>
       </div>
     </div>
-
   </div>
 
-  <!-- 流量 & 快速連結 -->
+  <!-- 流量行為與洞見 -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
+    <!-- 轉化漏斗 -->
+    <div class="card">
+      <div class="text-sm font-semibold text-white mb-4">轉化漏斗</div>
+      <div id="funnel-steps" class="space-y-2.5"></div>
+    </div>
 
-    <!-- Vercel Analytics 入口 -->
-    <div class="card-sm flex flex-col gap-3">
-      <div class="kpi-label">網站流量</div>
-      <div class="text-xs text-gray-500 leading-relaxed">
-        Vercel Analytics 記錄真實訪客數、跳出率、熱門頁面。<br>
-        點擊下方進入即時流量儀表板。
+    <!-- 用戶分層摘要 -->
+    <div class="card">
+       <div class="text-sm font-semibold text-white mb-4">用戶分層摘要</div>
+       <div id="tier-summary" class="flex flex-wrap gap-2"></div>
+       <div class="mt-4 text-[10px] text-gray-600 leading-relaxed">
+         根據 30 天內的活躍度與終身點數進行分群：<br>
+         🐳 鯨魚 (>500點) | 💎 訂閱者 | ✨ 新用戶 (<7天)
+       </div>
+    </div>
+
+    <!-- 自動洞見 -->
+    <div class="card">
+      <div class="flex items-center justify-between mb-4">
+        <div class="text-sm font-semibold text-white">自動洞見</div>
+        <div id="insights-badge" class="hidden text-xs font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30"></div>
       </div>
-      <a href="https://vercel.com/loamlabstudio-4796s-projects/loamlab-camera/analytics"
-         target="_blank"
-         class="mt-auto flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2.5 text-xs text-gray-300 hover:text-white transition-all">
-        <svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-        </svg>
-        Vercel Analytics →
-      </a>
-    </div>
-
-    <!-- 快速連結 -->
-    <div class="card-sm col-span-2">
-      <div class="kpi-label mb-3">快速連結</div>
-      <div class="grid grid-cols-2 gap-2">
-        <a href="https://vercel.com/loamlabstudio-4796s-projects/loamlab-camera/deployments" target="_blank"
-           class="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-xs text-gray-400 hover:text-white transition-all">
-          <span>🚀</span> Vercel 部署記錄
-        </a>
-        <a href="https://app.supabase.com/project/zcalclzifnltkojucvgj/editor" target="_blank"
-           class="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-xs text-gray-400 hover:text-white transition-all">
-          <span>🗄️</span> Supabase SQL Editor
-        </a>
-        <a href="https://app.supabase.com/project/zcalclzifnltkojucvgj/table-editor" target="_blank"
-           class="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-xs text-gray-400 hover:text-white transition-all">
-          <span>📊</span> Supabase 資料表
-        </a>
-        <a href="https://vercel.com/loamlabstudio-4796s-projects/loamlab-camera/functions" target="_blank"
-           class="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-xs text-gray-400 hover:text-white transition-all">
-          <span>⚡</span> Vercel Functions Log
-        </a>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- 轉化漏斗 -->
-  <div class="card mb-5">
-    <div class="text-sm font-semibold text-white mb-4">轉化漏斗</div>
-    <div id="funnel-steps" class="space-y-2.5"></div>
-  </div>
-
-  <!-- 自動洞見 -->
-  <div class="card mb-5">
-    <div class="flex items-center justify-between mb-4">
-      <div class="text-sm font-semibold text-white">自動洞見</div>
-      <div id="insights-badge" class="hidden text-xs font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30"></div>
-    </div>
-    <div id="insights-list" class="space-y-2"></div>
-  </div>
-
-  <!-- 流量面板 -->
-  <div class="card mb-5">
-    <div class="flex items-center justify-between mb-4">
-      <div class="text-sm font-semibold text-white">網站流量（30 天）</div>
-      <div id="traffic-status" class="text-xs text-gray-600"></div>
-    </div>
-    <div id="traffic-chart-wrap" style="height:160px; position:relative;" class="hidden">
-      <canvas id="chart-traffic"></canvas>
-    </div>
-    <div id="traffic-fallback" class="hidden">
-      <p class="text-xs text-gray-500 mb-3 leading-relaxed">
-        流量數據需設定 Vercel 環境變數後才能在此顯示：<br>
-        <code class="text-gray-400">VERCEL_ACCESS_TOKEN</code>（Vercel Personal Access Token）<br>
-        <code class="text-gray-400">VERCEL_PROJECT_ID</code>（Project Settings → Project ID）
-      </p>
-      <a href="https://vercel.com/loamlabstudio-4796s-projects/loamlab-camera/analytics" target="_blank"
-         class="inline-flex items-center gap-2 text-xs text-gray-400 hover:text-white border border-white/10 px-3 py-2 rounded-lg transition-colors">
-        前往 Vercel Analytics →
-      </a>
+      <div id="insights-list" class="space-y-2"></div>
     </div>
   </div>
 
@@ -361,7 +297,8 @@ const TOOL_COLORS = ['#dc2626','#7c3aed','#0891b2','#16a34a'];
 const RES_COLORS  = ['#f59e0b','#3b82f6','#8b5cf6'];
 
 let adminKey = '', allUsers = [], allFeedback = [];
-let chartTrend = null, chartTools = null, chartRes = null, chartRevenue = null, chartTraffic = null;
+let chartTrend = null, chartTools = null, chartRes = null, chartRevenue = null;
+
 
 // ── 登入 ──────────────────────────────────────────────────────────────────────
 function login() {
@@ -386,7 +323,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 async function fetchAction(action) {
-  const r = await fetch(`${API_BASE}/api/stats?action=${action}&key=${encodeURIComponent(adminKey)}`);
+  const r = await fetch(`${API_BASE}/api/stats?action=${action}`, {
+    headers: { 'Authorization': `Bearer ${adminKey}` }
+  });
   if (r.status === 401) { logout(); throw new Error('Unauthorized'); }
   const j = await r.json();
   if (j.code !== 0) throw new Error(j.msg);
@@ -395,36 +334,50 @@ async function fetchAction(action) {
 
 async function loadAll() {
   setText('last-updated', '載入中...');
+  const actions = ['dashboard', 'renders', 'revenue', 'users', 'feedback', 'funnel', 'insights'];
   try {
-    const [dash, rendersData, revenueData, usersData, fbData, funnelData, insightsData, trafficData] = await Promise.all([
-      fetchAction('dashboard'),
-      fetchAction('renders'),
-      fetchAction('revenue'),
-      fetchAction('users'),
-      fetchAction('feedback'),
-      fetchAction('funnel'),
-      fetchAction('insights'),
-      fetchAction('traffic'),
-    ]);
+    const results = await Promise.allSettled(actions.map(a => fetchAction(a)));
+    const data = {};
+    actions.forEach((a, i) => {
+        if (results[i].status === 'fulfilled') data[a] = results[i].value;
+        else console.warn(`Action ${a} failed:`, results[i].reason);
+    });
+
     loadAnnouncement();
     loadPrompts();
-    renderKPIs(dash);
-    renderTrendChart(rendersData.daily_renders || {});
-    renderDonut('chart-tools', 'tool-legend', dash.tool_breakdown || {}, TOOL_NAMES, TOOL_COLORS);
-    renderDonut('chart-res',   'res-legend',  dash.resolution_breakdown || {}, {}, RES_COLORS);
-    renderRevenueChart(revenueData.daily_revenue || {});
-    allUsers = usersData.users || [];
+    
+    // 聚合數據
+    const combined = { 
+        ...(data.dashboard || {}),
+        renders: data.renders || {},
+        revenue: data.revenue || {},
+        users: data.users || {},
+        feedback: data.feedback || {},
+        funnel: data.funnel?.steps || [],
+        insights: data.insights?.insights || []
+    };
+    
+    renderDashboard(combined);
+    
+    if (data.renders) renderTrendChart(data.renders.daily_renders || {});
+    if (data.dashboard) {
+        renderDonut('chart-tools', 'tool-legend', data.dashboard.tool_breakdown || {}, TOOL_NAMES, TOOL_COLORS);
+        renderDonut('chart-res',   'res-legend',  data.dashboard.resolution_breakdown || {}, {}, RES_COLORS);
+    }
+    if (data.revenue) renderRevenueChart(data.revenue.daily_revenue || {});
+    
+    allUsers = data.users?.users || [];
     renderTierSummary(allUsers);
     filterUsers('all');
-    allFeedback = fbData.recent || [];
+    
+    allFeedback = data.feedback?.recent || [];
     filterFeedback('all');
-    renderFunnel(funnelData.steps || []);
-    renderInsights(insightsData.insights || []);
-    renderTraffic(trafficData);
+    
     setText('last-updated', '更新 ' + new Date().toLocaleTimeString('zh-TW'));
     startAutoRefresh();
   } catch (e) {
-    if (e.message !== 'Unauthorized') console.error(e);
+    console.error('[Fatal Error]', e);
+    setText('last-updated', '系統錯誤: ' + e.message);
   }
 }
 
@@ -445,9 +398,9 @@ async function saveAnnouncement() {
   const text = document.getElementById('announcement-input').value;
   btn.innerText = '處理中...';
   try {
-    const r = await fetch(`${API_BASE}/api/stats?action=set_announcement&key=${encodeURIComponent(adminKey)}`, {
+    const r = await fetch(`${API_BASE}/api/stats?action=set_announcement`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
       body: JSON.stringify({ text })
     });
     if (r.ok) {
@@ -490,9 +443,9 @@ async function savePrompts() {
 
   btn.innerText = '儲存中...';
   try {
-    const r = await fetch(`${API_BASE}/api/stats?action=set_prompts&key=${encodeURIComponent(adminKey)}`, {
+    const r = await fetch(`${API_BASE}/api/stats?action=set_prompts`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
       body: JSON.stringify({ prompts })
     });
     if (r.ok) {
@@ -508,25 +461,91 @@ async function savePrompts() {
   btn.innerText = '儲存所有工作流設定';
 }
 
-// ── KPI ───────────────────────────────────────────────────────────────────────
-function renderKPIs(d) {
-  setText('kpi-users',   fmt(d.total_users));
-  setText('kpi-active',  fmt(d.active_7d));
-  setText('kpi-active-today', `今日活躍 ${fmt(d.active_today)}`);
-  setText('kpi-renders', fmt(d.renders_30d));
-  setText('kpi-revenue', d.revenue_30d ? '$' + d.revenue_30d : '—');
-  setText('kpi-paywall', fmt(d.paywall_hits_30d));
-  setText('kpi-rating',  d.avg_rating ? d.avg_rating + ' ★' : '—');
-  const arpu = d.active_7d && d.revenue_30d ? 'ARPU $' + (d.revenue_30d / d.active_7d).toFixed(1) : '';
+function renderDashboard(data) {
+  if (!data) return;
+  
+  // 1. KPI 數值
+  setText('kpi-users', fmt(data.total_users));
+  setText('kpi-users-today', data.active_today || 0); // 使用 active_today 作為近似趨勢
+  
+  const renders = data.renders_30d || (data.renders && data.renders.total) || 0;
+  setText('kpi-renders', fmt(renders));
+  
+  const errCount = data.error_count_30d || 0;
+  const errRate = renders > 0 ? Math.round((errCount / (renders + errCount)) * 100) : 0;
+  const errEl = document.getElementById('kpi-error-rate');
+  if (errEl) {
+    errEl.textContent = `錯誤率 ${errRate}% (${errCount})`;
+    errEl.className = `kpi-trend ${errRate > 10 ? 'trend-down' : 'text-gray-500'}`;
+  }
+
+  setText('kpi-revenue', '$' + fmt(data.revenue_30d || 0));
+  const arpu = data.active_7d && data.revenue_30d ? 'ARPU $' + (data.revenue_30d / data.active_7d).toFixed(1) : 'ARPU --';
   setText('kpi-arpu', arpu);
+  
+  setText('kpi-rating', data.avg_rating ? data.avg_rating + ' ★' : '--');
+  setText('kpi-rating-count', data.total_feedback || (data.feedback && data.feedback.recent?.length) || 0);
+
+  // 2. 風格偏好排行
+  const styleBD = data.style_breakdown || {};
+  const styles = Object.entries(styleBD)
+    .map(([key, val]) => ({ key: key || '預設 (無)', value: Array.isArray(val) ? val.length : val }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+  
+  const styleRankingEl = document.getElementById('style-ranking');
+  if (styleRankingEl) {
+    const maxStyle = styles[0]?.value || 1;
+    styleRankingEl.innerHTML = styles.map(s => `
+      <div class="space-y-1">
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="text-gray-300 font-medium">${s.key}</span>
+          <span class="text-gray-500">${fmt(s.value)}</span>
+        </div>
+        <div class="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+          <div class="bg-blue-500 h-full rounded-full" style="width: ${Math.round(s.value/maxStyle*100)}%"></div>
+        </div>
+      </div>`).join('') || '<div class="text-xs text-gray-700">暫無數據</div>';
+  }
+
+  // 3. 轉化漏斗
+  const funnel = data.funnel || [];
+  const funnelEl = document.getElementById('funnel-steps');
+  if (funnelEl) {
+    const total = (funnel[0]?.value || 1);
+    funnelEl.innerHTML = funnel.map((s, i) => {
+        const prev = funnel[i-1]?.value || s.value;
+        const rate = prev > 0 ? Math.round((s.value / prev) * 100) : 0;
+        const totalPct = Math.round((s.value / total) * 100);
+        return `
+          <div class="flex items-center gap-3">
+            <div class="text-[10px] text-gray-600 font-mono w-4">${i+1}.</div>
+            <div class="flex-1">
+              <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-gray-400">${s.label}</span>
+                <span class="text-white font-bold">${fmt(s.value)} ${i>0 ? `<span class="text-[10px] text-gray-600 font-normal ml-1">← ${rate}%</span>` : ''}</span>
+              </div>
+              <div class="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-1000" style="width: ${totalPct}%; background: ${['#ef4444','#f97316','#f59e0b','#10b981','#3b82f6'][i] || '#3b82f6'}"></div>
+              </div>
+            </div>
+          </div>`;
+    }).join('') || '<div class="text-xs text-gray-700">暫無數據</div>';
+  }
+
+  // 4. 自動洞見（委派給 renderInsights）
+  renderInsights(data.insights || []);
 }
 
 function renderTierSummary(users) {
+  if (!users) return;
   const counts = users.reduce((a, u) => { a[u.tier] = (a[u.tier]||0)+1; return a; }, {});
   const el = document.getElementById('tier-summary');
-  el.innerHTML = Object.entries(counts).map(([t,c]) =>
-    `<span class="badge badge-${t}">${t} <span class="opacity-70">${c}</span></span>`
-  ).join('');
+  if (el) {
+    el.innerHTML = Object.entries(counts).map(([t,c]) =>
+      `<span class="badge badge-${t}">${t} <span class="opacity-70">${c}</span></span>`
+    ).join('') || '<div class="text-xs text-gray-700">暫無數據</div>';
+  }
 }
 
 // ── 折線圖：渲染趨勢 ──────────────────────────────────────────────────────────
@@ -676,27 +695,6 @@ function filterFeedback(type, btn) {
     </div>`).join('');
 }
 
-// ── 轉化漏斗 ──────────────────────────────────────────────────────────────────
-function renderFunnel(steps) {
-  const el = document.getElementById('funnel-steps');
-  if (!steps.length) { el.innerHTML = '<div class="text-xs text-gray-700">暫無資料</div>'; return; }
-  const maxCount = steps[0].count || 1;
-  const COLORS = ['#dc2626','#f97316','#eab308','#22c55e','#3b82f6'];
-  el.innerHTML = steps.map((s, i) => {
-    const pct = maxCount ? Math.round(s.count / maxCount * 100) : 0;
-    const conv = i > 0 && steps[i-1].count ? Math.round(s.count / steps[i-1].count * 100) : null;
-    return `
-      <div>
-        <div class="flex items-center justify-between text-xs mb-1">
-          <span class="text-gray-400">${i+1}. ${s.label}</span>
-          <span class="font-bold text-white">${fmt(s.count)}${conv !== null ? `<span class="text-gray-600 font-normal ml-2">← ${conv}%</span>` : ''}</span>
-        </div>
-        <div class="h-1.5 bg-white/5 rounded-full overflow-hidden">
-          <div style="width:${pct}%;background:${COLORS[i]};height:100%;border-radius:99px;transition:width .6s ease"></div>
-        </div>
-      </div>`;
-  }).join('<div class="flex justify-end text-gray-700 text-xs py-0.5 pr-1">↓</div>');
-}
 
 // ── 自動洞見 ──────────────────────────────────────────────────────────────────
 function renderInsights(insights) {
@@ -734,52 +732,6 @@ function renderInsights(insights) {
   }).join('');
 }
 
-// ── 流量面板 ──────────────────────────────────────────────────────────────────
-function renderTraffic(data) {
-  const wrap     = document.getElementById('traffic-chart-wrap');
-  const fallback = document.getElementById('traffic-fallback');
-  const status   = document.getElementById('traffic-status');
-  if (!data || !data.available) {
-    fallback.classList.remove('hidden');
-    status.textContent = '未設定環境變數';
-    return;
-  }
-  wrap.classList.remove('hidden');
-  status.textContent = '30天 PV';
-  // Vercel Analytics timeseries 格式：data.data 陣列，每項有 timestamp + value
-  const rows = Array.isArray(data.data) ? data.data : (data.data?.data || []);
-  const days  = last30Days();
-  // 嘗試對齊到 YYYY-MM-DD
-  const pvMap = {};
-  rows.forEach(r => {
-    const d = (r.key || r.timestamp || r.date || '').toString().slice(0, 10);
-    if (d) pvMap[d] = (r.value || r.count || r.total || 0);
-  });
-  const pvData = days.map(d => pvMap[d] || 0);
-  const ctx = document.getElementById('chart-traffic').getContext('2d');
-  if (chartTraffic) chartTraffic.destroy();
-  chartTraffic = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: days.map(d => d.slice(5)),
-      datasets: [{
-        data: pvData,
-        backgroundColor: 'rgba(59,130,246,0.5)',
-        borderColor: '#3b82f6',
-        borderWidth: 1,
-        borderRadius: 3,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: t => ` ${t.raw} PV` } } },
-      scales: {
-        x: { grid: { color: '#1e2440' }, ticks: { color: '#4b5577', font: { size: 10 }, maxTicksLimit: 10 } },
-        y: { grid: { color: '#1e2440' }, ticks: { color: '#4b5577', font: { size: 10 } }, beginAtZero: true },
-      }
-    }
-  });
-}
 
 // ── 自動刷新（60 秒倒數）────────────────────────────────────────────────────
 let autoRefreshTimer = null, countdown = 60;

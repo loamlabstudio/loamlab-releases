@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // ── 測試帳號過濾 ──────────────────────────────────────────────────────────────
-// 排除 testsprite_*、*@example.com、*@loamlab.test* 等自動化測試帳號
-const TEST_REGEX = /testsprite|@example\.com|\.test[_.]|\.test$/i;
+// 排除 testsprite_*、*@example.com、*@loamlab.test* 以及指定的測試帳號
+const TEST_REGEX = /testsprite|@example\.com|\.test[_.]|\.test$|^loamlabstudio@gmail\.com$|^loamlabs@gmail\.com$/i;
 const isTest = email => TEST_REGEX.test(email || '');
 
 // 為 Supabase query 加測試帳號排除（email 欄位）
@@ -10,14 +10,16 @@ const noTest = q => q
     .not('email', 'ilike', '%testsprite%')
     .not('email', 'ilike', '%.test')
     .not('email', 'ilike', '%.test_%')
-    .not('email', 'ilike', '%@example.com');
+    .not('email', 'ilike', '%@example.com')
+    .not('email', 'in', '("loamlabstudio@gmail.com","loamlabs@gmail.com")');
 
 // 為 user_email 欄位（transactions / render_history / feedback）加排除
 const noTestRef = q => q
     .not('user_email', 'ilike', '%testsprite%')
     .not('user_email', 'ilike', '%.test')
     .not('user_email', 'ilike', '%.test_%')
-    .not('user_email', 'ilike', '%@example.com');
+    .not('user_email', 'ilike', '%@example.com')
+    .not('user_email', 'in', '("loamlabstudio@gmail.com","loamlabs@gmail.com")');
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -62,7 +64,8 @@ export default async function handler(req, res) {
     }
 
     // --- Admin 端點（需要 ADMIN_KEY）---
-    if (req.query.key !== process.env.ADMIN_KEY) {
+    const adminKeyHeader = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!adminKeyHeader || adminKeyHeader !== process.env.ADMIN_KEY) {
         return res.status(401).json({ code: -1, msg: 'Unauthorized' });
     }
 
@@ -96,7 +99,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
-    const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, traffic };
+    const actions = { dashboard, users, revenue, renders, feedback, funnel, insights };
     if (!actions[action]) return res.status(400).json({ code: -1, msg: `Unknown action: ${action}` });
 
     try {
@@ -145,18 +148,29 @@ async function dashboard(supabase) {
         noTestRef(supabase.from('transactions').select('user_email', { count: 'exact', head: true }).gte('created_at', d1)),
         noTestRef(supabase.from('transactions').select('user_email', { count: 'exact', head: true }).gte('created_at', d7)),
         noTestRef(supabase.from('transactions').select('*', { count: 'exact', head: true }).in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K']).gte('created_at', d30)),
-        noTestRef(supabase.from('transactions').select('amount').eq('transaction_type', 'TOPUP').gte('created_at', d30)),
-        noTestRef(supabase.from('transactions').select('transaction_type, created_at').in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K']).gte('created_at', d30).limit(500)),
-        noTestRef(supabase.from('render_history').select('user_rating').not('user_rating', 'is', null).gte('created_at', d30)),
+        noTestRef(supabase.from('transactions').select('amount, transaction_type').eq('transaction_type', 'TOPUP').gte('created_at', d30)),
+        noTestRef(supabase.from('transactions').select('transaction_type, created_at').in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K']).gte('created_at', d30).limit(1000)),
+        noTestRef(supabase.from('render_history').select('user_rating, style, tool_id').gte('created_at', d30)),
         noTestRef(supabase.from('feedback').select('*', { count: 'exact', head: true }).eq('type', 'paywall_trigger').gte('created_at', d30)),
     ]);
 
     const revenue30d = (topups || []).reduce((s, r) => s + (r.amount || 0), 0);
-    const toolBreakdown = groupBy(renders || [], 'transaction_type');
-    const resBreakdown  = groupBy(renders || [], 'transaction_type'); // resolution encoded in type
-    const avgRating = ratingRows?.length
-        ? Math.round((ratingRows.reduce((s, r) => s + r.user_rating, 0) / ratingRows.length) * 10) / 10
+    const toolBreakdown = groupBy((ratingRows || []).filter(r => r.tool_id != null), 'tool_id');
+    
+    // 從 render_history 獲取風格分佈 (30天)
+    const styleBreakdown = groupBy(ratingRows || [], 'style');
+    
+    const errorCount = (topups || []).filter(t => t.transaction_type.startsWith('REFUND_')).length;
+
+    const avgRatingRows = (ratingRows || []).filter(r => r.user_rating != null);
+    const avgRating = avgRatingRows.length
+        ? Math.round((avgRatingRows.reduce((s, r) => s + r.user_rating, 0) / avgRatingRows.length) * 10) / 10
         : null;
+
+    // 解析度解析
+    const resBreakdown = groupBy((renders || []).map(r => ({
+        ...r, res: (r.transaction_type || '').replace('RENDER_', '').toLowerCase()
+    })), 'res');
 
     return {
         total_users: totalUsers,
@@ -167,7 +181,9 @@ async function dashboard(supabase) {
         paywall_hits_30d: paywallHits,
         avg_rating: avgRating,
         tool_breakdown: toolBreakdown,
+        style_breakdown: styleBreakdown,
         resolution_breakdown: resBreakdown,
+        error_count_30d: errorCount,
     };
 }
 
@@ -297,11 +313,11 @@ async function funnel(supabase) {
 
     return {
         steps: [
-            { label: '已註冊',     count: registered || 0 },
-            { label: '首次渲染',   count: hasRender.size },
-            { label: '習慣形成',   count: habitual },
-            { label: 'Paywall觸發', count: hitPaywall },
-            { label: '已付費',     count: paidSet },
+            { label: '已註冊',      value: registered || 0 },
+            { label: '首次渲染',    value: hasRender.size },
+            { label: '習慣形成',    value: habitual },
+            { label: 'Paywall觸發', value: hitPaywall },
+            { label: '已付費',      value: paidSet || 0 },
         ]
     };
 }
@@ -413,24 +429,6 @@ async function insights(supabase) {
     return { insights: result, analyzed_users: users.length };
 }
 
-// ── Vercel Analytics 流量代理 ─────────────────────────────────────────────────
-async function traffic() {
-    const token     = process.env.VERCEL_ACCESS_TOKEN;
-    const projectId = process.env.VERCEL_PROJECT_ID;
-    if (!token || !projectId) return { available: false, reason: 'env_not_set' };
-
-    try {
-        const to   = Date.now();
-        const from = to - 30 * 86400000;
-        const url  = `https://vercel.com/api/web/insights/stats/timeseries?projectId=${projectId}&from=${from}&to=${to}&environment=production&tz=UTC`;
-        const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-        if (!r.ok) return { available: false, reason: `api_error_${r.status}` };
-        const json = await r.json();
-        return { available: true, data: json };
-    } catch (e) {
-        return { available: false, reason: e.message };
-    }
-}
 
 // ── 工具函數 ──────────────────────────────────────────────────────────────────
 function daysAgo(n) {

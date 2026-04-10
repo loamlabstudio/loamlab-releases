@@ -208,7 +208,7 @@
             <div class="h-4 w-[1px] bg-white/20 mx-1"></div>
 
             <!-- Render History Button -->
-            <button id="btn-history" title="Render History"
+            <button id="btn-history" title="Render History" data-i18n-title="tooltip_history"
                 class="hover:text-white transition-colors flex items-center gap-1.5 focus:outline-none relative group">
                 <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -240,7 +240,7 @@
             <div class="flex items-center gap-4">
                 <!-- Invite & Earn Button -->
                 <div class="flex flex-col md:flex-row items-center justify-center gap-2 cursor-pointer hover:bg-white/5 py-1.5 px-3 rounded border border-transparent hover:border-white/10 transition-colors group"
-                    title="邀請好友得 200 點" id="btn-show-referral">
+                    title="邀請好友得 200 點" data-i18n-title="tooltip_referral" id="btn-show-referral">
                     <span class="text-white/40 tracking-wider text-[13px] font-semibold drop-shadow-md">🎟️</span>
                     <span
                         class="font-bold text-white/90 tracking-widest text-[10px] uppercase hidden md:block">Invite</span>
@@ -249,17 +249,17 @@
                 <div class="h-4 w-[1px] bg-white/10 hidden md:block"></div>
 
                 <div class="flex items-center gap-2 cursor-pointer hover:bg-white/5 py-1.5 px-3 rounded border border-transparent hover:border-white/10 transition-colors group"
-                    title="查看與升級方案" id="btn-show-pricing">
+                    title="查看與升級方案" data-i18n-title="tooltip_pricing" id="btn-show-pricing">
                     <span id="plan-badge" class="text-white/40 tracking-wider text-[11px] font-semibold">Points:</span>
                     <span id="point-balance"
                         class="font-bold text-white/90 font-mono tracking-widest drop-shadow-sm text-xs">--</span>
-                    <button id="btn-refresh-points" title="Refresh balance"
+                    <button id="btn-refresh-points" title="Refresh balance" data-i18n-title="tooltip_refresh_balance"
                         onclick="event.stopPropagation();if(window.loamlabUserEmail){window.fetchUserPoints(window.loamlabUserEmail);}"
                         style="background:none;border:none;cursor:pointer;font-size:11px;color:rgba(255,255,255,0.4);padding:0 2px;line-height:1;" class="hover:text-white/80 transition-colors">↺</button>
                 </div>
 
                 <div class="flex items-center gap-2 cursor-pointer group hover:bg-white/5 px-2 py-1.5 -mr-1 rounded border border-transparent hover:border-white/10 transition-all"
-                    title="Google 登入" id="btn-login">
+                    title="Google 登入" data-i18n-title="tooltip_login" id="btn-login">
                     <span
                         class="text-[11px] font-bold text-white/70 group-hover:text-white transition-colors tracking-wide"
                         data-i18n="login">Log In</span>
@@ -281,7 +281,7 @@
             <div class="flex flex-col gap-4 w-full px-3">
                 <!-- 1. 真實渲染 (Active) -->
                 <div id="sidebar-tool-1" class="sidebar-tool-btn w-full aspect-square rounded-xl bg-white/10 transition-colors cursor-pointer flex flex-col items-center justify-center text-white group relative overflow-hidden shadow-sm border border-white/20 hover:bg-white/20"
-                    title="真實渲染" onclick="setActiveTool(1)">
+                    title="真實渲染" data-i18n-title="tooltip_render" onclick="setActiveTool(1)">
                     <div class="absolute inset-x-0 top-0 h-1 bg-[var(--accent-red)] sidebar-active-bar"></div>
                     <svg class="w-6 h-6 mb-1 text-[var(--accent-red)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -291,7 +291,7 @@
                 </div>
                 <!-- 2. SpaceReform -->
                 <div id="sidebar-tool-2" class="sidebar-tool-btn w-full aspect-square rounded-xl bg-transparent transition-colors cursor-pointer flex flex-col items-center justify-center text-white/50 group relative overflow-hidden hover:bg-white/10 hover:text-white"
-                    title="SpaceReform" onclick="setActiveTool(2)">
+                    title="SpaceReform" data-i18n-title="tooltip_space_reform" onclick="setActiveTool(2)">
                     <div class="absolute inset-x-0 top-0 h-1 bg-[var(--accent-red)] sidebar-active-bar hidden"></div>
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -301,7 +301,7 @@
                 </div>
                 <!-- 3. 九宮格鏡頭構圖 -->
                 <div id="sidebar-tool-3" class="sidebar-tool-btn w-full aspect-square rounded-xl bg-transparent transition-colors cursor-pointer flex flex-col items-center justify-center text-white/50 group relative overflow-hidden hover:bg-white/10 hover:text-white"
-                    title="九宮格鏡頭構圖" onclick="setActiveTool(3)">
+                    title="九宮格鏡頭構圖" data-i18n-title="tooltip_multi_angle" onclick="setActiveTool(3)">
                     <div class="absolute inset-x-0 top-0 h-1 bg-[var(--accent-red)] sidebar-active-bar hidden"></div>
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -311,7 +311,7 @@
                 </div>
                 <!-- 4. 指定材質替換 (Dev only) -->
                 <div id="sidebar-tool-4" class="dev-only-tool hidden sidebar-tool-btn w-full aspect-square rounded-xl bg-transparent transition-colors cursor-pointer flex flex-col items-center justify-center text-white/50 group relative overflow-hidden hover:bg-white/10 hover:text-white"
-                    title="指定材質替換" onclick="setActiveTool(4)">
+                    title="指定材質替換" data-i18n-title="tooltip_material" onclick="setActiveTool(4)">
                     <div class="absolute inset-x-0 top-0 h-1 bg-[var(--accent-red)] sidebar-active-bar hidden"></div>
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -325,7 +325,7 @@
                 <button
                     onclick="(function(){var ids={1:'ai-render',2:'spacereform',3:'multiangle',4:'smartcanvas'};if(window.TutorialSystem)TutorialSystem.openHelp(ids[currentActiveTool]||'ai-render');})()"
                     class="w-8 h-8 rounded-full flex items-center justify-center text-white/20 hover:text-white/60 hover:bg-white/8 transition-colors cursor-pointer"
-                    title="使用說明">
+                    title="使用說明" data-i18n-title="tooltip_help">
                     <span class="text-[13px] font-light select-none">?</span>
                 </button>
             </div>
@@ -362,6 +362,12 @@
                         </svg>
                         <a href="https://www.loamlab.com/feedback-beta" target="_blank" class="nav-item text-sm tracking-widest font-medium"
                             data-i18n="status_waiting">正在等待 RUBY 核心連線...</a>
+                    </div>
+
+                    <!-- 遮罩確認預覽 Overlay（Apply Changes 後顯示在主視窗） -->
+                    <div id="sc-mask-overlay" class="hidden absolute inset-0 z-20 bg-black flex items-center justify-center">
+                        <img id="sc-mask-overlay-img" src="" class="w-full h-full object-contain">
+                        <div class="absolute top-3 left-3 text-[10px] font-semibold tracking-wider text-white/60 uppercase bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-md" data-i18n="sc_pending_label">遮罩預覽</div>
                     </div>
 
                     <!-- 頂部浮動操作列 -->
@@ -420,6 +426,17 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- 工具 2：遮罩確認後右側資訊區（底圖縮圖 + 區域列表 + 重新編輯） -->
+                    <div id="sc-pending-preview" class="hidden w-full flex flex-col gap-2">
+                        <label class="text-[11px] font-semibold tracking-wider text-blue-400/80 uppercase" data-i18n="sc_pending_label">遮罩預覽</label>
+                        <!-- 底圖縮圖 -->
+                        <img id="sc-base-thumb" src="" class="w-full rounded-xl object-cover bg-black/40" style="max-height:80px;">
+                        <div id="sc-preview-region-list" class="flex flex-col gap-1.5"></div>
+                        <button id="btn-sc-re-edit" class="w-full text-[11px] py-1.5 rounded-lg border border-white/15 text-white/50 hover:text-white/80 hover:border-white/30 transition-colors">
+                            <span data-i18n="sc_re_edit">重新編輯遮罩</span>
+                        </button>
                     </div>
 
                     <!-- 工具 2：參考圖上傳（可選，置於 Advanced Settings 外側） -->
@@ -522,7 +539,7 @@
                                     data-i18n="prompt_label">
                                     <span class="uppercase" data-i18n="prompt_label">附加提示詞 (Optional)</span>
                                     <span class="text-[10px] text-white/30 font-medium tracking-normal"
-                                        title="打上圖片上的具體材料，如果在SU已有賦予或不需要指定則可空白。">ℹ️ 無特殊指示可留空</span>
+                                        title="打上圖片上的具體材料，如果在SU已有賦予或不需要指定則可空白。" data-i18n-title="tooltip_prompt_helper">ℹ️ 無特殊指示可留空</span>
                                 </label>
                                 <textarea id="user-prompt-input" rows="2" data-i18n="prompt_ph"
                                     class="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[12px] text-white/90 focus:outline-none focus:border-[#dc2626]/70 focus:ring-1 focus:ring-[#dc2626]/50 transition-all placeholder-white/20 resize-none custom-scrollbar mb-3 font-light tracking-wide shadow-inner"
@@ -565,7 +582,7 @@
                             <span class="text-[10px] text-white/40 uppercase font-semibold whitespace-nowrap hidden xl:block">目錄</span>
                             <div id="save-dir-display"
                                 class="text-[11px] text-white/50 font-mono truncate cursor-pointer group-hover/dir:text-white/80 transition-colors bg-transparent border-none appearance-none outline-none"
-                                title="尚未設定 (點擊選擇資料夾)"
+                                title="尚未設定 (點擊選擇資料夾)" data-i18n-title="tooltip_save_path"
                                 onclick="if(window.sketchup) sketchup.choose_save_dir({})">
                                 D:/專案/預設輸出/
                             </div>
@@ -1093,18 +1110,18 @@
                     <!-- 底部膠囊工具列 -->
                     <div class="shrink-0 flex items-center justify-center pb-4 px-4">
                         <div id="sc-capsule" class="flex items-center gap-1.5 bg-black/70 backdrop-blur border border-white/15 rounded-full px-4 py-2 shadow-lg">
-                            <button class="sc-tool-btn sc-active" data-tool="wand" title="魔術棒 (Smart Select)">
+                            <button class="sc-tool-btn sc-active" data-tool="wand" title="魔術棒 (Smart Select)" data-i18n-title="sc_tool_magic">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 9-7 2-4 7L5 3z"/></svg>
                             </button>
-                            <button class="sc-tool-btn" data-tool="brush" title="筆刷 (Brush)">
+                            <button class="sc-tool-btn" data-tool="brush" title="筆刷 (Brush)" data-i18n-title="sc_tool_brush">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                             </button>
                             <input type="color" id="sc-color-picker" value="#ff6432" class="w-7 h-7 rounded-full border-2 border-white/20 cursor-pointer bg-transparent" title="筆刷顏色">
                             <input type="range" id="sc-brush-size" min="5" max="60" value="20" class="w-16 accent-rose-500" title="筆刷大小">
-                            <button class="sc-tool-btn" data-tool="eraser" title="橡皮擦 (Eraser)">
+                            <button class="sc-tool-btn" data-tool="eraser" title="橡皮擦 (Eraser)" data-i18n-title="sc_tool_eraser">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                             </button>
-                            <button class="sc-tool-btn" data-tool="fill" title="填充 (Fill enclosed area)">
+                            <button class="sc-tool-btn" data-tool="fill" title="填充 (Fill enclosed area)" data-i18n-title="sc_tool_fill">
                                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15c-.59.56-.59 1.53 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10 10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z"/></svg>
                             </button>
                             <div class="w-px h-5 bg-white/15 mx-1"></div>

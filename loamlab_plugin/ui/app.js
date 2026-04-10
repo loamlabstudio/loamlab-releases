@@ -11,6 +11,18 @@ function t(key) {
     return (val !== undefined && val !== null) ? val : key;
 }
 
+function sanitizeMsg(msg) {
+    if (!msg || typeof msg !== 'string') return msg;
+    return msg
+        .replace(/AtlasCloud/gi, 'AI 渲染引擎')
+        .replace(/nano-banana/gi, 'AI-Engine')
+        .replace(/nanobanana/gi, 'AI-Engine')
+        .replace(/google/gi, 'AI')
+        .replace(/coze/gi, 'Cloud')
+        .replace(/execution expired/gi, '連線逾時')
+        .replace(/Failed to open TCP connection/gi, '伺服器連線失敗');
+}
+
 // 實時進度條計時器與背景列隊計數器
 let renderTimer = null;
 let currentPct = 0;
@@ -191,9 +203,21 @@ function setActiveTool(n, skipTutorial) {
         if (pickEmpty) pickEmpty.className = 'flex flex-col items-center justify-center gap-2 text-white/30 group-hover:text-blue-400/50 transition-colors py-5';
     }
 
+    // 遮罩預覽：切換工具時先隱藏，再依 pending 狀態決定是否恢復
+    const maskOverlay = document.getElementById('sc-mask-overlay');
+    if (maskOverlay) maskOverlay.classList.add('hidden');
+    const pendingPreviewEl = document.getElementById('sc-pending-preview');
+    if (pendingPreviewEl) pendingPreviewEl.classList.add('hidden');
+
     // 底圖選擇器：工具 2/3/4 顯示，工具 1 隱藏
     const picker = document.getElementById('base-image-picker');
-    if (picker) picker.classList.toggle('hidden', n === 1);
+    if (SmartCanvas.pendingSwap && (n === 2 || n === 4)) {
+        // 切回有待確認遮罩的工具 → 恢復遮罩預覽面板
+        if (picker) picker.classList.add('hidden');
+        _scRenderPendingPanel();
+    } else {
+        if (picker) picker.classList.toggle('hidden', n === 1);
+    }
     clearBaseImageSelection();
 
     updateCostPreview();
@@ -779,7 +803,7 @@ window.receiveFromRuby = function (data) {
             if (typeof openPricingModal === 'function') openPricingModal({ highlight: 'pro' });
         }
         const langObj5 = UI_LANG[currentLang];
-        let failMsg = data.message || langObj5['render_failed'] || 'Render Failed';
+        let failMsg = sanitizeMsg(data.message || langObj5['render_failed'] || 'Render Failed');
         if (data.points_refunded) {
             failMsg += ` (${langObj5['points_refunded'] || 'Points Refunded'})`;
         }
@@ -2806,11 +2830,11 @@ function _scHandlePaste(e) {
     }
 }
 
-function openSmartCanvas(channelBase64, renderedUrl, sceneName) {
+function openSmartCanvas(channelBase64, renderedUrl, sceneName, keepRegions = false) {
     SmartCanvas.renderedUrl = renderedUrl;
     SmartCanvas.channelImgSrc = channelBase64;
     SmartCanvas.baseScene = sceneName || '';
-    SmartCanvas.regions = [];
+    if (!keepRegions) { SmartCanvas.regions = []; }
     SmartCanvas.undoStack = [];
     SmartCanvas.activeTool = 'wand';
     SmartCanvas.hoveredColor = null;
@@ -3730,6 +3754,57 @@ function _scUpdatePendingIndicator() {
     }
 }
 
+// 在主視窗顯示遮罩預覽 overlay，右側面板顯示可編輯區域列表
+function _scRenderPendingPanel() {
+    const previewEl = document.getElementById('sc-pending-preview');
+    const basePickerEl = document.getElementById('base-image-picker');
+
+    // 主視窗 overlay：顯示帶色彩標注的合成預覽圖
+    try {
+        const composite = _scCreateAnnotatedComposite();
+        const overlayImg = document.getElementById('sc-mask-overlay-img');
+        if (overlayImg) overlayImg.src = composite.toDataURL('image/jpeg', 0.9);
+        const overlay = document.getElementById('sc-mask-overlay');
+        if (overlay) overlay.classList.remove('hidden');
+    } catch (e) { /* non-fatal */ }
+
+    // 右側面板：渲染可編輯區域卡片
+    const list = document.getElementById('sc-preview-region-list');
+    if (list) {
+        list.innerHTML = '';
+        SmartCanvas.regions.forEach((r, i) => {
+            const card = document.createElement('div');
+            card.className = 'flex items-center gap-2 bg-white/5 rounded-lg px-3 py-1.5';
+            card.innerHTML = `<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${r.colorHex || r.color}"></span>
+                <input class="sc-preview-label flex-1 bg-transparent text-[11px] text-white/75 outline-none border-b border-white/10 focus:border-white/30 min-w-0" value="${(r.label || '').replace(/"/g, '&quot;')}" placeholder="${t('sc_describe_placeholder') || '描述替換內容...'}" data-idx="${i}">`;
+            list.appendChild(card);
+        });
+        list.querySelectorAll('.sc-preview-label').forEach(inp => {
+            inp.addEventListener('input', e => {
+                const idx = +e.target.dataset.idx;
+                if (SmartCanvas.regions[idx]) SmartCanvas.regions[idx].label = e.target.value;
+            });
+        });
+    }
+
+    // 底圖縮圖
+    const baseThumb = document.getElementById('sc-base-thumb');
+    if (baseThumb && SmartCanvas.renderedUrl) baseThumb.src = SmartCanvas.renderedUrl;
+
+    // 右側面板顯示，隱藏底圖選擇器
+    if (previewEl) previewEl.classList.remove('hidden');
+    if (basePickerEl) basePickerEl.classList.add('hidden');
+}
+
+function _scHidePendingPanel() {
+    const previewEl = document.getElementById('sc-pending-preview');
+    const basePickerEl = document.getElementById('base-image-picker');
+    const overlay = document.getElementById('sc-mask-overlay');
+    if (previewEl) previewEl.classList.add('hidden');
+    if (basePickerEl) basePickerEl.classList.remove('hidden');
+    if (overlay) overlay.classList.add('hidden');
+}
+
 function _scConfirmSelections() {
     if (SmartCanvas.regions.length === 0) {
         showUpdateToast(t('sc_no_regions') || '請先選取至少一個區域');
@@ -3755,6 +3830,8 @@ function _scConfirmSelections() {
     (document.getElementById('smart-canvas-modal') || document.createElement('div')).classList.add('hidden');
     (document.getElementById('smart-canvas-modal') || document.createElement('div')).classList.remove('flex');
     _scUpdatePendingIndicator();
+    // 在左側面板顯示遮罩預覽
+    _scRenderPendingPanel();
     showUpdateToast('✅ 選取已確認，點擊渲染鍵執行替換');
 }
 
@@ -3882,6 +3959,7 @@ async function executeSmartSwap(overrideBody = null) {
     } finally {
         finalizeRenderUI();
         SmartCanvas._executing = false;
+        _scHidePendingPanel();
         if (renderBtn) { renderBtn.disabled = false; renderBtn.classList.remove('rendering-pulse'); }
         if (renderLabel) renderLabel.textContent = origLabel;
         const stEl = document.getElementById('status-text');
@@ -3904,10 +3982,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // 執行替換按鈕：確認選取 → 關閉 modal → 等待渲染鍵
     (document.getElementById('btn-execute-smart-swap') || document.createElement('div')).addEventListener('click', _scConfirmSelections);
 
+    // 左側面板「重新編輯遮罩」按鈕 → 隱藏預覽，重開 modal 並保留繪製區域
+    (document.getElementById('btn-sc-re-edit') || document.createElement('div')).addEventListener('click', () => {
+        SmartCanvas.pendingSwap = false;
+        _scHidePendingPanel();
+        _scUpdatePendingIndicator();
+        openSmartCanvas(SmartCanvas.channelImgSrc, SmartCanvas.renderedUrl, SmartCanvas.baseScene, /*keepRegions=*/true);
+    });
+
     // Smart Canvas pending 取消鍵
     (document.getElementById('sc-pending-cancel') || document.createElement('div')).addEventListener('click', () => {
         SmartCanvas.pendingSwap = false;
         SmartCanvas.regions = [];
+        _scHidePendingPanel();
         _scUpdatePendingIndicator();
     });
 
@@ -3918,6 +4005,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
         SmartCanvas.pendingSwap = false;
+        _scHidePendingPanel();
         _scUpdatePendingIndicator();
     });
 

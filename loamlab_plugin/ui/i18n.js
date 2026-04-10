@@ -141,6 +141,8 @@ const UI_LANG = {
         'sc_guide_ref_h': '上傳參考圖（可選）',
         'sc_guide_ref_p': '點擊區域卡片的 🖼 圖示上傳風格照片，AI 會同時學習文字與圖片的視覺風格。',
         'sc_no_regions': '請先選取至少一個區域',
+        'sc_re_edit': '重新編輯遮罩',
+        'sc_pending_label': '遮罩預覽',
         'tut_step_of': '步驟 {n} / {total}',
         'tut_next': '下一步 →',
         'tut_prev': '← 上一步',
@@ -150,7 +152,23 @@ const UI_LANG = {
         'tut_choice_title': '需要新手引導嗎？',
         'tut_choice_desc': '首次使用各工具時，我們提供 2-3 步操作說明。隨時可從工具旁的 ? 重新開啟。',
         'tut_choice_yes': '帶我了解功能 →',
-        'tut_choice_no': '我已熟悉，直接開始'
+        'tut_choice_no': '我已熟悉，直接開始',
+        'tooltip_referral': '邀請好友得 200 點',
+        'tooltip_pricing': '查看與升級方案',
+        'tooltip_login': 'Google 登入',
+        'tooltip_render': '真實渲染',
+        'tooltip_space_reform': '空間改造',
+        'tooltip_multi_angle': '九宮格鏡頭構圖',
+        'tooltip_material': '指定材質替換',
+        'tooltip_help': '使用說明',
+        'tooltip_history': '渲染歷史記錄',
+        'tooltip_refresh_balance': '刷新點數餘額',
+        'tooltip_save_path': '尚未設定（點擊選擇資料夾）',
+        'tooltip_prompt_helper': '打上圖片上的具體材料...',
+        'sc_tool_magic': '魔術棒選取',
+        'sc_tool_brush': '筆刷繪製',
+        'sc_tool_eraser': '橡皮擦',
+        'sc_tool_fill': '填充'
     },
     'en-US': {
         'title': 'LoamLab Camera',
@@ -294,6 +312,8 @@ const UI_LANG = {
         'sc_guide_ref_h': 'Upload a reference photo (optional)',
         'sc_guide_ref_p': 'Tap 🖼 on any zone card to add a style reference image. AI will blend your text and visual input.',
         'sc_no_regions': 'Please select at least one region',
+        'sc_re_edit': 'Re-edit Mask',
+        'sc_pending_label': 'Mask Preview',
         'tut_step_of': 'Step {n} of {total}',
         'tut_next': 'Next →',
         'tut_prev': '← Back',
@@ -303,7 +323,23 @@ const UI_LANG = {
         'tut_choice_title': 'Want a quick tour?',
         'tut_choice_desc': 'We show 2-3 step guides the first time you use each tool. Reopen anytime via the ? button.',
         'tut_choice_yes': 'Show me the features →',
-        'tut_choice_no': "I'm familiar, let me start"
+        'tut_choice_no': "I'm familiar, let me start",
+        'tooltip_referral': 'Invite friends, get 200 pts',
+        'tooltip_pricing': 'View & upgrade plans',
+        'tooltip_login': 'Sign in with Google',
+        'tooltip_render': 'AI Render',
+        'tooltip_space_reform': 'SpaceReform',
+        'tooltip_multi_angle': 'Multi-angle Composition',
+        'tooltip_material': 'Material Replacement',
+        'tooltip_help': 'Help',
+        'tooltip_history': 'Render History',
+        'tooltip_refresh_balance': 'Refresh balance',
+        'tooltip_save_path': 'Not set (click to choose folder)',
+        'tooltip_prompt_helper': 'Add material details...',
+        'sc_tool_magic': 'Magic Wand',
+        'sc_tool_brush': 'Brush',
+        'sc_tool_eraser': 'Eraser',
+        'sc_tool_fill': 'Fill'
     },
     'zh-CN': {
         'title': '野人相机 (LoamLab Camera)',
@@ -449,6 +485,8 @@ const UI_LANG = {
         'sc_guide_ref_h': '上传参考图（可选）',
         'sc_guide_ref_p': '点击区域卡片的 🖼 图标上传风格照片，AI 会同时学习文字与图片的视觉风格。',
         'sc_no_regions': '请先选取至少一个区域',
+        'sc_re_edit': '重新编辑遮罩',
+        'sc_pending_label': '遮罩预览',
         'tut_step_of': '步骤 {n} / {total}',
         'tut_next': '下一步 →',
         'tut_prev': '← 上一步',
@@ -458,7 +496,23 @@ const UI_LANG = {
         'tut_choice_title': '需要新手引导吗？',
         'tut_choice_desc': '首次使用各工具时，我们提供 2-3 步操作说明。随时可从工具旁的 ? 重新开启。',
         'tut_choice_yes': '带我了解功能 →',
-        'tut_choice_no': '我已熟悉，直接开始'
+        'tut_choice_no': '我已熟悉，直接开始',
+        'tooltip_referral': '邀请好友得 200 点',
+        'tooltip_pricing': '查看与升级方案',
+        'tooltip_login': 'Google 登录',
+        'tooltip_render': '真实渲染',
+        'tooltip_space_reform': '空间改造',
+        'tooltip_multi_angle': '九宫格镜头构图',
+        'tooltip_material': '指定材质替换',
+        'tooltip_help': '使用说明',
+        'tooltip_history': '渲染历史记录',
+        'tooltip_refresh_balance': '刷新点数余额',
+        'tooltip_save_path': '尚未设定（点击选择文件夹）',
+        'tooltip_prompt_helper': '填写图片上的具体材料...',
+        'sc_tool_magic': '魔术棒选取',
+        'sc_tool_brush': '笔刷绘制',
+        'sc_tool_eraser': '橡皮擦',
+        'sc_tool_fill': '填充'
     },
     'es-ES': {
         'title': 'LoamLab Cámara',
@@ -602,6 +656,8 @@ const UI_LANG = {
         'sc_guide_ref_h': 'Sube una foto de referencia (opcional)',
         'sc_guide_ref_p': 'Pulsa 🖼 en una tarjeta de zona para añadir una imagen de estilo. La IA combinará texto e imagen.',
         'sc_no_regions': 'Selecciona al menos una región',
+        'sc_re_edit': 'Reeditar Máscara',
+        'sc_pending_label': 'Vista previa de máscara',
         'tut_step_of': 'Paso {n} de {total}',
         'tut_next': 'Siguiente →',
         'tut_prev': '← Anterior',
@@ -611,7 +667,23 @@ const UI_LANG = {
         'tut_choice_title': '¿Quieres un tour rápido?',
         'tut_choice_desc': 'Mostramos 2-3 pasos la primera vez que usas cada herramienta. Reabre cuando quieras con el botón ?.',
         'tut_choice_yes': 'Muéstrame las funciones →',
-        'tut_choice_no': 'Ya conozco el producto, empezar'
+        'tut_choice_no': 'Ya conozco el producto, empezar',
+        'tooltip_referral': 'Invita amigos, obtén 200 pts',
+        'tooltip_pricing': 'Ver y mejorar plan',
+        'tooltip_login': 'Iniciar sesión con Google',
+        'tooltip_render': 'Render IA',
+        'tooltip_space_reform': 'SpaceReform',
+        'tooltip_multi_angle': 'Composición multi-ángulo',
+        'tooltip_material': 'Reemplazo de material',
+        'tooltip_help': 'Ayuda',
+        'tooltip_history': 'Historial de renders',
+        'tooltip_refresh_balance': 'Actualizar saldo',
+        'tooltip_save_path': 'No configurado (clic para elegir carpeta)',
+        'tooltip_prompt_helper': 'Describe los materiales de la imagen...',
+        'sc_tool_magic': 'Varita mágica',
+        'sc_tool_brush': 'Pincel',
+        'sc_tool_eraser': 'Borrador',
+        'sc_tool_fill': 'Rellenar'
     },
     'pt-BR': {
         'title': 'Câmera LoamLab',
@@ -755,6 +827,8 @@ const UI_LANG = {
         'sc_guide_ref_h': 'Envie uma foto de referência (opcional)',
         'sc_guide_ref_p': 'Toque em 🖼 no cartão da zona para adicionar uma imagem de estilo. A IA combina texto e imagem.',
         'sc_no_regions': 'Selecione pelo menos uma região',
+        'sc_re_edit': 'Reeditar Máscara',
+        'sc_pending_label': 'Pré-visualização de máscara',
         'tut_step_of': 'Etapa {n} de {total}',
         'tut_next': 'Próximo →',
         'tut_prev': '← Anterior',
@@ -764,7 +838,23 @@ const UI_LANG = {
         'tut_choice_title': 'Quer um tour rápido?',
         'tut_choice_desc': 'Mostramos 2-3 passos na primeira vez que você usa cada ferramenta. Reabra quando quiser com o botão ?.',
         'tut_choice_yes': 'Me mostre as funcionalidades →',
-        'tut_choice_no': 'Já conheço, vamos começar'
+        'tut_choice_no': 'Já conheço, vamos começar',
+        'tooltip_referral': 'Convide amigos, ganhe 200 pts',
+        'tooltip_pricing': 'Ver e fazer upgrade do plano',
+        'tooltip_login': 'Entrar com Google',
+        'tooltip_render': 'Render por IA',
+        'tooltip_space_reform': 'SpaceReform',
+        'tooltip_multi_angle': 'Composição multi-ângulo',
+        'tooltip_material': 'Substituição de material',
+        'tooltip_help': 'Ajuda',
+        'tooltip_history': 'Histórico de renders',
+        'tooltip_refresh_balance': 'Atualizar saldo',
+        'tooltip_save_path': 'Não configurado (clique para escolher pasta)',
+        'tooltip_prompt_helper': 'Descreva os materiais da imagem...',
+        'sc_tool_magic': 'Varinha mágica',
+        'sc_tool_brush': 'Pincel',
+        'sc_tool_eraser': 'Borracha',
+        'sc_tool_fill': 'Preencher'
     },
     'ja-JP': {
         'title': '野人カメラ (LoamLab Camera)',
@@ -908,6 +998,8 @@ const UI_LANG = {
         'sc_guide_ref_h': '参照画像をアップロード（任意）',
         'sc_guide_ref_p': 'ゾーンカードの 🖼 をタップしてスタイル参照画像を追加。AIがテキストと画像を組み合わせて学習します。',
         'sc_no_regions': '少なくとも1つのエリアを選択してください',
+        'sc_re_edit': 'マスクを再編集',
+        'sc_pending_label': 'マスクプレビュー',
         'tut_step_of': 'ステップ {n} / {total}',
         'tut_next': '次へ →',
         'tut_prev': '← 戻る',
@@ -917,7 +1009,23 @@ const UI_LANG = {
         'tut_choice_title': 'クイックツアーを見ますか？',
         'tut_choice_desc': '各ツールの初回使用時に 2-3 ステップのガイドを表示します。? ボタンでいつでも再表示できます。',
         'tut_choice_yes': '機能を教えてください →',
-        'tut_choice_no': '使い方は分かっています、始める'
+        'tut_choice_no': '使い方は分かっています、始める',
+        'tooltip_referral': '友達を招待して 200 pts 獲得',
+        'tooltip_pricing': 'プランを確認・アップグレード',
+        'tooltip_login': 'Google でサインイン',
+        'tooltip_render': 'AIレンダリング',
+        'tooltip_space_reform': 'スペース改造',
+        'tooltip_multi_angle': '多角度構図',
+        'tooltip_material': '素材置き換え',
+        'tooltip_help': 'ヘルプ',
+        'tooltip_history': 'レンダー履歴',
+        'tooltip_refresh_balance': '残高を更新',
+        'tooltip_save_path': '未設定（クリックしてフォルダを選択）',
+        'tooltip_prompt_helper': '画像の具体的な素材を入力...',
+        'sc_tool_magic': 'マジックワンド',
+        'sc_tool_brush': 'ブラシ',
+        'sc_tool_eraser': '消しゴム',
+        'sc_tool_fill': '塗りつぶし'
     }
 };
 
@@ -955,6 +1063,12 @@ window.setLanguage = function (lang) {
         const count = scenesSpan.getAttribute('data-count') || 0;
         scenesSpan.textContent = `${UI_LANG[lang]['total']} ${count} ${UI_LANG[lang]['unit']}`;
     }
+
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        const val = (UI_LANG[lang] || UI_LANG['en-US'])[key];
+        if (val) el.title = val;
+    });
 
     if (typeof updatePlanCostLabels === 'function') updatePlanCostLabels(lang);
     if (typeof setActiveTool === 'function' && typeof currentActiveTool !== 'undefined') setActiveTool(currentActiveTool, true);

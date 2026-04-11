@@ -27,7 +27,7 @@ module LoamLab
     # [v1.4.2 Hotfix] 如果正在重載代碼（更新或熱重載），且舊視窗還在，強制清除它
     # 這樣可以確保 1.3.3 -> 1.4.2 的用戶能看到新版介面（因其 updater.rb 呼叫 show_dialog 不帶參數）
     if @dialog
-      begin; @dialog.close; rescue; end
+      begin; @dialog.close; rescue => e; puts "[LoamLab] dialog close: #{e.message}"; end
       @dialog = nil
       @@polling_dialog = nil
     end
@@ -54,16 +54,21 @@ module LoamLab
       keys_hash.each do |k, v|
         begin
           ro[k] = v if valid_keys.include?(k)
-        rescue
+        rescue => e
+          puts "[LoamLab] render key #{k}: #{e.message}"
         end
       end
     end
 
     def self.apply_render_keys(model)
       ro = model.rendering_options
-      RENDER_KEYS.keys.each { |k| model.set_attribute('LoamLabRenderOverride', k, ro[k]) rescue nil }
+      RENDER_KEYS.keys.each do |k|
+        begin; model.set_attribute('LoamLabRenderOverride', k, ro[k]); rescue => e; puts "[LoamLab] render attr #{k}: #{e.message}"; end
+      end
       self.safe_set_render_keys(ro, RENDER_KEYS)
-      model.pages.each { |p| p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS) rescue nil }
+      model.pages.each do |p|
+        begin; p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS); rescue => e; puts "[LoamLab] page update: #{e.message}"; end
+      end
       model.set_attribute('LoamLabRenderOverride', 'applied', true)
     end
 
@@ -75,7 +80,9 @@ module LoamLab
         restore_hash[k] = val unless val.nil?
       end
       self.safe_set_render_keys(ro, restore_hash)
-      model.pages.each { |p| p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS) rescue nil }
+      model.pages.each do |p|
+        begin; p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS); rescue => e; puts "[LoamLab] page update: #{e.message}"; end
+      end
       model.set_attribute('LoamLabRenderOverride', 'applied', false)
     end
 
@@ -101,7 +108,7 @@ module LoamLab
     def self.show_dialog(force = false)
       # 如果強制重開，先關閉存在的視窗
       if force && @dialog
-        begin; @dialog.close; rescue; end
+        begin; @dialog.close; rescue => e; puts "[LoamLab] dialog close: #{e.message}"; end
         @dialog = nil
       end
 
@@ -254,14 +261,14 @@ module LoamLab
       # 4. [Prod] 自動更新: 向伺服器檢查版號，若有新版則透過 JS 通知
       dialog.add_action_callback("auto_update") do |action_context, params|
         current_version = LoamLab::VERSION
-        LoamLabPlugin::Updater.check_for_updates(dialog, current_version)
+        LoamLab::Updater.check_for_updates(dialog, current_version)
       end
 
-      # 4b. [Prod] 執行安裝更新: 接收 JS 確認後實際下載並覆蓋插件
+      # 4b. 執行更新（EW版跳瀏覽器，直接版自動下載安裝）
       dialog.add_action_callback("execute_update") do |action_context, params|
         url = params.is_a?(Hash) ? params["url"] : nil
         if url && !url.empty?
-          LoamLabPlugin::Updater.download_and_install(dialog, url)
+          LoamLab::Updater.download_and_install(dialog, url)
         else
           dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status: 'update_error', msg: '無效的下載連結'})})")
         end
@@ -352,7 +359,8 @@ module LoamLab
                     original_states[k] = model.rendering_options[k]
                     model.rendering_options[k] = false
                   end
-                rescue
+                rescue => e
+                  puts "[LoamLab] render option #{k}: #{e.message}"
                 end
               end
               
@@ -377,7 +385,8 @@ module LoamLab
               original_states.each do |k, v|
                 begin
                   model.rendering_options[k] = v
-                rescue
+                rescue => e
+                  puts "[LoamLab] render option restore #{k}: #{e.message}"
                 end
               end
             end
@@ -564,7 +573,7 @@ module LoamLab
             begin
               s[:face].material      = s[:mat]
               s[:face].back_material = s[:back]
-            rescue; end
+            rescue => e; puts "[LoamLab] face material restore: #{e.message}"; end
           end
           # 刪除臨時材質
           materials_created.each { |m| model.materials.remove(m) rescue nil }
@@ -738,7 +747,7 @@ module LoamLab
 
       # 批量出圖：禁用場景切換過渡動畫，避免截圖時切換尚未完成
       original_transition_time = (model.pages.transition_time rescue 0.5)
-      begin; model.pages.transition_time = 0; rescue; end
+      begin; model.pages.transition_time = 0; rescue => e; puts "[LoamLab] transition time: #{e.message}"; end
 
       # 記錄並隱藏干擾元素（截圖後自動還原）
       safe_keys = ['DrawHidden', 'DrawHiddenObjects', 'DisplaySketchAxes', 'DisplayInstanceAxes']
@@ -749,7 +758,8 @@ module LoamLab
             original_states[k] = model.rendering_options[k]
             model.rendering_options[k] = false
           end
-        rescue
+        rescue => e
+          puts "[LoamLab] render option #{k}: #{e.message}"
         end
       end
 
@@ -769,9 +779,11 @@ module LoamLab
           # 佇列結束，恢復狀態
           UI.start_timer(0.5, false) do
             dialog.execute_script("window.receiveFromRuby({status: 'export_done'})")
-            original_states.each { |k, v| model.rendering_options[k] = v rescue nil }
+            original_states.each do |k, v|
+              begin; model.rendering_options[k] = v; rescue => e; puts "[LoamLab] render option restore #{k}: #{e.message}"; end
+            end
             model.pages.selected_page = current_page if current_page
-            begin; model.pages.transition_time = original_transition_time; rescue; end
+            begin; model.pages.transition_time = original_transition_time; rescue => e; puts "[LoamLab] transition time: #{e.message}"; end
             puts "[LoamLab] 批量導出排程已全部送出。"
           end
           next
@@ -921,7 +933,9 @@ module LoamLab
         ro['EdgeDisplayMode'] = 0      # 無邊線
         view.write_image(path, width, height, false)
       ensure
-        saved.each { |k, v| ro[k] = v rescue nil }
+        saved.each do |k, v|
+          begin; ro[k] = v; rescue => e; puts "[LoamLab] render option restore #{k}: #{e.message}"; end
+        end
       end
     end
 
@@ -977,7 +991,7 @@ module LoamLab
           dir = File.dirname(File.expand_path(__FILE__))
           # 關閉舊視窗
           if @dialog
-            begin; @dialog.close; rescue; end
+            begin; @dialog.close; rescue => e; puts "[LoamLab] dialog close: #{e.message}"; end
             @dialog = nil
           end
           # 依序重載 (不移除常數，直接覆蓋方法定義)

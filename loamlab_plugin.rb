@@ -7,9 +7,6 @@ module LoamLab
     PLUGIN_ROOT = File.expand_path(File.dirname(__FILE__))
     # 鐏忓洨鏆ラ崜宥咁樆閹烘盯鏋婇惂鑲╂窗闁峰嫭甯归崗?$LOAD_PATH 閻ㄥ嫭娓堕崜宥夋桨閿?
     # 闁瑦菐娑撯偓娓氬棗顩ч弸?SketchUp 閸徰勬箒閸忊晝绁崥灞芥倳閹挎潙鐫嶉敍灞界殻濮樻悂浠╁宄板煑閸庮亜鍘涚拋鈧崣鏍ㄦ付閺傛壆娈戦柅娆戠カ閵?
-    dev_dir = File.dirname(__FILE__)
-    $LOAD_PATH.unshift(dev_dir) unless $LOAD_PATH.include?(dev_dir)
-    
     unless file_loaded?(__FILE__)
     ext = SketchupExtension.new('LoamLab Camera (闁插簼姹夐惄鍛婎熂)', File.join(File.dirname(__FILE__), 'loamlab_plugin', 'main'))
     ext.description = 'LoamLab Camera Architecture Rendering Plugin'
@@ -24,6 +21,7 @@ module LoamLab
     end
   end
 end
+
 
 
 

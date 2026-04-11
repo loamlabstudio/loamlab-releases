@@ -15,9 +15,10 @@ export default function handler(req, res) {
     }
     return res.status(200).json({
         ...LATEST,
-        release_notes: "Admin security hardening + tool usage analytics fix"
+        release_notes: "EW compliance fix"
     });
 }
+
 
 
 

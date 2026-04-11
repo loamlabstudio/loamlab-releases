@@ -8,6 +8,7 @@ module LoamLab
   # ==============================================================================
   ENV_MODE = "production"
   BUILD_TYPE = "dev"
+  DIST_CHANNEL = "direct"   # "direct" = 官網版（自動安裝）| "store" = EW版（跳瀏覽器）
 
   if ENV_MODE == "production"
     API_BASE_URL = "https://loamlab-camera.vercel.app"
@@ -18,6 +19,7 @@ module LoamLab
   # Update version for 1.3.3 -> 1.4.0
   VERSION = '1.4.6'
 end
+
 
 
 

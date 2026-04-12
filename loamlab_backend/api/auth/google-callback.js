@@ -1,3 +1,5 @@
+import { createClient } from '@supabase/supabase-js';
+
 export default async function handler(req, res) {
     const { code, state: sessionId, error: oauthError } = req.query;
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -36,16 +38,16 @@ export default async function handler(req, res) {
         return res.status(200).send(renderHtml(false, '缺少授權碼或 Session ID', '請在 SketchUp 重新點擊登入。'));
     }
 
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
     // 1. 驗證 session 存在（CSRF 防護：確認 session_id 是由我們的 plugin 發起的）
-    let sessionValid = false;
-    try {
-        const checkRes = await fetch(
-            `${supabaseUrl}/rest/v1/auth_sessions?id=eq.${encodeURIComponent(sessionId)}&status=eq.pending&select=id`,
-            { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` } }
-        );
-        const sessions = await checkRes.json();
-        sessionValid = Array.isArray(sessions) && sessions.length > 0;
-    } catch (e) {}
+    const { data: sessions } = await supabase
+        .from('auth_sessions')
+        .select('id')
+        .eq('id', sessionId)
+        .eq('status', 'pending');
+
+    const sessionValid = Array.isArray(sessions) && sessions.length > 0;
 
     if (!sessionValid) {
         return res.status(200).send(renderHtml(false,
@@ -99,34 +101,23 @@ export default async function handler(req, res) {
     }
 
     // 4. 更新 auth_sessions → success（plugin 的 poll 機制會偵測到這個變化）
-    try {
-        await fetch(`${supabaseUrl}/rest/v1/auth_sessions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': supabaseKey,
-                'Authorization': `Bearer ${supabaseKey}`,
-                'Prefer': 'resolution=merge-duplicates,return=minimal'
-            },
-            body: JSON.stringify({ id: sessionId, email, status: 'success' })
-        });
-    } catch (e) {
-        return res.status(200).send(renderHtml(false, '狀態更新失敗', e.message));
+    const { error: updateError } = await supabase
+        .from('auth_sessions')
+        .upsert({ id: sessionId, email, status: 'success' }, { onConflict: 'id' });
+
+    if (updateError) {
+        console.error('[google-callback] session update failed:', updateError.message);
+        return res.status(200).send(renderHtml(false,
+            '狀態更新失敗',
+            updateError.message + '（請聯繫客服或重試）'
+        ));
     }
 
     // 5. 確保 users 資料存在（新用戶給 60 點，舊用戶忽略衝突）
-    try {
-        await fetch(`${supabaseUrl}/rest/v1/users?on_conflict=email`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': supabaseKey,
-                'Authorization': `Bearer ${supabaseKey}`,
-                'Prefer': 'resolution=ignore-duplicates,return=minimal'
-            },
-            body: JSON.stringify({ email, points: 60 })
-        });
-    } catch (e) {}
+    await supabase.from('users').upsert({ email, points: 60 }, {
+        onConflict: 'email',
+        ignoreDuplicates: true
+    });
 
     return res.status(200).send(renderHtml(
         true,

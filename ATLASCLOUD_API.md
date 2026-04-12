@@ -164,6 +164,64 @@ POST https://api.atlascloud.ai/api/v1/model/generateImage
 
 ---
 
+---
+
+## 三-D. Nano Banana Pro Edit 與 Pro Edit Ultra
+
+> 文件建立：2026-04-11（由 AtlasCloud 模型頁面實測整理）
+
+### 3-D-1. 模型概覽
+
+| 項目 | Banana 2 Edit | Pro Edit | Pro Edit Ultra |
+|------|--------------|----------|----------------|
+| Model ID | `google/nano-banana-2/edit` | `google/nano-banana-pro/edit` | `google/nano-banana-pro/edit-ultra` |
+| 定價 | $0.072–$0.144（依解析度）| **$0.14 固定** | **$0.15 固定** |
+| 最高解析度 | 4K | 未明確（推測 2K） | 原生 4K |
+| 多圖輸入 | 最多 14 張（已驗證）| 未明確 | 14+ 張（已驗證）|
+| 生成速度 | 4–8 秒 | 未測 | < 2 秒（官方標注）|
+| 文件完整度 | 詳細 | 極簡 | 極簡 |
+
+### 3-D-2. API 接口
+
+**三個模型共用相同 endpoint 與請求格式**，只換 `model` 欄位，現有 render.js 無需改動。
+
+```json
+POST https://api.atlascloud.ai/api/v1/model/generateImage
+{
+  "model": "google/nano-banana-pro/edit",
+  "images": ["data:image/jpeg;base64,..."],
+  "prompt": "architectural visualization, photorealistic",
+  "resolution": "2k",
+  "aspect_ratio": "16:9"
+}
+```
+
+> ⚠️ **注意**：AtlasCloud 官方文件對 Pro / Pro Ultra 只列出 `prompt` 一個參數，`resolution`、`images` 是否生效**尚未驗證**。建議首次使用時觀察回傳結果是否正常。
+
+### 3-D-3. 定價邏輯差異（重要）
+
+Banana 2 按解析度分級；Pro / Pro Ultra 為**固定單價**：
+
+| 解析度 | Banana 2 成本 | Pro 成本 | Pro Ultra 成本 |
+|--------|-------------|---------|--------------|
+| 1K | $0.072 | $0.14（貴 1.9x）| $0.15（貴 2.1x）|
+| 2K | $0.108 | $0.14（貴 1.3x）| $0.15（貴 1.4x）|
+| 4K | $0.144 | $0.14（便宜 3%）| $0.15（貴 4%）|
+
+**結論：Pro 系列只在 4K 時與 Banana 2 成本相近；1K / 2K 時成本顯著更高。**
+
+LoamLab 點數扣費設計（1K=15點、2K=20點、4K=30點）是針對 Banana 2 定價校準，切換至 Pro 系列後後台成本與前台點數對應會失衡，需注意毛利率。
+
+### 3-D-4. 適用場景建議
+
+| 模型 | 建議使用場景 |
+|------|------------|
+| Banana 2 | 日常渲染、批量出圖、1K/2K 解析度為主 |
+| Pro Edit | 需要更細緻智能編輯、對品質要求較高的 4K 場景 |
+| Pro Ultra | 最高品質輸出、多參考圖一致性要求高、速度快（< 2s）|
+
+---
+
 ## 四、同平台其他圖像模型（備用選項）
 
 | 模型 | Model ID | 速度 | 價格/張 | 最適場景 |

@@ -7,7 +7,9 @@ param(
     [string]$version,
 
     [Parameter(Mandatory = $true)]
-    [string]$notes
+    [string]$notes,
+
+    [string]$channel = "direct"   # "direct"（預設，官網版）| "store"（EW版）
 )
 
 $ROOT       = $PSScriptRoot
@@ -47,6 +49,11 @@ $configRelease = $configOriginal `
     -replace 'BUILD_TYPE = "dev"',          'BUILD_TYPE = "release"' `
     -replace 'ENV_MODE = "development"',     'ENV_MODE = "production"' `
     -replace "VERSION = '[^']*'",            "VERSION = '$version'"
+
+if ($channel -eq "store") {
+    $configRelease = $configRelease -replace 'DIST_CHANNEL = "direct"', 'DIST_CHANNEL = "store"'
+    Write-Host "   [INFO] DIST_CHANNEL = store (EW版，自動安裝已停用)" -ForegroundColor Magenta
+}
 Set-Content -Path $CONFIG -Value $configRelease -Encoding UTF8
 
 $loaderRelease = $loaderOriginal -replace "ext\.version\s*=\s*'[^']*'", "ext.version     = '$version'"
@@ -85,7 +92,9 @@ Get-ChildItem -Path "$ROOT\loamlab_plugin" -Recurse -File | Where-Object {
 $archive.Dispose()
 $stream.Dispose()
 
-$configDev = $configRelease -replace 'BUILD_TYPE = "release"', 'BUILD_TYPE = "dev"'
+$configDev = $configRelease `
+    -replace 'BUILD_TYPE = "release"', 'BUILD_TYPE = "dev"' `
+    -replace 'DIST_CHANNEL = "store"',  'DIST_CHANNEL = "direct"'
 Set-Content -Path $CONFIG -Value $configDev -Encoding UTF8
 
 Rename-Item -Path $OUT_ZIP -NewName "loamlab_plugin.rbz" -Force
@@ -207,9 +216,16 @@ if ($gitStatus) {
 }
 
 # ---------------------------------------------------------
-# Step 5: Create GitHub Release + upload RBZ
+# Step 5: Create GitHub Release + upload RBZ（EW版跳過）
 # ---------------------------------------------------------
 Write-Host ""
+if ($channel -eq "store") {
+    Write-Host "[5/5] Skipping GitHub Release (EW版 - 請手動上傳 .rbz 至 EW 後台)" -ForegroundColor Magenta
+    Write-Host ""
+    Write-Host "  上傳位址：https://extensions.sketchup.com/developer" -ForegroundColor Cyan
+    Write-Host "  上傳檔案：$OUT_RBZ" -ForegroundColor Cyan
+    exit 0
+}
 Write-Host "[5/5] Creating GitHub Release ..." -ForegroundColor Yellow
 
 $ghCheck = gh --version 2>&1

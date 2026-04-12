@@ -52,6 +52,7 @@ export default async function handler(req, res) {
             .select('id', { count: 'exact', head: true })
             .eq('email', data.email)
             .eq('status', 'success')
+            .neq('id', session_id)
             .gt('expires_at', new Date().toISOString());
 
         if (count >= maxDevices) {

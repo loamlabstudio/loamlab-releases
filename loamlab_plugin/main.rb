@@ -23,6 +23,8 @@ module LoamLab
     @@requests        ||= []
     @@pending_results   = []
     @@polling_dialog    = nil
+    @@deferred_sends    = []   # Method B：Scene 1+ 的延遲 HTTP 佇列
+    @@scene0_style_url  = nil  # Method B：Scene 0 成功後的結果 URL
 
     # [v1.4.2 Hotfix] 如果正在重載代碼（更新或熱重載），且舊視窗還在，強制清除它
     # 這樣可以確保 1.3.3 -> 1.4.2 的用戶能看到新版介面（因其 updater.rb 呼叫 show_dialog 不帶參數）
@@ -33,15 +35,18 @@ module LoamLab
     end
 
     # 主執行緒輪詢器：從 Thread 接收結果並傳給 JS（每 0.5 秒）
-    UI.start_timer(0.5, true) do
-      until @@pending_results.empty?
+    # 每次只送一個結果，避免連續 execute_script 在 WebView 快速連發導致第一個被丟棄
+    # 熱重載安全：取消舊計時器，避免多重 timer 同時跑導致結果格式混亂
+    UI.stop_timer($loamlab_poll_timer) if defined?($loamlab_poll_timer) && $loamlab_poll_timer
+    $loamlab_poll_timer = UI.start_timer(0.5, true) do
+      unless @@pending_results.empty?
         res = @@pending_results.shift
         begin
           d = @@polling_dialog
           if d
             b64 = Base64.strict_encode64(res.to_json)
             d.execute_script("window.receiveFromRubyBase64('#{b64}')")
-            puts "[LoamLab] Poll 送出結果: #{res[:status]} url=#{res[:url]} msg=#{res[:message]}"
+            # poll result sent
           end
         rescue => e
           puts "[LoamLab] Poll 傳送失敗: #{e.message}"
@@ -745,9 +750,21 @@ module LoamLab
 
       current_page = model.pages.selected_page
 
-      # 批量出圖：禁用場景切換過渡動畫，避免截圖時切換尚未完成
-      original_transition_time = (model.pages.transition_time rescue 0.5)
-      begin; model.pages.transition_time = 0; rescue => e; puts "[LoamLab] transition time: #{e.message}"; end
+      # 批量出圖：先暫停任何正在播放的動畫，避免截到動畫過渡幀
+      begin
+        Sketchup.send_action("pauseAnimation:")
+      rescue => e
+        puts "[LoamLab] pauseAnimation: #{e.message}"
+      end
+
+      # 禁用場景切換過渡動畫，避免截圖時切換尚未完成
+      begin
+        opts = model.options['PageOptions']
+        original_transition_time = opts['TransitionTime'] rescue 0.5
+        opts['TransitionTime'] = 0.0
+      rescue
+        original_transition_time = 0.5
+      end
 
       # 記錄並隱藏干擾元素（截圖後自動還原）
       safe_keys = ['DrawHidden', 'DrawHiddenObjects', 'DisplaySketchAxes', 'DisplayInstanceAxes']
@@ -783,7 +800,7 @@ module LoamLab
               begin; model.rendering_options[k] = v; rescue => e; puts "[LoamLab] render option restore #{k}: #{e.message}"; end
             end
             model.pages.selected_page = current_page if current_page
-            begin; model.pages.transition_time = original_transition_time; rescue => e; puts "[LoamLab] transition time: #{e.message}"; end
+            begin; model.options['PageOptions']['TransitionTime'] = original_transition_time; rescue; end
             puts "[LoamLab] 批量導出排程已全部送出。"
           end
           next
@@ -799,8 +816,21 @@ module LoamLab
           # 場景切換後 SketchUp 會還原場景儲存的 rendering_options，需重新套用
           self.safe_set_render_keys(model.rendering_options, RENDER_KEYS)
 
-          # 2. 等待 SketchUp 視圖更新完成後再截圖（避免截到過渡幀或前一場景角度）
+          # 2. 等待 SketchUp 視圖更新完成後再截圖
+          #    注意：camera sync 必須在 timer 內執行（截圖前瞬間），
+          #    否則動畫在 0.5s 等待期間可能再次移動相機導致截到過渡幀
           UI.start_timer(0.5, false) do
+            # 截圖前強制相機到場景精確位置，通用於有/無動畫的模型
+            begin
+              cam = page.camera
+              if cam
+                model.active_view.camera = cam
+                model.active_view.invalidate
+              end
+            rescue => e
+              puts "[LoamLab] pre-capture camera sync: #{e.message}"
+            end
+
             temp_img_path = File.join(temp_dir, "loamlab_render_#{index}_#{Time.now.to_i}.jpg")
 
             begin
@@ -850,43 +880,64 @@ module LoamLab
               captured_scene       = scene_name
               captured_channel_b64 = channel_b64
               captured_dialog      = dialog
+
+              # 截圖完成立即發送縮略圖給 JS，更新骨架卡片預覽
+              begin
+                preview_payload = { action: 'scene_screenshot', scene: captured_scene, image_data: data_uri }.to_json
+                dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(preview_payload)}')")
+              rescue => e
+                puts "[LoamLab] 縮略圖發送失敗（非致命）: #{e.message}"
+              end
               captured_body        = request_body.dup
               captured_email       = user_email.dup
               captured_version     = ::LoamLab::VERSION.dup
               captured_url         = "#{::LoamLab::API_BASE_URL}/api/render"
-              puts "[LoamLab] 啟動 Thread 送出請求: #{scene_name}"
+              puts "[LoamLab] 截圖中: #{scene_name}"
 
-              Thread.new do
-                result = nil
-                begin
-                  uri  = URI.parse(captured_url)
-                  http = Net::HTTP.new(uri.host, uri.port)
-                  http.use_ssl      = (uri.scheme == 'https')
-                  http.verify_mode  = OpenSSL::SSL::VERIFY_NONE
-                  http.read_timeout = 600
-                  http.open_timeout = 30
-                  response = http.post(uri.path, captured_body, {
-                    'Content-Type'      => 'application/json',
-                    'x-user-email'      => captured_email,
-                    'x-plugin-version'  => captured_version
-                  })
-                  body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
-                  puts "[LoamLab] Thread 回應 status=#{response.code} len=#{body_str.length} body=#{body_str[0..300]}"
-                  data   = JSON.parse(body_str)
-                  result = (data['code'] == 0 && data['url']) ?
-                    { status: 'render_success', scene_name: captured_scene, url: data['url'],
-                      points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
-                      channel_base64: captured_channel_b64 } :
-                    { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.code}"),
-                      points_refunded: data['points_refunded'], error: data['error'] }
-
-                  # [Consolidated] Tool 1 Auto-Save is now handled by the 'auto_save_render' callback
-                  # called from app.js to prevent double file creation and ensure project name inclusion.
-                rescue => e
-                  puts "[LoamLab] Thread 錯誤: #{e.class} #{e.message}"
-                  result = { status: 'render_failed', message: self.sanitize_error(e.message) }
+              if index == 0 || total_count == 1
+                # Scene 0：立即送出，完成後觸發後續場景
+                # 傳入參數建立 block-local binding，避免 proc 多次呼叫覆蓋同一閉包變數
+                Thread.new(captured_scene.dup, captured_channel_b64.dup, captured_body.dup, captured_email.dup, captured_version.dup, captured_url.dup) do |thread_scene, thread_channel, thread_body, thread_email, thread_version, thread_url|
+                  result = nil
+                  begin
+                    uri  = URI.parse(thread_url)
+                    http = Net::HTTP.new(uri.host, uri.port)
+                    http.use_ssl      = (uri.scheme == 'https')
+                    http.verify_mode  = OpenSSL::SSL::VERIFY_NONE
+                    http.read_timeout = 600
+                    http.open_timeout = 30
+                    response = http.post(uri.path, thread_body, {
+                      'Content-Type'      => 'application/json',
+                      'x-user-email'      => thread_email,
+                      'x-plugin-version'  => thread_version
+                    })
+                    body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
+                    data   = JSON.parse(body_str)
+                    result = (data['code'] == 0 && data['url']) ?
+                      { status: 'render_success', scene_name: thread_scene, url: data['url'],
+                        points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
+                        channel_base64: thread_channel } :
+                      { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.code}"),
+                        points_refunded: data['points_refunded'], error: data['error'] }
+                  rescue => e
+                    puts "[LoamLab] 渲染失敗: #{thread_scene}"
+                    result = { status: 'render_failed', message: self.sanitize_error(e.message) }
+                  end
+                  @@pending_results << result if result
+                  style_url = (result && result[:status] == 'render_success') ? result[:url] : nil
+                  self.fire_deferred_renders(style_url)
                 end
-                @@pending_results << result if result
+              else
+                # Scene 1+：截圖已完成，延遲 HTTP 送出直到 Scene 0 結果回來（Method B）
+                @@deferred_sends << {
+                  body:    captured_body,
+                  email:   captured_email,
+                  version: captured_version,
+                  url:     captured_url,
+                  scene:   captured_scene,
+                  channel: captured_channel_b64
+                }
+                puts "[LoamLab] 截圖完成: #{scene_name}"
               end
 
               puts "[LoamLab] 第 #{index+1}/#{total_count} 個場景請求中: #{scene_name}"
@@ -897,7 +948,7 @@ module LoamLab
               File.delete(temp_img_path) if File.exist?(temp_img_path)
             end
 
-            # ★ 截圖完成後繼續處理下一個場景
+            # ★ 截圖完成後立即推進下一個場景（並行：不等待本場景結果回來）
             UI.start_timer(0.1, false) { process_chain.call(index + 1) }
           end
         else
@@ -906,8 +957,63 @@ module LoamLab
         end
       end
 
+      # Method B：每次批量渲染前重置 deferred 狀態
+      @@deferred_sends.clear
+      @@scene0_style_url = nil
+
       # 啟動鏈式呼叫
       process_chain.call(0)
+    end
+
+    # Method B：Scene 0 完成後並行送出所有 deferred scenes
+    # style_ref_url 為 Scene 0 的渲染結果 URL（nil 表示 Scene 0 失敗，不帶風格參考）
+    def self.fire_deferred_renders(style_ref_url)
+      sends = @@deferred_sends.dup
+      @@deferred_sends.clear
+      @@scene0_style_url = style_ref_url
+      return if sends.empty?
+
+      # fire deferred renders
+
+      sends.each do |item|
+        body_hash = JSON.parse(item[:body])
+        if style_ref_url
+          body_hash['parameters'] ||= {}
+          body_hash['parameters']['style_ref_url'] = style_ref_url
+        end
+        final_body = JSON.dump(body_hash)
+        captured   = item
+
+        Thread.new do
+          result = nil
+          begin
+            uri  = URI.parse(captured[:url])
+            http = Net::HTTP.new(uri.host, uri.port)
+            http.use_ssl      = (uri.scheme == 'https')
+            http.verify_mode  = OpenSSL::SSL::VERIFY_NONE
+            http.read_timeout = 600
+            http.open_timeout = 30
+            response = http.post(uri.path, final_body, {
+              'Content-Type'      => 'application/json',
+              'x-user-email'      => captured[:email],
+              'x-plugin-version'  => captured[:version]
+            })
+            body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
+            # response received
+            data = JSON.parse(body_str)
+            result = (data['code'] == 0 && data['url']) ?
+              { status: 'render_success', scene_name: captured[:scene], url: data['url'],
+                points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
+                channel_base64: captured[:channel] } :
+              { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.code}"),
+                points_refunded: data['points_refunded'], error: data['error'] }
+          rescue => e
+            puts "[LoamLab] 渲染失敗"
+            result = { status: 'render_failed', message: self.sanitize_error(e.message) }
+          end
+          @@pending_results << result if result
+        end
+      end
     end
     
     # 生成色彩通道圖 (Smart Canvas 用) — 切換至「依材質著色」模式截圖後立即還原
@@ -1027,8 +1133,13 @@ module LoamLab
           return '連線到伺服器逾時，請檢查您的網路狀態或稍後再試。'
         end
         # 隱藏技術關鍵字
-        msg.gsub(/AtlasCloud/i, 'AI 渲染引擎')
+        msg.gsub(/api\.atlascloud\.ai/i, 'ai-render-gateway')
+           .gsub(/atlascloud\.ai/i, 'ai-render-gateway')
+           .gsub(/AtlasCloud/i, 'AI 渲染引擎')
+           .gsub(/ATLASCLOUD_API_KEY/i, '渲染引擎金鑰')
+           .gsub(/google\/[^\s]*/i, 'AI-Engine')
            .gsub(/nano-banana/i, 'AI-Engine')
+           .gsub(/https?:\/\/api\.[a-z0-9\-\.]+\/[^\s]*/i, '[API_ENDPOINT]')
            .gsub(/google/i, 'AI')
       end
 

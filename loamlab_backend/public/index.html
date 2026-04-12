@@ -73,9 +73,18 @@
 
     <div class="noise-overlay"></div>
 
+    <!-- 全站緊急公告 Banner -->
+    <div id="ann-banner" class="hidden fixed top-0 left-0 right-0 z-[60] bg-yellow-500/10 border-b border-yellow-500/25 backdrop-blur-sm">
+        <div class="flex items-center justify-center gap-2 px-4 py-2 text-xs text-yellow-400 text-center">
+            <span>⚠️</span>
+            <span id="ann-text"></span>
+            <button onclick="closeBanner()" class="ml-2 text-yellow-500/50 hover:text-yellow-400 transition-colors text-base leading-none flex-shrink-0">✕</button>
+        </div>
+    </div>
+
     <!-- 導航與語系切換 -->
-    <nav class="fixed w-full z-50 px-6 md:px-12 py-6 flex justify-between items-center bg-[#09090b]/80 backdrop-blur-md border-b border-white/5">
-        <a href="#hero" class="flex items-center space-x-3 group cursor-pointer hover:opacity-75 transition-opacity">
+    <nav id="main-nav" class="fixed w-full z-50 px-6 md:px-12 py-6 flex justify-between items-center bg-[#09090b]/80 backdrop-blur-md border-b border-white/5">
+        <a href="https://www.instagram.com/loamlab_barbarian/" target="_blank" rel="noopener" class="flex items-center space-x-3 group cursor-pointer hover:opacity-75 transition-opacity">
             <svg width="28" height="28" viewBox="0 0 100 100" fill="none">
                 <path d="M 50 50 L 35 78 L 65 78 Z" fill="#DA1E1F"/>
                 <path d="M 5 80 L 35 20 L 65 80" stroke="white" stroke-width="5" stroke-linejoin="miter"/>
@@ -980,29 +989,68 @@
         // === SYNC POINT: DodoPayments variant IDs — must match app.js DODO_VARIANTS & webhook.js ===
         const _DODO = 'https://checkout.dodopayments.com/buy';
 
+        // === SYNC POINT: rendersHint / exchText 須與 loamlab_plugin/ui/app.js 的
+        //     PLAN_RENDER_COUNTS / PLAN_RENDER_COST_USD 保持一致 ===
         const PricingConfig = [
             { id: "top-up", title: {us:"TOP-UP", tw:"TOP-UP 加值", cn:"TOP-UP 加值", es:"RECARGA", br:"RECARGA", jp:"TOP-UP"}, origPrice: 18, price: 13, per: {"us":"one-time", "tw":"/次", "cn":"/次", "es":"/una vez", "br":"/uma vez", "jp":"/回"}, isPopular: false,
                 isQuantifiable: true,
+                rendersHint: {us:"≈ 10 renders (2K) · 13 (1K)", tw:"約 10 張（2K）· 13 張（1K）", cn:"约 10 张（2K）· 13 张（1K）", es:"≈ 10 renders (2K) · 13 (1K)", br:"≈ 10 renders (2K) · 13 (1K)", jp:"約 10 枚（2K）・13 枚（1K）"},
                 exchText: {us:"2K ≈ $1.30", tw:"2K ≈ NT$42", cn:"2K ≈ ¥8.5", es:"2K ≈ €1.20", br:"2K ≈ R$6.50", jp:"2K ≈ ¥195"},
                 feats: [{k:'t_perm', v:"200 ", ok:true}, {k:'t_res2', v:"", ok:true}, {k:'t_dev1', v:"", ok:true}, {k:'t_comF', v:"", ok:false}], btn: {us:"BUY NOW",tw:"BUY NOW",cn:"BUY NOW",es:"COMPRAR",br:"COMPRAR",jp:"購入する"},
                 checkoutUrl: `pdt_0NbIlveGNSETSOveL7Xmk`
             },
             { id: "starter", title: {us:"STARTER", tw:"STARTER", cn:"STARTER", es:"STARTER", br:"STARTER", jp:"STARTER"}, origPrice: 24, price: 17, per: {"us":"/mo", "tw":"/月", "cn":"/月", "es":"/mes", "br":"/mês", "jp":" /月"}, isPopular: false,
+                rendersHint: {us:"≈ 15 renders/mo (2K) · 20 (1K)", tw:"約 15 張/月（2K）· 20 張（1K）", cn:"约 15 张/月（2K）· 20 张（1K）", es:"≈ 15 renders/mes (2K) · 20 (1K)", br:"≈ 15 renders/mês (2K) · 20 (1K)", jp:"約 15 枚/月（2K）・20 枚（1K）"},
                 exchText: {us:"2K ≈ $1.15", tw:"2K ≈ NT$37", cn:"2K ≈ ¥7.5", es:"2K ≈ €1.05", br:"2K ≈ R$5.80", jp:"2K ≈ ¥170"},
                 feats: [{k:'t_mo1', v:"300 ", ok:true}, {k:'t_res2', v:"", ok:true}, {k:'t_dev1', v:"", ok:true}, {k:'t_comF', v:"", ok:false}], btn: {us:"SUBSCRIBE",tw:"SUBSCRIBE",cn:"SUBSCRIBE",es:"SUSCRIBIRSE",br:"ASSINAR",jp:"サブスクライブ"},
                 checkoutUrl: `pdt_0NbImUvFnwJe36ymTELWV`
             },
             { id: "pro", title: {us:"PRO", tw:"PRO", cn:"PRO", es:"PRO", br:"PRO", jp:"PRO"}, origPrice: 52, price: 36, per: {"us":"/mo", "tw":"/月", "cn":"/月", "es":"/mes", "br":"/mês", "jp":" /月"}, isPopular: true,
+                rendersHint: {us:"≈ 100 renders/mo (2K) · 66 (4K)", tw:"約 100 張/月（2K）· 66 張（4K）", cn:"约 100 张/月（2K）· 66 张（4K）", es:"≈ 100 renders/mes (2K) · 66 (4K)", br:"≈ 100 renders/mês (2K) · 66 (4K)", jp:"約 100 枚/月（2K）・66 枚（4K）"},
                 exchText: {us:"2K ≈ $0.36", tw:"2K ≈ NT$12", cn:"2K ≈ ¥2.5", es:"2K ≈ €0.34", br:"2K ≈ R$1.85", jp:"2K ≈ ¥54"},
                 feats: [{k:'t_mo1', v:"2,000 ", ok:true}, {k:'t_res4', v:"", ok:true}, {k:'t_dev2', v:"", ok:true}, {k:'t_comT', v:"", ok:true}], btn: {us:"SUBSCRIBE",tw:"SUBSCRIBE",cn:"SUBSCRIBE",es:"SUSCRIBIRSE",br:"ASSINAR",jp:"サブスクライブ"},
                 checkoutUrl: `pdt_0NbImafnebUuGNrMRvJp4`
             },
             { id: "studio", title: {us:"STUDIO", tw:"STUDIO", cn:"STUDIO", es:"ESTUDIO", br:"ESTÚDIO", jp:"STUDIO"}, origPrice: 139, price: 97, per: {"us":"/mo", "tw":"/月", "cn":"/月", "es":"/mes", "br":"/mês", "jp":" /月"}, isPopular: false,
+                rendersHint: {us:"≈ 450 renders/mo (2K) · 300 (4K)", tw:"約 450 張/月（2K）· 300 張（4K）", cn:"约 450 张/月（2K）· 300 张（4K）", es:"≈ 450 renders/mes (2K) · 300 (4K)", br:"≈ 450 renders/mês (2K) · 300 (4K)", jp:"約 450 枚/月（2K）・300 枚（4K）"},
                 exchText: {us:"2K ≈ $0.21", tw:"2K ≈ NT$7", cn:"2K ≈ ¥1.5", es:"2K ≈ €0.20", br:"2K ≈ R$1.10", jp:"2K ≈ ¥30"},
                 feats: [{k:'t_mo1', v:"9,000 ", ok:true}, {k:'t_res4', v:"", ok:true}, {k:'t_dev5', v:"", ok:true}, {k:'t_comT', v:"", ok:true}], btn: {us:"SUBSCRIBE",tw:"SUBSCRIBE",cn:"SUBSCRIBE",es:"SUSCRIBIRSE",br:"ASSINAR",jp:"サブスクライブ"},
                 checkoutUrl: `pdt_0NbImhwhr5WXfNyDHpaA2`
             }
         ];
+
+        // ── 全站公告 ──────────────────────────────────────────────────────────
+        let _annData = null;
+
+        async function loadAnnouncement() {
+            try {
+                const r = await fetch('/api/stats?action=get_announcement');
+                const j = await r.json();
+                _annData = (j.code === 0) ? (j.announcement || null) : null;
+                updateAnnouncementBanner();
+            } catch(e) {}
+        }
+
+        function updateAnnouncementBanner() {
+            if (!_annData) return;
+            const text = _annData[currentLang] || _annData['us'] || '';
+            const banner = document.getElementById('ann-banner');
+            const span = document.getElementById('ann-text');
+            if (text.trim()) {
+                // 自動將公告中的 URL 轉為可點擊連結
+                span.innerHTML = text.replace(/(https?:\/\/[^\s<>"]+)/g, '<a href="$1" target="_blank" rel="noopener" class="underline hover:text-yellow-300 transition-colors">$1</a>');
+                banner.classList.remove('hidden');
+                document.getElementById('main-nav').style.top = banner.offsetHeight + 'px';
+            } else {
+                banner.classList.add('hidden');
+                document.getElementById('main-nav').style.top = '0';
+            }
+        }
+
+        function closeBanner() {
+            document.getElementById('ann-banner').classList.add('hidden');
+            document.getElementById('main-nav').style.top = '0';
+        }
 
         function changeLang(langKey) {
             currentLang = langKey;
@@ -1015,6 +1063,7 @@
             renderPricing();
             renderFeatures();
             renderFAQ();
+            updateAnnouncementBanner();
         }
 
         function renderPricing() {
@@ -1030,18 +1079,21 @@
                         <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-l-green/20 text-l-green tracking-widest">-30% BETA</span>
                     </div>
                     
-                    <div class="text-5xl font-light text-white mb-6">$${plan.price} <span class="text-xs font-normal text-zinc-500">${plan.per[currentLang]}</span></div>
-                    
+                    <div class="text-5xl font-light text-white mb-3">$${plan.price} <span class="text-xs font-normal text-zinc-500">${plan.per[currentLang]}</span></div>
+
+                    <div class="mb-5 pb-5 border-b border-white/[0.06]">
+                        <div class="text-[11px] text-l-green/80 font-mono tracking-widest">${plan.rendersHint[currentLang]}</div>
+                        <div class="text-[10px] text-zinc-600 font-mono mt-1">${plan.exchText[currentLang]}</div>
+                    </div>
+
                     <ul class="space-y-4 mb-8 flex-grow text-[11px] md:text-xs font-light text-zinc-400">
                         ${plan.feats.map(f => `
                             <li class="flex items-center gap-3">
-                                <span class="${f.ok ? 'text-l-green font-bold text-sm' : 'text-zinc-600'}">${f.ok ? '✓' : '×'}</span> 
+                                <span class="${f.ok ? 'text-l-green font-bold text-sm' : 'text-zinc-600'}">${f.ok ? '✓' : '×'}</span>
                                 <span class="${f.ok ? 'text-white' : 'text-zinc-600'}">${f.v}${FeatText[f.k][currentLang]}</span>
                             </li>
                         `).join('')}
                     </ul>
-                    
-                    <div class="text-[10px] text-l-green mb-4 font-mono font-bold tracking-widest">${plan.exchText[currentLang]}</div>
                     
                     ${plan.isQuantifiable ? `
                     <div class="flex items-center justify-between gap-2 mb-4 bg-white/5 rounded-lg p-2 border border-white/5">
@@ -1097,6 +1149,7 @@
             changeLang(currentLang); // 強制用 default (us) 刷新整個字典（包含 renderPricing）
             renderFeatures();
             renderFAQ();
+            loadAnnouncement();
             // Slider: force 50% start position (defensive JS init, avoids CSS CDN timing issue)
             compAfter.style.width = '50%';
             compBtn.style.left = '50%';

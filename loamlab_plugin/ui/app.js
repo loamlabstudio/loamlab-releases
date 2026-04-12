@@ -383,6 +383,30 @@ window.receiveFromRuby = function (data) {
         renderHistoryGrid([...rubyFiles, ...sessionItems]);
         return;
     }
+    if (data.action === 'scene_screenshot') {
+        // 截圖後填入骨架卡片縮略圖
+        const _gridEl = document.getElementById('preview-grid');
+        if (_gridEl && data.scene && data.image_data) {
+            const _card = _findCardByScene(_gridEl, data.scene);
+            if (_card) {
+                const _imgBox = _card.querySelector('.aspect-video');
+                if (_imgBox) {
+                    const _placeholder = _imgBox.querySelector('[data-placeholder]');
+                    if (_placeholder) _placeholder.remove();
+                    const _pulse = _imgBox.querySelector('.animate-pulse');
+                    if (_pulse) _pulse.remove();
+                    let _img = _imgBox.querySelector('img');
+                    if (!_img) {
+                        _img = document.createElement('img');
+                        _img.className = 'w-full h-full object-cover opacity-60 transition-opacity duration-500 group-hover/card:opacity-100';
+                        _imgBox.appendChild(_img);
+                    }
+                    _img.src = data.image_data;
+                }
+            }
+        }
+        return;
+    }
 
     const statusText = document.getElementById('status-text');
     const langObj = UI_LANG[currentLang];
@@ -537,6 +561,7 @@ window.receiveFromRuby = function (data) {
         statusText.textContent = langObj3['export_done'] || 'All scenes sent. Rendering in cloud...';
         statusText.classList.replace('text-red-400', 'text-amber-400');
     } else if (data.status === 'render_success') {
+        console.log('[render_success] scene_name=', data.scene_name, 'url=', (data.url||'').slice(0,60));
         finishedScenesCount++;
         // 自動更新點數餘額 (後端回傳 points_remaining)
         if (data.points_remaining !== undefined) {
@@ -559,6 +584,11 @@ window.receiveFromRuby = function (data) {
                     }
                 }, 600);
             }
+        }
+
+        // Tool 1：立即更新對應卡片（每個結果到就更新，不批量 buffer 以避免 race condition）
+        if (data.scene_name && data.url && currentActiveTool === 1 && !_baseImageEntry) {
+            _applyTool1CardUpdate(data.scene_name, data.url, data.channel_base64 || '', data.transaction_id);
         }
 
         if (finishedScenesCount >= totalScenesToRender) {
@@ -665,136 +695,6 @@ window.receiveFromRuby = function (data) {
                 return; // 跳過後續 span.truncate 查找邏輯
             }
 
-            const gridEl = document.getElementById('preview-grid');
-            if (gridEl) {
-                // 尋找卡片內的標題是不是符合
-                const cards = gridEl.querySelectorAll('div > span.truncate');
-                cards.forEach(span => {
-                    if ((span.getAttribute('data-scene') || span.textContent) === targetScene) {
-                        const card = span.closest('.flex-col');
-                        const imgContainer = card.querySelector('div.aspect-video');
-                        if (imgContainer) {
-                            const originalImgSrc = imgContainer.querySelector('img').src;
-
-                            // 保持 aspect-video 高度，改用 overlay 疊加對比（hover 查看 SKETCHUP 原圖）
-                            imgContainer.className = "relative w-full overflow-hidden bg-black aspect-video flex-shrink-0";
-                            imgContainer.innerHTML = `
-                                <img src="${targetUrl}" class="w-full h-full object-cover transition-transform duration-[3s] hover:scale-[1.04]" onclick="openImagePreview('${targetUrl}')" title="點擊開大圖" style="cursor:pointer">
-                                <div class="absolute top-2 left-2 bg-[#dc2626] text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest pointer-events-none">AI RENDERED</div>
-                                <div class="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-                                    <img src="${originalImgSrc}" class="w-full h-full object-cover opacity-90">
-                                    <div class="absolute top-2 left-2 bg-black/70 backdrop-blur-md border border-white/10 text-white/60 text-[8px] px-2 py-1 rounded z-10 font-mono tracking-widest">SKETCHUP</div>
-                                </div>
-                            `;
-                        }
-
-                        const badge = span.nextElementSibling;
-                        if (badge && !badge.closest('.btn-container')) {
-                            // 打造一個按鈕容器
-                            const btnContainer = document.createElement('div');
-                            btnContainer.className = "btn-container flex gap-1.5 items-center";
-
-                            // 更新原本的 Badge
-                            badge.textContent = 'RENDERED';
-                            badge.classList.replace('text-rose-300', 'text-amber-300');
-                            badge.classList.replace('bg-rose-500/10', 'bg-amber-500/10');
-                            badge.classList.replace('border-rose-500/20', 'border-amber-400/20');
-
-                            // 打造專業的「儲存」按鍵
-                            const saveBtn = document.createElement('button');
-                            saveBtn.className = "text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black hover:border-white transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm";
-                            saveBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> SAVE`;
-
-                            saveBtn.onclick = (e) => {
-                                e.stopPropagation(); // 防止點擊事件擴散
-                                var promptEl = document.getElementById('user-prompt-input');
-                                const promptText = (promptEl ? promptEl.value : "") || "";
-                                // 呼叫 Ruby 後端的 save_image
-                                if (window.sketchup) {
-                                    sketchup.save_image({ url: targetUrl, prompt: promptText, lang: currentLang });
-                                }
-                            };
-
-                            // 把原本 badge 的位置換成這個容器
-                            badge.parentNode.replaceChild(btnContainer, badge);
-                            btnContainer.appendChild(badge);
-                            btnContainer.appendChild(saveBtn);
-
-                            // SWAP 按鈕（工具 1/2 才顯示，工具 3 九宮格不做局部替換）
-                            if (!HIDE_UNFINISHED_FEATURES && currentActiveTool !== 3) {
-                                const swapBtn = document.createElement('button');
-                                swapBtn.className = "text-[9px] px-2.5 py-1 rounded border border-amber-500/30 text-amber-300/80 hover:bg-amber-500/20 hover:text-amber-200 hover:border-amber-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm";
-                                swapBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> SWAP`;
-                                swapBtn.onclick = (e) => {
-                                    e.stopPropagation();
-                                    channelB64 ? openSmartCanvas(channelB64, targetUrl, targetScene) : openSwapModal(originalImgSrc, targetUrl);
-                                };
-                                btnContainer.appendChild(swapBtn);
-
-                                // EXTRACT 按鈕 — 從渲染圖框選材質存入素材庫
-                                const extractBtn = document.createElement('button');
-                                extractBtn.className = "text-[9px] px-2.5 py-1 rounded border border-sky-500/30 text-sky-300/80 hover:bg-sky-500/20 hover:text-sky-200 hover:border-sky-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm";
-                                extractBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> EXTRACT`;
-                                extractBtn.onclick = (e) => {
-                                    e.stopPropagation();
-                                    startExtractMode(targetUrl);
-                                };
-                                btnContainer.appendChild(extractBtn);
-                            }
-
-                            // SHARE 按鈕（已登入且有邀請碼才顯示，直接顯示 LINE / WA）
-                            if (window.loamlabUserReferralCode) {
-                                const shareBtnClass = "text-[9px] px-2.5 py-1 rounded border border-green-500/30 text-green-300/80 hover:bg-green-500/20 hover:text-green-200 hover:border-green-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest active:scale-90 shadow-sm";
-                                const lineBtn = document.createElement('button');
-                                lineBtn.className = shareBtnClass;
-                                lineBtn.textContent = 'LINE';
-                                lineBtn.onclick = (e) => { e.stopPropagation(); openSharePlatform('line'); };
-                                const waBtn = document.createElement('button');
-                                waBtn.className = shareBtnClass;
-                                waBtn.textContent = 'WA';
-                                waBtn.onclick = (e) => { e.stopPropagation(); openSharePlatform('wa'); };
-                                btnContainer.appendChild(lineBtn);
-                                btnContainer.appendChild(waBtn);
-                            }
-                        }
-
-                        // Rating Bar（需有 transaction_id）
-                        const transactionId = data.transaction_id;
-                        if (transactionId) {
-                            const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
-                            const ratingBar = document.createElement('div');
-                            ratingBar.className = "rating-bar flex items-center gap-1.5 mt-1.5 ml-0.5";
-                            ratingBar.innerHTML = `
-                                <span class="text-[9px] text-white/30 mr-0.5">${lang['feedback_rate_q'] || 'How was this?'}</span>
-                                <button class="rate-up text-[9px] px-2 py-0.5 rounded border border-white/15 text-white/50 hover:border-green-500/40 hover:text-green-300 transition-all">👍 ${lang['feedback_thumbs_up'] || 'Great'}</button>
-                                <button class="rate-down text-[9px] px-2 py-0.5 rounded border border-white/15 text-white/50 hover:border-rose-500/40 hover:text-rose-300 transition-all">👎 ${lang['feedback_thumbs_down'] || 'Not satisfied'}</button>
-                            `;
-                            const submitRating = (rating, tags = []) => {
-                                submitFeedback({ type: 'rating', rating, tags, transaction_id: transactionId });
-                                ratingBar.innerHTML = `<span class="text-[9px] text-green-400/60">${lang['feedback_thanks'] || 'Thanks!'}</span>`;
-                            };
-                            ratingBar.querySelector('.rate-up').onclick = () => submitRating(5);
-                            ratingBar.querySelector('.rate-down').onclick = () => {
-                                ratingBar.innerHTML = `
-                                    <div class="flex flex-wrap gap-1.5 items-center">
-                                        <span class="text-[9px] text-white/40">${lang['feedback_why'] || 'What went wrong?'}</span>
-                                        <label class="flex items-center gap-1 text-[9px] text-white/50 cursor-pointer"><input type="checkbox" class="tag-cb" value="style_wrong"> ${lang['feedback_tag_style'] || 'Wrong style'}</label>
-                                        <label class="flex items-center gap-1 text-[9px] text-white/50 cursor-pointer"><input type="checkbox" class="tag-cb" value="detail_missing"> ${lang['feedback_tag_detail'] || 'Missing details'}</label>
-                                        <label class="flex items-center gap-1 text-[9px] text-white/50 cursor-pointer"><input type="checkbox" class="tag-cb" value="color_off"> ${lang['feedback_tag_color'] || 'Color issues'}</label>
-                                        <label class="flex items-center gap-1 text-[9px] text-white/50 cursor-pointer"><input type="checkbox" class="tag-cb" value="other"> ${lang['feedback_tag_other'] || 'Other'}</label>
-                                        <button class="tag-submit text-[9px] px-2 py-0.5 rounded bg-rose-500/15 border border-rose-500/25 text-rose-300 hover:bg-rose-500/25 transition-all">${lang['feedback_submit'] || 'Submit'}</button>
-                                    </div>
-                                `;
-                                ratingBar.querySelector('.tag-submit').onclick = () => {
-                                    const selectedTags = [...ratingBar.querySelectorAll('.tag-cb:checked')].map(cb => cb.value);
-                                    submitRating(1, selectedTags);
-                                };
-                            };
-                            card.appendChild(ratingBar);
-                        }
-                    }
-                });
-            }
         }
     } else if (data.status === 'render_failed') {
         finishedScenesCount++;
@@ -915,20 +815,120 @@ function renderScenesList(scenes) {
     inputs.forEach(input => {
         input.addEventListener('change', () => {
             updateCostPreview();
-            const checkboxes = document.querySelectorAll('input[name="scene"]:checked');
-            const selectedScenes = Array.from(checkboxes).map(cb => cb.value);
-            if (window.sketchup) {
-                // 發動全場景截圖時，UI 顯示提示文字
-                const placeholderEl = document.getElementById('preview-placeholder');
-                const gridEl = document.getElementById('preview-grid');
-                if (placeholderEl && (!gridEl || gridEl.classList.contains('hidden'))) {
-                    const textSpan = placeholderEl.querySelector('#placeholder-text');
-                    if (textSpan) textSpan.textContent = (UI_LANG[currentLang] || UI_LANG['en-US'])['preview_storyboard_hint'];
-                }
-                setTimeout(() => sketchup.sync_preview({ scenes: selectedScenes }), 50);
-            }
+            // 移除即時截圖：checkbox 勾選時不再自動 sync_preview
+            // 原因：sync_preview 回傳 preview_updated 時會重建 grid（innerHTML=''），
+            // 若此時渲染已完成，會把已更新的卡片清空，導致只有最後一個結果顯示。
+            // 用戶如需更新預覽，請點擊左上角「Sync View」按鈕。
         });
     });
+}
+
+// 依場景名找卡片（dataset 直接比對，不用 CSS.escape，相容舊版 WebView）
+function _findCardByScene(gridEl, sceneName) {
+    const all = gridEl.querySelectorAll('[data-card-scene]');
+    for (let i = 0; i < all.length; i++) {
+        if (all[i].dataset.cardScene === sceneName) return all[i];
+    }
+    return null;
+}
+
+// 將 Tool 1 渲染結果套用到對應卡片（從 receiveFromRuby 呼叫，必須在模組頂層）
+function _applyTool1CardUpdate(targetScene, targetUrl, channelB64, transactionId) {
+    const gridEl = document.getElementById('preview-grid');
+    if (!gridEl) return;
+    const card = _findCardByScene(gridEl, targetScene);
+    if (!card) { console.warn('[LoamLab] card not found for scene:', targetScene); return; }
+    const span = card.querySelector('[data-scene]');
+    const imgContainer = card.querySelector('.aspect-video');
+    if (imgContainer) {
+        const originalImgEl = imgContainer.querySelector('img');
+        const originalImgSrc = originalImgEl ? originalImgEl.src : '';
+        imgContainer.className = "relative w-full overflow-hidden bg-black aspect-video flex-shrink-0";
+        imgContainer.innerHTML = `
+            <img src="${targetUrl}" class="w-full h-full object-cover transition-transform duration-[3s] hover:scale-[1.04]" onclick="openImagePreview('${targetUrl}')" title="點擊開大圖" style="cursor:pointer">
+            <div class="absolute top-2 left-2 bg-[#dc2626] text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest pointer-events-none">AI RENDERED</div>
+            <div class="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none">
+                ${originalImgSrc && originalImgSrc !== 'data:,' ? `<img src="${originalImgSrc}" class="w-full h-full object-cover opacity-90">
+                <div class="absolute top-2 left-2 bg-black/70 backdrop-blur-md border border-white/10 text-white/60 text-[8px] px-2 py-1 rounded z-10 font-mono tracking-widest">SKETCHUP</div>` : ''}
+            </div>
+        `;
+    }
+
+    const badge = span ? span.nextElementSibling : null;
+    if (badge && !badge.closest('.btn-container')) {
+        const btnContainer = document.createElement('div');
+        btnContainer.className = "btn-container flex gap-1.5 items-center";
+        badge.textContent = 'RENDERED';
+        badge.className = 'text-[9px] text-amber-300 bg-amber-500/10 border border-amber-400/20 px-2.5 py-1 rounded shadow-md flex-shrink-0 font-bold uppercase tracking-widest';
+        const saveBtn = document.createElement('button');
+        saveBtn.className = "text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black hover:border-white transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm";
+        saveBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> SAVE`;
+        saveBtn.onclick = (e) => {
+            e.stopPropagation();
+            var promptEl = document.getElementById('user-prompt-input');
+            const promptText = (promptEl ? promptEl.value : "") || "";
+            if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: promptText, lang: currentLang });
+        };
+        badge.parentNode.replaceChild(btnContainer, badge);
+        btnContainer.appendChild(badge);
+        btnContainer.appendChild(saveBtn);
+        if (!HIDE_UNFINISHED_FEATURES && currentActiveTool !== 3) {
+            const swapBtn = document.createElement('button');
+            swapBtn.className = "text-[9px] px-2.5 py-1 rounded border border-amber-500/30 text-amber-300/80 hover:bg-amber-500/20 hover:text-amber-200 hover:border-amber-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm";
+            swapBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> SWAP`;
+            swapBtn.onclick = (e) => { e.stopPropagation(); channelB64 ? openSmartCanvas(channelB64, targetUrl, targetScene) : openSwapModal('', targetUrl); };
+            btnContainer.appendChild(swapBtn);
+            const extractBtn = document.createElement('button');
+            extractBtn.className = "text-[9px] px-2.5 py-1 rounded border border-sky-500/30 text-sky-300/80 hover:bg-sky-500/20 hover:text-sky-200 hover:border-sky-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm";
+            extractBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> EXTRACT`;
+            extractBtn.onclick = (e) => { e.stopPropagation(); startExtractMode(targetUrl); };
+            btnContainer.appendChild(extractBtn);
+        }
+        if (window.loamlabUserReferralCode) {
+            const shareBtnClass = "text-[9px] px-2.5 py-1 rounded border border-green-500/30 text-green-300/80 hover:bg-green-500/20 hover:text-green-200 hover:border-green-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest active:scale-90 shadow-sm";
+            const lineBtn = document.createElement('button');
+            lineBtn.className = shareBtnClass; lineBtn.textContent = 'LINE';
+            lineBtn.onclick = (e) => { e.stopPropagation(); openSharePlatform('line'); };
+            const waBtn = document.createElement('button');
+            waBtn.className = shareBtnClass; waBtn.textContent = 'WA';
+            waBtn.onclick = (e) => { e.stopPropagation(); openSharePlatform('wa'); };
+            btnContainer.appendChild(lineBtn);
+            btnContainer.appendChild(waBtn);
+        }
+    }
+
+    if (transactionId && card) {
+        const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
+        const ratingBar = document.createElement('div');
+        ratingBar.className = "rating-bar flex items-center gap-1.5 mt-1.5 ml-0.5";
+        ratingBar.innerHTML = `
+            <span class="text-[9px] text-white/30 mr-0.5">${lang['feedback_rate_q'] || 'How was this?'}</span>
+            <button class="rate-up text-[9px] px-2 py-0.5 rounded border border-white/15 text-white/50 hover:border-green-500/40 hover:text-green-300 transition-all">👍 ${lang['feedback_thumbs_up'] || 'Great'}</button>
+            <button class="rate-down text-[9px] px-2 py-0.5 rounded border border-white/15 text-white/50 hover:border-rose-500/40 hover:text-rose-300 transition-all">👎 ${lang['feedback_thumbs_down'] || 'Not satisfied'}</button>
+        `;
+        const submitRating = (rating, tags = []) => {
+            submitFeedback({ type: 'rating', rating, tags, transaction_id: transactionId });
+            ratingBar.innerHTML = `<span class="text-[9px] text-green-400/60">${lang['feedback_thanks'] || 'Thanks!'}</span>`;
+        };
+        ratingBar.querySelector('.rate-up').onclick = () => submitRating(5);
+        ratingBar.querySelector('.rate-down').onclick = () => {
+            ratingBar.innerHTML = `
+                <div class="flex flex-wrap gap-1.5 items-center">
+                    <span class="text-[9px] text-white/40">${lang['feedback_why'] || 'What went wrong?'}</span>
+                    <label class="flex items-center gap-1 text-[9px] text-white/50 cursor-pointer"><input type="checkbox" class="tag-cb" value="style_wrong"> ${lang['feedback_tag_style'] || 'Wrong style'}</label>
+                    <label class="flex items-center gap-1 text-[9px] text-white/50 cursor-pointer"><input type="checkbox" class="tag-cb" value="detail_missing"> ${lang['feedback_tag_detail'] || 'Missing details'}</label>
+                    <label class="flex items-center gap-1 text-[9px] text-white/50 cursor-pointer"><input type="checkbox" class="tag-cb" value="color_off"> ${lang['feedback_tag_color'] || 'Color issues'}</label>
+                    <label class="flex items-center gap-1 text-[9px] text-white/50 cursor-pointer"><input type="checkbox" class="tag-cb" value="other"> ${lang['feedback_tag_other'] || 'Other'}</label>
+                    <button class="tag-submit text-[9px] px-2 py-0.5 rounded bg-rose-500/15 border border-rose-500/25 text-rose-300 hover:bg-rose-500/25 transition-all">${lang['feedback_submit'] || 'Submit'}</button>
+                </div>
+            `;
+            ratingBar.querySelector('.tag-submit').onclick = () => {
+                const selectedTags = [...ratingBar.querySelectorAll('.tag-cb:checked')].map(cb => cb.value);
+                submitRating(1, selectedTags);
+            };
+        };
+        card.appendChild(ratingBar);
+    }
 }
 
 function showProgressBar() {
@@ -1012,6 +1012,38 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
+    // 批量渲染前建立場景骨架卡片（Start Engine 時立即顯示，截圖回來再填縮略圖）
+    function _buildReadyGrid(scenes) {
+        const gridEl = document.getElementById('preview-grid');
+        const placeholderEl = document.getElementById('preview-placeholder');
+        if (!gridEl || !scenes.length) return;
+        if (placeholderEl) placeholderEl.classList.add('hidden');
+        gridEl.classList.remove('hidden');
+        gridEl.innerHTML = '';
+        const count = scenes.length;
+        const gridClass = count === 1 ? 'grid-cols-1' : count === 2 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-3';
+        gridEl.className = `w-full h-full px-6 grid gap-5 overflow-y-auto custom-scrollbar content-start items-start ${gridClass}`;
+        scenes.forEach(sceneName => {
+            const card = document.createElement('div');
+            card.className = 'flex flex-col bg-white/[0.02] rounded-2xl border border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.3)] hover:border-white/20 transition-all duration-300 overflow-hidden relative pointer-events-auto group/card';
+            card.dataset.cardScene = sceneName;
+            card.innerHTML = `
+                <div class="relative w-full overflow-hidden bg-black aspect-video flex-shrink-0">
+                    <div class="absolute inset-0 animate-pulse bg-gradient-to-br from-white/[0.03] to-transparent"></div>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center gap-2" data-placeholder="true">
+                        <svg class="w-8 h-8 text-white/10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        <span class="text-[9px] text-white/15 font-mono tracking-widest uppercase">Capturing...</span>
+                    </div>
+                </div>
+                <div class="px-4 py-3 flex justify-between items-center bg-black/50 backdrop-blur-xl absolute bottom-0 w-full z-20 border-t border-white/[0.05]">
+                    <span class="text-[12px] font-semibold text-white/90 tracking-widest truncate pr-2 drop-shadow-md" data-scene="${sceneName}">${translateSceneName(sceneName)}</span>
+                    <span class="text-[9px] text-white bg-[#dc2626] px-2.5 py-1 rounded shadow-md flex-shrink-0 font-bold uppercase tracking-widest">Ready</span>
+                </div>
+            `;
+            gridEl.appendChild(card);
+        });
+    }
+
     // 渲染按鈕綁定與額度攔截 (Paywall)
     (document.getElementById('btn-render') || document.createElement('div')).addEventListener('click', () => {
         // 未登入攔截：直接開啟登入流程，不發送任何請求
@@ -1090,6 +1122,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!isNaN(currentPoints) && totalCost > currentPoints) {
             if (typeof openPricingModal === 'function') openPricingModal({ cost: totalCost, balance: currentPoints });
             return;
+        }
+
+        // Tool 1 批量：立即建骨架卡片，等待截圖縮略圖和渲染結果填入
+        if (currentActiveTool === 1 && !usingBaseImage && selectedScenes.length > 0) {
+            _buildReadyGrid(selectedScenes);
         }
 
         if (window.sketchup) {
@@ -1293,6 +1330,7 @@ function openPricingModal(ctx = null) {
     }
     pricingModal.classList.remove('hidden');
     updatePlanCostLabels(currentLang);
+    updateRenderHints();
     refreshPricingModalBadge();
     applyBetaDiscountDisplay();
     setTimeout(() => {
@@ -1430,11 +1468,21 @@ const COST_CURRENCY = {
     'ja-JP': { symbol: '¥', rate: 150 },
 };
 // 各方案 2K 渲染實際成本（USD，已含公測 -30% 折扣）
+// === SYNC POINT: 與 loamlab_backend/public/index.html PricingConfig.exchText 保持一致 ===
 const PLAN_RENDER_COST_USD = {
-    topup: 1.26,    // $18 × 0.7 / 200 pts × 20
-    starter: 1.12,  // $24 × 0.7 / 300 pts × 20
+    topup: 1.30,    // $18 × 0.7 / 200 pts × 20 (≈$1.26, display $1.30)
+    starter: 1.15,  // $24 × 0.7 / 300 pts × 20 (≈$1.12, display $1.15)
     pro: 0.36,      // $52 × 0.7 / 2000 pts × 20
-    studio: 0.22,   // $139 × 0.7 / 9000 pts × 20
+    studio: 0.21,   // $139 × 0.7 / 9000 pts × 20 (≈$0.216, display $0.21)
+};
+
+// 各方案可出圖數量（1K=15pts, 2K=20pts, 4K=30pts）
+// === SYNC POINT: 與 loamlab_backend/public/index.html PricingConfig.rendersHint 保持一致 ===
+const PLAN_RENDER_COUNTS = {
+    topup:   { primary: '2K', counts: { '2K': 10, '1K': 13 } },
+    starter: { primary: '2K', counts: { '2K': 15, '1K': 20 } },
+    pro:     { primary: '2K', counts: { '2K': 100, '4K': 66 } },
+    studio:  { primary: '2K', counts: { '2K': 450, '4K': 300 } },
 };
 
 function updatePlanCostLabels(lang) {
@@ -1445,6 +1493,16 @@ function updatePlanCostLabels(lang) {
         if (!usd) return;
         const localCost = (usd * currency.rate).toFixed(currency.rate >= 10 ? 0 : 2);
         el.textContent = `2K ≈ ${currency.symbol}${localCost}`;
+    });
+}
+
+function updateRenderHints() {
+    document.querySelectorAll('[data-renders-hint]').forEach(el => {
+        const plan = el.getAttribute('data-renders-hint');
+        const d = PLAN_RENDER_COUNTS[plan];
+        if (!d) return;
+        const parts = Object.entries(d.counts).map(([res, n]) => `${n} (${res})`);
+        el.textContent = `≈ ${parts.join(' · ')} renders`;
     });
 }
 
@@ -1925,17 +1983,6 @@ function executeUpdate(url) {
     if (window.sketchup) {
         sketchup.execute_update({ url });
     }
-}
-
-function openLoginModal() {
-    loginModal.classList.remove('pointer-events-none');
-    setTimeout(() => {
-        loginModal.classList.remove('opacity-0');
-        loginModalContent.classList.remove('scale-95');
-    }, 10);
-
-    // 開始 OAuth Polling
-    startOAuthFlow();
 }
 
 // 結帳並跳轉付款頁面（接受 planKey: 'TOPUP'/'STARTER'/'PRO'/'STUDIO'）

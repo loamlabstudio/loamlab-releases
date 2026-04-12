@@ -80,13 +80,53 @@
       </div>
       <div class="text-xs text-gray-500">留白並儲存即可關閉跑馬燈</div>
     </div>
-    <div class="flex gap-3 items-start">
-      <textarea id="announcement-input" class="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-yellow-500/90 outline-none focus:border-yellow-600/50 transition-colors placeholder-gray-600 resize-none h-12" placeholder="輸入要顯示在所有網頁頂部的跑馬燈內容..."></textarea>
-      <button onclick="saveAnnouncement()" class="bg-yellow-600/20 hover:bg-yellow-600/40 text-yellow-500 border border-yellow-600/50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors mt-0.5 min-w-[5rem] h-11 flex items-center justify-center whitespace-nowrap" id="btn-save-ann">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="text-xs text-gray-500">來源語言：</span>
+      <select id="ann-source-lang" class="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-yellow-400 outline-none focus:border-yellow-600/50 transition-colors">
+        <option value="tw">🇹🇼 繁體中文</option>
+        <option value="cn">🇨🇳 简体中文</option>
+        <option value="us">🇺🇸 English</option>
+        <option value="es">🇪🇸 Español</option>
+        <option value="br">🇧🇷 Português</option>
+        <option value="jp">🇯🇵 日本語</option>
+      </select>
+      <button onclick="translateAnnouncement()" id="btn-translate" class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-600/50 px-3 py-1 rounded-lg text-xs font-semibold transition-colors">
+        一鍵翻譯至其他語言
+      </button>
+      <span id="translate-status" class="text-xs text-gray-500 hidden"></span>
+    </div>
+    <div class="grid grid-cols-2 gap-2 mb-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">🇺🇸 English</label>
+        <textarea id="ann-us" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-yellow-500/90 outline-none focus:border-yellow-600/50 transition-colors placeholder-gray-600 resize-none h-10" placeholder="English announcement..."></textarea>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">🇹🇼 繁體中文</label>
+        <textarea id="ann-tw" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-yellow-500/90 outline-none focus:border-yellow-600/50 transition-colors placeholder-gray-600 resize-none h-10" placeholder="繁體中文公告..."></textarea>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">🇨🇳 简体中文</label>
+        <textarea id="ann-cn" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-yellow-500/90 outline-none focus:border-yellow-600/50 transition-colors placeholder-gray-600 resize-none h-10" placeholder="简体中文公告..."></textarea>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">🇪🇸 Español</label>
+        <textarea id="ann-es" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-yellow-500/90 outline-none focus:border-yellow-600/50 transition-colors placeholder-gray-600 resize-none h-10" placeholder="Anuncio en español..."></textarea>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">🇧🇷 Português</label>
+        <textarea id="ann-br" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-yellow-500/90 outline-none focus:border-yellow-600/50 transition-colors placeholder-gray-600 resize-none h-10" placeholder="Anúncio em português..."></textarea>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">🇯🇵 日本語</label>
+        <textarea id="ann-jp" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-yellow-500/90 outline-none focus:border-yellow-600/50 transition-colors placeholder-gray-600 resize-none h-10" placeholder="日本語のお知らせ..."></textarea>
+      </div>
+    </div>
+    <div class="flex justify-between items-center">
+      <div id="ann-status" class="text-xs hidden text-green-400"></div>
+      <button onclick="saveAnnouncement()" class="bg-yellow-600/20 hover:bg-yellow-600/40 text-yellow-500 border border-yellow-600/50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ml-auto min-w-[5rem] flex items-center justify-center whitespace-nowrap" id="btn-save-ann">
         儲存/發布
       </button>
     </div>
-    <div id="ann-status" class="text-xs mt-2 hidden text-green-400"></div>
   </div>
 
   <!-- 渲染工作流預設咒語管理 (Workflow Prompts) -->
@@ -129,6 +169,10 @@
         <textarea id="prompt-t1" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-20 leading-relaxed"></textarea>
       </div>
       <div>
+        <label class="block text-xs text-gray-400 mb-1">Tool 1: 批量出圖 — 風格一致性附加提示詞 <span class="text-white/30">（第二張起附加於主提示詞後，用於鎖定第一張的光線與色調）</span></label>
+        <textarea id="prompt-t1-batch-style" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-16 leading-relaxed"></textarea>
+      </div>
+      <div>
         <label class="block text-xs text-gray-400 mb-1">Tool 2: 空間重塑 (SpaceReform)</label>
         <textarea id="prompt-t2" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-48 leading-relaxed"></textarea>
       </div>
@@ -141,6 +185,43 @@
       <div id="prompt-status" class="text-xs text-green-400 hidden"></div>
       <button onclick="savePrompts()" class="bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-600/50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ml-auto" id="btn-save-prompts">
         儲存所有工作流設定
+      </button>
+    </div>
+  </div>
+
+  <!-- 模型選擇 -->
+  <div class="bg-white/5 rounded-xl p-4 mb-5 border border-white/10">
+    <h2 class="text-sm font-semibold text-gray-300 mb-3">模型選擇</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">T1 真實渲染</label>
+        <select id="model-t1" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-purple-200 outline-none focus:border-purple-500/50 transition-colors">
+          <option value="google/nano-banana-2/edit">Banana 2（預設）</option>
+          <option value="google/nano-banana-pro/edit">Pro</option>
+          <option value="google/nano-banana-pro/edit-ultra">Pro Ultra</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">T2 SpaceReform</label>
+        <select id="model-t2" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-purple-200 outline-none focus:border-purple-500/50 transition-colors">
+          <option value="google/nano-banana-2/edit">Banana 2（預設）</option>
+          <option value="google/nano-banana-pro/edit">Pro</option>
+          <option value="google/nano-banana-pro/edit-ultra">Pro Ultra</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">T3 九宮格</label>
+        <select id="model-t3" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-purple-200 outline-none focus:border-purple-500/50 transition-colors">
+          <option value="google/nano-banana-2/edit">Banana 2（預設）</option>
+          <option value="google/nano-banana-pro/edit">Pro</option>
+          <option value="google/nano-banana-pro/edit-ultra">Pro Ultra</option>
+        </select>
+      </div>
+    </div>
+    <div class="flex justify-between mt-3 items-center">
+      <div id="model-status" class="text-xs text-green-400 hidden"></div>
+      <button onclick="saveModels()" class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-600/50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ml-auto" id="btn-save-models">
+        儲存模型設定
       </button>
     </div>
   </div>
@@ -170,6 +251,63 @@
       <div class="kpi-trend">平均 <span id="kpi-rating-count">0</span> 筆</div>
     </div>
   </section>
+
+  <!-- 網站流量 (Vercel Analytics) -->
+  <div class="card mb-5">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <div class="text-sm font-semibold text-white">網站流量</div>
+        <span class="text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full font-mono">7天</span>
+      </div>
+      <a href="https://vercel.com/loamlabstudio/loamlab-camera/analytics" target="_blank" class="text-[10px] text-gray-600 hover:text-blue-400 transition-colors">Vercel ↗</a>
+    </div>
+
+    <!-- KPI row -->
+    <div class="grid grid-cols-3 gap-3 mb-4" id="traffic-kpis">
+      <div class="bg-white/[0.03] rounded-xl p-3">
+        <div class="kpi-label mb-1">訪客</div>
+        <div class="kpi-value text-xl" id="t-visitors">--</div>
+      </div>
+      <div class="bg-white/[0.03] rounded-xl p-3">
+        <div class="kpi-label mb-1">頁面瀏覽</div>
+        <div class="kpi-value text-xl" id="t-pageviews">--</div>
+      </div>
+      <div class="bg-white/[0.03] rounded-xl p-3">
+        <div class="kpi-label mb-1">跳出率</div>
+        <div class="kpi-value text-xl" id="t-bounce">--</div>
+      </div>
+    </div>
+
+    <!-- Data row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4" id="traffic-data">
+      <!-- Daily bar chart -->
+      <div>
+        <div class="text-[10px] text-gray-600 mb-2 uppercase tracking-wider">每日訪客</div>
+        <div style="height:90px; position:relative;"><canvas id="chart-traffic"></canvas></div>
+      </div>
+      <!-- Referrers -->
+      <div>
+        <div class="text-[10px] text-gray-600 mb-2 uppercase tracking-wider">來源</div>
+        <div id="t-referrers" class="space-y-1.5 text-[11px]"></div>
+      </div>
+      <!-- Countries + Devices -->
+      <div>
+        <div class="text-[10px] text-gray-600 mb-2 uppercase tracking-wider">地區</div>
+        <div id="t-countries" class="space-y-1.5 text-[11px] mb-3"></div>
+        <div class="text-[10px] text-gray-600 mb-2 uppercase tracking-wider">裝置</div>
+        <div id="t-devices" class="flex gap-2 flex-wrap text-[11px]"></div>
+      </div>
+    </div>
+
+    <!-- Not configured fallback -->
+    <div id="traffic-unconfigured" class="hidden text-center py-5">
+      <div class="text-gray-600 text-xs mb-1">設定 <code class="text-blue-400">VERCEL_TOKEN</code> + <code class="text-blue-400">VERCEL_PROJECT_ID</code> 環境變數以啟用</div>
+      <a href="https://vercel.com/loamlabstudio/loamlab-camera/analytics" target="_blank"
+         class="inline-block mt-2 text-xs text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg hover:bg-blue-500/10 transition-colors">
+        開啟 Vercel Dashboard ↗
+      </a>
+    </div>
+  </div>
 
   <!-- 圖表第一列：渲染趨勢 + 風格排行 -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
@@ -297,7 +435,7 @@ const TOOL_COLORS = ['#dc2626','#7c3aed','#0891b2','#16a34a'];
 const RES_COLORS  = ['#f59e0b','#3b82f6','#8b5cf6'];
 
 let adminKey = '', allUsers = [], allFeedback = [];
-let chartTrend = null, chartTools = null, chartRes = null, chartRevenue = null;
+let chartTrend = null, chartTools = null, chartRes = null, chartRevenue = null, chartTraffic = null;
 
 
 // ── 登入 ──────────────────────────────────────────────────────────────────────
@@ -334,7 +472,7 @@ async function fetchAction(action) {
 
 async function loadAll() {
   setText('last-updated', '載入中...');
-  const actions = ['dashboard', 'renders', 'revenue', 'users', 'feedback', 'funnel', 'insights'];
+  const actions = ['dashboard', 'renders', 'revenue', 'users', 'feedback', 'funnel', 'insights', 'vercel_traffic'];
   try {
     const results = await Promise.allSettled(actions.map(a => fetchAction(a)));
     const data = {};
@@ -345,6 +483,7 @@ async function loadAll() {
 
     loadAnnouncement();
     loadPrompts();
+    loadModels();
     
     // 聚合數據
     const combined = { 
@@ -365,6 +504,7 @@ async function loadAll() {
         renderDonut('chart-res',   'res-legend',  data.dashboard.resolution_breakdown || {}, {}, RES_COLORS);
     }
     if (data.revenue) renderRevenueChart(data.revenue.daily_revenue || {});
+    renderTraffic(data.vercel_traffic || null);
     
     allUsers = data.users?.users || [];
     renderTierSummary(allUsers);
@@ -387,7 +527,11 @@ async function loadAnnouncement() {
     const r = await fetch(`${API_BASE}/api/stats?action=get_announcement`);
     const j = await r.json();
     if (j.code === 0) {
-      document.getElementById('announcement-input').value = j.announcement || '';
+      const ann = j.announcement || {};
+      ['us','tw','cn','es','br','jp'].forEach(l => {
+        const el = document.getElementById(`ann-${l}`);
+        if (el) el.value = ann[l] || '';
+      });
     }
   } catch(e) {}
 }
@@ -395,16 +539,21 @@ async function loadAnnouncement() {
 async function saveAnnouncement() {
   const btn = document.getElementById('btn-save-ann');
   const status = document.getElementById('ann-status');
-  const text = document.getElementById('announcement-input').value;
+  const announcement = {};
+  ['us','tw','cn','es','br','jp'].forEach(l => {
+    const el = document.getElementById(`ann-${l}`);
+    announcement[l] = el ? el.value.trim() : '';
+  });
   btn.innerText = '處理中...';
   try {
     const r = await fetch(`${API_BASE}/api/stats?action=set_announcement`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
-      body: JSON.stringify({ text })
+      body: JSON.stringify({ announcement })
     });
+    const hasContent = Object.values(announcement).some(v => v);
     if (r.ok) {
-      status.innerText = text ? '✅ 公告已發布至全站' : '✅ 公告跑馬燈已關閉';
+      status.innerText = hasContent ? '✅ 公告已發布至全站（依用戶語言顯示）' : '✅ 公告跑馬燈已關閉';
       status.classList.remove('hidden');
       setTimeout(() => status.classList.add('hidden'), 3000);
     } else {
@@ -416,9 +565,95 @@ async function saveAnnouncement() {
   btn.innerText = '儲存/發布';
 }
 
+const ANN_LANGS = ['us', 'tw', 'cn', 'es', 'br', 'jp'];
+let annUndoStack = [];
+let lastEditedAnnLang = null;
+
+// 追蹤最後編輯的公告欄位
+document.addEventListener('input', e => {
+  if (e.target.id?.startsWith('ann-') && ANN_LANGS.includes(e.target.id.replace('ann-', ''))) {
+    lastEditedAnnLang = e.target.id.replace('ann-', '');
+    document.getElementById('ann-source-lang').value = lastEditedAnnLang;
+  }
+});
+
+function saveAnnSnapshot() {
+  const snap = {};
+  ANN_LANGS.forEach(l => snap[l] = document.getElementById(`ann-${l}`)?.value || '');
+  annUndoStack.push(snap);
+  if (annUndoStack.length > 20) annUndoStack.shift();
+}
+
+function restoreAnnSnapshot() {
+  if (!annUndoStack.length) return;
+  const snap = annUndoStack.pop();
+  ANN_LANGS.forEach(l => { const el = document.getElementById(`ann-${l}`); if (el) el.value = snap[l]; });
+  const status = document.getElementById('translate-status');
+  if (status) { status.innerText = '↩ 已還原'; status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 2000); }
+}
+
+// 在公告區塊任一 textarea 上監聽 Ctrl+Z
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.target.id?.startsWith('ann-')) {
+    if (annUndoStack.length) { e.preventDefault(); restoreAnnSnapshot(); }
+  }
+});
+
+async function translateAnnouncement() {
+  const gtLangMap = { us: 'en', tw: 'zh-TW', cn: 'zh-CN', es: 'es', br: 'pt', jp: 'ja' };
+
+  let sourceLang = document.getElementById('ann-source-lang').value;
+  let sourceText = document.getElementById(`ann-${sourceLang}`).value.trim();
+
+  // 來源欄是空的時，自動找第一個有內容的欄位
+  if (!sourceText) {
+    const priority = [sourceLang, 'tw', 'cn', 'us', 'es', 'br', 'jp'];
+    for (const l of priority) {
+      const v = document.getElementById(`ann-${l}`).value.trim();
+      if (v) { sourceLang = l; sourceText = v; break; }
+    }
+  }
+  if (!sourceText) { alert('請先在任一語言欄輸入公告內容'); return; }
+
+  saveAnnSnapshot(); // 翻譯前存快照，供 Ctrl+Z 還原
+  const btn = document.getElementById('btn-translate');
+  const status = document.getElementById('translate-status');
+  btn.innerText = '翻譯中...';
+  btn.disabled = true;
+  status.innerText = '';
+  status.classList.remove('hidden');
+
+  async function gtTranslate(text, sl, tl) {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
+    const r = await fetch(url);
+    const j = await r.json();
+    return j[0].map(s => s[0]).join('');
+  }
+
+  try {
+    const sl = gtLangMap[sourceLang];
+    // 所有 6 個欄位都填入（來源欄填原文，其他翻譯）
+    const allLangs = ['us', 'tw', 'cn', 'es', 'br', 'jp'];
+    const results = await Promise.all(allLangs.map(t =>
+      t === sourceLang
+        ? Promise.resolve({ lang: t, text: sourceText })
+        : gtTranslate(sourceText, sl, gtLangMap[t]).then(text => ({ lang: t, text }))
+    ));
+    results.forEach(({ lang, text }) => {
+      document.getElementById(`ann-${lang}`).value = text;
+    });
+    status.innerText = '✅ 翻譯完成，請確認後儲存';
+  } catch(e) {
+    status.innerText = '❌ 翻譯失敗，請手動填寫';
+  }
+  btn.innerText = '一鍵翻譯至其他語言';
+  btn.disabled = false;
+}
+
 // ── 渲染工作流預設咒語管理 ─────────────────────────────────────────────────
 async function loadPrompts() {
   const defaultP1 = "這是sketchup室內建模的模型（圖1），最後的目的是要轉換成iPhone拍的照片：先在後端生成一張鎖死空間感的深度圖（圖2）和一張所有元素鎖死並且轉換成色彩分明的通道圖（圖三），使用圖1參考圖2和圖3，在不改變模型材質和結構的情況下，99%還原圖片的空間感、相機位置、材質紋理方向，轉換成iPhone拍攝室內空間寫實照片，自然的光感，補充其他區域的漫反射光線，避免局部死黑或過曝，根據室內空間合理化極小不合理的元素，專業攝影級色彩，照片整體有自然的明暗過渡的層次,ultra-detailed";
+  const defaultP1BatchStyle = ". Ensure this image's overall lighting (direction, warmth, intensity) and color tone (temperature, saturation, luminance) match the second reference image so both appear from the same photography session. Spatial content and materials follow Image 1 only — do not reference the second image for those.";
   const defaultP2 = "Edit IMAGE 1 (the original scene photo) by replacing objects as specified below.\nThe colored areas in IMAGE 2 are only location markers — do not use these marker colors in the final result.\n{{REF_TEXT}}\nChanges:\n{{CHANGES}}\n\nStrict Guidelines:\n① Final result must be based on IMAGE 1, appearing as a natural, original photograph — not based on IMAGE 2\n② Perspective & Proportion: Render all objects from IMAGE 1's camera angle, adjust orientation to match scene perspective; do not keep the reference photo's original angle\n③ Lighting & Color Temperature: Strictly follow IMAGE 1's light direction, intensity, shadows and color temperature; remove all color casts, glows and artificial lighting from references\n④ Boundary Control: Stay mainly within marked zones; minor edge feathering is allowed for seamless blending, but do not affect unrelated objects or surfaces\n⑤ Realism & Aesthetics: Replaced objects must have realistic materials, correct scale, elegant composition, and blend harmoniously into the original space with consistent style";
   const defaultP3 = "Based on the uploaded reference image, generate a single high-quality 3x3 interior visualization collage in exact 1:1 square aspect ratio. Output only the clean collage - no text, no titles, no watermarks, no borders, no labels.\nHighest priority: Faithfully extract and reproduce all details from the reference image, including material textures, light and shadow characteristics, color tones, object qualities, and unique atmosphere. All 9 panels must maintain the exact same spatial structure, furniture layout, and lighting direction. Accurate perspective with zero distortion or shifting.\n3x3 Mixed Grid Layout:\nTop Row Left: Left 45 wide long shot showing the full spatial layout and depth\nTop Row Center: Exact same viewpoint and framing as the uploaded reference image (visual anchor)\nTop Row Right: Close-up detail 1 - highly faithful reproduction of material textures and craftsmanship from the reference image\nMiddle Row Left: Medium shot focusing on main furniture arrangement and functional area, preserving the original light and shadow atmosphere\nMiddle Row Center: Close-up detail 2 - emphasizing light and shadow interaction and surface qualities from the reference image\nMiddle Row Right: Right 45 wide long shot showing the other side of the space\nBottom Row Left: Close-up detail 3 - faithfully presenting another dimension of details from the reference image (e.g., decorative elements, corner craftsmanship, or material contrast)\nBottom Row Center: Medium shot from an alternative angle showing spatial transparency and overall atmosphere, faithful to the original tone\nBottom Row Right: Balanced medium shot concluding with overall harmony and high-end quality\n\nTechnical Requirements:\nStrictly faithful to the reference image's materials, lighting, colors, and fine details; 8K ultra-high resolution with extreme detail; photorealistic material rendering with accurate reflections, refractions, and micro-surface details; professional multi-layer lighting; cinematic color grading with sophisticated, soft, and luxurious tones; extremely sharp, clean, noise-free, and distortion-free.\nGenerate a single cohesive 3x3 collage with strong visual rhythm and dramatic scale contrast, while perfectly capturing the unique details and atmosphere of the reference image.";
   
@@ -426,6 +661,7 @@ async function loadPrompts() {
     const r = await fetch(`${API_BASE}/api/stats?action=get_prompts`);
     const j = await r.json();
     document.getElementById('prompt-t1').value = (j.prompts && j.prompts.TOOL_1) ? j.prompts.TOOL_1 : defaultP1;
+    document.getElementById('prompt-t1-batch-style').value = (j.prompts && j.prompts.TOOL_1_BATCH_STYLE) ? j.prompts.TOOL_1_BATCH_STYLE : defaultP1BatchStyle;
     document.getElementById('prompt-t2').value = (j.prompts && j.prompts.TOOL_2) ? j.prompts.TOOL_2 : defaultP2;
     document.getElementById('prompt-t3').value = (j.prompts && j.prompts.TOOL_3) ? j.prompts.TOOL_3 : defaultP3;
   } catch(e) { console.error('Failed to load prompts:', e); }
@@ -437,6 +673,7 @@ async function savePrompts() {
   
   const prompts = {
     TOOL_1: document.getElementById('prompt-t1').value.trim(),
+    TOOL_1_BATCH_STYLE: document.getElementById('prompt-t1-batch-style').value.trim(),
     TOOL_2: document.getElementById('prompt-t2').value.trim(),
     TOOL_3: document.getElementById('prompt-t3').value.trim()
   };
@@ -459,6 +696,47 @@ async function savePrompts() {
     alert('儲存錯誤');
   }
   btn.innerText = '儲存所有工作流設定';
+}
+
+// ── 模型選擇 ──────────────────────────────────────────────────────────────
+async function loadModels() {
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=get_model_config`);
+    const j = await r.json();
+    if (j.models) {
+      if (j.models.tool1) document.getElementById('model-t1').value = j.models.tool1;
+      if (j.models.tool2) document.getElementById('model-t2').value = j.models.tool2;
+      if (j.models.tool3) document.getElementById('model-t3').value = j.models.tool3;
+    }
+  } catch(e) { console.error('Failed to load model config:', e); }
+}
+
+async function saveModels() {
+  const btn = document.getElementById('btn-save-models');
+  const status = document.getElementById('model-status');
+  const models = {
+    tool1: document.getElementById('model-t1').value,
+    tool2: document.getElementById('model-t2').value,
+    tool3: document.getElementById('model-t3').value
+  };
+  btn.innerText = '儲存中...';
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=set_model_config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+      body: JSON.stringify({ models })
+    });
+    if (r.ok) {
+      status.innerText = '✅ 模型設定已儲存，即刻生效';
+      status.classList.remove('hidden');
+      setTimeout(() => status.classList.add('hidden'), 3000);
+    } else {
+      alert('儲存失敗');
+    }
+  } catch(e) {
+    alert('儲存錯誤');
+  }
+  btn.innerText = '儲存模型設定';
 }
 
 function renderDashboard(data) {
@@ -732,6 +1010,100 @@ function renderInsights(insights) {
   }).join('');
 }
 
+
+// ── 網站流量（Vercel Analytics）─────────────────────────────────────────────
+function renderTraffic(d) {
+  const kpis = document.getElementById('traffic-kpis');
+  const dataEl = document.getElementById('traffic-data');
+  const unconf = document.getElementById('traffic-unconfigured');
+
+  if (!d || !d.configured) {
+    kpis.classList.add('hidden');
+    dataEl.classList.add('hidden');
+    unconf.classList.remove('hidden');
+    return;
+  }
+
+  // KPI — overview response: { devices: visitors, total: pageViews, bounceRate: 87 }
+  const ov = d.overview || {};
+  const visitors  = ov.devices   ?? ov.visitors  ?? '--';
+  const pageviews = ov.total     ?? ov.pageViews ?? '--';
+  const bounce    = ov.bounceRate != null ? Math.round(ov.bounceRate) + '%' : '--';
+
+  setText('t-visitors',  typeof visitors  === 'number' ? visitors.toLocaleString()  : visitors);
+  setText('t-pageviews', typeof pageviews === 'number' ? pageviews.toLocaleString() : pageviews);
+  setText('t-bounce', bounce);
+
+  // 每日訪客 bar chart — timeseries response: { data: { groups: { all: [...] } } }
+  const daily = d.timeseries?.data?.groups?.all ?? [];
+  if (daily.length) {
+    const labels = daily.map(p => (p.key || '').slice(5, 10)); // MM-DD
+    const values = daily.map(p => p.devices ?? p.total ?? 0); // 訪客數
+    const ctx = document.getElementById('chart-traffic').getContext('2d');
+    if (chartTraffic) chartTraffic.destroy();
+    chartTraffic = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: [{ data: values, backgroundColor: '#3b82f620', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 3 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#4b5577', font: { size: 9 } } },
+          y: { grid: { color: '#1e244066' }, ticks: { color: '#4b5577', font: { size: 9 } } }
+        }
+      }
+    });
+  }
+
+  // 來源排行
+  const refs = Array.isArray(d.referrers) ? d.referrers : (d.referrers?.data ?? []);
+  const refEl = document.getElementById('t-referrers');
+  if (refs.length) {
+    const max = refs[0]?.total ?? refs[0]?.visitors ?? 1;
+    refEl.innerHTML = refs.slice(0, 6).map(r => {
+      const label = r.key || r.referrer || r.source || 'Direct';
+      const count = r.total ?? r.visitors ?? 0;
+      const pct = Math.round((count / max) * 100);
+      return `<div class="flex items-center gap-2">
+        <div class="w-20 truncate text-gray-400">${label}</div>
+        <div class="flex-1 bg-white/5 rounded-full h-1"><div class="bg-blue-500/60 h-1 rounded-full" style="width:${pct}%"></div></div>
+        <div class="text-gray-600 w-6 text-right">${count}</div>
+      </div>`;
+    }).join('');
+  } else {
+    refEl.innerHTML = '<div class="text-gray-700 text-[11px]">無資料</div>';
+  }
+
+  // 地區排行
+  const countries = Array.isArray(d.countries) ? d.countries : (d.countries?.data ?? []);
+  const ctryEl = document.getElementById('t-countries');
+  if (countries.length) {
+    const max = countries[0]?.total ?? countries[0]?.visitors ?? 1;
+    ctryEl.innerHTML = countries.slice(0, 5).map(c => {
+      const label = c.key || c.country || '?';
+      const count = c.total ?? c.visitors ?? 0;
+      const pct = Math.round((count / max) * 100);
+      return `<div class="flex items-center gap-2">
+        <div class="w-16 truncate text-gray-400">${label}</div>
+        <div class="flex-1 bg-white/5 rounded-full h-1"><div class="bg-cyan-500/60 h-1 rounded-full" style="width:${pct}%"></div></div>
+        <div class="text-gray-600 w-6 text-right">${count}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // 裝置分佈
+  const deviceIcons = { mobile: '📱', desktop: '💻', tablet: '📟' };
+  const devices = Array.isArray(d.devices) ? d.devices : (d.devices?.data ?? []);
+  const devEl = document.getElementById('t-devices');
+  if (devices.length) {
+    devEl.innerHTML = devices.map(dv => {
+      const type = (dv.key || dv.device || '').toLowerCase();
+      const pct  = dv.percentage != null ? Math.round(dv.percentage * (dv.percentage <= 1 ? 100 : 1)) + '%'
+                 : (dv.total ?? dv.visitors ?? '?');
+      return `<span class="text-gray-500 bg-white/[0.03] px-2 py-1 rounded-lg border border-white/5">${deviceIcons[type] || '?'} ${type} <span class="text-gray-600">${pct}</span></span>`;
+    }).join('');
+  }
+}
 
 // ── 自動刷新（60 秒倒數）────────────────────────────────────────────────────
 let autoRefreshTimer = null, countdown = 60;

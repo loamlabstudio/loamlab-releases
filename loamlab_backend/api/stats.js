@@ -49,7 +49,10 @@ export default async function handler(req, res) {
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
-        return res.status(200).json({ code: 0, announcement: data?.metadata?.announcement || '' });
+        // 向下相容：舊格式為字串，新格式為多語言物件
+        const raw = data?.metadata?.announcement || '';
+        const announcement = (raw && typeof raw === 'string') ? { us: raw, tw: raw, cn: raw, es: raw, br: raw, jp: raw } : (raw || {});
+        return res.status(200).json({ code: 0, announcement });
     }
 
     if (req.method === 'GET' && action === 'get_prompts') {
@@ -63,6 +66,17 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, prompts: data?.metadata?.prompts || {} });
     }
 
+    if (req.method === 'GET' && action === 'get_model_config') {
+        const { data, error } = await supabase.from('transactions')
+            .select('metadata')
+            .eq('transaction_type', 'MODEL_CONFIG')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0, models: data?.metadata?.models || {} });
+    }
+
     // --- Admin 端點（需要 ADMIN_KEY）---
     const adminKeyHeader = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     if (!adminKeyHeader || adminKeyHeader !== process.env.ADMIN_KEY) {
@@ -70,12 +84,12 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST' && action === 'set_announcement') {
-        const text = req.body?.text || '';
+        const announcement = req.body?.announcement || {};
         const { error } = await supabase.from('transactions').insert([{
             user_email: null,
             amount: 0,
             transaction_type: 'SYSTEM_CONFIG',
-            metadata: { announcement: text }
+            metadata: { announcement }
         }]);
         if (error) {
             console.error('Save error:', error.message);
@@ -99,7 +113,22 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
-    const actions = { dashboard, users, revenue, renders, feedback, funnel, insights };
+    if (req.method === 'POST' && action === 'set_model_config') {
+        const models = req.body?.models || {};
+        const { error } = await supabase.from('transactions').insert([{
+            user_email: null,
+            amount: 0,
+            transaction_type: 'MODEL_CONFIG',
+            metadata: { models }
+        }]);
+        if (error) {
+            console.error('Save model config error:', error.message);
+            return res.status(500).json({ code: -1, msg: error.message });
+        }
+        return res.status(200).json({ code: 0, msg: 'Saved' });
+    }
+
+    const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic };
     if (!actions[action]) return res.status(400).json({ code: -1, msg: `Unknown action: ${action}` });
 
     try {
@@ -429,6 +458,41 @@ async function insights(supabase) {
     return { insights: result, analyzed_users: users.length };
 }
 
+
+// ── Admin: Vercel 網站流量 ────────────────────────────────────────────────────
+async function vercel_traffic() {
+    const token   = process.env.VERCEL_ACCESS_TOKEN;
+    const slug    = process.env.VERCEL_PROJECT_SLUG || 'loamlab-camera';
+    const teamId  = process.env.VERCEL_TEAM_ID;
+    if (!token) return { configured: false };
+
+    const now  = new Date();
+    const to   = now.toISOString();
+    const from = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const tz   = 'Asia/Taipei';
+    const h    = { Authorization: `Bearer ${token}` };
+
+    const base   = 'https://vercel.com/api/web-analytics';
+    const common = `environment=production&filter=%7B%7D&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&tz=${encodeURIComponent(tz)}&projectId=${slug}${teamId ? `&teamId=${teamId}` : ''}`;
+    const stats  = (type) => `${base}/stats?${common}&limit=20&type=${type}`;
+
+    const [overviewR, timeseriesR, referrersR, countriesR, devicesR] = await Promise.allSettled([
+        fetch(`${base}/overview?${common}&withBounceRate=true`, { headers: h }).then(r => r.json()),
+        fetch(`${base}/timeseries?${common}`,                   { headers: h }).then(r => r.json()),
+        fetch(stats('referrer'),                                { headers: h }).then(r => r.json()),
+        fetch(stats('country'),                                 { headers: h }).then(r => r.json()),
+        fetch(stats('device'),                                  { headers: h }).then(r => r.json()),
+    ]);
+
+    return {
+        configured: true,
+        overview:    overviewR.status    === 'fulfilled' ? overviewR.value    : null,
+        timeseries:  timeseriesR.status  === 'fulfilled' ? timeseriesR.value  : null,
+        referrers:   referrersR.status   === 'fulfilled' ? referrersR.value   : null,
+        countries:   countriesR.status   === 'fulfilled' ? countriesR.value   : null,
+        devices:     devicesR.status     === 'fulfilled' ? devicesR.value     : null,
+    };
+}
 
 // ── 工具函數 ──────────────────────────────────────────────────────────────────
 function daysAgo(n) {

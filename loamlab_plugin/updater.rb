@@ -100,12 +100,26 @@ module LoamLab
 
             UI.start_timer(1.0, false) do
               plugin_dir = File.dirname(__FILE__)
-              %w[config.rb coze_api.rb updater.rb main.rb].each do |f|
-                fp = File.join(plugin_dir, f)
-                load fp if File.exist?(fp)
+              begin
+                # 1. 先關閉舊視窗
+                begin; dialog.close; rescue => e; end
+
+                # 2. 清除模組常數（同 dev_reload.rb 做法），確保 VERSION 等常數乾淨重載
+                Object.send(:remove_const, :LoamLab) if Object.const_defined?(:LoamLab)
+                Object.send(:remove_const, :LoamLabPlugin) if Object.const_defined?(:LoamLabPlugin)
+
+                # 3. 依序重載（順序必須：config → coze_api → updater → main）
+                %w[config.rb coze_api.rb updater.rb main.rb].each do |f|
+                  fp = File.join(plugin_dir, f)
+                  load fp if File.exist?(fp)
+                end
+
+                # 4. 重開 UI（此時 LoamLab::VERSION 已是新版本）
+                LoamLab::AIURenderer.show_dialog(true)
+                puts "[Updater] 更新完成，版本已更新至 #{LoamLab::VERSION}"
+              rescue => e
+                puts "[Updater] 重載失敗：#{e.message}"
               end
-              begin; dialog.close; rescue => e; puts "[LoamLab] dialog close: #{e.message}"; end
-              LoamLab::AIURenderer.show_dialog(true)
             end
 
           rescue => e

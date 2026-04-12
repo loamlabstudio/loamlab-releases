@@ -448,9 +448,10 @@ window.receiveFromRuby = function (data) {
         statusText.classList.replace('text-gray-400', 'text-green-500');
         renderScenesList(data.scenes);
 
-        // Header 顯示版本號
+        // Header 顯示版本號，並同步全域版本常數
         const versionLabel = document.getElementById('current-version-label');
         if (versionLabel && data.version) versionLabel.textContent = `v${data.version}`;
+        if (data.version) window.LOAMLAB_VERSION = data.version;
 
         // 啟動時靜默自動檢查（有新版才提示，已是最新不打擾）
         if (window.sketchup) {
@@ -1714,7 +1715,7 @@ function openHistoryModal() {
     
     // Yield to let the browser paint the modal before the potentially heavy Ruby IPC call
     setTimeout(function() {
-        if (window.sketchup) {
+        if (window.sketchup && typeof sketchup.list_saved_renders === 'function') {
             sketchup.list_saved_renders({});
         } else {
             const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
@@ -3965,7 +3966,7 @@ async function executeSmartSwap(overrideBody = null) {
                 headers: {
                     'Content-Type': 'application/json',
                     'X-User-Email': window.loamlabUserEmail || '',
-                    'X-Plugin-Version': '1.2.5'
+                    'X-Plugin-Version': window.LOAMLAB_VERSION || '0.0.0'
                 },
                 body: JSON.stringify(fetchBody),
                 signal: AbortSignal.timeout(400000)  // 6.7 分鐘安全網（Vercel 300s 504 會先回來，前端拿到正確 JSON 錯誤）

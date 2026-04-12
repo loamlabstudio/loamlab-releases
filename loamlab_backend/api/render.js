@@ -10,11 +10,16 @@ function sanitizeError(msg) {
     // 隱藏技術棧字眼
     return msg
         .replace(/AtlasCloud API error/gi, 'AI 渲染引擎錯誤')
+        .replace(/api\.atlascloud\.ai/gi, 'ai-render-gateway')
+        .replace(/atlascloud\.ai/gi, 'ai-render-gateway')
         .replace(/AtlasCloud/gi, 'AI 渲染引擎')
+        .replace(/ATLASCLOUD_API_KEY/g, '渲染引擎金鑰')
         .replace(/nano-banana-2\/edit/gi, 'AI-Renderer-Pro')
         .replace(/nano-banana/gi, 'AI-Engine')
         .replace(/google\/nano-banana-2\/edit/gi, 'AI-Renderer-Pro')
-        .replace(/google/gi, 'AI');
+        .replace(/google/gi, 'AI')
+        .replace(/Bearer\s+[A-Za-z0-9\-._~+/]+=*/g, '[TOKEN]')
+        .replace(/https?:\/\/api\.[^\s"']+/g, '[API_ENDPOINT]');
 }
 
 export default async function handler(req, res) {
@@ -234,14 +239,15 @@ export default async function handler(req, res) {
                         if (origSign?.signedUrl) originalImageUrl = origSign.signedUrl;
                     }
                 }
-                if (!originalImageUrl) throw new Error('原始底圖上傳失敗');
+                // Fallback：Storage 不可用時直接用 base64 data URL（AtlasCloud 支援）
+                if (!originalImageUrl) originalImageUrl = originalImageB64;
             }
 
             // 合成疊加圖 (Mask)
             baseForCoze = baseImageUrlPayload;
             if (baseImageB64) {
-                const cleanB64 = baseImageB64.replace(/^data:image\/\w+;base64,/, '');
                 if (supabaseAdmin) {
+                    const cleanB64 = baseImageB64.replace(/^data:image\/\w+;base64,/, '');
                     const baseName = `tmp/${Date.now()}_base_${Math.random().toString(36).slice(2)}.jpg`;
                     const { error: upBase } = await supabaseAdmin.storage.from('render-temp').upload(baseName, Buffer.from(cleanB64, 'base64'), { contentType: 'image/jpeg' });
                     if (upBase) throw new Error(`底圖上傳失敗: ${upBase.message}`);
@@ -249,25 +255,27 @@ export default async function handler(req, res) {
                     const { data: baseSign } = await supabaseAdmin.storage.from('render-temp').createSignedUrl(baseName, 3600);
                     baseForCoze = baseSign?.signedUrl || '';
                 } else {
-                    throw new Error('Storage 服務不可用');
+                    // Fallback：Storage 不可用時直接用 base64 data URL（AtlasCloud 支援）
+                    baseForCoze = baseImageB64;
                 }
             }
 
             // 用戶的上傳參考圖
             const refImagesB64 = (userPayload.parameters?.ref_images || []).filter(Boolean);
             for (const b64 of refImagesB64) {
-                const clean = b64.replace(/^data:image\/\w+;base64,/, '');
-                let url = '';
                 if (supabaseAdmin) {
+                    const clean = b64.replace(/^data:image\/\w+;base64,/, '');
                     const fname = `tmp/${Date.now()}_ref_${Math.random().toString(36).slice(2)}.jpg`;
                     const { error: upRef } = await supabaseAdmin.storage.from('render-temp').upload(fname, Buffer.from(clean, 'base64'), { contentType: 'image/jpeg' });
                     if (!upRef) {
                         tempRefImages.push(fname);
                         const { data: s } = await supabaseAdmin.storage.from('render-temp').createSignedUrl(fname, 3600);
-                        if (s?.signedUrl) url = s.signedUrl;
+                        if (s?.signedUrl) refImageUrls.push(s.signedUrl);
                     }
+                } else {
+                    // Fallback：直接用 base64 data URL
+                    refImageUrls.push(b64);
                 }
-                if (url) refImageUrls.push(url);
             }
         }
 
@@ -279,7 +287,13 @@ export default async function handler(req, res) {
             const pRes = await supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_PROMPTS').order('created_at', { ascending: false }).limit(1).maybeSingle();
             if (pRes.data) systemPrompts = pRes.data.metadata?.prompts || {};
         } catch(e) {}
-        
+
+        let toolModelMap = {};
+        try {
+            const mRes = await supabase.from('transactions').select('metadata').eq('transaction_type', 'MODEL_CONFIG').order('created_at', { ascending: false }).limit(1).maybeSingle();
+            if (mRes.data?.metadata?.models) toolModelMap = mRes.data.metadata.models;
+        } catch(e) {}
+
         const defaultP1 = "這是sketchup室內建模的模型（圖1），最後的目的是要轉換成iPhone拍的照片：先在後端生成一張鎖死空間感的深度圖（圖2）和一張所有元素鎖死並且轉換成色彩分明的通道圖（圖三），使用圖1參考圖2和圖3，在不改變模型材質和結構的情況下，99%還原圖片的空間感、相機位置、材質紋理方向，轉換成iPhone拍攝室內空間寫實照片，自然的光感，補充其他區域的漫反射光線，避免局部死黑或過曝，根據室內空間合理化極小不合理的元素，專業攝影級色彩，照片整體有自然的明暗過渡的層次,ultra-detailed";
         const defaultP2 = "Edit IMAGE 1 (the original scene photo) by replacing objects as specified below.\nThe colored areas in IMAGE 2 are only location markers — do not use these marker colors in the final result.\n{{REF_TEXT}}\nChanges:\n{{CHANGES}}\n\nStrict Guidelines:\n① Final result must be based on IMAGE 1, appearing as a natural, original photograph — not based on IMAGE 2\n② Perspective & Proportion: Render all objects from IMAGE 1's camera angle, adjust orientation to match scene perspective; do not keep the reference photo's original angle\n③ Lighting & Color Temperature: Strictly follow IMAGE 1's light direction, intensity, shadows and color temperature; remove all color casts, glows and artificial lighting from references\n④ Boundary Control: Stay mainly within marked zones; minor edge feathering is allowed for seamless blending, but do not affect unrelated objects or surfaces\n⑤ Realism & Aesthetics: Replaced objects must have realistic materials, correct scale, elegant composition, and blend harmoniously into the original space with consistent style";
         const defaultP3 = "Based on the uploaded reference image, generate a single high-quality 3x3 interior visualization collage in exact 1:1 square aspect ratio. Output only the clean collage - no text, no titles, no watermarks, no borders, no labels.\nHighest priority: Faithfully extract and reproduce all details from the reference image, including material textures, light and shadow characteristics, color tones, object qualities, and unique atmosphere. All 9 panels must maintain the exact same spatial structure, furniture layout, and lighting direction. Accurate perspective with zero distortion or shifting.\n3x3 Mixed Grid Layout:\nTop Row Left: Left 45 wide long shot showing the full spatial layout and depth\nTop Row Center: Exact same viewpoint and framing as the uploaded reference image (visual anchor)\nTop Row Right: Close-up detail 1 - highly faithful reproduction of material textures and craftsmanship from the reference image\nMiddle Row Left: Medium shot focusing on main furniture arrangement and functional area, preserving the original light and shadow atmosphere\nMiddle Row Center: Close-up detail 2 - emphasizing light and shadow interaction and surface qualities from the reference image\nMiddle Row Right: Right 45 wide long shot showing the other side of the space\nBottom Row Left: Close-up detail 3 - faithfully presenting another dimension of details from the reference image (e.g., decorative elements, corner craftsmanship, or material contrast)\nBottom Row Center: Medium shot from an alternative angle showing spatial transparency and overall atmosphere, faithful to the original tone\nBottom Row Right: Balanced medium shot concluding with overall harmony and high-end quality\n\nTechnical Requirements:\nStrictly faithful to the reference image's materials, lighting, colors, and fine details; 8K ultra-high resolution with extreme detail; photorealistic material rendering with accurate reflections, refractions, and micro-surface details; professional multi-layer lighting; cinematic color grading with sophisticated, soft, and luxurious tones; extremely sharp, clean, noise-free, and distortion-free.\nGenerate a single cohesive 3x3 collage with strong visual rhythm and dramatic scale contrast, while perfectly capturing the unique details and atmosphere of the reference image.";
@@ -287,11 +301,16 @@ export default async function handler(req, res) {
         const p1 = systemPrompts.TOOL_1 || defaultP1;
         const p2 = systemPrompts.TOOL_2 || defaultP2;
         const p3 = systemPrompts.TOOL_3 || defaultP3;
+        const defaultStyleNote = ". Ensure this image's overall lighting (direction, warmth, intensity) and color tone (temperature, saturation, luminance) match the second reference image so both appear from the same photography session. Spatial content and materials follow Image 1 only — do not reference the second image for those.";
+        const p1StyleNote = systemPrompts.TOOL_1_BATCH_STYLE || defaultStyleNote;
+
+        // Method B：提前取得風格參考 URL（需在 finalPrompt 組裝前宣告）
+        const styleRefUrl = (userPayload.parameters?.style_ref_url || '').trim();
 
         // ── 提示詞組裝 ──
         let finalPrompt = "";
-        let finalModel = 'google/nano-banana-2/edit';
-        
+        let finalModel = toolModelMap[`tool${activeTool}`] || 'google/nano-banana-2/edit';
+
         if (activeTool === 2) {
             let changes = [];
             for (const part of (userPrompt || "").split(';')) {
@@ -304,31 +323,36 @@ export default async function handler(req, res) {
             if (changes.length === 0) {
                 finalPrompt = "Enhance this interior design photo naturally with realistic, high-end visual quality.";
             } else {
-                const hasRefs = refImageUrls.length >= 1; 
+                const hasRefs = refImageUrls.length >= 1;
                 const refText = hasRefs ? "IMAGE 3+ are reference objects: use only their shape, style and form; match lighting to IMAGE 1's environment.\n" : "";
                 finalPrompt = p2.replace("{{REF_TEXT}}", refText).replace("{{CHANGES}}", changes.join('\n'));
             }
         } else if (activeTool === 3) {
             finalPrompt = userPrompt.trim() ? p3 + ", " + userPrompt : p3;
         } else {
-            finalPrompt = userPrompt.trim() ? p1 + "，" + userPrompt : p1;
+            const styleNote = styleRefUrl ? p1StyleNote : "";
+            finalPrompt = userPrompt.trim() ? p1 + styleNote + ", " + userPrompt : p1 + styleNote;
         }
 
         // ==========================================
         // 呼叫 AtlasCloud (取代 Coze)
         // ==========================================
         const ATLASCLOUD_API_KEY = process.env.ATLASCLOUD_API_KEY;
-        if (!ATLASCLOUD_API_KEY) throw new Error("遺失 ATLASCLOUD_API_KEY，請在 Vercel 環境變數中設定。");
+        if (!ATLASCLOUD_API_KEY) throw new Error("渲染引擎金鑰未設定，請聯繫管理員。");
 
         const resolutionMap = { '1k': '1k', '1K': '1k', '2k': '2k', '2K': '2k', '4k': '4k', '4K': '4k' };
         const resVal = userPayload.resolution || '1k';
-        
+
         // 收集要傳送給 AtlasCloud 的影像
         let allImagesStrArray = [];
         if (activeTool === 2) {
             allImagesStrArray = [originalImageUrl, baseForCoze, ...refImageUrls];
         } else {
             allImagesStrArray = userPayload.parameters?.image || [];
+            // Method B：若有風格參考 URL，附加在截圖之後作為第二張圖
+            if (styleRefUrl) {
+                allImagesStrArray = [...allImagesStrArray, styleRefUrl];
+            }
         }
 
         // 將所有參考圖片確保為 URL 或 base64 data URL 容錯機制
@@ -400,7 +424,8 @@ export default async function handler(req, res) {
         } else {
             await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
             try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL' }]); } catch(e) {}
-            return res.status(500).json({ code: -1, msg: sanitizeError(`API 成功但未回傳網址: ${JSON.stringify(data).slice(0,100)}`), points_refunded: true });
+            console.error('[render] no_url response:', JSON.stringify(data).slice(0, 200));
+            return res.status(500).json({ code: -1, msg: '出圖完成但結果未返回，請稍後再試。', points_refunded: true });
         }
     } catch (apiError) {
         await cleanTemp2();

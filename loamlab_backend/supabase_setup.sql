@@ -85,6 +85,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_order_id ON transactions(orde
 
 /*
 ===================================================
+Phase 18b: auth_sessions 補全欄位（若表在早期版本創建）
+請在 Supabase Dashboard -> SQL Editor 執行此段
+===================================================
+*/
+
+-- 若 auth_sessions 在 email 欄位加入前已存在，補加欄位
+ALTER TABLE public.auth_sessions ADD COLUMN IF NOT EXISTS email      TEXT;
+ALTER TABLE public.auth_sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '30 days';
+
+/*
+===================================================
 Feedback System — 反饋系統
 ===================================================
 */
@@ -143,6 +154,7 @@ CREATE POLICY "Enable all access for service role" ON public.user_presets FOR AL
 CREATE TABLE IF NOT EXISTS public.render_history (
   id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_email   TEXT NOT NULL REFERENCES public.users(email) ON DELETE CASCADE,
+  input_url    TEXT,                  -- 原始輸入圖片 URL（數據飛輪用）
   thumbnail_url TEXT,                 -- freeimage.host 縮圖 URL
   full_url     TEXT,                  -- 完整圖片 URL
   prompt       TEXT,
@@ -157,6 +169,8 @@ CREATE TABLE IF NOT EXISTS public.render_history (
 CREATE INDEX IF NOT EXISTS idx_render_history_email ON public.render_history(user_email);
 CREATE INDEX IF NOT EXISTS idx_render_history_created ON public.render_history(created_at DESC);
 ALTER TABLE public.render_history ENABLE ROW LEVEL SECURITY;
+-- 若表已存在，補上新欄位（冪等操作）
+ALTER TABLE public.render_history ADD COLUMN IF NOT EXISTS input_url TEXT;
 DROP POLICY IF EXISTS "Enable all access for service role" ON public.render_history;
 CREATE POLICY "Enable all access for service role" ON public.render_history FOR ALL USING (true);
 

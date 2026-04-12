@@ -165,6 +165,7 @@ Commit message 格式：`feat(ui): 說明 [T07][DONE]`（`[T\d+][DONE]` 觸發 `
 | `LEMONSQUEEZY_WEBHOOK_SECRET` | `webhook.js` | HMAC signing secret |
 | `IMGBB_API_KEY` | `render.js` | Fallback image host; hardcoded default exists |
 | `ADMIN_KEY` | `fix_anomalies.js` | Guards admin endpoint in production |
+| `SUPABASE_SERVICE_ROLE_KEY` | `render.js` | **Tool 2 必需**；Supabase Storage 私有 bucket 上傳（render-temp）；缺少時 fallback 到 base64 直傳，但建議設置以減少 payload 大小 |
 | `ATLASCLOUD_API_KEY` | 備援渲染（未實裝）| `ATLASCLOUD_API.md` |
 | `GEMINI_API_KEY` | Gemini fallback（未實裝）| Google AI Studio |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Vertex AI Inpainting（未實裝）| Service Account JSON 路徑 |

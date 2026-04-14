@@ -1110,18 +1110,18 @@
                     <!-- 底部膠囊工具列 -->
                     <div class="shrink-0 flex items-center justify-center pb-4 px-4">
                         <div id="sc-capsule" class="flex items-center gap-1.5 bg-black/70 backdrop-blur border border-white/15 rounded-full px-4 py-2 shadow-lg">
-                            <button class="sc-tool-btn sc-active" data-tool="wand" title="魔術棒 (Smart Select)" data-i18n-title="sc_tool_magic">
+                            <button class="sc-tool-btn sc-active" data-tool="wand" title="魔術棒 W" data-i18n-title="sc_tool_magic">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 9-7 2-4 7L5 3z"/></svg>
                             </button>
-                            <button class="sc-tool-btn" data-tool="brush" title="筆刷 (Brush)" data-i18n-title="sc_tool_brush">
+                            <button class="sc-tool-btn" data-tool="brush" title="筆刷 B  |  Shift拖曳=直線  |  [ ] 調整大小" data-i18n-title="sc_tool_brush">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                             </button>
                             <input type="color" id="sc-color-picker" value="#ff6432" class="w-7 h-7 rounded-full border-2 border-white/20 cursor-pointer bg-transparent" title="筆刷顏色">
                             <input type="range" id="sc-brush-size" min="5" max="60" value="20" class="w-16 accent-rose-500" title="筆刷大小">
-                            <button class="sc-tool-btn" data-tool="eraser" title="橡皮擦 (Eraser)" data-i18n-title="sc_tool_eraser">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            <button class="sc-tool-btn" data-tool="eraser" title="橡皮擦 E" data-i18n-title="sc_tool_eraser">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 20H7L3 16l10-10 7 7-3.5 3.5M6 17l4-4"/></svg>
                             </button>
-                            <button class="sc-tool-btn" data-tool="fill" title="填充 (Fill enclosed area)" data-i18n-title="sc_tool_fill">
+                            <button class="sc-tool-btn" data-tool="fill" title="填充 G" data-i18n-title="sc_tool_fill">
                                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15c-.59.56-.59 1.53 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10 10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z"/></svg>
                             </button>
                             <div class="w-px h-5 bg-white/15 mx-1"></div>
@@ -1134,6 +1134,9 @@
                             <button id="sc-clear" title="清空 (Clear All)" class="sc-ctrl-btn text-white/50 hover:text-rose-400">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
+                        </div>
+                        <div class="text-[8px] text-white/20 text-center mt-1.5 tracking-wider select-none pointer-events-none">
+                            W 魔棒 · B 筆刷 · E 橡皮擦 · G 填充 &nbsp;|&nbsp; [ ] 大小 · Shift 直線 · Alt+拖 調整大小 · Ctrl+Z/Y 復原/重做
                         </div>
                     </div>
                 </div>

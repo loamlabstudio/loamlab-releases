@@ -2806,6 +2806,9 @@ const SmartCanvas = {
     focusedRegionIdx: null, // 快速標籤追加目標的 region index
     activeTagGroup: 'soft', // 當前快速標籤群組
     _lastDrawX: null, _lastDrawY: null,  // 筆刷連線插值用
+    _strokeStartX: null, _strokeStartY: null, // Shift 直線起點
+    _hasDragged: false,  // 是否有實際移動
+    eraserTarget: null,  // 鎖定單擦的 region index（null = 全部）
     brushColor: '#ff6432',
     brushSize: 20,
     isDrawing: false,
@@ -3325,11 +3328,14 @@ function _scRenderRegionList() {
         const hasRef = !!region.refImageBase64;
         const card = document.createElement('div');
         card.className = 'sc-region-card';
+        const isEraserTarget = SmartCanvas.eraserTarget === idx;
+        card.className = 'sc-region-card' + (isEraserTarget ? ' sc-eraser-target-active' : '');
         card.innerHTML = `
             <div class="flex items-center gap-2">
                 <div class="sc-region-swatch" style="background:${region.colorHex || '#ff6432'}"></div>
                 <span class="text-[10px] text-white/50 font-semibold uppercase tracking-wide">區域 ${idx + 1}</span>
-                <button class="ml-auto text-white/20 hover:text-rose-400 text-[11px] leading-none sc-del-btn">✕</button>
+                <button class="sc-erase-target-btn text-[11px] leading-none ${isEraserTarget ? 'text-rose-400' : 'text-white/20 hover:text-rose-400'}" title="${isEraserTarget ? '取消鎖定（目前只擦此圖層）' : '只擦此圖層'}">⊖</button>
+                <button class="text-white/20 hover:text-rose-400 text-[11px] leading-none sc-del-btn">✕</button>
             </div>
             <input type="text" class="sc-region-label-input w-full bg-transparent border-b border-white/10 text-[11px] text-white/80 outline-none placeholder-white/25 pb-0.5 mt-1.5"
                 value="${region.label || ''}" placeholder="描述替換內容（可選）..." />
@@ -3346,7 +3352,18 @@ function _scRenderRegionList() {
         `;
         // 點擊任意卡片區域即更新焦點 index（供 Ctrl+V 貼圖使用）
         card.addEventListener('mousedown', () => { SmartCanvas.focusedRegionIdx = idx; });
+        card.querySelector('.sc-erase-target-btn').onclick = () => {
+            // 切換單擦鎖定：再點一次解除
+            SmartCanvas.eraserTarget = (SmartCanvas.eraserTarget === idx) ? null : idx;
+            // 鎖定後自動切換到橡皮擦工具
+            if (SmartCanvas.eraserTarget !== null) {
+                const eraserBtn = document.querySelector('.sc-tool-btn[data-tool="eraser"]');
+                if (eraserBtn) eraserBtn.click();
+            }
+            _scRenderRegionList();
+        };
         card.querySelector('.sc-del-btn').onclick = () => {
+            if (SmartCanvas.eraserTarget === idx) SmartCanvas.eraserTarget = null;
             SmartCanvas.regions.splice(idx, 1);
             _scRenderRegionList();
             _scRenderOverlays();
@@ -3501,6 +3518,8 @@ function _scBindEvents() {
         SmartCanvas.lastWandX = -1; SmartCanvas.lastWandY = -1;
         _scRenderOverlays();
         if (SmartCanvas.cursorCtx) SmartCanvas.cursorCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+        // 滑鼠離開時若仍在繪製，提交筆畫（防止放開滑鼠後筆刷卡住）
+        if (SmartCanvas.isDrawing) _scFinishStroke();
     });
 
     // --- 魔術棒 click → 選取區域 → 彈出 label ---
@@ -3553,14 +3572,14 @@ function _scBindEvents() {
         _scSaveUndo();
         _scDraw(e);
     });
-    fresh.addEventListener('mouseup', () => {
+    // 提取為函式供 mouseup / mouseleave / document.mouseup 共用
+    function _scFinishStroke() {
         if (!SmartCanvas.isDrawing) return;
         SmartCanvas.isDrawing = false;
         SmartCanvas._lastDrawX = null;
         SmartCanvas._lastDrawY = null;
-        SmartCanvas._altResizeStartX = null; // 結束 Alt resize
+        SmartCanvas._altResizeStartX = null;
         if (SmartCanvas.activeTool === 'brush') {
-            // 只有實際拖曳過才提交為 region（防止單次點擊產生空 region）
             if (SmartCanvas._hasDragged) {
                 const maskCanvas = _scMergeMaskFromDraw();
                 const _be = SmartCanvas.regions.find(r => r.colorHex === SmartCanvas.brushColor);
@@ -3572,8 +3591,11 @@ function _scBindEvents() {
             _scRenderOverlays();
         } else if (SmartCanvas.activeTool === 'eraser') {
             if (SmartCanvas._hasDragged) {
-                // 把 drawCtx 上的白色筆跡當成遮罩，destination-out 到各 region
-                SmartCanvas.regions.forEach(r => {
+                // 若有 eraserTarget 則只擦該 region，否則擦全部
+                const targets = (SmartCanvas.eraserTarget !== null && SmartCanvas.eraserTarget < SmartCanvas.regions.length)
+                    ? [SmartCanvas.regions[SmartCanvas.eraserTarget]]
+                    : SmartCanvas.regions;
+                targets.forEach(r => {
                     const rCtx = r.maskCanvas.getContext('2d');
                     rCtx.globalCompositeOperation = 'destination-out';
                     rCtx.drawImage(SmartCanvas.drawCtx.canvas, 0, 0);
@@ -3584,12 +3606,17 @@ function _scBindEvents() {
                     const d = r.maskCanvas.getContext('2d').getImageData(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH).data;
                     return d.some((v, i) => (i % 4 === 3) && v > 0);
                 });
+                // 若目標 region 已被完全擦除，重置 eraserTarget
+                if (SmartCanvas.eraserTarget !== null && SmartCanvas.eraserTarget >= SmartCanvas.regions.length) {
+                    SmartCanvas.eraserTarget = null;
+                }
                 _scRenderRegionList();
             }
             SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
             _scRenderOverlays();
         }
-    });
+    }
+    fresh.addEventListener('mouseup', _scFinishStroke);
     fresh.addEventListener('mousemove', (e) => {
         const { x, y } = _scGetXY(e);
         // Alt + 拖曳：水平移動調整筆刷大小（PS 同款體驗）
@@ -3773,10 +3800,22 @@ function _scDraw(e) {
     ctx.fillStyle   = isEraser ? 'rgba(255,255,255,0.6)' : SmartCanvas.brushColor;
 
     if (SmartCanvas._lastDrawX === null) {
-        // 第一個點：單點補全
+        // 第一個點：單點補全，記錄直線起點
+        SmartCanvas._strokeStartX = x;
+        SmartCanvas._strokeStartY = y;
         ctx.beginPath();
         ctx.arc(x, y, SmartCanvas.brushSize / 2, 0, Math.PI * 2);
         ctx.fill();
+    } else if (e.shiftKey) {
+        // Shift 直線模式：清除預覽，從起點畫橡皮筋直線到當前點
+        ctx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+        ctx.beginPath();
+        ctx.arc(SmartCanvas._strokeStartX, SmartCanvas._strokeStartY, SmartCanvas.brushSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(SmartCanvas._strokeStartX, SmartCanvas._strokeStartY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
     } else {
         ctx.beginPath();
         ctx.moveTo(SmartCanvas._lastDrawX, SmartCanvas._lastDrawY);

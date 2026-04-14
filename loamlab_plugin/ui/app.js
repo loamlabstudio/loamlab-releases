@@ -416,6 +416,9 @@ window.receiveFromRuby = function (data) {
             API_BASE = data.api_base;
             console.log("API_BASE updated to:", API_BASE);
         }
+        if (data.device_id) {
+            localStorage.setItem('loamlab_device_id', data.device_id);
+        }
         if (data.build_type === 'dev') {
             window._isDev = true;
             const badge = document.createElement('div');
@@ -666,7 +669,13 @@ window.receiveFromRuby = function (data) {
                     (document.getElementById('tool2-swap-btn') || document.createElement('div')).addEventListener('click', () => openSmartCanvas(channelB64, targetUrl, targetScene));
                     (document.getElementById('tool2-save-btn') || document.createElement('div')).addEventListener('click', () => {
                         const p = (document.getElementById('user-prompt-input') || document.createElement('div')).value || '';
-                        if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
+                        if (window.interceptDownloadIfLowPoints) {
+                            window.interceptDownloadIfLowPoints(() => {
+                                if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
+                            });
+                        } else {
+                            if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
+                        }
                     });
                 }
                 return;
@@ -690,7 +699,13 @@ window.receiveFromRuby = function (data) {
                     `;
                     (document.getElementById('ninegrid-save-btn') || document.createElement('div')).addEventListener('click', () => {
                         const p = (document.getElementById('user-prompt-input') || document.createElement('div')).value || '';
-                        if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
+                        if (window.interceptDownloadIfLowPoints) {
+                            window.interceptDownloadIfLowPoints(() => {
+                                if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
+                            });
+                        } else {
+                            if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
+                        }
                     });
                 }
                 return; // 跳過後續 span.truncate 查找邏輯
@@ -868,7 +883,13 @@ function _applyTool1CardUpdate(targetScene, targetUrl, channelB64, transactionId
             e.stopPropagation();
             var promptEl = document.getElementById('user-prompt-input');
             const promptText = (promptEl ? promptEl.value : "") || "";
-            if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: promptText, lang: currentLang });
+            if (window.interceptDownloadIfLowPoints) {
+                window.interceptDownloadIfLowPoints(() => {
+                    if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: promptText, lang: currentLang });
+                });
+            } else {
+                if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: promptText, lang: currentLang });
+            }
         };
         badge.parentNode.replaceChild(btnContainer, badge);
         btnContainer.appendChild(badge);
@@ -1454,6 +1475,196 @@ window.sendFeedbackModal = function() {
     setTimeout(closeFeedbackModal, 1500);
 };
 
+/* =========================================================
+   Share Modal / Low Point Interception
+   ========================================================= */
+let _shareTemplates = null;
+let _qrcodeInstance = null;
+
+async function fetchShareTemplates() {
+    if (_shareTemplates) return _shareTemplates;
+    try {
+        if (typeof API_BASE !== 'undefined' && API_BASE) {
+            const resp = await fetch(`${API_BASE}/api/stats?action=get_share_template`);
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.data) {
+                    _shareTemplates = data.data;
+                    return _shareTemplates;
+                }
+            }
+        }
+    } catch (e) { console.warn("Failed to fetch share templates", e); }
+    return null; 
+}
+
+function getCurrentShareTemplate() {
+    if (_shareTemplates) {
+        const lang = (currentLang || 'en-US').toLowerCase();
+        if (_shareTemplates[lang]) return _shareTemplates[lang];
+        return _shareTemplates['en-us'] || _shareTemplates['zh-tw'] || t('share_text');
+    }
+    return '【 {project} 】\n\n{content}\n\nDesign: {designer}\nRenderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n🎁 Try it for free & get 100 bonus points:\nhttps://loamlab-camera.vercel.app/?ref={referral_code}\n\n#sketchup #architectural #render3d';
+}
+
+function generateShareTextWithReferral() {
+    const template = getCurrentShareTemplate() || "";
+    const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
+    
+    // 讀取輸入框數值，若無則提供預設範例
+    const project = document.getElementById('share-input-project')?.value || "Design Plan for Homestay Hot Spring Rooms";
+    const designer = document.getElementById('share-input-designer')?.value || "@jamie_jagon";
+    const content = document.getElementById('share-input-content')?.value || "Testing Buggggg";
+    
+    return template
+        .replace(/{project}/g, project)
+        .replace(/{designer}/g, designer)
+        .replace(/{content}/g, content)
+        .replace(/{referral_code}/g, myCode)
+        .replace(/{code}/g, myCode);
+}
+
+window.openShareModal = function() {
+    const modal = document.getElementById('share-modal');
+    if (!modal) return;
+    
+    const textContent = document.getElementById('share-text-content');
+    if (textContent) textContent.value = generateShareTextWithReferral();
+    
+    const qrContainer = document.getElementById('share-qrcode');
+    window._updateQRCode = function() {
+        if (!qrContainer) return;
+        qrContainer.innerHTML = '';
+        const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
+        const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : 'https://loamlab-camera.vercel.app';
+        
+        // Encode text data for qr-handoff
+        const textContent = document.getElementById('share-text-content')?.value || "";
+        // Convert to base64 to avoid URL encoding bloat and special character issues (using unescape to handle unicode)
+        const encodedData = btoa(unescape(encodeURIComponent(textContent)));
+        const shareUrl = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&data=${encodedData}`;
+        
+        try {
+            if (!_qrcodeInstance && typeof QRCode !== 'undefined') {
+                _qrcodeInstance = new QRCode(qrContainer, {
+                    text: shareUrl, width: 90, height: 90,
+                    colorDark : "#e1306c", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L
+                });
+            } else if (_qrcodeInstance) {
+                _qrcodeInstance.clear();
+                _qrcodeInstance.makeCode(shareUrl);
+            }
+        } catch (e) {
+            console.error("QRCode generation failed", e);
+            if (qrContainer.innerHTML === '') {
+                qrContainer.innerHTML = '<span class="text-xs text-rose-500">QR Error</span>';
+            }
+        }
+    };
+    
+    // Initial render
+    window._updateQRCode();
+    
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        const modalContent = document.getElementById('share-modal-content');
+        if (modalContent) modalContent.classList.remove('scale-95');
+    }, 10);
+    
+    fetchShareTemplates().then(() => {
+        if (textContent) textContent.value = generateShareTextWithReferral();
+    });
+};
+
+window.closeShareModal = function() {
+    const modal = document.getElementById('share-modal');
+    if (!modal) return;
+    modal.classList.add('opacity-0');
+    const modalContent = document.getElementById('share-modal-content');
+    if (modalContent) modalContent.classList.add('scale-95');
+    setTimeout(() => { modal.classList.add('hidden'); }, 300);
+};
+
+window.interceptDownloadIfLowPoints = function(saveCallback) {
+    const pointStr = document.getElementById('point-balance') ? document.getElementById('point-balance').innerText : '0';
+    const currentPoints = parseInt(pointStr, 10);
+    
+    if (!isNaN(currentPoints) && currentPoints > 0 && currentPoints <= 20 && !window._hasShownShareIntercept) {
+        window._hasShownShareIntercept = true; 
+        showUpdateToast("💡 您目前點數較低，分享至 IG 即可免費獲得 100 點！");
+        window.openShareModal();
+        
+        // 攔截並延遲下載（讓他們看到 Modal，但依然幫他們下載完這次操作）
+        setTimeout(() => {
+            saveCallback();
+        }, 800);
+        return;
+    }
+    
+    saveCallback();
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Share Buttons Logic
+    const btnShowShare = document.getElementById('btn-show-share');
+    if (btnShowShare) {
+        btnShowShare.addEventListener('click', window.openShareModal);
+    }
+    
+    const btnCloseShare = document.getElementById('btn-close-share');
+    if (btnCloseShare) {
+        btnCloseShare.addEventListener('click', window.closeShareModal);
+    }
+    
+    const shareModalBg = document.getElementById('share-modal');
+    if (shareModalBg) {
+        shareModalBg.addEventListener('click', (e) => {
+            if (e.target === shareModalBg) window.closeShareModal();
+        });
+    }
+
+    // 綁定輸入框事件以更新 IG 預覽結果
+    ['share-input-project', 'share-input-designer', 'share-input-content'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('input', () => {
+                const textContent = document.getElementById('share-text-content');
+                if (textContent) textContent.value = generateShareTextWithReferral();
+                if (window._updateQRCode) window._updateQRCode();
+            });
+        }
+    });
+    
+    const btnPcCopy = document.getElementById('btn-share-pc-copy');
+    if (btnPcCopy) {
+        btnPcCopy.addEventListener('click', async () => {
+            const textContent = document.getElementById('share-text-content');
+            if (textContent) {
+                try {
+                    await navigator.clipboard.writeText(textContent.value);
+                    const originalText = btnPcCopy.textContent;
+                    btnPcCopy.textContent = "✅ 已複製！跳轉中...";
+                    btnPcCopy.classList.add('bg-green-500/20', 'text-green-400', 'border-green-500/50');
+                    setTimeout(() => {
+                        btnPcCopy.textContent = originalText;
+                        btnPcCopy.classList.remove('bg-green-500/20', 'text-green-400', 'border-green-500/50');
+                        if (window.sketchup) {
+                            sketchup.open_browser("https://www.instagram.com");
+                        } else {
+                            window.open("https://www.instagram.com", "_blank");
+                        }
+                    }, 1500);
+                } catch (e) {
+                    textContent.select();
+                    document.execCommand('copy');
+                    showUpdateToast("文案已選取並嘗試複製。");
+                }
+            }
+        });
+    }
+});
+
 // =========================================================
 // LemonSqueezy Variant IDs & Beta 折扣碼
 // ★ 請至 LemonSqueezy 後台 Products > Variants 取得真實 ID 後更新此處
@@ -1604,8 +1815,23 @@ window.updateLoginUI = function (email, points, refCode, referredBy) {
     }
 }
 
-window.logoutUser = function (e) {
-    e.stopPropagation();
+window.logoutUser = async function (e) {
+    if (e) e.stopPropagation();
+    
+    // 呼叫後端 API 註銷 session，以釋放設備數限制
+    const sessionUuid = localStorage.getItem('loamlab_device_id');
+    if (sessionUuid) {
+        try {
+            await fetch(`${API_BASE}/api/user`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'logout', session_id: sessionUuid })
+            });
+        } catch (err) {
+            console.warn('[LoamLab] logout API failed:', err);
+        }
+    }
+
     window.loamlabUserEmail = null;
     if (window.sketchup) {
         sketchup.logout_user({});
@@ -1746,12 +1972,17 @@ function renderHistoryGrid(files) {
                     : `<div class="w-full h-full flex items-center justify-center text-white/20 text-[10px]">No Preview</div>`
                 }
                 <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3" onclick="event.stopPropagation()">
-                    ${window._historyPickMode
-                        ? `<button onclick="pickBaseImage(window._historyFiles[${i}])"
-                            class="text-[10px] px-4 py-1.5 rounded-full bg-green-500/90 hover:bg-green-400 text-black font-bold tracking-wider transition-all shadow-lg">
-                            ✓ 選為底圖
+                    ${window._historySharePickModeSlot
+                        ? `<button onclick="pickShareImage(window._historyFiles[${i}])"
+                            class="text-[10px] px-4 py-1.5 rounded-full bg-[#e1306c]/90 hover:bg-[#e1306c] text-white font-bold tracking-wider transition-all shadow-lg">
+                            ✓ 選取此圖片 (Select)
                            </button>`
-                        : `<button onclick="applyHistorySettings(window._historyFiles[${i}])"
+                        : window._historyPickMode
+                            ? `<button onclick="pickBaseImage(window._historyFiles[${i}])"
+                                class="text-[10px] px-4 py-1.5 rounded-full bg-green-500/90 hover:bg-green-400 text-black font-bold tracking-wider transition-all shadow-lg">
+                                ✓ 選為底圖
+                               </button>`
+                            : `<button onclick="applyHistorySettings(window._historyFiles[${i}])"
                             class="text-[10px] px-4 py-1.5 rounded-full bg-amber-500/90 hover:bg-amber-400 text-black font-bold tracking-wider transition-all shadow-lg">
                             ${lang['history_rerender'] || '重用設定'}
                            </button>`
@@ -1773,9 +2004,28 @@ function renderHistoryGrid(files) {
 
 function closeHistoryModal() {
     window._historyPickMode = false;
+    window._historySharePickModeSlot = null;
     var histModal = document.getElementById('history-modal');
     if (histModal) histModal.classList.add('hidden');
 }
+
+// 分享專用：從歷史紀錄選圖片
+window._historySharePickModeSlot = null;
+window.openHistoryModalForSharePick = function(slot) {
+    window._historySharePickModeSlot = slot;
+    openHistoryModal();
+};
+window.pickShareImage = function(entry) {
+    const slot = window._historySharePickModeSlot;
+    if (slot) {
+        const previewEl = document.getElementById('share-img-preview-' + slot);
+        if (previewEl) {
+            previewEl.src = entry.file_url || entry.cloud_url || '';
+            previewEl.classList.remove('hidden');
+        }
+    }
+    closeHistoryModal();
+};
 
 // 底圖選取模式：從 History 選一張圖作為工具 2/3/4 的底圖
 function openHistoryModalForPick() {
@@ -2110,13 +2360,16 @@ function startOAuthFlow() {
     if (optView) { optView.classList.remove('flex'); optView.classList.add('hidden'); }
     if (pollView) { pollView.classList.remove('hidden'); pollView.classList.add('flex'); }
 
-    let sessionUuid;
-    if (typeof crypto.randomUUID === 'function') {
-        sessionUuid = crypto.randomUUID();
-    } else {
-        sessionUuid = '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
-            (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-        );
+    let sessionUuid = localStorage.getItem('loamlab_device_id');
+    if (!sessionUuid) {
+        if (typeof crypto.randomUUID === 'function') {
+            sessionUuid = crypto.randomUUID();
+        } else {
+            sessionUuid = '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
+                (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+            );
+        }
+        localStorage.setItem('loamlab_device_id', sessionUuid);
     }
 
     const loginUrl = `${API_BASE}/api/auth/login?session_id=${sessionUuid}`;
@@ -3808,6 +4061,8 @@ function _scDraw(e) {
         ctx.fill();
     } else if (e.shiftKey) {
         // Shift 直線模式：清除預覽，從起點畫橡皮筋直線到當前點
+        // 橡皮擦必須用完整不透明白色，否則 clearRect 後每次只有 0.6 alpha → destination-out 擦不乾淨
+        if (isEraser) { ctx.fillStyle = 'rgba(255,255,255,1)'; ctx.strokeStyle = 'rgba(255,255,255,1)'; }
         ctx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
         ctx.beginPath();
         ctx.arc(SmartCanvas._strokeStartX, SmartCanvas._strokeStartY, SmartCanvas.brushSize / 2, 0, Math.PI * 2);

@@ -456,12 +456,6 @@ window.receiveFromRuby = function (data) {
         if (versionLabel && data.version) versionLabel.textContent = `v${data.version}`;
         if (data.version) window.LOAMLAB_VERSION = data.version;
 
-        // 啟動時靜默自動檢查（有新版才提示，已是最新不打擾）
-        if (window.sketchup) {
-            window._silentUpdateCheck = true;
-            setTimeout(() => sketchup.auto_update({}), 2000);
-        }
-
         // 初始化時主動請求第一張預覽圖
         if (window.sketchup) {
             setTimeout(() => { sketchup.sync_preview({}); }, 200);
@@ -1538,11 +1532,14 @@ window.openShareModal = function() {
         const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
         const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : 'https://loamlab-camera.vercel.app';
         
-        // Encode text data for qr-handoff
-        const textContent = document.getElementById('share-text-content')?.value || "";
-        // Convert to base64 to avoid URL encoding bloat and special character issues (using unescape to handle unicode)
-        const encodedData = btoa(unescape(encodeURIComponent(textContent)));
-        const shareUrl = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&data=${encodedData}`;
+        // Payload Compression: Only send raw JSON values (no template text) to save massive QR space!
+        const payloadObj = {
+            p: document.getElementById('share-input-project')?.value || "",
+            d: document.getElementById('share-input-designer')?.value || "",
+            c: document.getElementById('share-input-content')?.value || ""
+        };
+        const encodedData = btoa(unescape(encodeURIComponent(JSON.stringify(payloadObj))));
+        const shareUrl = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&d=${encodedData}`;
         
         try {
             if (!_qrcodeInstance && typeof QRCode !== 'undefined') {
@@ -1556,8 +1553,8 @@ window.openShareModal = function() {
             }
         } catch (e) {
             console.error("QRCode generation failed", e);
-            if (qrContainer.innerHTML === '') {
-                qrContainer.innerHTML = '<span class="text-xs text-rose-500">QR Error</span>';
+            if (qrContainer) {
+                qrContainer.innerHTML = '<span class="text-[10px] text-white/50 text-center leading-tight">文案過長<br>請改電腦發文</span>';
             }
         }
     };
@@ -1954,12 +1951,28 @@ function renderHistoryGrid(files) {
     const grid = document.getElementById('history-grid');
     if (!grid) return;
     const lang = UI_LANG[currentLang] || UI_LANG['en-US'];
-    if (!files || files.length === 0) {
+    
+    // Apply filtering if we are in share picking mode
+    let filteredFiles = files || [];
+    if (window._historySharePickModeSlot) {
+        if (window._historyFilterMode === 'base') {
+            filteredFiles = filteredFiles.filter(f => (f.filename || '').includes('原圖'));
+        } else if (window._historyFilterMode === 'render') {
+            filteredFiles = filteredFiles.filter(f => !(f.filename || '').includes('原圖'));
+        }
+    }
+    
+    // Also filter for regular "Pick Base Image" mode (which implies 'base')
+    if (window._historyPickMode) {
+        filteredFiles = filteredFiles.filter(f => (f.filename || '').includes('原圖'));
+    }
+
+    if (!filteredFiles || filteredFiles.length === 0) {
         grid.innerHTML = `<div class="col-span-2 text-center text-white/30 text-[12px] py-10">${lang['history_empty'] || 'No renders yet'}</div>`;
         return;
     }
-    window._historyFiles = files;
-    grid.innerHTML = files.map((e, i) => {
+    window._historyFiles = filteredFiles;
+    grid.innerHTML = filteredFiles.map((e, i) => {
         const date = (e.timestamp || '').replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, '$1/$2/$3 $4:$5');
         const promptSnippet = (e.prompt || '').slice(0, 40) + ((e.prompt || '').length > 40 ? '…' : '');
         const imgSrc = e.file_url || e.cloud_url || '';
@@ -2005,26 +2018,61 @@ function renderHistoryGrid(files) {
 function closeHistoryModal() {
     window._historyPickMode = false;
     window._historySharePickModeSlot = null;
+    window._historyFilterMode = null;
     var histModal = document.getElementById('history-modal');
     if (histModal) histModal.classList.add('hidden');
 }
 
 // 分享專用：從歷史紀錄選圖片
 window._historySharePickModeSlot = null;
-window.openHistoryModalForSharePick = function(slot) {
+window._historyFilterMode = null;
+window._shareImagesPool = [];
+
+window.openHistoryModalForSharePick = function(slot, filterModeStr) {
     window._historySharePickModeSlot = slot;
+    window._historyFilterMode = filterModeStr || 'render';
     openHistoryModal();
 };
+
 window.pickShareImage = function(entry) {
-    const slot = window._historySharePickModeSlot;
-    if (slot) {
-        const previewEl = document.getElementById('share-img-preview-' + slot);
-        if (previewEl) {
-            previewEl.src = entry.file_url || entry.cloud_url || '';
-            previewEl.classList.remove('hidden');
-        }
+    if (window._shareImagesPool && !window._shareImagesPool.some(e => e.filename === entry.filename)) {
+        window._shareImagesPool.push(entry);
     }
+    renderShareImagePool();
     closeHistoryModal();
+};
+
+window.removeShareImage = function(index) {
+    if (window._shareImagesPool) {
+        window._shareImagesPool.splice(index, 1);
+        renderShareImagePool();
+    }
+};
+
+window.renderShareImagePool = function() {
+    const pool = document.getElementById('share-image-pool');
+    const count = document.getElementById('share-img-count');
+    if (!pool || !count || !window._shareImagesPool) return;
+    
+    count.textContent = window._shareImagesPool.length + " 張圖片";
+    
+    if(window._shareImagesPool.length === 0){
+        pool.innerHTML = '<div class="text-[10px] text-white/20 w-full flex items-center justify-center py-2 h-[60px]">尚未選擇圖片</div>';
+        return;
+    }
+    
+    pool.innerHTML = window._shareImagesPool.map((img, i) => {
+        const src = img.file_url || img.cloud_url || '';
+        const isBase = (img.filename || '').includes('原圖');
+        return `
+        <div class="relative w-16 h-16 shrink-0 rounded overflow-hidden border border-white/20 group cursor-pointer shadow-lg" onclick="removeShareImage(${i})" title="點擊移除">
+            <img src="${src}" class="w-full h-full object-cover">
+            <div class="absolute inset-0 bg-red-500/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span class="text-white text-xs font-bold leading-none">&times;</span>
+            </div>
+            <div class="absolute bottom-0 left-0 right-0 bg-black/80 text-[8px] text-center py-0.5 tracking-wider font-bold ${isBase ? 'text-[#e1306c]' : 'text-amber-500'}">${isBase ? 'BEFORE' : 'AFTER'}</div>
+        </div>`;
+    }).join('');
 };
 
 // 底圖選取模式：從 History 選一張圖作為工具 2/3/4 的底圖
@@ -2228,12 +2276,9 @@ function showUpdateBanner(version, notes, url, manualUrl) {
     banner.classList.remove('hidden');
 }
 
-function executeUpdate(url) {
+function executeUpdate(_url) {
     (document.getElementById('update-banner') || document.createElement('div')).classList.add('hidden');
-    showUpdateToast('⬇️ 下載更新中，請稍候...');
-    if (window.sketchup) {
-        sketchup.execute_update({ url });
-    }
+    showUpdateToast('請前往 Extension Warehouse 安裝最新版本');
 }
 
 // 結帳並跳轉付款頁面（接受 planKey: 'TOPUP'/'STARTER'/'PRO'/'STUDIO'）
@@ -2701,18 +2746,9 @@ if (btnCheckUpdate) {
         const svg = btnCheckUpdate.querySelector('svg');
         if (svg) svg.classList.add('animate-spin');
 
-        if (window.sketchup) {
-            window._silentUpdateCheck = false;
-            sketchup.auto_update({});
-            // 10 秒兜底：如果 Ruby 沒回應就自動停止
-            window._updateSpinnerTimeout = setTimeout(() => {
-                stopUpdateSpinner();
-                showUpdateToast('⚠️ 無法連接伺服器，請稍後再試');
-            }, 10000);
-        } else {
-            console.log("Auto update triggered (Local Mock)");
-            setTimeout(() => { if (svg) svg.classList.remove('animate-spin'); }, 1000);
-        }
+        stopUpdateSpinner();
+        showUpdateToast('請前往 Extension Warehouse 取得最新版本');
+        if (svg) svg.classList.remove('animate-spin');
     });
 }
 

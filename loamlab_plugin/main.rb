@@ -7,9 +7,13 @@ require 'uri'
 require 'openssl'
 require_relative 'config.rb'
 require_relative 'coze_api.rb'
-require_relative 'updater.rb'
 
 module LoamLab
+
+  # Dev-only logging helper — silent in release builds
+  def self.log(msg)
+    puts msg if LoamLab::BUILD_TYPE == 'dev'
+  end
 
   module AIURenderer
 
@@ -29,7 +33,7 @@ module LoamLab
     # [v1.4.2 Hotfix] 如果正在重載代碼（更新或熱重載），且舊視窗還在，強制清除它
     # 這樣可以確保 1.3.3 -> 1.4.2 的用戶能看到新版介面（因其 updater.rb 呼叫 show_dialog 不帶參數）
     if @dialog
-      begin; @dialog.close; rescue => e; puts "[LoamLab] dialog close: #{e.message}"; end
+      begin; @dialog.close; rescue => e; LoamLab.log "[LoamLab] dialog close: #{e.message}"; end
       @dialog = nil
       @@polling_dialog = nil
     end
@@ -49,7 +53,7 @@ module LoamLab
             # poll result sent
           end
         rescue => e
-          puts "[LoamLab] Poll 傳送失敗: #{e.message}"
+          LoamLab.log "[LoamLab] Poll 傳送失敗: #{e.message}"
         end
       end
     end
@@ -60,7 +64,7 @@ module LoamLab
         begin
           ro[k] = v if valid_keys.include?(k)
         rescue => e
-          puts "[LoamLab] render key #{k}: #{e.message}"
+          LoamLab.log "[LoamLab] render key #{k}: #{e.message}"
         end
       end
     end
@@ -68,11 +72,11 @@ module LoamLab
     def self.apply_render_keys(model)
       ro = model.rendering_options
       RENDER_KEYS.keys.each do |k|
-        begin; model.set_attribute('LoamLabRenderOverride', k, ro[k]); rescue => e; puts "[LoamLab] render attr #{k}: #{e.message}"; end
+        begin; model.set_attribute('LoamLabRenderOverride', k, ro[k]); rescue => e; LoamLab.log "[LoamLab] render attr #{k}: #{e.message}"; end
       end
       self.safe_set_render_keys(ro, RENDER_KEYS)
       model.pages.each do |p|
-        begin; p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS); rescue => e; puts "[LoamLab] page update: #{e.message}"; end
+        begin; p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS); rescue => e; LoamLab.log "[LoamLab] page update: #{e.message}"; end
       end
       model.set_attribute('LoamLabRenderOverride', 'applied', true)
     end
@@ -86,7 +90,7 @@ module LoamLab
       end
       self.safe_set_render_keys(ro, restore_hash)
       model.pages.each do |p|
-        begin; p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS); rescue => e; puts "[LoamLab] page update: #{e.message}"; end
+        begin; p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS); rescue => e; LoamLab.log "[LoamLab] page update: #{e.message}"; end
       end
       model.set_attribute('LoamLabRenderOverride', 'applied', false)
     end
@@ -113,7 +117,7 @@ module LoamLab
     def self.show_dialog(force = false)
       # 如果強制重開，先關閉存在的視窗
       if force && @dialog
-        begin; @dialog.close; rescue => e; puts "[LoamLab] dialog close: #{e.message}"; end
+        begin; @dialog.close; rescue => e; LoamLab.log "[LoamLab] dialog close: #{e.message}"; end
         @dialog = nil
       end
 
@@ -169,6 +173,13 @@ module LoamLab
         save_path = self.get_effective_save_path(model)
         user_email = Sketchup.read_default("LoamLabAI", "user_email", "")
         saved_lang = Sketchup.read_default("LoamLabAI", "ui_lang", "")
+        
+        device_id = Sketchup.read_default("LoamLabAI", "device_id", "")
+        if device_id.to_s.strip.empty?
+          device_id = "10000000-1000-4000-8000-100000000000".gsub(/0/){rand(16).to_s(16)}
+          Sketchup.write_default("LoamLabAI", "device_id", device_id)
+        end
+
         response = {
           status: 'success',
           version: LoamLab::VERSION,
@@ -177,7 +188,8 @@ module LoamLab
           lang: saved_lang.empty? ? nil : saved_lang,
           scenes: self.get_scene_names,
           save_path: save_path,
-          user_email: user_email
+          user_email: user_email,
+          device_id: device_id
         }
         
         json_str = response.to_json
@@ -227,7 +239,7 @@ module LoamLab
 
       # 2. 開始渲染指令 (由 JS 呼叫)
       dialog.add_action_callback("render_scene") do |action_context, params|
-        puts "LoamLab: 收到渲染指令 - #{params.inspect}"
+        LoamLab.log "LoamLab: 收到渲染指令 - #{params.inspect}"
         scenes_to_render        = params["scenes"] || []
         user_prompt             = (params["prompt"] || "").to_s.dup.force_encoding("UTF-8")
         resolution              = params["resolution"] || "1k"
@@ -261,22 +273,6 @@ module LoamLab
           UI.messagebox("LoamLab 載入錯誤: #{e.message}")
         end
         dialog.execute_script("window.location.reload();")
-      end
-
-      # 4. [Prod] 自動更新: 向伺服器檢查版號，若有新版則透過 JS 通知
-      dialog.add_action_callback("auto_update") do |action_context, params|
-        current_version = LoamLab::VERSION
-        LoamLab::Updater.check_for_updates(dialog, current_version)
-      end
-
-      # 4b. 執行更新（EW版跳瀏覽器，直接版自動下載安裝）
-      dialog.add_action_callback("execute_update") do |action_context, params|
-        url = params.is_a?(Hash) ? params["url"] : nil
-        if url && !url.empty?
-          LoamLab::Updater.download_and_install(dialog, url)
-        else
-          dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status: 'update_error', msg: '無效的下載連結'})})")
-        end
       end
 
       # 3.5 [第一性原理除錯]: 空載 API 直連測試
@@ -339,7 +335,7 @@ module LoamLab
       # 4. 同步預覽畫面指令 (處理批量故事板預覽)
       dialog.add_action_callback("sync_preview") do |action_context, params|
         begin
-          puts "LoamLab: 正在擷取即時預覽故事板..."
+          LoamLab.log "LoamLab: 正在擷取即時預覽故事板..."
           scenes = params["scenes"] || []
           
           batch_data = []
@@ -365,7 +361,7 @@ module LoamLab
                     model.rendering_options[k] = false
                   end
                 rescue => e
-                  puts "[LoamLab] render option #{k}: #{e.message}"
+                  LoamLab.log "[LoamLab] render option #{k}: #{e.message}"
                 end
               end
               
@@ -391,7 +387,7 @@ module LoamLab
                 begin
                   model.rendering_options[k] = v
                 rescue => e
-                  puts "[LoamLab] render option restore #{k}: #{e.message}"
+                  LoamLab.log "[LoamLab] render option restore #{k}: #{e.message}"
                 end
               end
             end
@@ -426,13 +422,13 @@ module LoamLab
           filename          = "#{timestamp}_#{safe_project_name}_#{safe_scene}_渲染圖.jpg"
           full_path         = File.join(save_path, filename)
           File.open(full_path, "wb") { |f| URI.open(url) { |img| f.write(img.read) } }
-          puts "[LoamLab] auto_save_render: #{filename}"
+          LoamLab.log "[LoamLab] auto_save_render: #{filename}"
         rescue => e
-          puts "[LoamLab] auto_save_render failed: #{e.message}"
+          LoamLab.log "[LoamLab] auto_save_render failed: #{e.message}"
         end
       end
 
-      # 6. 列出已儲存的渲染歷史（直接掃描 save_path 資料夾，從檔名解析 metadata）
+      # 6. 列出已儲存的渲染歷史
       dialog.add_action_callback("list_saved_renders") do |action_context, params|
         begin
           model     = Sketchup.active_model
@@ -440,14 +436,15 @@ module LoamLab
 
           history = []
           if !save_path.empty? && File.directory?(save_path)
-            # 優先掃描帶有「渲染圖」後綴的結果
+            # 掃描渲染圖與原圖
             files = Dir.glob(File.join(save_path, "*_渲染圖.jpg"))
+            files += Dir.glob(File.join(save_path, "*_原圖.jpg"))
             # 向後相容舊版的命名 (loamlab_camera.jpg)
             files += Dir.glob(File.join(save_path, "*_loamlab_camera.jpg"))
             files = files.uniq.sort_by { |f| -File.mtime(f).to_i }
-            history = files.first(30).map do |f|
+            history = files.first(60).map do |f|
               fname = File.basename(f)
-              # 格式：YYYYMMDD_HHMMSS_SCENE_RES_loamlab_camera.jpg
+              # 格式：YYYYMMDD_HHMMSS_SCENE_RES_loamlab_camera.jpg (舊版)
               m = fname.match(/^(\d{8})_(\d{6})_(.+)_(1k|2k|4k)_loamlab_camera\.jpg$/i)
               if m
                 ts    = "#{m[1]}_#{m[2]}"
@@ -468,7 +465,45 @@ module LoamLab
         rescue => e
           payload = { action: 'historyList', files: [] }.to_json
           dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(payload)}')")
-          puts "[LoamLab] list_saved_renders error: #{e.message}"
+          LoamLab.log "[LoamLab] list_saved_renders error: #{e.message}"
+        end
+      end
+
+      # 7. 專屬：匯出 IG 貼文素材至獨立資料夾
+      dialog.add_action_callback("export_ig_assets") do |action_context, params|
+        begin
+          require 'fileutils'
+          model = Sketchup.active_model
+          save_path = self.get_effective_save_path(model)
+          
+          # 建立桌面隔離資料夾
+          desktop_path = ENV['HOME'] || ENV['USERPROFILE']
+          desktop_path = File.join(desktop_path, 'Desktop')
+          export_dir = File.join(desktop_path, '[LoamLab]_IG貼文素材')
+          
+          FileUtils.mkdir_p(export_dir)
+          
+          files = params['files'] || []
+          text = params['text'] || ""
+          
+          # 將選擇的圖片單獨拷貝進去
+          files.each do |fname|
+            source = File.join(save_path, fname)
+            target = File.join(export_dir, fname)
+            FileUtils.cp(source, target) if File.exist?(source)
+          end
+          
+          # 寫入文案 text 檔
+          File.write(File.join(export_dir, '貼文文案.txt'), text)
+          
+          # 打開這個乾淨的資料夾
+          if Sketchup.platform == :platform_win
+            UI.openURL("file:///#{export_dir}")
+          else
+            UI.openURL("file://#{export_dir}")
+          end
+        rescue => e
+          LoamLab.log "[LoamLab] export_ig_assets error: #{e.message}"
         end
       end
 
@@ -578,7 +613,7 @@ module LoamLab
             begin
               s[:face].material      = s[:mat]
               s[:face].back_material = s[:back]
-            rescue => e; puts "[LoamLab] face material restore: #{e.message}"; end
+            rescue => e; LoamLab.log "[LoamLab] face material restore: #{e.message}"; end
           end
           # 刪除臨時材質
           materials_created.each { |m| model.materials.remove(m) rescue nil }
@@ -591,7 +626,7 @@ module LoamLab
           dialog.execute_script("window._onSegMapReady(#{JSON.dump(result)})")
         rescue => e
           dialog.execute_script("window._onSegMapReady(#{JSON.dump({error: e.message})})")
-          puts "[LoamLab] generate_seg_map error: #{e.message}\n#{e.backtrace.first(3).join("\n")}"
+          LoamLab.log "[LoamLab] generate_seg_map error: #{e.message}\n#{e.backtrace.first(3).join("\n")}"
         end
       end
     end
@@ -754,7 +789,7 @@ module LoamLab
       begin
         Sketchup.send_action("pauseAnimation:")
       rescue => e
-        puts "[LoamLab] pauseAnimation: #{e.message}"
+        LoamLab.log "[LoamLab] pauseAnimation: #{e.message}"
       end
 
       # 禁用場景切換過渡動畫，避免截圖時切換尚未完成
@@ -762,7 +797,7 @@ module LoamLab
         opts = model.options['PageOptions']
         original_transition_time = opts['TransitionTime'] rescue 0.5
         opts['TransitionTime'] = 0.0
-      rescue
+      rescue => _e
         original_transition_time = 0.5
       end
 
@@ -776,7 +811,7 @@ module LoamLab
             model.rendering_options[k] = false
           end
         rescue => e
-          puts "[LoamLab] render option #{k}: #{e.message}"
+          LoamLab.log "[LoamLab] render option #{k}: #{e.message}"
         end
       end
 
@@ -797,11 +832,11 @@ module LoamLab
           UI.start_timer(0.5, false) do
             dialog.execute_script("window.receiveFromRuby({status: 'export_done'})")
             original_states.each do |k, v|
-              begin; model.rendering_options[k] = v; rescue => e; puts "[LoamLab] render option restore #{k}: #{e.message}"; end
+              begin; model.rendering_options[k] = v; rescue => e; LoamLab.log "[LoamLab] render option restore #{k}: #{e.message}"; end
             end
             model.pages.selected_page = current_page if current_page
-            begin; model.options['PageOptions']['TransitionTime'] = original_transition_time; rescue; end
-            puts "[LoamLab] 批量導出排程已全部送出。"
+            begin; model.options['PageOptions']['TransitionTime'] = original_transition_time; rescue => _e; end
+            LoamLab.log "[LoamLab] 批量導出排程已全部送出。"
           end
           next
         end
@@ -828,7 +863,7 @@ module LoamLab
                 model.active_view.invalidate
               end
             rescue => e
-              puts "[LoamLab] pre-capture camera sync: #{e.message}"
+              LoamLab.log "[LoamLab] pre-capture camera sync: #{e.message}"
             end
 
             temp_img_path = File.join(temp_dir, "loamlab_render_#{index}_#{Time.now.to_i}.jpg")
@@ -851,7 +886,7 @@ module LoamLab
                   File.delete(channel_path)
                 end
               rescue => e
-                puts "[LoamLab] channel image failed (non-fatal): #{e.message}"
+                LoamLab.log "[LoamLab] channel image failed (non-fatal): #{e.message}"
               end
 
               # 自動備份
@@ -886,13 +921,13 @@ module LoamLab
                 preview_payload = { action: 'scene_screenshot', scene: captured_scene, image_data: data_uri }.to_json
                 dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(preview_payload)}')")
               rescue => e
-                puts "[LoamLab] 縮略圖發送失敗（非致命）: #{e.message}"
+                LoamLab.log "[LoamLab] 縮略圖發送失敗（非致命）: #{e.message}"
               end
               captured_body        = request_body.dup
               captured_email       = user_email.dup
               captured_version     = ::LoamLab::VERSION.dup
               captured_url         = "#{::LoamLab::API_BASE_URL}/api/render"
-              puts "[LoamLab] 截圖中: #{scene_name}"
+              LoamLab.log "[LoamLab] 截圖中: #{scene_name}"
 
               if index == 0 || total_count == 1
                 # Scene 0：立即送出，完成後觸發後續場景
@@ -920,7 +955,7 @@ module LoamLab
                       { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.code}"),
                         points_refunded: data['points_refunded'], error: data['error'] }
                   rescue => e
-                    puts "[LoamLab] 渲染失敗: #{thread_scene}"
+                    LoamLab.log "[LoamLab] 渲染失敗: #{thread_scene}"
                     result = { status: 'render_failed', message: self.sanitize_error(e.message) }
                   end
                   @@pending_results << result if result
@@ -937,13 +972,13 @@ module LoamLab
                   scene:   captured_scene,
                   channel: captured_channel_b64
                 }
-                puts "[LoamLab] 截圖完成: #{scene_name}"
+                LoamLab.log "[LoamLab] 截圖完成: #{scene_name}"
               end
 
-              puts "[LoamLab] 第 #{index+1}/#{total_count} 個場景請求中: #{scene_name}"
+              LoamLab.log "[LoamLab] 第 #{index+1}/#{total_count} 個場景請求中: #{scene_name}"
 
             rescue => e
-              puts "[LoamLab] 導出 #{scene_name} 發生錯誤: #{e.message}"
+              LoamLab.log "[LoamLab] 導出 #{scene_name} 發生錯誤: #{e.message}"
             ensure
               File.delete(temp_img_path) if File.exist?(temp_img_path)
             end
@@ -1008,7 +1043,7 @@ module LoamLab
               { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.code}"),
                 points_refunded: data['points_refunded'], error: data['error'] }
           rescue => e
-            puts "[LoamLab] 渲染失敗"
+            LoamLab.log "[LoamLab] 渲染失敗"
             result = { status: 'render_failed', message: self.sanitize_error(e.message) }
           end
           @@pending_results << result if result
@@ -1040,7 +1075,7 @@ module LoamLab
         view.write_image(path, width, height, false)
       ensure
         saved.each do |k, v|
-          begin; ro[k] = v; rescue => e; puts "[LoamLab] render option restore #{k}: #{e.message}"; end
+          begin; ro[k] = v; rescue => e; LoamLab.log "[LoamLab] render option restore #{k}: #{e.message}"; end
         end
       end
     end
@@ -1058,7 +1093,7 @@ module LoamLab
         end
       end
     rescue => e
-      puts "[LoamLab] override_faces_recursive error: #{e.message}"
+      LoamLab.log "[LoamLab] override_faces_recursive error: #{e.message}"
     end
 
     # HSL (0-360, 0-1, 0-1) → [R, G, B] (0-255)
@@ -1097,7 +1132,7 @@ module LoamLab
           dir = File.dirname(File.expand_path(__FILE__))
           # 關閉舊視窗
           if @dialog
-            begin; @dialog.close; rescue => e; puts "[LoamLab] dialog close: #{e.message}"; end
+            begin; @dialog.close; rescue => e; LoamLab.log "[LoamLab] dialog close: #{e.message}"; end
             @dialog = nil
           end
           # 依序重載 (不移除常數，直接覆蓋方法定義)
@@ -1106,7 +1141,7 @@ module LoamLab
           load File.join(dir, 'updater.rb')
           load File.join(dir, 'main.rb')
           LoamLab::AIURenderer.show_dialog
-          puts "======= LoamLab: Dev Reload OK ======="
+          LoamLab.log "======= LoamLab: Dev Reload OK ======="
         rescue => e
           UI.messagebox("Dev Reload 失敗: #{e.message}")
         end

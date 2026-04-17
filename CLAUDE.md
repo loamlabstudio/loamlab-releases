@@ -137,8 +137,8 @@ Commit message 格式：`feat(ui): 說明 [T07][DONE]`（`[T\d+][DONE]` 觸發 `
 - **Image hosting**: freeimage.host → fallback ImgBB → both fail = refund + abort
 - **Resolution cost detection**: `render.js` string-searches payload for `1K`/`2K`/`4K` — keep strings consistent front/back
 - **`fix_anomalies.js`**: CJS/ESM mixed bug (`require()` + `export default`) — avoid touching until refactored
-- **Inpainting (`inpaint.js`)**: currently Fal.ai; alternatives: Vertex AI Imagen 3 (mask support, $0.02/img) or Gemini API (text-only, no mask). See `GOOGLE_AI_STUDIO_API.md`
-- **AtlasCloud Nano Banana 2**: T2I + style transfer only, NO masking/inpainting. Pricing: 1K=$0.072, 2K=$0.108, 4K=$0.144. Docs: `ATLASCLOUD_API.md`
+- **Inpainting (`inpaint.js`)**: currently Fal.ai; alternatives: Vertex AI Imagen 3 (mask support, $0.02/img) or Gemini API (text-only, no mask). See `docs/api/GOOGLE_AI_STUDIO_API.md`
+- **AtlasCloud Nano Banana 2**: T2I + style transfer only, NO masking/inpainting. Pricing: 1K=$0.072, 2K=$0.108, 4K=$0.144. Docs: `docs/api/ATLASCLOUD_API.md`
 
 ---
 
@@ -147,9 +147,9 @@ Commit message 格式：`feat(ui): 說明 [T07][DONE]`（`[T\d+][DONE]` 觸發 `
 | API | 用途 | 認證方式 | 詳細說明 |
 |-----|------|---------|---------|
 | Coze Workflow | 主力渲染（現有）| `COZE_PAT` | `render.js` |
-| AtlasCloud Nano Banana 2 | 備援渲染 / 多參考圖風格遷移 | `ATLASCLOUD_API_KEY` | `ATLASCLOUD_API.md` |
-| Gemini API (AI Studio) | Coze fallback 候選 | `GEMINI_API_KEY` | `GOOGLE_AI_STUDIO_API.md` §二 |
-| Vertex AI Imagen 3 | Inpainting（Fal.ai 替換候選）| Service Account JSON | `GOOGLE_AI_STUDIO_API.md` §三 |
+| AtlasCloud Nano Banana 2 | 備援渲染 / 多參考圖風格遷移 | `ATLASCLOUD_API_KEY` | `docs/api/ATLASCLOUD_API.md` |
+| Gemini API (AI Studio) | Coze fallback 候選 | `GEMINI_API_KEY` | `docs/api/GOOGLE_AI_STUDIO_API.md` §二 |
+| Vertex AI Imagen 3 | Inpainting（Fal.ai 替換候選）| Service Account JSON | `docs/api/GOOGLE_AI_STUDIO_API.md` §三 |
 | Fal.ai | Inpainting（現有）| 內建 | `inpaint.js` |
 
 ---
@@ -166,7 +166,7 @@ Commit message 格式：`feat(ui): 說明 [T07][DONE]`（`[T\d+][DONE]` 觸發 `
 | `IMGBB_API_KEY` | `render.js` | Fallback image host; hardcoded default exists |
 | `ADMIN_KEY` | `fix_anomalies.js` | Guards admin endpoint in production |
 | `SUPABASE_SERVICE_ROLE_KEY` | `render.js` | **Tool 2 必需**；Supabase Storage 私有 bucket 上傳（render-temp）；缺少時 fallback 到 base64 直傳，但建議設置以減少 payload 大小 |
-| `ATLASCLOUD_API_KEY` | 備援渲染（未實裝）| `ATLASCLOUD_API.md` |
+| `ATLASCLOUD_API_KEY` | 備援渲染（未實裝）| `docs/api/ATLASCLOUD_API.md` |
 | `GEMINI_API_KEY` | Gemini fallback（未實裝）| Google AI Studio |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Vertex AI Inpainting（未實裝）| Service Account JSON 路徑 |
 | `GOOGLE_CLOUD_PROJECT` | Vertex AI Inpainting（未實裝）| GCP 控制台取得 |

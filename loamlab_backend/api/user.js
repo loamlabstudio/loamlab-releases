@@ -69,6 +69,22 @@ export default async function handler(req, res) {
                 .eq('referred_by', email)
                 .eq('referral_rewarded', true);
 
+            // 查詢待審核 / 最近核發的 Wow Shot 獎勵（含自動過期處理）
+            const now = new Date().toISOString();
+            await supabase
+                .from('reward_requests')
+                .update({ status: 'rejected', reviewed_at: now, reviewer_note: 'auto_expired' })
+                .eq('user_email', email)
+                .eq('status', 'pending')
+                .lt('expires_at', now);
+
+            const { data: rewardData } = await supabase
+                .from('reward_requests')
+                .select('id, reward_points, status, requested_at, reviewed_at, reviewer_note')
+                .eq('user_email', email)
+                .order('requested_at', { ascending: false })
+                .limit(5);
+
             if (error && error.code === 'PGRST116') {
                 const newReferralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
                 const { data: newUser, error: insertError } = await supabase
@@ -96,11 +112,48 @@ export default async function handler(req, res) {
                 referral_code: data ? data.referral_code : null,
                 referred_by: data ? data.referred_by : null,
                 referral_success_count: referralSuccessCount || 0,
-                is_new_user: error && error.code === 'PGRST116' ? true : false
+                is_new_user: error && error.code === 'PGRST116' ? true : false,
+                reward_requests: rewardData || []
             });
         } catch (e) {
             return res.status(500).json({ code: -1, msg: e.message });
         }
+    }
+
+    // --- POST: Admin reward approve/reject ---
+    if (req.method === 'POST' && req.body?.action === 'approve_reward') {
+        const adminKey = req.headers['x-admin-key'] || req.body?.admin_key;
+        if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
+            return res.status(401).json({ code: -1, msg: 'Unauthorized' });
+        }
+        const { request_id, reviewer_note } = req.body;
+        if (!request_id) return res.status(400).json({ code: -1, msg: 'Missing request_id' });
+
+        const { data: rr } = await supabase.from('reward_requests')
+            .select('reward_points, status, user_email').eq('id', request_id).single();
+        if (!rr) return res.status(404).json({ code: -1, msg: 'Not found' });
+        if (rr.status !== 'pending') return res.status(400).json({ code: -1, msg: `Already ${rr.status}` });
+
+        const { data: userData } = await supabase.from('users').select('points').eq('email', rr.user_email).single();
+        const curPts = userData ? (userData.points || 0) : 0;
+        await supabase.from('users').update({ points: curPts + rr.reward_points }).eq('email', rr.user_email);
+        await supabase.from('reward_requests').update({
+            status: 'approved', reviewed_at: new Date().toISOString(), reviewer_note: reviewer_note || null
+        }).eq('id', request_id);
+        return res.status(200).json({ code: 0, msg: `+${rr.reward_points} pts approved` });
+    }
+
+    if (req.method === 'POST' && req.body?.action === 'reject_reward') {
+        const adminKey = req.headers['x-admin-key'] || req.body?.admin_key;
+        if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
+            return res.status(401).json({ code: -1, msg: 'Unauthorized' });
+        }
+        const { request_id, reviewer_note } = req.body;
+        if (!request_id) return res.status(400).json({ code: -1, msg: 'Missing request_id' });
+        await supabase.from('reward_requests').update({
+            status: 'rejected', reviewed_at: new Date().toISOString(), reviewer_note: reviewer_note || null
+        }).eq('id', request_id);
+        return res.status(200).json({ code: 0, msg: 'Rejected' });
     }
 
     // --- POST: presets CRUD + history rating ---
@@ -181,6 +234,22 @@ export default async function handler(req, res) {
                 code: 0,
                 msg: '邀請碼已綁定！首次付費後，+100 點將自動到帳，您的推薦人同時獲得 +300 點。'
             });
+        } catch (err) {
+            return res.status(500).json({ code: -1, msg: err.message });
+        }
+    }
+
+    // --- POST: Logout device session (Merged to avoid Vercel 12 functions limit) ---
+    if (req.method === 'POST' && req.body?.action === 'logout') {
+        const { session_id } = req.body || {};
+        if (!session_id) return res.status(400).json({ code: -1, msg: 'Missing session_id' });
+        try {
+            const { error } = await supabase
+                .from('auth_sessions')
+                .delete()
+                .eq('id', session_id);
+            if (error) throw error;
+            return res.status(200).json({ code: 0, status: 'success' });
         } catch (err) {
             return res.status(500).json({ code: -1, msg: err.message });
         }

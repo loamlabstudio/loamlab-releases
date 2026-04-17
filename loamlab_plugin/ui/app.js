@@ -327,6 +327,32 @@ function finalizeRenderUI() {
                 }
             }, 1800);
         }
+
+        // Wow Shot CTA：渲染完成後在 preview-grid 底部插入橫幅（每 session 只顯示一次）
+        if (!window._wowShotCTAShown) {
+            window._wowShotCTAShown = true;
+            setTimeout(() => {
+                const gridEl = document.getElementById('preview-grid');
+                if (!gridEl) return;
+                const existing = gridEl.querySelector('[data-wow-shot-cta]');
+                if (existing) return;
+                const banner = document.createElement('div');
+                banner.setAttribute('data-wow-shot-cta', '1');
+                banner.className = 'wow-shot-cta w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[#e1306c]/20 bg-[#e1306c]/5 cursor-pointer hover:bg-[#e1306c]/10 transition-colors mt-1';
+                banner.innerHTML = `
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-[#e1306c] text-base shrink-0">📸</span>
+                        <div class="min-w-0">
+                            <p class="text-[11px] font-bold text-white/80 tracking-wide">Wow Shot 聯名計畫</p>
+                            <p class="text-[10px] text-white/40 truncate">邀請 @loamlab_barbarian 共同發佈 → +300 點獎勵</p>
+                        </div>
+                    </div>
+                    <button class="shrink-0 text-[10px] font-bold text-[#e1306c] border border-[#e1306c]/30 px-3 py-1.5 rounded-lg hover:bg-[#e1306c]/15 transition-colors uppercase tracking-wider whitespace-nowrap" onclick="event.stopPropagation();if(window.openShareModal)window.openShareModal();">了解 →</button>
+                `;
+                banner.onclick = () => { if (window.openShareModal) window.openShareModal(); };
+                gridEl.appendChild(banner);
+            }, 2200);
+        }
     }, 1000);
 }
 
@@ -1518,57 +1544,127 @@ function generateShareTextWithReferral() {
         .replace(/{code}/g, myCode);
 }
 
+// 上傳圖片 session 到後端，回傳 session_id；失敗時 fallback 到舊版 base64 QR
+async function _createShareSession() {
+    const afterImages = (window._shareImagesPool || []).filter(img => img.type !== 'before');
+    const beforeImages = (window._shareImagesPool || []).filter(img => img.type === 'before');
+
+    const images = [
+        ...afterImages.map(img => ({ url: img.cloud_url || img.file_url || '', type: 'after' })),
+        ...beforeImages.map(img => ({ url: img.cloud_url || img.file_url || '', type: 'before' }))
+    ].filter(img => img.url);
+
+    const textData = {
+        project: document.getElementById('share-input-project')?.value || '',
+        designer: document.getElementById('share-input-designer')?.value || '',
+        content: document.getElementById('share-input-content')?.value || '',
+        referral_code: localStorage.getItem('loamlab_user_referral_code') || ''
+    };
+
+    const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : 'https://loamlab-camera.vercel.app';
+    try {
+        const resp = await fetch(`${baseUrl}/api/stats?action=create_share_session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ images, text_data: textData, user_email: window.loamlabUserEmail || null })
+        });
+        if (!resp.ok) throw new Error('upload failed');
+        const data = await resp.json();
+        if (data.code !== 0) throw new Error(data.msg);
+        return { sessionId: data.session_id, baseUrl };
+    } catch (e) {
+        console.warn('[Share] Session upload failed, fallback to base64', e);
+        return { sessionId: null, baseUrl };
+    }
+}
+
+function _renderQRCode(qrContainer, url) {
+    qrContainer.innerHTML = '';
+    try {
+        if (!_qrcodeInstance && typeof QRCode !== 'undefined') {
+            _qrcodeInstance = new QRCode(qrContainer, {
+                text: url, width: 90, height: 90,
+                colorDark: "#e1306c", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.L
+            });
+        } else if (_qrcodeInstance) {
+            _qrcodeInstance.clear();
+            _qrcodeInstance.makeCode(url);
+        }
+    } catch (e) {
+        console.error("QRCode generation failed", e);
+        qrContainer.innerHTML = '<span class="text-[10px] text-white/50 text-center leading-tight">文案過長<br>請改電腦發文</span>';
+    }
+}
+
 window.openShareModal = function() {
     const modal = document.getElementById('share-modal');
     if (!modal) return;
-    
+
     const textContent = document.getElementById('share-text-content');
     if (textContent) textContent.value = generateShareTextWithReferral();
-    
+
     const qrContainer = document.getElementById('share-qrcode');
+
+    // 顯示 QR loading 並非同步上傳 session
+    if (qrContainer) {
+        qrContainer.innerHTML = '<svg class="w-6 h-6 text-[#e1306c] animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+    }
+
+    // 非同步建立 session 後再產生 QR
+    _createShareSession().then(({ sessionId, baseUrl }) => {
+        if (!qrContainer) return;
+        let shareUrl;
+        const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
+        if (sessionId) {
+            shareUrl = `${baseUrl}/qr-handoff.html?session=${encodeURIComponent(sessionId)}&ref=${encodeURIComponent(myCode)}`;
+        } else {
+            // fallback：舊版 base64 模式
+            const payloadObj = {
+                p: document.getElementById('share-input-project')?.value || "",
+                d: document.getElementById('share-input-designer')?.value || "",
+                c: document.getElementById('share-input-content')?.value || ""
+            };
+            const encodedData = btoa(unescape(encodeURIComponent(JSON.stringify(payloadObj))));
+            shareUrl = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&d=${encodedData}`;
+        }
+        _renderQRCode(qrContainer, shareUrl);
+    });
+
+    // 文字更新觸發器（輸入框改變時重新渲染 QR）
     window._updateQRCode = function() {
         if (!qrContainer) return;
-        qrContainer.innerHTML = '';
-        const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
-        const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : 'https://loamlab-camera.vercel.app';
-        
-        // Payload Compression: Only send raw JSON values (no template text) to save massive QR space!
-        const payloadObj = {
-            p: document.getElementById('share-input-project')?.value || "",
-            d: document.getElementById('share-input-designer')?.value || "",
-            c: document.getElementById('share-input-content')?.value || ""
-        };
-        const encodedData = btoa(unescape(encodeURIComponent(JSON.stringify(payloadObj))));
-        const shareUrl = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&d=${encodedData}`;
-        
-        try {
-            if (!_qrcodeInstance && typeof QRCode !== 'undefined') {
-                _qrcodeInstance = new QRCode(qrContainer, {
-                    text: shareUrl, width: 90, height: 90,
-                    colorDark : "#e1306c", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L
-                });
-            } else if (_qrcodeInstance) {
-                _qrcodeInstance.clear();
-                _qrcodeInstance.makeCode(shareUrl);
-            }
-        } catch (e) {
-            console.error("QRCode generation failed", e);
-            if (qrContainer) {
-                qrContainer.innerHTML = '<span class="text-[10px] text-white/50 text-center leading-tight">文案過長<br>請改電腦發文</span>';
-            }
-        }
+        if (textContent) textContent.value = generateShareTextWithReferral();
+        // debounce 重新產生 QR（避免頻繁上傳）
+        clearTimeout(window._qrDebounce);
+        window._qrDebounce = setTimeout(() => {
+            qrContainer.innerHTML = '<svg class="w-6 h-6 text-[#e1306c] animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+            _createShareSession().then(({ sessionId, baseUrl }) => {
+                if (!qrContainer) return;
+                const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
+                let shareUrl;
+                if (sessionId) {
+                    shareUrl = `${baseUrl}/qr-handoff.html?session=${encodeURIComponent(sessionId)}&ref=${encodeURIComponent(myCode)}`;
+                } else {
+                    const payloadObj = {
+                        p: document.getElementById('share-input-project')?.value || "",
+                        d: document.getElementById('share-input-designer')?.value || "",
+                        c: document.getElementById('share-input-content')?.value || ""
+                    };
+                    const encodedData = btoa(unescape(encodeURIComponent(JSON.stringify(payloadObj))));
+                    shareUrl = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&d=${encodedData}`;
+                }
+                _renderQRCode(qrContainer, shareUrl);
+            });
+        }, 1500);
     };
-    
-    // Initial render
-    window._updateQRCode();
-    
+
     modal.classList.remove('hidden');
     setTimeout(() => {
         modal.classList.remove('opacity-0');
         const modalContent = document.getElementById('share-modal-content');
         if (modalContent) modalContent.classList.remove('scale-95');
     }, 10);
-    
+
     fetchShareTemplates().then(() => {
         if (textContent) textContent.value = generateShareTextWithReferral();
     });
@@ -1600,6 +1696,52 @@ window.interceptDownloadIfLowPoints = function(saveCallback) {
     }
     
     saveCallback();
+};
+
+// Wow Shot 申請：透過 share session 記錄申請，管理員在後台核發點數
+window.applyWowShot = async function() {
+    const email = window.loamlabUserEmail;
+    if (!email) { showUpdateToast('請先登入後再申請'); return; }
+
+    const afterImages = (window._shareImagesPool || []).filter(img => img.type === 'after');
+    if (!afterImages.length) {
+        showUpdateToast('請先選擇渲染圖(After)再申請');
+        return;
+    }
+
+    const applyBtn = document.getElementById('btn-wow-shot-apply');
+    const statusEl = document.getElementById('wow-shot-apply-status');
+    if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = '送出中...'; }
+
+    const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : 'https://loamlab-camera.vercel.app';
+
+    try {
+        const resp = await fetch(`${baseUrl}/api/stats?action=create_share_session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                images: afterImages.map(img => ({ url: img.cloud_url || img.file_url || '', type: 'after' })),
+                text_data: {
+                    project: document.getElementById('share-input-project')?.value || '',
+                    designer: document.getElementById('share-input-designer')?.value || '',
+                    content: document.getElementById('share-input-content')?.value || '',
+                    referral_code: localStorage.getItem('loamlab_user_referral_code') || '',
+                    wow_shot_apply: true
+                },
+                user_email: email
+            })
+        });
+        if (!resp.ok) throw new Error('申請失敗');
+        const data = await resp.json();
+        if (data.code !== 0) throw new Error(data.msg);
+
+        if (applyBtn) applyBtn.classList.add('hidden');
+        if (statusEl) statusEl.classList.remove('hidden');
+        localStorage.setItem('loamlab_wow_shot_applied', Date.now().toString());
+    } catch (e) {
+        if (applyBtn) { applyBtn.disabled = false; applyBtn.innerHTML = '<span>📸</span> 申請 Wow Shot +300 點'; }
+        showUpdateToast('申請失敗，請稍後再試');
+    }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1837,6 +1979,55 @@ window.logoutUser = async function (e) {
 }
 
 // 內部實作：帶 retry 的 user fetch（最多 3 次，1s/3s backoff）
+// Wow Shot 獎勵狀態 — 根據 reward_requests 更新 Points 旁的狀態標籤
+function _handleRewardRequests(rewards) {
+    const pendingEl = document.getElementById('wow-shot-pending-badge');
+
+    const pending = rewards.find(r => r.status === 'pending');
+    const justApproved = rewards.find(r =>
+        r.status === 'approved' &&
+        !localStorage.getItem(`reward_notified_${r.id}`)
+    );
+    const justRejected = rewards.find(r =>
+        r.status === 'rejected' &&
+        r.reviewer_note !== 'auto_expired' &&
+        !localStorage.getItem(`reward_notified_${r.id}`)
+    );
+    const autoExpired = rewards.find(r =>
+        r.status === 'rejected' &&
+        r.reviewer_note === 'auto_expired' &&
+        !localStorage.getItem(`reward_notified_${r.id}`)
+    );
+
+    if (justApproved) {
+        localStorage.setItem(`reward_notified_${justApproved.id}`, '1');
+        setTimeout(() => showUpdateToast(`✅ Wow Shot +${justApproved.reward_points} 點已到帳！`), 600);
+        if (pendingEl) pendingEl.remove();
+    } else if (justRejected) {
+        localStorage.setItem(`reward_notified_${justRejected.id}`, '1');
+        setTimeout(() => showUpdateToast('📸 本次 Wow Shot 申請未通過，下次可再試'), 600);
+        if (pendingEl) pendingEl.remove();
+    } else if (autoExpired) {
+        localStorage.setItem(`reward_notified_${autoExpired.id}`, '1');
+        if (pendingEl) pendingEl.remove();
+    } else if (pending) {
+        // 顯示待審核標籤
+        if (!pendingEl) {
+            const pb = document.getElementById('point-balance');
+            if (pb && pb.parentNode) {
+                const badge = document.createElement('span');
+                badge.id = 'wow-shot-pending-badge';
+                badge.title = '你的 Wow Shot 申請審核中，通過後 +300 點';
+                badge.className = 'text-[9px] text-amber-400/70 border border-amber-400/20 px-1.5 py-0.5 rounded font-bold tracking-wider cursor-default animate-pulse';
+                badge.textContent = '⏳+300';
+                pb.parentNode.insertBefore(badge, pb.nextSibling);
+            }
+        }
+    } else {
+        if (pendingEl) pendingEl.remove();
+    }
+}
+
 function _doFetchUserPoints(email, attempt) {
     const targetUrl = `${API_BASE}/api/user?email=${encodeURIComponent(email)}`;
     const pb = document.getElementById('point-balance');
@@ -1878,6 +2069,9 @@ function _doFetchUserPoints(email, attempt) {
                         if (window.TutorialSystem) TutorialSystem.checkWhatsNew();
                     }, 2000);
                 }
+
+                // Wow Shot 獎勵狀態處理
+                _handleRewardRequests(data.reward_requests || []);
             } else {
                 // 資料格式異常：靜默降級，不用 alert
                 console.warn('[LoamLab] /api/user missing points field:', data);
@@ -2036,7 +2230,8 @@ window.openHistoryModalForSharePick = function(slot, filterModeStr) {
 
 window.pickShareImage = function(entry) {
     if (window._shareImagesPool && !window._shareImagesPool.some(e => e.filename === entry.filename)) {
-        window._shareImagesPool.push(entry);
+        const type = (window._historyFilterMode === 'base') ? 'before' : 'after';
+        window._shareImagesPool.push({ ...entry, type });
     }
     renderShareImagePool();
     closeHistoryModal();

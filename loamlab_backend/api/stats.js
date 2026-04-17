@@ -55,6 +55,17 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, announcement });
     }
 
+    if (req.method === 'GET' && action === 'get_share_template') {
+        const { data, error } = await supabase.from('transactions')
+            .select('metadata')
+            .eq('transaction_type', 'SYSTEM_SHARE_TEMPLATE')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0, template: data?.metadata?.template || {} });
+    }
+
     if (req.method === 'GET' && action === 'get_prompts') {
         const { data, error } = await supabase.from('transactions')
             .select('metadata')
@@ -64,6 +75,44 @@ export default async function handler(req, res) {
             .maybeSingle();
         if (error) return res.status(500).json({ code: -1, msg: error.message });
         return res.status(200).json({ code: 0, prompts: data?.metadata?.prompts || {} });
+    }
+
+    // --- Share Session (POST: 建立; GET: 讀取) ---
+    if (action === 'create_share_session' && req.method === 'POST') {
+        const { images, text_data, user_email } = req.body || {};
+        const afterImages = (images || []).filter(img => img.type === 'after');
+        if (!afterImages.length) return res.status(400).json({ code: -1, msg: '渲染結果圖(After)為必填' });
+
+        const sessionId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+
+        const { error: insertErr } = await supabase.from('share_sessions').insert({
+            id: sessionId, user_email: user_email || null,
+            images: images || [], text_data: text_data || {}, expires_at: expiresAt
+        });
+        if (insertErr) return res.status(500).json({ code: -1, msg: insertErr.message });
+
+        // Wow Shot 申請：建立 pending reward_request
+        if (text_data && text_data.wow_shot_apply && user_email) {
+            await supabase.from('reward_requests').insert({
+                user_email, reward_points: 300,
+                ig_post_url: `share_session:${sessionId}`, status: 'pending',
+                expires_at: new Date(Date.now() + 7 * 86400000).toISOString()
+            });
+        }
+        return res.status(200).json({ code: 0, session_id: sessionId });
+    }
+
+    if (action === 'get_share_session' && req.method === 'GET') {
+        const sessionId = req.query.session;
+        if (!sessionId) return res.status(400).json({ code: -1, msg: 'Missing session' });
+        const { data, error } = await supabase
+            .from('share_sessions')
+            .select('images, text_data, expires_at')
+            .eq('id', sessionId).single();
+        if (error || !data) return res.status(404).json({ code: -1, msg: 'Session not found' });
+        if (new Date(data.expires_at) < new Date()) return res.status(410).json({ code: -1, msg: 'Session expired' });
+        return res.status(200).json({ code: 0, ...data });
     }
 
     if (req.method === 'GET' && action === 'get_model_config') {
@@ -93,6 +142,21 @@ export default async function handler(req, res) {
         }]);
         if (error) {
             console.error('Save error:', error.message);
+            return res.status(500).json({ code: -1, msg: error.message });
+        }
+        return res.status(200).json({ code: 0, msg: 'Saved' });
+    }
+
+    if (req.method === 'POST' && action === 'set_share_template') {
+        const template = req.body?.template || {};
+        const { error } = await supabase.from('transactions').insert([{
+            user_email: null,
+            amount: 0,
+            transaction_type: 'SYSTEM_SHARE_TEMPLATE',
+            metadata: { template }
+        }]);
+        if (error) {
+            console.error('Save share template error:', error.message);
             return res.status(500).json({ code: -1, msg: error.message });
         }
         return res.status(200).json({ code: 0, msg: 'Saved' });

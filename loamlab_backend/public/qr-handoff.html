@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LoamLab | IG Mobile Post</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #09090b; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-start min-h-screen p-4 pb-12">
+    <div class="w-full max-w-md bg-[#18181d] border border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden mt-4">
+        <div class="text-center mb-5">
+            <h1 class="text-xl font-bold text-[#e1306c] tracking-widest mb-1 flex justify-center items-center gap-2">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+                POST ON IG
+            </h1>
+            <p class="text-white/40 text-[11px] mt-1">①長按圖片存到相簿 ②複製文字 ③開 IG 發文</p>
+        </div>
+
+        <!-- Loading 狀態 -->
+        <div id="loading-state" class="flex flex-col items-center justify-center py-10 gap-3">
+            <svg class="w-8 h-8 text-[#e1306c] animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="text-white/40 text-xs">載入中...</p>
+        </div>
+
+        <!-- Session 模式：圖片區 -->
+        <div id="images-section" class="hidden mb-5 flex flex-col gap-3">
+            <p class="text-[11px] font-bold text-white/50 uppercase tracking-widest">① 長按圖片存到相簿</p>
+            <div id="images-grid" class="flex flex-col gap-3"></div>
+        </div>
+
+        <!-- 貼文文字 -->
+        <div id="text-section" class="hidden mb-5">
+            <p class="text-[11px] font-bold text-white/50 uppercase tracking-widest mb-2">② 複製貼文文字</p>
+            <textarea id="ig-content" readonly class="w-full h-36 bg-black/50 border border-white/10 rounded-lg p-3 text-xs text-white/80 resize-none font-mono focus:outline-none"></textarea>
+        </div>
+
+        <!-- 主按鈕 -->
+        <button id="btn-copy-post" class="hidden w-full py-4 bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:opacity-90 active:scale-95 border-none text-white rounded-xl text-sm font-bold tracking-widest transition-all shadow-[0_4px_14px_0_rgba(225,48,108,0.39)] flex flex-col items-center">
+            <span>③ 複製文字並開啟 IG APP 發文</span>
+            <span class="text-[10px] font-normal opacity-80 mt-1">開啟後選擇已存的照片</span>
+        </button>
+
+        <!-- 錯誤狀態 -->
+        <div id="error-state" class="hidden text-center py-8">
+            <p class="text-red-400 text-sm font-bold mb-2">⚠️ 連結已失效</p>
+            <p class="text-white/40 text-xs">此分享連結已過期（48小時有效）<br>請在電腦端重新開啟分享</p>
+        </div>
+
+        <div id="toast" class="absolute bottom-5 left-1/2 transform -translate-x-1/2 bg-green-500 text-white text-xs font-bold px-4 py-2 rounded shadow flex items-center gap-2 opacity-0 pointer-events-none transition-opacity duration-300">
+            ✅ 已複製！準備跳轉...
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        async function loadSession(sessionId) {
+            try {
+                const resp = await fetch(`${API_BASE}/api/stats?action=get_share_session&session=${encodeURIComponent(sessionId)}`);
+                if (!resp.ok) throw new Error(resp.status);
+                const data = await resp.json();
+                if (data.code !== 0) throw new Error(data.msg);
+                return data;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function buildPostText(textData) {
+            const tmpl = '【 {project} 】\n\n{content}\n\nDesign: {designer}\nRenderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n🎁 Try it for free & get 100 bonus points:\nhttps://loamlab-camera.vercel.app/?ref={referral_code}\n\n#sketchup #architectural #render3d';
+            return tmpl
+                .replace(/{project}/g, textData.project || '設計專案')
+                .replace(/{designer}/g, textData.designer || '@designer')
+                .replace(/{content}/g, textData.content || '')
+                .replace(/{referral_code}/g, textData.referral_code || '');
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const params = new URLSearchParams(window.location.search);
+            const ref = params.get('ref');
+            const sessionId = params.get('session');
+            const dataBase64 = params.get('d') || params.get('data');
+
+            // 儲存推薦碼
+            if (ref) {
+                try {
+                    localStorage.setItem('loamlab_referrer_code', ref);
+                    document.cookie = `loamlab_ref=${encodeURIComponent(ref)}; path=/; max-age=2592000; SameSite=Lax`;
+                } catch (e) {}
+            }
+
+            const loadingEl = document.getElementById('loading-state');
+            const imagesSection = document.getElementById('images-section');
+            const imagesGrid = document.getElementById('images-grid');
+            const textSection = document.getElementById('text-section');
+            const textArea = document.getElementById('ig-content');
+            const copyBtn = document.getElementById('btn-copy-post');
+            const errorEl = document.getElementById('error-state');
+
+            // === 新模式：session ID ===
+            if (sessionId) {
+                const sessionData = await loadSession(sessionId);
+                loadingEl.classList.add('hidden');
+
+                if (!sessionData) {
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+
+                // 渲染圖片區
+                const images = sessionData.images || [];
+                if (images.length > 0) {
+                    imagesSection.classList.remove('hidden');
+                    const afterImgs = images.filter(img => img.type === 'after');
+                    const beforeImgs = images.filter(img => img.type === 'before');
+
+                    const renderImgCard = (img, label, labelColor) => {
+                        const div = document.createElement('div');
+                        div.className = 'relative rounded-xl overflow-hidden border border-white/10';
+                        div.innerHTML = `
+                            <img src="${img.url}" class="w-full object-contain max-h-64 bg-black" loading="lazy">
+                            <div class="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded ${labelColor} uppercase tracking-widest">${label}</div>
+                        `;
+                        return div;
+                    };
+
+                    afterImgs.forEach(img => imagesGrid.appendChild(renderImgCard(img, 'After (AI Render)', 'bg-amber-500 text-black')));
+                    beforeImgs.forEach(img => imagesGrid.appendChild(renderImgCard(img, 'Before (原圖)', 'bg-white/20 text-white')));
+                }
+
+                // 文字
+                const td = sessionData.text_data || {};
+                textArea.value = buildPostText(td);
+                textSection.classList.remove('hidden');
+                copyBtn.classList.remove('hidden');
+
+            // === 舊模式：base64 直接帶文字（向下相容）===
+            } else if (dataBase64) {
+                loadingEl.classList.add('hidden');
+                let contentText = '';
+                try {
+                    const decoded = decodeURIComponent(escape(atob(dataBase64)));
+                    if (params.get('d')) {
+                        const obj = JSON.parse(decoded);
+                        contentText = buildPostText({ ...obj, project: obj.p, designer: obj.d, content: obj.c, referral_code: ref || '' });
+                    } else {
+                        contentText = decoded;
+                    }
+                } catch (e) {
+                    contentText = '無法解碼內容，請在電腦端重新分享。';
+                }
+                textArea.value = contentText;
+                textSection.classList.remove('hidden');
+                copyBtn.classList.remove('hidden');
+
+            } else {
+                loadingEl.classList.add('hidden');
+                errorEl.classList.remove('hidden');
+            }
+
+            // 複製並跳轉
+            const toast = document.getElementById('toast');
+            copyBtn.addEventListener('click', async () => {
+                try {
+                    const text = textArea.value;
+                    if (navigator.clipboard && window.isSecureContext) {
+                        await navigator.clipboard.writeText(text);
+                    } else {
+                        textArea.select();
+                        document.execCommand('copy');
+                    }
+                    toast.classList.remove('opacity-0');
+                    setTimeout(() => toast.classList.add('opacity-0'), 2000);
+                    setTimeout(() => {
+                        window.location.href = 'instagram://camera';
+                        setTimeout(() => { window.location.href = 'https://www.instagram.com/'; }, 1000);
+                    }, 500);
+                } catch (e) {
+                    alert('複製失敗，請手動全選複製。');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

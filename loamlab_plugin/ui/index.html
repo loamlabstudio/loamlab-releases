@@ -158,6 +158,90 @@
         .is-rendering .scanning-line {
             display: block;
         }
+
+        /* T1 Dynamic Nodes Styles */
+        .node-item {
+            margin-bottom: 12px;
+        }
+        .node-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            display: block;
+        }
+        .node-input-wrapper {
+            position: relative;
+        }
+        .node-text-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px border rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.9);
+            outline: none;
+            transition: all 0.2s;
+        }
+        .node-text-input:focus {
+            border-color: rgba(220, 38, 38, 0.7);
+            box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.5);
+        }
+        .node-text-input::placeholder {
+            color: rgba(255, 255, 255, 0.2);
+            font-style: italic;
+        }
+
+        /* Slider Styles */
+        .node-slider-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 4px 0;
+        }
+        .node-slider {
+            flex: 1;
+            height: 4px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            outline: none;
+        }
+        .node-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
+        }
+        .node-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        .node-slider-val {
+            min-width: 36px;
+            text-align: right;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.4);
+            font-weight: 500;
+        }
+        .node-group { margin-bottom: 16px; }
+        .node-group-title {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            color: rgba(255, 255, 255, 0.22);
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
     </style>
 </head>
 
@@ -505,6 +589,10 @@
                         </summary>
 
                         <div class="px-4 pb-4 pt-1 flex flex-col gap-5 border-t border-white/[0.05]">
+                            <!-- Dynamic Nodes Container (T1 only) -->
+                            <div id="t1-dynamic-nodes" class="w-full flex flex-col pt-2 hidden">
+                                <!-- Nodes will be generated here -->
+                            </div>
 
                             <!-- Resolution Selector -->
                             <div class="w-full flex flex-col pt-2">
@@ -807,14 +895,26 @@
             </div>
             
             <div class="flex flex-col gap-4">
-                <!-- 手機掃碼分享 -->
+                <!-- 分享預覽 + 掃碼 -->
                 <div class="bg-[#18181d] border border-white/10 rounded-xl p-4 flex items-center gap-4">
-                    <div id="share-qrcode" class="bg-white p-2 rounded-lg shrink-0 w-[90px] h-[90px] flex items-center justify-center">
-                        <svg class="w-6 h-6 text-gray-300 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <!-- 圖片預覽 + 電腦下載 -->
+                    <div class="flex flex-col items-center gap-1.5 shrink-0">
+                        <div id="share-img-preview" class="w-[90px] h-[90px] rounded-lg overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center">
+                            <span class="text-white/20 text-[10px]">無圖片</span>
+                        </div>
+                        <a id="btn-download-render" href="#" download="render.jpg" class="opacity-30 pointer-events-none w-full text-center bg-white/5 hover:bg-white/10 border border-white/10 rounded py-1 text-[9px] text-white/60 font-bold tracking-wider transition-all">⬇ 儲存圖片</a>
                     </div>
-                    <div class="flex flex-col flex-1">
-                        <p class="text-white/90 text-[13px] font-bold tracking-wider mb-1" data-i18n="share_modal_qr_title">📱 用手機掃碼發文與分享</p>
-                        <p class="text-[11px] text-white/50 leading-relaxed" data-i18n="share_modal_qr_desc">手機掃碼即可複製做好的圖文與您的專屬連結，並一鍵跳轉 IG App 發文。</p>
+                    <!-- QR Code + 說明 -->
+                    <div class="flex flex-col items-center gap-1.5 shrink-0">
+                        <div id="share-qrcode" class="bg-white p-2 rounded-lg w-[90px] h-[90px] flex items-center justify-center">
+                            <svg class="w-6 h-6 text-gray-300 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        </div>
+                        <p class="text-[9px] text-white/30 text-center">📱 手機掃碼</p>
+                    </div>
+                    <div class="flex flex-col flex-1 gap-1">
+                        <p class="text-white/90 text-[12px] font-bold tracking-wider">電腦：儲存圖片 → 複製文字 → 開 IG 發文</p>
+                        <p class="text-white/90 text-[12px] font-bold tracking-wider">手機：掃碼 → 長按存圖 → 複製文字 → 開 IG</p>
+                        <p class="text-[10px] text-[#e1306c]/70 mt-1">發文後邀請 <span class="font-mono font-bold">@loamlab_barbarian</span> 協作，審核通過得 +300 點</p>
                     </div>
                 </div>
 
@@ -868,14 +968,6 @@
 
                     <button id="btn-share-pc-copy" data-i18n="share_modal_copy_btn" class="w-full py-2.5 mt-1 bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:opacity-90 border-none text-white rounded-lg text-[12px] font-semibold tracking-widest transition-all">一鍵複製並開啟 IG 網頁發文</button>
 
-                    <!-- Wow Shot 申請按鈕 -->
-                    <div class="border-t border-white/[0.06] pt-3 mt-1">
-                        <p class="text-[10px] text-white/30 mb-2 text-center">發文後，邀請 <span class="text-[#e1306c]">@loamlab_barbarian</span> 為協作者，再點下方申請</p>
-                        <button id="btn-wow-shot-apply" onclick="applyWowShot()" class="w-full py-2 border border-[#e1306c]/40 text-[#e1306c] hover:bg-[#e1306c]/10 rounded-lg text-[11px] font-bold tracking-widest transition-all flex items-center justify-center gap-1.5">
-                            <span>📸</span> 申請 Wow Shot +300 點
-                        </button>
-                        <div id="wow-shot-apply-status" class="hidden mt-2 text-center text-[10px] text-amber-400/70">⏳ 申請已送出，審核通過後點數自動到帳</div>
-                    </div>
                 </div>
             </div>
         </div>

@@ -103,8 +103,41 @@
             const copyBtn = document.getElementById('btn-copy-post');
             const errorEl = document.getElementById('error-state');
 
-            // === 新模式：session ID ===
-            if (sessionId) {
+            const imgParam = params.get('img');
+
+            // === 最新模式：img=URL 直接帶圖片網址 + d=base64 帶文字 ===
+            if (imgParam || dataBase64) {
+                loadingEl.classList.add('hidden');
+
+                // 顯示圖片（如有）
+                if (imgParam) {
+                    imagesSection.classList.remove('hidden');
+                    const div = document.createElement('div');
+                    div.className = 'relative rounded-xl overflow-hidden border border-white/10';
+                    div.innerHTML = `
+                        <img src="${imgParam}" class="w-full object-contain max-h-64 bg-black" loading="lazy">
+                        <div class="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500 text-black uppercase tracking-widest">After (AI Render)</div>
+                    `;
+                    imagesGrid.appendChild(div);
+                }
+
+                // 解碼文字
+                let contentText = '';
+                if (dataBase64) {
+                    try {
+                        const decoded = decodeURIComponent(escape(atob(dataBase64)));
+                        const obj = JSON.parse(decoded);
+                        contentText = buildPostText({ ...obj, project: obj.p, designer: obj.d, content: obj.c, referral_code: ref || '' });
+                    } catch (e) {
+                        contentText = '無法解碼內容，請在電腦端重新分享。';
+                    }
+                }
+                textArea.value = contentText;
+                textSection.classList.remove('hidden');
+                copyBtn.classList.remove('hidden');
+
+            // === 向下相容：session ID ===
+            } else if (sessionId) {
                 const sessionData = await loadSession(sessionId);
                 loadingEl.classList.add('hidden');
 
@@ -113,7 +146,6 @@
                     return;
                 }
 
-                // 渲染圖片區
                 const images = sessionData.images || [];
                 if (images.length > 0) {
                     imagesSection.classList.remove('hidden');
@@ -134,28 +166,8 @@
                     beforeImgs.forEach(img => imagesGrid.appendChild(renderImgCard(img, 'Before (原圖)', 'bg-white/20 text-white')));
                 }
 
-                // 文字
                 const td = sessionData.text_data || {};
                 textArea.value = buildPostText(td);
-                textSection.classList.remove('hidden');
-                copyBtn.classList.remove('hidden');
-
-            // === 舊模式：base64 直接帶文字（向下相容）===
-            } else if (dataBase64) {
-                loadingEl.classList.add('hidden');
-                let contentText = '';
-                try {
-                    const decoded = decodeURIComponent(escape(atob(dataBase64)));
-                    if (params.get('d')) {
-                        const obj = JSON.parse(decoded);
-                        contentText = buildPostText({ ...obj, project: obj.p, designer: obj.d, content: obj.c, referral_code: ref || '' });
-                    } else {
-                        contentText = decoded;
-                    }
-                } catch (e) {
-                    contentText = '無法解碼內容，請在電腦端重新分享。';
-                }
-                textArea.value = contentText;
                 textSection.classList.remove('hidden');
                 copyBtn.classList.remove('hidden');
 

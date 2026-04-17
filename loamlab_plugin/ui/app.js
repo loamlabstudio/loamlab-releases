@@ -36,6 +36,13 @@ let currentActiveTool = 1;
 let selectedShotStyle = 'dramatic';
 let _baseImageEntry = null; // 工具 2/3/4：從歷史選取的底圖
 let _referenceImageBase64 = null; // 工具 2：本地上傳的參考圖 base64
+let t1NodesData = []; // Store Tool 1 advanced nodes configuration
+
+const T1_GROUP_TITLES = {
+    scene_lighting: { 'zh-TW': '場景與光效', 'en-US': 'Scene & Lighting', 'zh-CN': '场景与光效', 'es-ES': 'Escena e Iluminación', 'pt-BR': 'Cena e Iluminação', 'ja-JP': 'シーンと照明' },
+    photography:    { 'zh-TW': '攝影參數', 'en-US': 'Photography', 'zh-CN': '摄影参数', 'es-ES': 'Fotografía', 'pt-BR': 'Fotografia', 'ja-JP': '撮影設定' },
+    rendering:      { 'zh-TW': '渲染精度', 'en-US': 'Render Quality', 'zh-CN': '渲染精度', 'es-ES': 'Calidad de Render', 'pt-BR': 'Qualidade de Render', 'ja-JP': 'レンダリング品質' }
+};
 
 const PROXY_PREFIX = "This interior design scene contains simple geometric proxy shapes (boxes/blocks/cylinders) representing furniture placeholders. Replace each proxy with a realistic, high-quality piece of furniture of the indicated type while preserving its exact position, scale, and spatial relationship. ";
 
@@ -79,6 +86,86 @@ const SWAP_TAG_GROUPS = {
     }
 };
 
+async function fetchT1Nodes() {
+    try {
+        const resp = await fetch(`${API_BASE}/api/stats?action=get_t1_nodes`);
+        const data = await resp.json();
+        if (data.code === 0) {
+            t1NodesData = data.nodes || [];
+            renderT1Nodes();
+        }
+    } catch (e) {
+        console.error('Failed to fetch T1 nodes:', e);
+    }
+}
+
+function renderT1Nodes() {
+    const container = document.getElementById('t1-dynamic-nodes');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const GROUP_ORDER = ['scene_lighting', 'photography', 'rendering'];
+    const grouped = {};
+    t1NodesData.forEach(node => {
+        const g = node.group || 'other';
+        if (!grouped[g]) grouped[g] = [];
+        grouped[g].push(node);
+    });
+
+    const groupKeys = [
+        ...GROUP_ORDER.filter(g => grouped[g]),
+        ...Object.keys(grouped).filter(g => !GROUP_ORDER.includes(g))
+    ];
+
+    groupKeys.forEach(groupKey => {
+        const nodes = grouped[groupKey];
+        if (!nodes || nodes.length === 0) return;
+
+        const titleMap = T1_GROUP_TITLES[groupKey] || {};
+        const groupTitle = titleMap[currentLang] || titleMap['en-US'] || groupKey;
+
+        const groupEl = document.createElement('div');
+        groupEl.className = 'node-group';
+        groupEl.innerHTML = `<div class="node-group-title">${groupTitle}</div>`;
+
+        nodes.forEach(node => {
+            const label = node.labels?.[currentLang] || node.labels?.['en-US'] || node.id;
+            const ph = node.placeholders?.[currentLang] || node.placeholders?.['en-US'] || '';
+
+            const item = document.createElement('div');
+            item.className = 'node-item';
+
+            if (node.type === 'slider') {
+                const min = node.min ?? 0;
+                const max = node.max ?? 100;
+                const step = node.step ?? 1;
+                const def = node.default ?? node.min ?? 0;
+
+                item.innerHTML = `
+                    <label class="node-label">${label}</label>
+                    <div class="node-slider-container">
+                        <input type="range" id="t1-node-${node.id}" class="node-slider" min="${min}" max="${max}" step="${step}" value="${def}">
+                        <span class="node-slider-val" id="t1-node-${node.id}-val">${def}</span>
+                    </div>
+                `;
+                const slider = item.querySelector('.node-slider');
+                const valSpan = item.querySelector('.node-slider-val');
+                slider.addEventListener('input', (e) => { valSpan.textContent = e.target.value; });
+            } else {
+                item.innerHTML = `
+                    <label class="node-label">${label}</label>
+                    <div class="node-input-wrapper">
+                        <input type="text" id="t1-node-${node.id}" class="node-text-input" placeholder="${ph}">
+                    </div>
+                `;
+            }
+            groupEl.appendChild(item);
+        });
+
+        container.appendChild(groupEl);
+    });
+}
+
 function setActiveTool(n, skipTutorial) {
     currentActiveTool = n;
 
@@ -106,6 +193,15 @@ function setActiveTool(n, skipTutorial) {
         activeBtn.classList.remove('text-white/50');
         const bar = activeBtn.querySelector('.sidebar-active-bar');
         if (bar) bar.classList.remove('hidden');
+    }
+
+    const t1NodesContainer = document.getElementById('t1-dynamic-nodes');
+    if (t1NodesContainer) {
+        if (n === 1) {
+            t1NodesContainer.classList.remove('hidden');
+        } else {
+            t1NodesContainer.classList.add('hidden');
+        }
     }
 
     const hintBanner = document.getElementById('tool-hint-banner');
@@ -334,8 +430,8 @@ function finalizeRenderUI() {
             setTimeout(() => {
                 const gridEl = document.getElementById('preview-grid');
                 if (!gridEl) return;
-                const existing = gridEl.querySelector('[data-wow-shot-cta]');
-                if (existing) return;
+                if (gridEl.querySelector('[data-wow-shot-cta]')) return;
+                const lastRender = window._sessionRenders && window._sessionRenders[0];
                 const banner = document.createElement('div');
                 banner.setAttribute('data-wow-shot-cta', '1');
                 banner.className = 'wow-shot-cta w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[#e1306c]/20 bg-[#e1306c]/5 cursor-pointer hover:bg-[#e1306c]/10 transition-colors mt-1';
@@ -344,12 +440,15 @@ function finalizeRenderUI() {
                         <span class="text-[#e1306c] text-base shrink-0">📸</span>
                         <div class="min-w-0">
                             <p class="text-[11px] font-bold text-white/80 tracking-wide">Wow Shot 聯名計畫</p>
-                            <p class="text-[10px] text-white/40 truncate">邀請 @loamlab_barbarian 共同發佈 → +300 點獎勵</p>
+                            <p class="text-[10px] text-white/40 truncate">邀請 @loamlab_barbarian 共同發佈 → +300 點</p>
                         </div>
                     </div>
-                    <button class="shrink-0 text-[10px] font-bold text-[#e1306c] border border-[#e1306c]/30 px-3 py-1.5 rounded-lg hover:bg-[#e1306c]/15 transition-colors uppercase tracking-wider whitespace-nowrap" onclick="event.stopPropagation();if(window.openShareModal)window.openShareModal();">了解 →</button>
+                    <button class="shrink-0 text-[10px] font-bold text-[#e1306c] border border-[#e1306c]/30 px-3 py-1.5 rounded-lg hover:bg-[#e1306c]/15 transition-colors uppercase tracking-wider whitespace-nowrap">分享 →</button>
                 `;
-                banner.onclick = () => { if (window.openShareModal) window.openShareModal(); };
+                banner.onclick = () => {
+                    if (lastRender) _autoPopulateShareImage(lastRender.cloud_url || lastRender.file_url || '');
+                    if (window.openShareModal) window.openShareModal();
+                };
                 gridEl.appendChild(banner);
             }, 2200);
         }
@@ -1013,6 +1112,9 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // Fetch T1 dynamic nodes configuration
+    fetchT1Nodes();
+
     // 解析度切換時更新按鈕點數預覽，並顯示 4K 方案限制提示
     document.querySelectorAll('input[name="resolution"]').forEach(radio => {
         radio.addEventListener('change', () => {
@@ -1172,12 +1274,24 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (window.sketchup) {
+            // Collect dynamic node values for Tool 1
+            let advanced_settings = {};
+            if (currentActiveTool === 1) {
+                t1NodesData.forEach(node => {
+                    const input = document.getElementById(`t1-node-${node.id}`);
+                    if (input) {
+                        advanced_settings[node.id] = input.value;
+                    }
+                });
+            }
+
             sketchup.render_scene({
                 scenes: usingBaseImage ? [] : selectedScenes,
                 prompt: finalPrompt,
                 resolution,
                 expected_cost: totalCost,
                 tool: currentActiveTool,
+                advanced_settings,
                 ...(usingBaseImage && {
                     base_image_url: _baseImageEntry.file_url,
                     base_image_scene: _baseImageEntry.scene || '底圖'
@@ -1544,38 +1658,31 @@ function generateShareTextWithReferral() {
         .replace(/{code}/g, myCode);
 }
 
-// 上傳圖片 session 到後端，回傳 session_id；失敗時 fallback 到舊版 base64 QR
-async function _createShareSession() {
-    const afterImages = (window._shareImagesPool || []).filter(img => img.type !== 'before');
-    const beforeImages = (window._shareImagesPool || []).filter(img => img.type === 'before');
-
-    const images = [
-        ...afterImages.map(img => ({ url: img.cloud_url || img.file_url || '', type: 'after' })),
-        ...beforeImages.map(img => ({ url: img.cloud_url || img.file_url || '', type: 'before' }))
-    ].filter(img => img.url);
-
-    const textData = {
-        project: document.getElementById('share-input-project')?.value || '',
-        designer: document.getElementById('share-input-designer')?.value || '',
-        content: document.getElementById('share-input-content')?.value || '',
-        referral_code: localStorage.getItem('loamlab_user_referral_code') || ''
-    };
-
-    const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : 'https://loamlab-camera.vercel.app';
-    try {
-        const resp = await fetch(`${baseUrl}/api/stats?action=create_share_session`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ images, text_data: textData, user_email: window.loamlabUserEmail || null })
-        });
-        if (!resp.ok) throw new Error('upload failed');
-        const data = await resp.json();
-        if (data.code !== 0) throw new Error(data.msg);
-        return { sessionId: data.session_id, baseUrl };
-    } catch (e) {
-        console.warn('[Share] Session upload failed, fallback to base64', e);
-        return { sessionId: null, baseUrl };
+// 將一張渲染圖自動加入 share pool（如已有同 URL 則跳過）
+function _autoPopulateShareImage(url) {
+    if (!url) return;
+    window._shareImagesPool = window._shareImagesPool || [];
+    if (!window._shareImagesPool.some(e => (e.cloud_url || e.file_url) === url)) {
+        window._shareImagesPool.unshift({ cloud_url: url, file_url: url, type: 'after', filename: 'render' });
+        renderShareImagePool();
     }
+}
+
+// 組裝即時 QR URL（不需後端，直接把圖片 URL + 文字帶進去）
+function _buildShareUrl() {
+    const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : 'https://loamlab-camera.vercel.app';
+    const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
+    const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
+    const imgUrl = afterImg ? (afterImg.cloud_url || afterImg.file_url || '') : '';
+    const payload = {
+        p: document.getElementById('share-input-project')?.value || '',
+        d: document.getElementById('share-input-designer')?.value || '',
+        c: document.getElementById('share-input-content')?.value || ''
+    };
+    const encodedText = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    let url = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&d=${encodedText}`;
+    if (imgUrl) url += `&img=${encodeURIComponent(imgUrl)}`;
+    return url;
 }
 
 function _renderQRCode(qrContainer, url) {
@@ -1591,8 +1698,7 @@ function _renderQRCode(qrContainer, url) {
             _qrcodeInstance.makeCode(url);
         }
     } catch (e) {
-        console.error("QRCode generation failed", e);
-        qrContainer.innerHTML = '<span class="text-[10px] text-white/50 text-center leading-tight">文案過長<br>請改電腦發文</span>';
+        qrContainer.innerHTML = '<span class="text-[10px] text-white/50 text-center leading-tight">QR 產生失敗<br>請用電腦發文</span>';
     }
 }
 
@@ -1603,59 +1709,21 @@ window.openShareModal = function() {
     const textContent = document.getElementById('share-text-content');
     if (textContent) textContent.value = generateShareTextWithReferral();
 
+    // 即時產生 QR（無 loading）
     const qrContainer = document.getElementById('share-qrcode');
+    if (qrContainer) _renderQRCode(qrContainer, _buildShareUrl());
 
-    // 顯示 QR loading 並非同步上傳 session
-    if (qrContainer) {
-        qrContainer.innerHTML = '<svg class="w-6 h-6 text-[#e1306c] animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
-    }
+    // 更新 PC 圖片預覽
+    _updateShareImgPreview();
 
-    // 非同步建立 session 後再產生 QR
-    _createShareSession().then(({ sessionId, baseUrl }) => {
-        if (!qrContainer) return;
-        let shareUrl;
-        const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
-        if (sessionId) {
-            shareUrl = `${baseUrl}/qr-handoff.html?session=${encodeURIComponent(sessionId)}&ref=${encodeURIComponent(myCode)}`;
-        } else {
-            // fallback：舊版 base64 模式
-            const payloadObj = {
-                p: document.getElementById('share-input-project')?.value || "",
-                d: document.getElementById('share-input-designer')?.value || "",
-                c: document.getElementById('share-input-content')?.value || ""
-            };
-            const encodedData = btoa(unescape(encodeURIComponent(JSON.stringify(payloadObj))));
-            shareUrl = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&d=${encodedData}`;
-        }
-        _renderQRCode(qrContainer, shareUrl);
-    });
-
-    // 文字更新觸發器（輸入框改變時重新渲染 QR）
+    // 輸入框變更時 debounce 重建 QR + 預覽文字
     window._updateQRCode = function() {
-        if (!qrContainer) return;
         if (textContent) textContent.value = generateShareTextWithReferral();
-        // debounce 重新產生 QR（避免頻繁上傳）
         clearTimeout(window._qrDebounce);
         window._qrDebounce = setTimeout(() => {
-            qrContainer.innerHTML = '<svg class="w-6 h-6 text-[#e1306c] animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
-            _createShareSession().then(({ sessionId, baseUrl }) => {
-                if (!qrContainer) return;
-                const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
-                let shareUrl;
-                if (sessionId) {
-                    shareUrl = `${baseUrl}/qr-handoff.html?session=${encodeURIComponent(sessionId)}&ref=${encodeURIComponent(myCode)}`;
-                } else {
-                    const payloadObj = {
-                        p: document.getElementById('share-input-project')?.value || "",
-                        d: document.getElementById('share-input-designer')?.value || "",
-                        c: document.getElementById('share-input-content')?.value || ""
-                    };
-                    const encodedData = btoa(unescape(encodeURIComponent(JSON.stringify(payloadObj))));
-                    shareUrl = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&d=${encodedData}`;
-                }
-                _renderQRCode(qrContainer, shareUrl);
-            });
-        }, 1500);
+            if (qrContainer) _renderQRCode(qrContainer, _buildShareUrl());
+            _updateShareImgPreview();
+        }, 600);
     };
 
     modal.classList.remove('hidden');
@@ -1669,6 +1737,22 @@ window.openShareModal = function() {
         if (textContent) textContent.value = generateShareTextWithReferral();
     });
 };
+
+// 更新 Modal 內 PC 圖片預覽區
+function _updateShareImgPreview() {
+    const preview = document.getElementById('share-img-preview');
+    const downloadBtn = document.getElementById('btn-download-render');
+    if (!preview) return;
+    const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
+    const url = afterImg ? (afterImg.cloud_url || afterImg.file_url || '') : '';
+    if (url) {
+        preview.innerHTML = `<img src="${url}" class="w-full h-full object-cover rounded-lg" style="max-height:80px;">`;
+        if (downloadBtn) { downloadBtn.href = url; downloadBtn.classList.remove('opacity-30', 'pointer-events-none'); }
+    } else {
+        preview.innerHTML = '<span class="text-[9px] text-white/20 uppercase tracking-wider">尚未選圖</span>';
+        if (downloadBtn) { downloadBtn.removeAttribute('href'); downloadBtn.classList.add('opacity-30', 'pointer-events-none'); }
+    }
+}
 
 window.closeShareModal = function() {
     const modal = document.getElementById('share-modal');
@@ -1698,51 +1782,6 @@ window.interceptDownloadIfLowPoints = function(saveCallback) {
     saveCallback();
 };
 
-// Wow Shot 申請：透過 share session 記錄申請，管理員在後台核發點數
-window.applyWowShot = async function() {
-    const email = window.loamlabUserEmail;
-    if (!email) { showUpdateToast('請先登入後再申請'); return; }
-
-    const afterImages = (window._shareImagesPool || []).filter(img => img.type === 'after');
-    if (!afterImages.length) {
-        showUpdateToast('請先選擇渲染圖(After)再申請');
-        return;
-    }
-
-    const applyBtn = document.getElementById('btn-wow-shot-apply');
-    const statusEl = document.getElementById('wow-shot-apply-status');
-    if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = '送出中...'; }
-
-    const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : 'https://loamlab-camera.vercel.app';
-
-    try {
-        const resp = await fetch(`${baseUrl}/api/stats?action=create_share_session`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                images: afterImages.map(img => ({ url: img.cloud_url || img.file_url || '', type: 'after' })),
-                text_data: {
-                    project: document.getElementById('share-input-project')?.value || '',
-                    designer: document.getElementById('share-input-designer')?.value || '',
-                    content: document.getElementById('share-input-content')?.value || '',
-                    referral_code: localStorage.getItem('loamlab_user_referral_code') || '',
-                    wow_shot_apply: true
-                },
-                user_email: email
-            })
-        });
-        if (!resp.ok) throw new Error('申請失敗');
-        const data = await resp.json();
-        if (data.code !== 0) throw new Error(data.msg);
-
-        if (applyBtn) applyBtn.classList.add('hidden');
-        if (statusEl) statusEl.classList.remove('hidden');
-        localStorage.setItem('loamlab_wow_shot_applied', Date.now().toString());
-    } catch (e) {
-        if (applyBtn) { applyBtn.disabled = false; applyBtn.innerHTML = '<span>📸</span> 申請 Wow Shot +300 點'; }
-        showUpdateToast('申請失敗，請稍後再試');
-    }
-};
 
 document.addEventListener('DOMContentLoaded', () => {
     // Share Buttons Logic
@@ -1979,54 +2018,6 @@ window.logoutUser = async function (e) {
 }
 
 // 內部實作：帶 retry 的 user fetch（最多 3 次，1s/3s backoff）
-// Wow Shot 獎勵狀態 — 根據 reward_requests 更新 Points 旁的狀態標籤
-function _handleRewardRequests(rewards) {
-    const pendingEl = document.getElementById('wow-shot-pending-badge');
-
-    const pending = rewards.find(r => r.status === 'pending');
-    const justApproved = rewards.find(r =>
-        r.status === 'approved' &&
-        !localStorage.getItem(`reward_notified_${r.id}`)
-    );
-    const justRejected = rewards.find(r =>
-        r.status === 'rejected' &&
-        r.reviewer_note !== 'auto_expired' &&
-        !localStorage.getItem(`reward_notified_${r.id}`)
-    );
-    const autoExpired = rewards.find(r =>
-        r.status === 'rejected' &&
-        r.reviewer_note === 'auto_expired' &&
-        !localStorage.getItem(`reward_notified_${r.id}`)
-    );
-
-    if (justApproved) {
-        localStorage.setItem(`reward_notified_${justApproved.id}`, '1');
-        setTimeout(() => showUpdateToast(`✅ Wow Shot +${justApproved.reward_points} 點已到帳！`), 600);
-        if (pendingEl) pendingEl.remove();
-    } else if (justRejected) {
-        localStorage.setItem(`reward_notified_${justRejected.id}`, '1');
-        setTimeout(() => showUpdateToast('📸 本次 Wow Shot 申請未通過，下次可再試'), 600);
-        if (pendingEl) pendingEl.remove();
-    } else if (autoExpired) {
-        localStorage.setItem(`reward_notified_${autoExpired.id}`, '1');
-        if (pendingEl) pendingEl.remove();
-    } else if (pending) {
-        // 顯示待審核標籤
-        if (!pendingEl) {
-            const pb = document.getElementById('point-balance');
-            if (pb && pb.parentNode) {
-                const badge = document.createElement('span');
-                badge.id = 'wow-shot-pending-badge';
-                badge.title = '你的 Wow Shot 申請審核中，通過後 +300 點';
-                badge.className = 'text-[9px] text-amber-400/70 border border-amber-400/20 px-1.5 py-0.5 rounded font-bold tracking-wider cursor-default animate-pulse';
-                badge.textContent = '⏳+300';
-                pb.parentNode.insertBefore(badge, pb.nextSibling);
-            }
-        }
-    } else {
-        if (pendingEl) pendingEl.remove();
-    }
-}
 
 function _doFetchUserPoints(email, attempt) {
     const targetUrl = `${API_BASE}/api/user?email=${encodeURIComponent(email)}`;
@@ -2070,8 +2061,6 @@ function _doFetchUserPoints(email, attempt) {
                     }, 2000);
                 }
 
-                // Wow Shot 獎勵狀態處理
-                _handleRewardRequests(data.reward_requests || []);
             } else {
                 // 資料格式異常：靜默降級，不用 alert
                 console.warn('[LoamLab] /api/user missing points field:', data);

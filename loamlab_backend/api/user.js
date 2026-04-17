@@ -69,22 +69,6 @@ export default async function handler(req, res) {
                 .eq('referred_by', email)
                 .eq('referral_rewarded', true);
 
-            // 查詢待審核 / 最近核發的 Wow Shot 獎勵（含自動過期處理）
-            const now = new Date().toISOString();
-            await supabase
-                .from('reward_requests')
-                .update({ status: 'rejected', reviewed_at: now, reviewer_note: 'auto_expired' })
-                .eq('user_email', email)
-                .eq('status', 'pending')
-                .lt('expires_at', now);
-
-            const { data: rewardData } = await supabase
-                .from('reward_requests')
-                .select('id, reward_points, status, requested_at, reviewed_at, reviewer_note')
-                .eq('user_email', email)
-                .order('requested_at', { ascending: false })
-                .limit(5);
-
             if (error && error.code === 'PGRST116') {
                 const newReferralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
                 const { data: newUser, error: insertError } = await supabase
@@ -112,8 +96,7 @@ export default async function handler(req, res) {
                 referral_code: data ? data.referral_code : null,
                 referred_by: data ? data.referred_by : null,
                 referral_success_count: referralSuccessCount || 0,
-                is_new_user: error && error.code === 'PGRST116' ? true : false,
-                reward_requests: rewardData || []
+                is_new_user: error && error.code === 'PGRST116' ? true : false
             });
         } catch (e) {
             return res.status(500).json({ code: -1, msg: e.message });

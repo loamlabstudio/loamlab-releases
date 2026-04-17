@@ -120,6 +120,7 @@ function renderT1Nodes() {
     groupKeys.forEach(groupKey => {
         const nodes = grouped[groupKey];
         if (!nodes || nodes.length === 0) return;
+        if (nodes.every(n => n.system)) return; // 全是 system 節點則整組跳過
 
         const titleMap = T1_GROUP_TITLES[groupKey] || {};
         const groupTitle = titleMap[currentLang] || titleMap['en-US'] || groupKey;
@@ -129,6 +130,7 @@ function renderT1Nodes() {
         groupEl.innerHTML = `<div class="node-group-title">${groupTitle}</div>`;
 
         nodes.forEach(node => {
+            if (node.system) return; // 核心約束由系統管理，插件不顯示
             const label = node.labels?.[currentLang] || node.labels?.['en-US'] || node.id;
             const ph = node.placeholders?.[currentLang] || node.placeholders?.['en-US'] || '';
 
@@ -1613,7 +1615,6 @@ window.sendFeedbackModal = function() {
    Share Modal / Low Point Interception
    ========================================================= */
 let _shareTemplates = null;
-let _qrcodeInstance = null;
 
 async function fetchShareTemplates() {
     if (_shareTemplates) return _shareTemplates;
@@ -1687,18 +1688,18 @@ function _buildShareUrl() {
 
 function _renderQRCode(qrContainer, url) {
     qrContainer.innerHTML = '';
+    if (typeof QRCode === 'undefined') {
+        qrContainer.innerHTML = '<span class="text-[10px] text-white/50 text-center leading-tight p-1">QR 載入失敗<br>請用電腦發文</span>';
+        return;
+    }
     try {
-        if (!_qrcodeInstance && typeof QRCode !== 'undefined') {
-            _qrcodeInstance = new QRCode(qrContainer, {
-                text: url, width: 90, height: 90,
-                colorDark: "#e1306c", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.L
-            });
-        } else if (_qrcodeInstance) {
-            _qrcodeInstance.clear();
-            _qrcodeInstance.makeCode(url);
-        }
+        new QRCode(qrContainer, {
+            text: url, width: 86, height: 86,
+            colorDark: "#000000", colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.L
+        });
     } catch (e) {
-        qrContainer.innerHTML = '<span class="text-[10px] text-white/50 text-center leading-tight">QR 產生失敗<br>請用電腦發文</span>';
+        qrContainer.innerHTML = '<span class="text-[10px] text-white/50 text-center leading-tight p-1">QR 產生失敗<br>請用電腦發文</span>';
     }
 }
 
@@ -1707,6 +1708,13 @@ window.openShareModal = function() {
     if (!modal) return;
 
     const textContent = document.getElementById('share-text-content');
+
+    // 自動帶入上次填入的 project / designer（降低重複填寫阻力）
+    ['share-input-project', 'share-input-designer'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && !el.value) el.value = localStorage.getItem(`loamlab_${id}`) || '';
+    });
+
     if (textContent) textContent.value = generateShareTextWithReferral();
 
     // 即時產生 QR（無 loading）
@@ -1718,6 +1726,11 @@ window.openShareModal = function() {
 
     // 輸入框變更時 debounce 重建 QR + 預覽文字
     window._updateQRCode = function() {
+        // 持久化 project / designer 到 localStorage
+        ['share-input-project', 'share-input-designer'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) localStorage.setItem(`loamlab_${id}`, el.value);
+        });
         if (textContent) textContent.value = generateShareTextWithReferral();
         clearTimeout(window._qrDebounce);
         window._qrDebounce = setTimeout(() => {

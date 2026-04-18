@@ -1669,15 +1669,23 @@ function _autoPopulateShareImage(url) {
     }
 }
 
-// QR URL：只帶圖片 URL + 推薦碼（移除 d= 文字參數，大幅縮短 URL 讓 QR 可掃）
+// QR URL：ref + d(內容) + img（175px QR 可承載 ~350 chars，全部放進去）
 function _buildShareUrl() {
     const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : 'https://loamlab-camera.vercel.app';
     const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
     const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
     const rawUrl = afterImg ? (afterImg.cloud_url || '') : '';
-    // 只用 http(s) 雲端 URL，排除本機路徑（如 C:\Users\...）
     const imgUrl = rawUrl.startsWith('http') ? rawUrl : '';
-    let url = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}`;
+
+    // 把用戶填入的內容也放進 QR，手機端才能顯示完整貼文
+    const payload = {
+        p: document.getElementById('share-input-project')?.value || '',
+        d: document.getElementById('share-input-designer')?.value || '',
+        c: document.getElementById('share-input-content')?.value || ''
+    };
+    const encodedText = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+
+    let url = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&d=${encodedText}`;
     if (imgUrl) url += `&img=${encodeURIComponent(imgUrl)}`;
     return url;
 }
@@ -1762,13 +1770,17 @@ window.openShareModal = function() {
     if (qrContainer) _renderQRCode(qrContainer, _buildShareUrl());
     _updateDownloadBtn();
 
-    // 輸入框變更時 debounce 更新文字預覽（QR 不因輸入框變更而重建）
+    // 輸入框變更時 debounce 重建 QR + 更新文字預覽（內容已放回 QR URL 中）
     window._updateQRCode = function() {
         ['share-input-project', 'share-input-designer'].forEach(id => {
             const el = document.getElementById(id);
             if (el) localStorage.setItem(`loamlab_${id}`, el.value);
         });
         if (textContent) textContent.value = generateShareTextWithReferral();
+        clearTimeout(window._qrDebounce);
+        window._qrDebounce = setTimeout(() => {
+            if (qrContainer) _renderQRCode(qrContainer, _buildShareUrl());
+        }, 800);
     };
 
     modal.classList.remove('hidden');

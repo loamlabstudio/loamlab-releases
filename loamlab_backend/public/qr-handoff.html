@@ -160,7 +160,8 @@
             let resolvedImg = '';
             let captionText = '';
 
-            if (imgParam || dataBase64 || ref) {
+            // params.has() 用於判斷 key 是否存在（避免空字串 '' 被視為 falsy）
+            if (params.has('img') || params.has('d') || params.has('ref')) {
                 resolvedImg = imgParam;
 
                 let textData = { referral_code: ref };
@@ -168,7 +169,7 @@
                     try {
                         const decoded = decodeURIComponent(escape(atob(dataBase64)));
                         const obj = JSON.parse(decoded);
-                        textData = { ...obj, project: obj.p, designer: obj.d, content: obj.c, referral_code: ref };
+                        textData = { project: obj.p, designer: obj.d, content: obj.c, referral_code: ref };
                     } catch(e) {}
                 }
                 captionText = buildPostText(textData);

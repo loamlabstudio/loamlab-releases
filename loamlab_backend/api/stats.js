@@ -42,6 +42,30 @@ export default async function handler(req, res) {
         return res.status(200).json(await getPublicStats(supabase));
     }
 
+
+    // --- 圖片代理（繞過 CORS，讓手機端可 fetch blob 下載）---
+    if (action === 'proxy_img' && req.method === 'GET') {
+        const imgUrl = req.query.url || '';
+        const ALLOWED = ['i.ibb.co', 'iili.io', 'freeimage.host', 'img.ibb.co'];
+        let parsedHost = '';
+        try { parsedHost = new URL(imgUrl).hostname; } catch(e) {}
+        if (!parsedHost || !ALLOWED.includes(parsedHost)) {
+            return res.status(403).json({ code: -1, msg: 'Domain not allowed' });
+        }
+        try {
+            const upstream = await fetch(imgUrl);
+            if (!upstream.ok) return res.status(502).end();
+            const contentType = upstream.headers.get('content-type') || 'image/jpeg';
+            const buffer = Buffer.from(await upstream.arrayBuffer());
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Content-Disposition', 'attachment; filename="loamlab-render.jpg"');
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            return res.status(200).send(buffer);
+        } catch(e) {
+            return res.status(502).json({ code: -1, msg: e.message });
+        }
+    }
+
     if (action === 'get_announcement') {
         const { data, error } = await supabase.from('transactions')
             .select('metadata')
@@ -126,10 +150,58 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, models: data?.metadata?.models || {} });
     }
 
+    if (req.method === 'GET' && action === 'get_t1_nodes') {
+        const { data, error } = await supabase.from('transactions')
+            .select('metadata')
+            .eq('transaction_type', 'SYSTEM_T1_NODES')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0, nodes: data?.metadata?.nodes || [] });
+    }
+
+    if (req.method === 'GET' && action === 'get_system_config') {
+        const { data, error } = await supabase.from('transactions')
+            .select('metadata')
+            .eq('transaction_type', 'SYSTEM_ENGINE_CONFIG')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0, config: data?.metadata?.config || { prompt_engine_mode: 'nodes' } });
+    }
+
+    if (req.method === 'GET' && action === 'get_presets') {
+        const { data, error } = await supabase.from('transactions')
+            .select('metadata')
+            .eq('transaction_type', 'SYSTEM_PRESETS')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0, presets: data?.metadata?.presets || { categories: [] } });
+    }
+
     // --- Admin 端點（需要 ADMIN_KEY）---
     const adminKeyHeader = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     if (!adminKeyHeader || adminKeyHeader !== process.env.ADMIN_KEY) {
         return res.status(401).json({ code: -1, msg: 'Unauthorized' });
+    }
+
+    if (req.method === 'POST' && action === 'set_t1_nodes') {
+        const nodes = req.body?.nodes || [];
+        const { error } = await supabase.from('transactions').insert([{
+            user_email: null,
+            amount: 0,
+            transaction_type: 'SYSTEM_T1_NODES',
+            metadata: { nodes }
+        }]);
+        if (error) {
+            console.error('Save t1 nodes error:', error.message);
+            return res.status(500).json({ code: -1, msg: error.message });
+        }
+        return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
     if (req.method === 'POST' && action === 'set_announcement') {
@@ -190,6 +262,66 @@ export default async function handler(req, res) {
             return res.status(500).json({ code: -1, msg: error.message });
         }
         return res.status(200).json({ code: 0, msg: 'Saved' });
+    }
+
+    if (req.method === 'POST' && action === 'set_system_config') {
+        const config = req.body?.config || {};
+        const { error } = await supabase.from('transactions').insert([{
+            user_email: null,
+            amount: 0,
+            transaction_type: 'SYSTEM_ENGINE_CONFIG',
+            metadata: { config }
+        }]);
+        if (error) {
+            console.error('Save engine config error:', error.message);
+            return res.status(500).json({ code: -1, msg: error.message });
+        }
+        return res.status(200).json({ code: 0, msg: 'Saved' });
+    }
+
+    if (req.method === 'POST' && action === 'set_presets') {
+        const presets = req.body?.presets || { categories: [] };
+        const { error } = await supabase.from('transactions').insert([{
+            user_email: null,
+            amount: 0,
+            transaction_type: 'SYSTEM_PRESETS',
+            metadata: { presets }
+        }]);
+        if (error) {
+            console.error('Save presets error:', error.message);
+            return res.status(500).json({ code: -1, msg: error.message });
+        }
+        return res.status(200).json({ code: 0, msg: 'Saved' });
+    }
+
+    if (req.method === 'GET' && action === 'export_preset_package') {
+        const [promptsRes, nodesRes, modelsRes] = await Promise.all([
+            supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_PROMPTS').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+            supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_T1_NODES').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+            supabase.from('transactions').select('metadata').eq('transaction_type', 'MODEL_CONFIG').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        ]);
+        return res.status(200).json({
+            code: 0,
+            package: {
+                prompts: promptsRes.data?.metadata?.prompts || {},
+                t1_nodes: nodesRes.data?.metadata?.nodes || [],
+                model_config: modelsRes.data?.metadata?.models || {},
+                exported_at: new Date().toISOString()
+            }
+        });
+    }
+
+    if (req.method === 'POST' && action === 'import_preset_package') {
+        const { prompts, t1_nodes, model_config } = req.body || {};
+        const ops = [];
+        if (prompts) ops.push(supabase.from('transactions').insert([{ user_email: null, amount: 0, transaction_type: 'SYSTEM_PROMPTS', metadata: { prompts } }]));
+        if (t1_nodes) ops.push(supabase.from('transactions').insert([{ user_email: null, amount: 0, transaction_type: 'SYSTEM_T1_NODES', metadata: { nodes: t1_nodes } }]));
+        if (model_config) ops.push(supabase.from('transactions').insert([{ user_email: null, amount: 0, transaction_type: 'MODEL_CONFIG', metadata: { models: model_config } }]));
+        if (!ops.length) return res.status(400).json({ code: -1, msg: 'Nothing to import' });
+        const results = await Promise.all(ops);
+        const failed = results.filter(r => r.error);
+        if (failed.length) return res.status(500).json({ code: -1, msg: failed[0].error.message });
+        return res.status(200).json({ code: 0, msg: `Imported ${ops.length} config(s)` });
     }
 
     const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic };

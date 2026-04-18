@@ -103,8 +103,11 @@
 
         async function downloadImage(url) {
             if (!url) return false;
+            // 透過後端代理繞過 CORS（直接 fetch 第三方圖床會被跨域限制）
+            const proxyUrl = `${API_BASE}/api/stats?action=proxy_img&url=${encodeURIComponent(url)}`;
             try {
-                const resp = await fetch(url);
+                const resp = await fetch(proxyUrl);
+                if (!resp.ok) throw new Error(resp.status);
                 const blob = await resp.blob();
                 const blobUrl = URL.createObjectURL(blob);
                 const a = document.createElement('a');

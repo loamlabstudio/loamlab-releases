@@ -1669,19 +1669,14 @@ function _autoPopulateShareImage(url) {
     }
 }
 
-// 組裝即時 QR URL（不需後端，直接把圖片 URL + 文字帶進去）
+// QR URL：只帶圖片 URL + 推薦碼（移除 d= 文字參數，大幅縮短 URL 讓 QR 可掃）
 function _buildShareUrl() {
     const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : 'https://loamlab-camera.vercel.app';
     const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
     const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
-    const imgUrl = afterImg ? (afterImg.cloud_url || afterImg.file_url || '') : '';
-    const payload = {
-        p: document.getElementById('share-input-project')?.value || '',
-        d: document.getElementById('share-input-designer')?.value || '',
-        c: document.getElementById('share-input-content')?.value || ''
-    };
-    const encodedText = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-    let url = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&d=${encodedText}`;
+    // 只用 cloud_url（已在雲端），排除本機路徑
+    const imgUrl = afterImg ? (afterImg.cloud_url || '') : '';
+    let url = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}`;
     if (imgUrl) url += `&img=${encodeURIComponent(imgUrl)}`;
     return url;
 }
@@ -1689,19 +1684,29 @@ function _buildShareUrl() {
 function _renderQRCode(qrContainer, url) {
     qrContainer.innerHTML = '';
     if (typeof QRCode === 'undefined') {
-        qrContainer.innerHTML = '<span class="text-[10px] text-white/50 text-center leading-tight p-1">QR 載入失敗<br>請用電腦發文</span>';
+        qrContainer.innerHTML = '<span class="text-[11px] text-gray-400 text-center leading-tight p-2">QR 載入失敗<br>請用電腦發文</span>';
         return;
     }
     try {
         new QRCode(qrContainer, {
-            text: url, width: 86, height: 86,
+            text: url, width: 175, height: 175,
             colorDark: "#000000", colorLight: "#ffffff",
             correctLevel: QRCode.CorrectLevel.L
         });
     } catch (e) {
-        qrContainer.innerHTML = '<span class="text-[10px] text-white/50 text-center leading-tight p-1">QR 產生失敗<br>請用電腦發文</span>';
+        qrContainer.innerHTML = '<span class="text-[11px] text-gray-400 text-center leading-tight p-2">QR 產生失敗<br>請用電腦發文</span>';
     }
 }
+
+// 折疊/展開自定義輸入欄
+window.toggleShareCustomize = function() {
+    const body = document.getElementById('share-customize-body');
+    const arrow = document.getElementById('share-customize-arrow');
+    if (!body) return;
+    const isHidden = body.classList.contains('hidden');
+    body.classList.toggle('hidden', !isHidden);
+    if (arrow) arrow.textContent = isHidden ? '▲' : '▼';
+};
 
 window.openShareModal = function() {
     const modal = document.getElementById('share-modal');
@@ -1709,7 +1714,7 @@ window.openShareModal = function() {
 
     const textContent = document.getElementById('share-text-content');
 
-    // 自動帶入上次填入的 project / designer（降低重複填寫阻力）
+    // 自動帶入上次填入的 project / designer
     ['share-input-project', 'share-input-designer'].forEach(id => {
         const el = document.getElementById(id);
         if (el && !el.value) el.value = localStorage.getItem(`loamlab_${id}`) || '';
@@ -1717,26 +1722,17 @@ window.openShareModal = function() {
 
     if (textContent) textContent.value = generateShareTextWithReferral();
 
-    // 即時產生 QR（無 loading）
+    // 即時產生 QR
     const qrContainer = document.getElementById('share-qrcode');
     if (qrContainer) _renderQRCode(qrContainer, _buildShareUrl());
 
-    // 更新 PC 圖片預覽
-    _updateShareImgPreview();
-
-    // 輸入框變更時 debounce 重建 QR + 預覽文字
+    // 輸入框變更時 debounce 更新文字預覽（QR 不因輸入框變更而重建）
     window._updateQRCode = function() {
-        // 持久化 project / designer 到 localStorage
         ['share-input-project', 'share-input-designer'].forEach(id => {
             const el = document.getElementById(id);
             if (el) localStorage.setItem(`loamlab_${id}`, el.value);
         });
         if (textContent) textContent.value = generateShareTextWithReferral();
-        clearTimeout(window._qrDebounce);
-        window._qrDebounce = setTimeout(() => {
-            if (qrContainer) _renderQRCode(qrContainer, _buildShareUrl());
-            _updateShareImgPreview();
-        }, 600);
     };
 
     modal.classList.remove('hidden');
@@ -1750,22 +1746,6 @@ window.openShareModal = function() {
         if (textContent) textContent.value = generateShareTextWithReferral();
     });
 };
-
-// 更新 Modal 內 PC 圖片預覽區
-function _updateShareImgPreview() {
-    const preview = document.getElementById('share-img-preview');
-    const downloadBtn = document.getElementById('btn-download-render');
-    if (!preview) return;
-    const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
-    const url = afterImg ? (afterImg.cloud_url || afterImg.file_url || '') : '';
-    if (url) {
-        preview.innerHTML = `<img src="${url}" class="w-full h-full object-cover rounded-lg" style="max-height:80px;">`;
-        if (downloadBtn) { downloadBtn.href = url; downloadBtn.classList.remove('opacity-30', 'pointer-events-none'); }
-    } else {
-        preview.innerHTML = '<span class="text-[9px] text-white/20 uppercase tracking-wider">尚未選圖</span>';
-        if (downloadBtn) { downloadBtn.removeAttribute('href'); downloadBtn.classList.add('opacity-30', 'pointer-events-none'); }
-    }
-}
 
 window.closeShareModal = function() {
     const modal = document.getElementById('share-modal');

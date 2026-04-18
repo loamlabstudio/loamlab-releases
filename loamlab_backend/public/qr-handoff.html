@@ -73,12 +73,18 @@
         }
 
         function buildPostText(textData) {
-            const tmpl = '【 {project} 】\n\n{content}\n\nDesign: {designer}\nRenderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n🎁 Try it for free & get 100 bonus points:\nhttps://loamlab-camera.vercel.app/?ref={referral_code}\n\n#sketchup #architectural #render3d';
-            return tmpl
-                .replace(/{project}/g, textData.project || '設計專案')
-                .replace(/{designer}/g, textData.designer || '@designer')
-                .replace(/{content}/g, textData.content || '')
-                .replace(/{referral_code}/g, textData.referral_code || '');
+            const ref = textData.referral_code || '';
+            const hasDetails = textData.project || textData.designer || textData.content;
+            if (hasDetails) {
+                const tmpl = '【 {project} 】\n\n{content}\n\nDesign: {designer}\nRenderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n🎁 Try it for free & get 100 bonus points:\nhttps://loamlab-camera.vercel.app/?ref={referral_code}\n\n#sketchup #architectural #render3d';
+                return tmpl
+                    .replace(/{project}/g, textData.project || '')
+                    .replace(/{designer}/g, textData.designer || '')
+                    .replace(/{content}/g, textData.content || '')
+                    .replace(/{referral_code}/g, ref);
+            }
+            // 無自定義內容時的精簡預設模板
+            return `Rendered with loamlab-camera — SU Realistic Rendering & Multi-angle Gen\n\n🎁 Try it free & get 100 bonus points:\nhttps://loamlab-camera.vercel.app/?ref=${ref}\n\n#sketchup #architectural #render3d #AIrender`;
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
@@ -121,18 +127,16 @@
                     imagesGrid.appendChild(div);
                 }
 
-                // 解碼文字
-                let contentText = '';
+                // 解碼文字（無 d= 參數時用預設模板）
+                let textData = { referral_code: ref || '' };
                 if (dataBase64) {
                     try {
                         const decoded = decodeURIComponent(escape(atob(dataBase64)));
                         const obj = JSON.parse(decoded);
-                        contentText = buildPostText({ ...obj, project: obj.p, designer: obj.d, content: obj.c, referral_code: ref || '' });
-                    } catch (e) {
-                        contentText = '無法解碼內容，請在電腦端重新分享。';
-                    }
+                        textData = { ...obj, project: obj.p, designer: obj.d, content: obj.c, referral_code: ref || '' };
+                    } catch (e) {}
                 }
-                textArea.value = contentText;
+                textArea.value = buildPostText(textData);
                 textSection.classList.remove('hidden');
                 copyBtn.classList.remove('hidden');
 

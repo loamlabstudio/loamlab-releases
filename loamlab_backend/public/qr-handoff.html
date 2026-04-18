@@ -111,8 +111,8 @@
 
             const imgParam = params.get('img');
 
-            // === 最新模式：img=URL 直接帶圖片網址 + d=base64 帶文字 ===
-            if (imgParam || dataBase64) {
+            // === 主流程：有 img / d / ref 任一參數就顯示內容（不進 error state）===
+            if (imgParam || dataBase64 || ref) {
                 loadingEl.classList.add('hidden');
 
                 // 顯示圖片（如有）

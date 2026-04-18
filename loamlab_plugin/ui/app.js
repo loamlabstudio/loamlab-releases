@@ -1674,11 +1674,46 @@ function _buildShareUrl() {
     const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : 'https://loamlab-camera.vercel.app';
     const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
     const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
-    // 只用 cloud_url（已在雲端），排除本機路徑
-    const imgUrl = afterImg ? (afterImg.cloud_url || '') : '';
+    const rawUrl = afterImg ? (afterImg.cloud_url || '') : '';
+    // 只用 http(s) 雲端 URL，排除本機路徑（如 C:\Users\...）
+    const imgUrl = rawUrl.startsWith('http') ? rawUrl : '';
     let url = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}`;
     if (imgUrl) url += `&img=${encodeURIComponent(imgUrl)}`;
     return url;
+}
+
+// 下載渲染圖（fetch blob → 觸發下載；失敗時開新分頁）
+window.downloadShareImage = async function() {
+    const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
+    const url = afterImg ? (afterImg.cloud_url || afterImg.file_url || '') : '';
+    if (!url) return;
+    try {
+        const resp = await fetch(url);
+        const blob = await resp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = 'loamlab-render.jpg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch (e) {
+        window.open(url, '_blank');
+    }
+};
+
+// 根據 _shareImagesPool 更新下載按鈕狀態
+function _updateDownloadBtn() {
+    const btn = document.getElementById('btn-download-render');
+    if (!btn) return;
+    const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
+    const url = afterImg ? (afterImg.cloud_url || afterImg.file_url || '') : '';
+    if (url) {
+        btn.classList.remove('opacity-30', 'pointer-events-none');
+    } else {
+        btn.classList.add('opacity-30', 'pointer-events-none');
+    }
 }
 
 function _renderQRCode(qrContainer, url) {
@@ -1725,6 +1760,7 @@ window.openShareModal = function() {
     // 即時產生 QR
     const qrContainer = document.getElementById('share-qrcode');
     if (qrContainer) _renderQRCode(qrContainer, _buildShareUrl());
+    _updateDownloadBtn();
 
     // 輸入框變更時 debounce 更新文字預覽（QR 不因輸入框變更而重建）
     window._updateQRCode = function() {
@@ -2230,7 +2266,7 @@ window.renderShareImagePool = function() {
     const pool = document.getElementById('share-image-pool');
     const count = document.getElementById('share-img-count');
     if (!pool || !count || !window._shareImagesPool) return;
-    
+    _updateDownloadBtn();
     count.textContent = window._shareImagesPool.length + " 張圖片";
     
     if(window._shareImagesPool.length === 0){

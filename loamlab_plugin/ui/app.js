@@ -1388,8 +1388,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // 初始化時立即顯示預設成本
     updateCostPreview();
 
-    const textPrompt = document.getElementById('user-prompt-input');
-
     // 批量渲染前建立場景骨架卡片（Start Engine 時立即顯示，截圖回來再填縮略圖）
     function _buildReadyGrid(scenes) {
         const gridEl = document.getElementById('preview-grid');
@@ -1457,7 +1455,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const checkboxes = document.querySelectorAll('input[name="scene"]:checked');
         const selectedScenes = Array.from(checkboxes).map(cb => cb.value);
-        const userPrompt = textPrompt ? textPrompt.value.trim() : "";
+        const userPrompt = "";
 
         // 依工具組裝最終 Prompt
         let finalPrompt = userPrompt;

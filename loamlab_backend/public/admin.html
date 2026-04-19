@@ -281,12 +281,20 @@
         <button onclick="loadDefaultT1Nodes()" class="bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 px-3 py-1 rounded-lg text-xs transition-colors">
           載入預設 17 節點
         </button>
-        <button onclick="addT1Node()" class="bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 border border-cyan-600/50 px-3 py-1 rounded-lg text-xs font-semibold transition-colors">
-          + 新增節點
-        </button>
       </div>
     </div>
-    
+
+    <!-- 設定包管理列 -->
+    <div class="flex items-center gap-2 mb-3 pb-3 border-b border-white/[0.06]">
+      <span class="text-[10px] text-gray-600 uppercase tracking-widest font-bold shrink-0">設定包</span>
+      <div id="admin-presets-list" class="flex flex-wrap gap-1.5 flex-1"></div>
+      <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+        <button onclick="saveAdminPreset()" class="bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 border border-cyan-600/50 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors">+ 保存當前</button>
+        <button onclick="exportAdminPreset()" class="bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 px-2.5 py-1 rounded-lg text-[11px] transition-colors">↑ 導出 JSON</button>
+        <button onclick="importAdminPreset()" class="bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 px-2.5 py-1 rounded-lg text-[11px] transition-colors">↓ 匯入 JSON</button>
+      </div>
+    </div>
+
     <!-- 雙欄：左節點清單 + 右黏性預覽 -->
     <div class="flex gap-5 items-start mt-3">
       <div id="t1-nodes-container" class="flex-1 space-y-3 min-w-0">
@@ -618,6 +626,7 @@ async function loadAll() {
     loadEngineConfig();
     if (!t1NodesDirty) loadT1Nodes();
     if (!optionsDirty) loadOptions();
+    renderAdminPresets();
     
     // 聚合數據
     const combined = { 
@@ -1068,6 +1077,7 @@ function renderT1Nodes() {
       pieces.push(`<div class="flex items-center gap-2 mt-4 mb-1">
         <div class="h-px flex-1 bg-white/[0.06]"></div>
         <span class="text-[9px] uppercase tracking-widest text-gray-600 font-bold shrink-0">${label}</span>
+        <button onclick="addT1Node('${grp}')" class="text-[9px] text-cyan-700 hover:text-cyan-400 transition-colors font-semibold shrink-0 px-1">+ 新增</button>
         <div class="h-px flex-1 bg-white/[0.06]"></div>
       </div>`);
     }
@@ -1229,11 +1239,11 @@ function renderT1Nodes() {
   container.innerHTML = pieces.join('');
 }
 
-function addT1Node() {
+function addT1Node(group) {
   t1NodesData.push({
     id: 'new_node_' + Date.now().toString(36),
     type: 'text',
-    group: 'scene_lighting',
+    group: group || 'scene_lighting',
     labels: { 'en-US': 'New Node', 'zh-TW': '新節點', 'zh-CN': '新节点', 'es-ES': 'Nuevo nodo', 'pt-BR': 'Novo nó', 'ja-JP': '新規ノード' },
     placeholders: { 'en-US': 'Enter value...', 'zh-TW': '請輸入...', 'zh-CN': '请输入...', 'es-ES': 'Ingrese valor...', 'pt-BR': 'Digite o valor...', 'ja-JP': '値を入力...' },
     prompt_fragment: '{{val}}'
@@ -1646,6 +1656,98 @@ function loadDefaultOptions() {
   ];
   optionsDirty = true;
   renderT1Nodes();
+}
+
+// ── Admin 設定包管理 ──────────────────────────────────────────────────────
+const ADMIN_PRESETS_KEY = 'loamlab_admin_presets';
+
+function _getAdminPresets() {
+  try { return JSON.parse(localStorage.getItem(ADMIN_PRESETS_KEY) || '[]'); } catch { return []; }
+}
+function _setAdminPresets(arr) {
+  localStorage.setItem(ADMIN_PRESETS_KEY, JSON.stringify(arr));
+}
+
+function renderAdminPresets() {
+  const list = document.getElementById('admin-presets-list');
+  if (!list) return;
+  const presets = _getAdminPresets();
+  if (presets.length === 0) {
+    list.innerHTML = '<span class="text-[10px] text-gray-700 italic">尚無設定包，點「保存當前」建立</span>';
+    return;
+  }
+  list.innerHTML = presets.map((p, i) => `
+    <span class="inline-flex items-center gap-1 bg-black/40 border border-cyan-600/20 text-cyan-300 rounded-full px-2.5 py-0.5 text-[11px] cursor-pointer hover:border-cyan-500/50 transition-colors group"
+          onclick="loadAdminPreset(${i})" title="點擊載入：${p.name}">
+      ${p.name}
+      <button type="button" onclick="event.stopPropagation();deleteAdminPreset(${i})"
+        class="text-[9px] text-gray-600 hover:text-red-400 transition-colors leading-none opacity-0 group-hover:opacity-100 ml-0.5">✕</button>
+    </span>`).join('');
+}
+
+function saveAdminPreset() {
+  const name = prompt('設定包名稱：', '自訂設定 ' + new Date().toLocaleDateString('zh-TW'));
+  if (!name) return;
+  const presets = _getAdminPresets();
+  presets.push({ name: name.trim(), created_at: Date.now(), nodes: JSON.parse(JSON.stringify(t1NodesData)), options: JSON.parse(JSON.stringify(optionsData)) });
+  _setAdminPresets(presets);
+  renderAdminPresets();
+}
+
+function loadAdminPreset(idx) {
+  const presets = _getAdminPresets();
+  const p = presets[idx];
+  if (!p) return;
+  if (!confirm(`載入設定包「${p.name}」？當前未儲存的節點和選項將被覆蓋。`)) return;
+  t1NodesData = JSON.parse(JSON.stringify(p.nodes || []));
+  optionsData = JSON.parse(JSON.stringify(p.options || []));
+  t1NodesDirty = true;
+  optionsDirty = true;
+  renderT1Nodes();
+  const status = document.getElementById('t1-nodes-status');
+  if (status) { status.textContent = `✅ 已載入「${p.name}」，記得按儲存`; status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 4000); }
+}
+
+function deleteAdminPreset(idx) {
+  const presets = _getAdminPresets();
+  if (!confirm(`刪除設定包「${presets[idx]?.name}」？`)) return;
+  presets.splice(idx, 1);
+  _setAdminPresets(presets);
+  renderAdminPresets();
+}
+
+function exportAdminPreset() {
+  const data = { nodes: t1NodesData, options: optionsData, exported_at: new Date().toISOString() };
+  const json = JSON.stringify(data, null, 2);
+  // 複製到剪貼簿 + 下載
+  navigator.clipboard.writeText(json).catch(() => {});
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `loamlab_nodes_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+
+function importAdminPreset() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.nodes && !data.options) { alert('格式不符，請選擇由本系統導出的 JSON'); return; }
+      if (!confirm(`匯入 JSON（${data.nodes?.length || 0} 節點 / ${data.options?.length || 0} 選項）？當前設定將被覆蓋。`)) return;
+      if (data.nodes) { t1NodesData = data.nodes; t1NodesDirty = true; }
+      if (data.options) { optionsData = data.options; optionsDirty = true; }
+      renderT1Nodes();
+      const status = document.getElementById('t1-nodes-status');
+      if (status) { status.textContent = `✅ 匯入成功，記得按儲存`; status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 4000); }
+    } catch(err) { alert('JSON 解析失敗：' + err.message); }
+  };
+  input.click();
 }
 
 function previewPrompt() {

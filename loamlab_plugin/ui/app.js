@@ -374,14 +374,15 @@ function exportPresetCode(idx) {
     const p = userPresets[idx];
     if (!p) return;
     const code = btoa(encodeURIComponent(JSON.stringify(p.data)));
-    navigator.clipboard?.writeText(code).catch(() => {});
-    // 臨時顯示分享碼
+    const row = document.getElementById('t1-export-code-row-' + idx);
     const codeEl = document.getElementById('t1-export-code-' + idx);
-    if (codeEl) {
-        codeEl.value = code;
-        codeEl.classList.remove('hidden');
-        codeEl.select();
-    }
+    if (!row || !codeEl) return;
+    const isOpen = !row.classList.contains('hidden');
+    if (isOpen) { row.classList.add('hidden'); return; }
+    codeEl.value = code;
+    row.classList.remove('hidden');
+    codeEl.select();
+    navigator.clipboard?.writeText(code).catch(() => {});
 }
 
 function importPresetCode() {
@@ -409,15 +410,32 @@ function renderPresets() {
         return;
     }
     list.innerHTML = userPresets.map((p, i) => `
-        <div class="flex items-center gap-1 bg-black/30 border border-white/5 rounded-lg px-2 py-1.5">
-            <span class="flex-1 text-[10px] text-gray-300 truncate" title="${p.name}">${p.name}</span>
-            <button onclick="applyPreset(${i})" class="text-[9px] px-1.5 py-0.5 rounded bg-red-600/20 border border-red-500/30 text-red-300 hover:bg-red-600/30 shrink-0">套用</button>
-            <div class="relative shrink-0">
-                <button onclick="exportPresetCode(${i})" class="text-[9px] px-1.5 py-0.5 rounded border border-white/10 text-gray-500 hover:text-white">分享</button>
-                <input id="t1-export-code-${i}" type="text" readonly class="hidden absolute bottom-full right-0 mb-1 w-48 text-[9px] bg-black border border-white/20 rounded px-1 py-0.5 text-gray-300 z-50" onclick="this.select()">
+        <div class="flex flex-col gap-1 bg-black/30 border border-white/5 rounded-lg px-2 py-1.5">
+            <div class="flex items-center gap-1">
+                <span class="flex-1 text-[10px] text-gray-300 truncate" title="${p.name}">${p.name}</span>
+                <button onclick="applyPreset(${i})" class="text-[9px] px-1.5 py-0.5 rounded bg-red-600/20 border border-red-500/30 text-red-300 hover:bg-red-600/30 shrink-0">套用</button>
+                <button onclick="exportPresetCode(${i})" class="text-[9px] px-1.5 py-0.5 rounded border border-white/10 text-gray-500 hover:text-white shrink-0">分享</button>
+                <button onclick="deletePreset(${i})" class="text-[9px] text-gray-600 hover:text-red-400 shrink-0">✕</button>
             </div>
-            <button onclick="deletePreset(${i})" class="text-[9px] text-gray-600 hover:text-red-400 shrink-0">✕</button>
+            <div id="t1-export-code-row-${i}" class="hidden flex items-center gap-1">
+                <input id="t1-export-code-${i}" type="text" readonly
+                    class="flex-1 min-w-0 text-[9px] bg-black/60 border border-white/15 rounded px-1.5 py-1 text-green-300 font-mono"
+                    onclick="this.select()" placeholder="">
+                <button onclick="copyPresetCode(${i})" id="t1-copy-btn-${i}"
+                    class="text-[9px] px-1.5 py-1 rounded bg-white/5 border border-white/10 text-gray-400 hover:text-white shrink-0 transition-colors">複製</button>
+            </div>
         </div>`).join('');
+}
+
+function copyPresetCode(idx) {
+    const input = document.getElementById('t1-export-code-' + idx);
+    const btn = document.getElementById('t1-copy-btn-' + idx);
+    if (!input || !input.value) return;
+    navigator.clipboard?.writeText(input.value).catch(() => {
+        input.select();
+        document.execCommand('copy');
+    });
+    if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = '複製'; }, 1500); }
 }
 
 function setActiveTool(n, skipTutorial) {

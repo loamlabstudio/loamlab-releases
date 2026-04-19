@@ -275,9 +275,6 @@
         <button onclick="translateAllOptions()" class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-600/50 px-3 py-1 rounded-lg text-xs transition-colors" id="btn-translate-options">
           一鍵翻譯 Value
         </button>
-        <button onclick="translateAllT1Nodes()" id="btn-translate-nodes" class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-600/50 px-3 py-1 rounded-lg text-xs transition-colors">
-          一鍵翻譯節點
-        </button>
         <button onclick="loadDefaultT1Nodes()" class="bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 px-3 py-1 rounded-lg text-xs transition-colors">
           載入預設 17 節點
         </button>
@@ -1077,6 +1074,7 @@ function renderT1Nodes() {
       pieces.push(`<div class="flex items-center gap-2 mt-4 mb-1">
         <div class="h-px flex-1 bg-white/[0.06]"></div>
         <span class="text-[9px] uppercase tracking-widest text-gray-600 font-bold shrink-0">${label}</span>
+        <button id="btn-translate-grp-${grp}" onclick="translateGroupNodes('${grp}')" class="text-[9px] text-blue-700 hover:text-blue-400 transition-colors shrink-0 px-1" title="翻譯此版塊所有節點">↻ 翻譯</button>
         <button onclick="addT1Node('${grp}')" class="text-[9px] text-cyan-700 hover:text-cyan-400 transition-colors font-semibold shrink-0 px-1">+ 新增</button>
         <div class="h-px flex-1 bg-white/[0.06]"></div>
       </div>`);
@@ -1337,83 +1335,80 @@ function removeT1Node(idx) {
   }
 }
 
-async function translateAllT1Nodes() {
-  const gtLangMap = { 'zh-TW': 'zh-TW', 'en-US': 'en', 'zh-CN': 'zh-CN', 'es-ES': 'es', 'pt-BR': 'pt', 'ja-JP': 'ja' };
-  const allLocales = ['zh-TW', 'en-US', 'zh-CN', 'es-ES', 'pt-BR', 'ja-JP'];
+// ── 翻譯共用 ──────────────────────────────────────────────────────────────
+const _GT_LANG_MAP = { 'zh-TW': 'zh-TW', 'en-US': 'en', 'zh-CN': 'zh-CN', 'es-ES': 'es', 'pt-BR': 'pt', 'ja-JP': 'ja' };
+const _ALL_LOCALES  = ['zh-TW', 'en-US', 'zh-CN', 'es-ES', 'pt-BR', 'ja-JP'];
 
-  async function gtTranslate(text, sl, tl) {
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
-    const r = await fetch(url);
-    const j = await r.json();
-    return j[0].map(s => s[0]).join('');
+async function _gtTranslate(text, sl, tl) {
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
+  const r = await fetch(url);
+  const j = await r.json();
+  return j[0].map(s => s[0]).join('');
+}
+
+function _findBestSrc(obj) {
+  for (const l of ['zh-TW', 'zh-CN', 'en-US', 'es-ES', 'pt-BR', 'ja-JP']) {
+    if (obj?.[l]?.trim()) return { locale: l, text: obj[l].trim() };
   }
+  return null;
+}
 
-  function findBestSource(obj) {
-    for (const l of ['zh-TW', 'zh-CN', 'en-US', 'es-ES', 'pt-BR', 'ja-JP']) {
-      if (obj?.[l]?.trim()) return { locale: l, text: obj[l].trim() };
-    }
-    return null;
-  }
-
-  const btn = document.getElementById('btn-translate-nodes');
+async function _doTranslateNodes(indices, btnEl, origText) {
   const status = document.getElementById('t1-nodes-status');
-  btn.innerText = '翻譯中...';
-  btn.disabled = true;
-  status.classList.remove('hidden');
-
-  const userNodes = t1NodesData.filter(n => !n.system);
+  if (btnEl) { btnEl.innerText = '翻譯中...'; btnEl.disabled = true; }
+  if (status) status.classList.remove('hidden');
   let done = 0;
-
   try {
-    for (let idx = 0; idx < t1NodesData.length; idx++) {
+    for (const idx of indices) {
       const node = t1NodesData[idx];
-      if (node.system) continue;
-
-      // 翻譯 labels
-      const labelSrc = findBestSource(node.labels);
+      // labels
+      const labelSrc = _findBestSrc(node.labels);
       if (labelSrc) {
-        const sl = gtLangMap[labelSrc.locale];
-        const results = await Promise.all(allLocales.map(locale =>
-          locale === labelSrc.locale
-            ? Promise.resolve(labelSrc.text)
-            : gtTranslate(labelSrc.text, sl, gtLangMap[locale]).catch(() => node.labels?.[locale] || '')
+        const sl = _GT_LANG_MAP[labelSrc.locale];
+        const results = await Promise.all(_ALL_LOCALES.map(l =>
+          l === labelSrc.locale ? Promise.resolve(labelSrc.text)
+            : _gtTranslate(labelSrc.text, sl, _GT_LANG_MAP[l]).catch(() => node.labels?.[l] || '')
         ));
         if (!t1NodesData[idx].labels) t1NodesData[idx].labels = {};
-        allLocales.forEach((locale, i) => { t1NodesData[idx].labels[locale] = results[i]; });
+        _ALL_LOCALES.forEach((l, i) => { t1NodesData[idx].labels[l] = results[i]; });
       }
-
-      // 翻譯 placeholders
-      const phSrc = findBestSource(node.placeholders);
+      // placeholders
+      const phSrc = _findBestSrc(node.placeholders);
       if (phSrc) {
-        const sl = gtLangMap[phSrc.locale];
-        const results = await Promise.all(allLocales.map(locale =>
-          locale === phSrc.locale
-            ? Promise.resolve(phSrc.text)
-            : gtTranslate(phSrc.text, sl, gtLangMap[locale]).catch(() => node.placeholders?.[locale] || '')
+        const sl = _GT_LANG_MAP[phSrc.locale];
+        const results = await Promise.all(_ALL_LOCALES.map(l =>
+          l === phSrc.locale ? Promise.resolve(phSrc.text)
+            : _gtTranslate(phSrc.text, sl, _GT_LANG_MAP[l]).catch(() => node.placeholders?.[l] || '')
         ));
         if (!t1NodesData[idx].placeholders) t1NodesData[idx].placeholders = {};
-        allLocales.forEach((locale, i) => { t1NodesData[idx].placeholders[locale] = results[i]; });
+        _ALL_LOCALES.forEach((l, i) => { t1NodesData[idx].placeholders[l] = results[i]; });
       }
-
-      // 翻譯 default → 英文（若含中文，渲染提示詞需為英文）
+      // default → EN（含中日文時自動英譯）
       if (node.default && /[\u4e00-\u9fff\u3040-\u30ff]/.test(String(node.default))) {
-        const translated = await gtTranslate(String(node.default), 'auto', 'en').catch(() => String(node.default));
+        const translated = await _gtTranslate(String(node.default), 'auto', 'en').catch(() => String(node.default));
         t1NodesData[idx].default = translated.trim();
       }
-
       done++;
-      status.innerText = `翻譯中... ${done} / ${userNodes.length}`;
+      if (status) status.innerText = `翻譯中... ${done} / ${indices.length}`;
     }
-
     t1NodesDirty = true;
     renderT1Nodes();
-    status.innerText = `✅ 已翻譯 ${done} 個節點，請確認後儲存`;
-    setTimeout(() => status.classList.add('hidden'), 5000);
+    if (status) { status.innerText = `✅ 已翻譯 ${done} 個節點，記得儲存`; setTimeout(() => status.classList.add('hidden'), 4000); }
   } catch(e) {
-    status.innerText = '❌ 翻譯失敗，請手動填寫';
+    if (status) status.innerText = '❌ 翻譯失敗，請手動填寫';
   }
-  btn.innerText = '一鍵翻譯所有節點';
-  btn.disabled = false;
+  if (btnEl) { btnEl.innerText = origText; btnEl.disabled = false; }
+}
+
+async function translateAllT1Nodes() {
+  const indices = t1NodesData.map((n, i) => (!n.system ? i : -1)).filter(i => i >= 0);
+  await _doTranslateNodes(indices, null, '');
+}
+
+async function translateGroupNodes(grp) {
+  const btn = document.getElementById('btn-translate-grp-' + grp);
+  const indices = t1NodesData.map((n, i) => (!n.system && n.group === grp ? i : -1)).filter(i => i >= 0);
+  await _doTranslateNodes(indices, btn, '↻ 翻譯');
 }
 
 let _previewTimer = null;

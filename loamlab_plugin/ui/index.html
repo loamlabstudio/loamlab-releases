@@ -244,6 +244,16 @@
         }
         .node-tag-remove:hover { color: #f87171; }
         .node-tags-placeholder { font-size: 11px; color: rgba(255, 255, 255, 0.2); font-style: italic; }
+        /* 個人自訂 Chip */
+        .node-chip-personal { border-style: dashed !important; border-color: rgba(220,38,38,0.35) !important; background: rgba(220,38,38,0.06) !important; }
+        .node-chip-del { font-size: 8px; color: rgba(255,255,255,0.25); cursor: pointer; margin-left: 2px; line-height: 1; }
+        .node-chip-del:hover { color: #f87171; }
+        /* 自訂 chip 輸入列（append 節點） */
+        .node-custom-chip-row { display: flex; gap: 4px; align-items: center; margin-top: 4px; }
+        .node-custom-chip-input { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 2px 8px; font-size: 10px; color: #fff; outline: none; }
+        .node-custom-chip-input:focus { border-color: rgba(220,38,38,0.4); }
+        .node-custom-chip-btn { background: rgba(220,38,38,0.15); border: 1px solid rgba(220,38,38,0.3); border-radius: 6px; color: #fca5a5; font-size: 11px; padding: 1px 7px; cursor: pointer; line-height: 1.6; transition: background .15s; }
+        .node-custom-chip-btn:hover { background: rgba(220,38,38,0.28); }
 
         /* Slider Styles */
         .node-slider-container {
@@ -631,11 +641,6 @@
                                 <span class="text-[12px] tracking-wider uppercase font-semibold" data-i18n="advanced_settings">進階渲染設定</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <button id="btn-prompt-mode-toggle" type="button"
-                                    onclick="event.preventDefault(); togglePromptMode()"
-                                    class="text-[9px] px-1.5 py-0.5 rounded border border-white/10 text-gray-500 hover:text-white hover:border-white/30 transition-colors select-none">
-                                    ⚙ Nodes
-                                </button>
                                 <svg class="w-4 h-4 text-white/40 transform transition-transform group-open:rotate-180"
                                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -653,8 +658,31 @@
                             <div id="t1-dynamic-nodes" class="w-full flex flex-col pt-2 hidden">
                                 <!-- Nodes will be generated here -->
                             </div>
-                            <!-- User Material Fields (T1 only) -->
-                            <div id="t1-user-materials" class="w-full hidden"></div>
+                            <!-- 我的預設 Presets Panel (T1 only) -->
+                            <div id="t1-presets-section" class="w-full hidden mt-1 pt-2 border-t border-white/[0.05]">
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <span class="text-[10px] text-gray-500 uppercase tracking-wider">我的預設</span>
+                                    <div class="flex gap-1">
+                                        <button onclick="(() => { const n = prompt('預設名稱：'); if (n) saveCurrentPreset(n); })()"
+                                            class="text-[9px] px-2 py-0.5 rounded bg-red-600/20 border border-red-500/30 text-red-300 hover:bg-red-600/30 transition-colors">
+                                            ＋ 保存目前設定
+                                        </button>
+                                        <button onclick="document.getElementById('t1-import-row').classList.toggle('hidden')"
+                                            class="text-[9px] px-2 py-0.5 rounded border border-white/10 text-gray-500 hover:text-white transition-colors">
+                                            匯入
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="t1-import-row" class="hidden flex gap-1 mb-2">
+                                    <input id="t1-import-code" type="text" placeholder="貼上分享碼..."
+                                        class="flex-1 text-[10px] bg-black/40 border border-white/10 rounded px-2 py-1 text-white outline-none focus:border-red-500/40">
+                                    <button onclick="importPresetCode()"
+                                        class="text-[9px] px-2 py-0.5 rounded border border-white/10 text-gray-400 hover:text-white transition-colors">
+                                        確認
+                                    </button>
+                                </div>
+                                <div id="t1-presets-list" class="flex flex-col gap-1"></div>
+                            </div>
 
                             <!-- Resolution Selector -->
                             <div class="w-full flex flex-col pt-2">

@@ -395,7 +395,6 @@ export default async function handler(req, res) {
                     const val = node.system ? (node.value || '') : (adv[node.id] || node.default || '');
                     if (val.toString().trim()) rawValues[node.id] = val.toString().trim();
                 });
-
                 // 2. Gemini 翻譯（有 CJK 才翻，無 API Key 則原值）
                 const translatedValues = await translateValues(rawValues);
                 const translatedUserPrompt = translatedValues['__userPrompt__'] || userPrompt.trim();

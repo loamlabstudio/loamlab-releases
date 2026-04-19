@@ -247,12 +247,13 @@ module LoamLab
         base_image_url          = (params["base_image_url"] || "").to_s
         base_image_scene        = (params["base_image_scene"] || "底圖").to_s.dup.force_encoding("UTF-8")
         reference_image_base64  = (params["reference_image_base64"] || "").to_s
+        advanced_settings       = params["advanced_settings"] || {}
 
         dialog.execute_script("window.receiveFromRuby({status: 'rendering'})")
 
         # 延遲一點執行，避免阻塞前端 UI 動畫
         UI.start_timer(0.1, false) do
-            self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution, tool, base_image_url, base_image_scene, reference_image_base64)
+            self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution, tool, base_image_url, base_image_scene, reference_image_base64, advanced_settings)
         end
       end
 
@@ -676,7 +677,7 @@ module LoamLab
     end
 
     # 批量導出指定的場景為實體檔案並上傳 Coze
-    def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1, base_image_url="", base_image_scene="底圖", reference_image_base64="")
+    def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1, base_image_url="", base_image_scene="底圖", reference_image_base64="", advanced_settings={})
       model = Sketchup.active_model
       return unless model
       @@polling_dialog = dialog
@@ -759,7 +760,8 @@ module LoamLab
           user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
           request_body = JSON.dump({
             tool: tool,
-            parameters: { "image" => [data_uri], "user_prompt" => user_prompt, "resolution" => resolution, "aspect_ratio" => "16:9" }
+            parameters: { "image" => [data_uri], "user_prompt" => user_prompt, "resolution" => resolution, "aspect_ratio" => "16:9" },
+            "advanced_settings" => advanced_settings
           })
           req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
           req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
@@ -908,7 +910,8 @@ module LoamLab
                 parameters: {
                   "image" => [data_uri], "user_prompt" => user_prompt,
                   "resolution" => resolution, "aspect_ratio" => closest_ratio
-                }
+                },
+                "advanced_settings" => advanced_settings
               })
 
               # 改用 Net::HTTP + Thread，完全繞過 Sketchup::Http::Request 的事件迴圈問題

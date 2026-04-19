@@ -22,6 +22,49 @@ function sanitizeError(msg) {
         .replace(/https?:\/\/api\.[^\s"']+/g, '[API_ENDPOINT]');
 }
 
+// ── Gemini 翻譯 helper（有 CJK 字元 + API Key 才翻，否則原值回傳）──
+async function translateValues(valuesObj) {
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    if (!GEMINI_API_KEY) return valuesObj;
+    const hasCJK = Object.values(valuesObj).some(v => /[\u4e00-\u9fff\u3040-\u30ff]/.test(String(v)));
+    if (!hasCJK) return valuesObj;
+    try {
+        const resp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text:
+                `Translate these interior design/photography descriptions to professional English. Output ONLY a valid JSON object with identical keys and English values. No explanations.\n\n${JSON.stringify(valuesObj)}`
+              }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 1024 } }) }
+        );
+        const data = await resp.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const m = text.match(/\{[\s\S]*\}/);
+        if (m) return JSON.parse(m[0]);
+    } catch(e) { /* fallback: 回傳原值 */ }
+    return valuesObj;
+}
+
+// ── 單字串翻譯（有 CJK 才翻；失敗靜默降級返回原文）──
+async function translateToEnglish(text) {
+    if (!text || !text.trim()) return text;
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    if (!GEMINI_API_KEY) return text;
+    if (!/[\u4e00-\u9fff\u3040-\u30ff]/.test(text)) return text;
+    try {
+        const resp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text:
+                `Translate the following interior design description to professional English. Output ONLY the translated text, no explanations.\n\n${text}`
+              }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 512 } }) }
+        );
+        const data = await resp.json();
+        const translated = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (translated) return translated;
+    } catch(e) { /* 靜默降級 */ }
+    return text;
+}
+
 export default async function handler(req, res) {
     // 1. 允許跨域請求 (CORS)
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -39,9 +82,6 @@ export default async function handler(req, res) {
 
     // 環境變數
     const COZE_PAT = process.env.COZE_PAT;
-    const WORKFLOW_ID = process.env.WORKFLOW_ID || "7613251981235208197";
-    const NINEGRID_WORKFLOW_ID = process.env.NINEGRID_WORKFLOW_ID || "7620780480431030325";
-    const SMART_CANVAS_WORKFLOW_ID = process.env.SMART_CANVAS_WORKFLOW_ID || '7621816572496478261';
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
 
@@ -75,9 +115,8 @@ export default async function handler(req, res) {
 
     const userPayload = req.body;
     const activeTool = userPayload.tool || 1;
-    const activeWorkflowId = (activeTool === 3 && NINEGRID_WORKFLOW_ID) ? NINEGRID_WORKFLOW_ID : WORKFLOW_ID;
 
-    // 記錄原始輸入 URL（僅保存穩定的外部 URL，不保存 base64 或臨時簽名 URL）
+// 記錄原始輸入 URL（僅保存穩定的外部 URL，不保存 base64 或臨時簽名 URL）
     let inputUrlForHistory = null;
     const _firstInputImg = userPayload.parameters?.image?.[0];
     if (_firstInputImg && _firstInputImg.startsWith('http') && !_firstInputImg.includes('supabase.co')) {
@@ -157,9 +196,6 @@ export default async function handler(req, res) {
         }
         return res.status(403).json({ code: -1, msg: sanitizeError(`扣款失敗：${deductResult?.error}`) });
     }
-
-    let monthlyPoints = deductResult.points;
-    let lifetimePoints = deductResult.lifetime_points;
 
     // ★ 修復：用 try/catch 包裹交易紀錄，避免因 transactions 表不存在而崩潰主流程
     let transactionId = null;
@@ -294,7 +330,14 @@ export default async function handler(req, res) {
             if (mRes.data?.metadata?.models) toolModelMap = mRes.data.metadata.models;
         } catch(e) {}
 
-        const defaultP1 = "這是sketchup室內建模的模型（圖1），最後的目的是要轉換成iPhone拍的照片：先在後端生成一張鎖死空間感的深度圖（圖2）和一張所有元素鎖死並且轉換成色彩分明的通道圖（圖三），使用圖1參考圖2和圖3，在不改變模型材質和結構的情況下，99%還原圖片的空間感、相機位置、材質紋理方向，轉換成iPhone拍攝室內空間寫實照片，自然的光感，補充其他區域的漫反射光線，避免局部死黑或過曝，根據室內空間合理化極小不合理的元素，專業攝影級色彩，照片整體有自然的明暗過渡的層次,ultra-detailed";
+        // ── Prompt Engine Mode（nodes | legacy）──
+        let promptEngineMode = 'nodes';
+        try {
+            const eRes = await supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_ENGINE_CONFIG').order('created_at', { ascending: false }).limit(1).maybeSingle();
+            if (eRes.data?.metadata?.config?.prompt_engine_mode) promptEngineMode = eRes.data.metadata.config.prompt_engine_mode;
+        } catch(e) {}
+
+        const defaultP1 = "SketchUp interior model (Image 1). Backend pre-generates a spatial depth map (Image 2) and a color-segmented channel map (Image 3). Using Image 1 with reference to Images 2 and 3, restore 99% of spatial depth, camera position, and material texture direction without altering geometry or materials. Convert to a realistic interior photo. Apply natural lighting with supplemental diffuse fill to eliminate pure-black shadows and overexposure. Rationalize minor spatial inconsistencies. Professional photography-grade color grading with natural tonal gradation. ultra-detailed";
         const defaultP2 = "Edit IMAGE 1 (the original scene photo) by replacing objects as specified below.\nThe colored areas in IMAGE 2 are only location markers — do not use these marker colors in the final result.\n{{REF_TEXT}}\nChanges:\n{{CHANGES}}\n\nStrict Guidelines:\n① Final result must be based on IMAGE 1, appearing as a natural, original photograph — not based on IMAGE 2\n② Perspective & Proportion: Render all objects from IMAGE 1's camera angle, adjust orientation to match scene perspective; do not keep the reference photo's original angle\n③ Lighting & Color Temperature: Strictly follow IMAGE 1's light direction, intensity, shadows and color temperature; remove all color casts, glows and artificial lighting from references\n④ Boundary Control: Stay mainly within marked zones; minor edge feathering is allowed for seamless blending, but do not affect unrelated objects or surfaces\n⑤ Realism & Aesthetics: Replaced objects must have realistic materials, correct scale, elegant composition, and blend harmoniously into the original space with consistent style";
         const defaultP3 = "Based on the uploaded reference image, generate a single high-quality 3x3 interior visualization collage in exact 1:1 square aspect ratio. Output only the clean collage - no text, no titles, no watermarks, no borders, no labels.\nHighest priority: Faithfully extract and reproduce all details from the reference image, including material textures, light and shadow characteristics, color tones, object qualities, and unique atmosphere. All 9 panels must maintain the exact same spatial structure, furniture layout, and lighting direction. Accurate perspective with zero distortion or shifting.\n3x3 Mixed Grid Layout:\nTop Row Left: Left 45 wide long shot showing the full spatial layout and depth\nTop Row Center: Exact same viewpoint and framing as the uploaded reference image (visual anchor)\nTop Row Right: Close-up detail 1 - highly faithful reproduction of material textures and craftsmanship from the reference image\nMiddle Row Left: Medium shot focusing on main furniture arrangement and functional area, preserving the original light and shadow atmosphere\nMiddle Row Center: Close-up detail 2 - emphasizing light and shadow interaction and surface qualities from the reference image\nMiddle Row Right: Right 45 wide long shot showing the other side of the space\nBottom Row Left: Close-up detail 3 - faithfully presenting another dimension of details from the reference image (e.g., decorative elements, corner craftsmanship, or material contrast)\nBottom Row Center: Medium shot from an alternative angle showing spatial transparency and overall atmosphere, faithful to the original tone\nBottom Row Right: Balanced medium shot concluding with overall harmony and high-end quality\n\nTechnical Requirements:\nStrictly faithful to the reference image's materials, lighting, colors, and fine details; 8K ultra-high resolution with extreme detail; photorealistic material rendering with accurate reflections, refractions, and micro-surface details; professional multi-layer lighting; cinematic color grading with sophisticated, soft, and luxurious tones; extremely sharp, clean, noise-free, and distortion-free.\nGenerate a single cohesive 3x3 collage with strong visual rhythm and dramatic scale contrast, while perfectly capturing the unique details and atmosphere of the reference image.";
         
@@ -304,6 +347,13 @@ export default async function handler(req, res) {
         const defaultStyleNote = ". Ensure this image's overall lighting (direction, warmth, intensity) and color tone (temperature, saturation, luminance) match the second reference image so both appear from the same photography session. Spatial content and materials follow Image 1 only — do not reference the second image for those.";
         const p1StyleNote = systemPrompts.TOOL_1_BATCH_STYLE || defaultStyleNote;
 
+        // ── 進階節點配置 (T1 Nodes) ──
+        let t1Nodes = [];
+        try {
+            const nRes = await supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_T1_NODES').order('created_at', { ascending: false }).limit(1).maybeSingle();
+            if (nRes.data?.metadata?.nodes) t1Nodes = nRes.data.metadata.nodes;
+        } catch(e) {}
+
         // Method B：提前取得風格參考 URL（需在 finalPrompt 組裝前宣告）
         const styleRefUrl = (userPayload.parameters?.style_ref_url || '').trim();
 
@@ -312,8 +362,9 @@ export default async function handler(req, res) {
         let finalModel = toolModelMap[`tool${activeTool}`] || 'google/nano-banana-2/edit';
 
         if (activeTool === 2) {
+            const translatedPrompt2 = await translateToEnglish(userPrompt);
             let changes = [];
-            for (const part of (userPrompt || "").split(';')) {
+            for (const part of (translatedPrompt2 || "").split(';')) {
                 const p = part.trim();
                 if (p.includes(': ')) {
                     const spl = p.split(/: (.+)/);
@@ -328,10 +379,59 @@ export default async function handler(req, res) {
                 finalPrompt = p2.replace("{{REF_TEXT}}", refText).replace("{{CHANGES}}", changes.join('\n'));
             }
         } else if (activeTool === 3) {
-            finalPrompt = userPrompt.trim() ? p3 + ", " + userPrompt : p3;
+            const translatedPrompt3 = await translateToEnglish(userPrompt);
+            finalPrompt = translatedPrompt3.trim() ? p3 + ", " + translatedPrompt3 : p3;
         } else {
-            const styleNote = styleRefUrl ? p1StyleNote : "";
-            finalPrompt = userPrompt.trim() ? p1 + styleNote + ", " + userPrompt : p1 + styleNote;
+            // Tool 1: 嚴格 JSON 結構組裝（legacy mode 跳過節點直接拼接）
+            const adv = userPayload.advanced_settings || {};
+            const styleRefNote = styleRefUrl ? p1StyleNote : "";
+
+            if (promptEngineMode !== 'legacy' && t1Nodes.length > 0) {
+                // Nodes 模式：JSON 結構化提示詞
+                // 1. 收集所有值（system 節點用 node.value，用戶節點用 adv[node.id]；userPrompt 一同納入翻譯）
+                const rawValues = {};
+                if (userPrompt.trim()) rawValues['__userPrompt__'] = userPrompt.trim();
+                t1Nodes.forEach(node => {
+                    const val = node.system ? (node.value || '') : (adv[node.id] || node.default || '');
+                    if (val.toString().trim()) rawValues[node.id] = val.toString().trim();
+                });
+
+                // 2. Gemini 翻譯（有 CJK 才翻，無 API Key 則原值）
+                const translatedValues = await translateValues(rawValues);
+                const translatedUserPrompt = translatedValues['__userPrompt__'] || userPrompt.trim();
+
+                // 3. 建構 JSON 結構
+                const GROUP_CONFIG = {
+                    core_constraints: 'Core Constraints',
+                    scene_lighting:   'Scene & Lighting',
+                    materials:        'Material Control',
+                    photography:      'Photography Settings',
+                    rendering:        'Render Quality'
+                };
+                const jsonPrompt = {};
+                const projectType = translatedValues['project_type'] || '';
+                jsonPrompt['Project'] = `SU Screenshot to Realistic Photography${projectType ? ' - ' + projectType : ''}${translatedUserPrompt ? ' - ' + translatedUserPrompt : ''}`;
+
+                Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
+                    const section = {};
+                    t1Nodes.filter(n => n.group === group).forEach(node => {
+                        const val = translatedValues[node.id];
+                        if (val) section[node.labels?.['en-US'] || node.id] = val;
+                    });
+                    if (Object.keys(section).length > 0) jsonPrompt[title] = section;
+                });
+
+                // 4. 批量出圖風格一致性附加
+                if (styleRefUrl && styleRefNote) {
+                    jsonPrompt['Style Consistency'] = styleRefNote.replace(/^\.\s*/, '').trim();
+                }
+
+                finalPrompt = JSON.stringify(jsonPrompt, null, 2);
+            } else {
+                // Legacy 模式 或 無節點 fallback：傳統拼接（翻譯後拼接）
+                const translatedPrompt1 = await translateToEnglish(userPrompt);
+                finalPrompt = translatedPrompt1.trim() ? p1 + ", " + translatedPrompt1 : p1;
+            }
         }
 
         // ==========================================
@@ -341,7 +441,7 @@ export default async function handler(req, res) {
         if (!ATLASCLOUD_API_KEY) throw new Error("渲染引擎金鑰未設定，請聯繫管理員。");
 
         const resolutionMap = { '1k': '1k', '1K': '1k', '2k': '2k', '2K': '2k', '4k': '4k', '4K': '4k' };
-        const resVal = userPayload.resolution || '1k';
+        const resVal = userPayload.parameters?.resolution || userPayload.resolution || '1k';
 
         // 收集要傳送給 AtlasCloud 的影像
         let allImagesStrArray = [];
@@ -453,46 +553,4 @@ function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal, cost
     }]).then(({ error }) => {
         if (error) console.error('[render_history] save failed:', error.message);
     });
-}
-// 支援非同步 API (Banana 2 / Replicate) 的動態輪詢
-async function pollAsyncUrl(pollUrl) {
-    console.log('[Polling] Started for URL:', pollUrl);
-    let attempts = 0;
-    while (attempts < 60) {
-        attempts++;
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        try {
-            const r = await fetch(pollUrl);
-            if (r.status === 401 || r.status === 403) {
-                console.error('[Polling] Access Denied. Auth token required for polling.');
-                return null;
-            }
-            const data = await r.json();
-            
-            // Replicate / Banana standard
-            if (data.status === 'succeeded' || data.status === 'success' || data.status === 'COMPLETED') {
-                let imgUrl = null;
-                if (Array.isArray(data.output) && data.output.length > 0) imgUrl = data.output[0];
-                else if (typeof data.output === 'string') imgUrl = data.output;
-                else {
-                    const match = JSON.stringify(data).match(/https?:\/\/[^\s"'\\]+?\.(?:jpg|jpeg|png|webp)/i);
-                    if (match) imgUrl = match[0];
-                }
-                if (imgUrl) return imgUrl;
-            } else if (data.status === 'failed' || data.status === 'FAILED' || data.error) {
-                console.error('[Polling] Task failed remotely:', data.error);
-                return null;
-            }
-            
-            // Fallback for custom APIs mapping directly to output
-            if (data.output && !data.status) {
-                if (Array.isArray(data.output)) return data.output[0];
-                if (typeof data.output === 'string') return data.output;
-            }
-        } catch (e) {
-            console.log('[Polling] Check attempt failed:', e.message);
-        }
-    }
-    console.error('[Polling] Exceeded maximum attempts (180s timeout)');
-    return null;
 }

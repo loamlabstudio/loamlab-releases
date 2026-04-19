@@ -37,9 +37,12 @@ let selectedShotStyle = 'dramatic';
 let _baseImageEntry = null; // 工具 2/3/4：從歷史選取的底圖
 let _referenceImageBase64 = null; // 工具 2：本地上傳的參考圖 base64
 let t1NodesData = []; // Store Tool 1 advanced nodes configuration
+let optionsData = []; // SYSTEM_OPTIONS from backend
 
 const T1_GROUP_TITLES = {
+    meta:           { 'zh-TW': '場景類型', 'en-US': 'Project', 'zh-CN': '场景类型', 'es-ES': 'Proyecto', 'pt-BR': 'Projeto', 'ja-JP': 'プロジェクト' },
     scene_lighting: { 'zh-TW': '場景與光效', 'en-US': 'Scene & Lighting', 'zh-CN': '场景与光效', 'es-ES': 'Escena e Iluminación', 'pt-BR': 'Cena e Iluminação', 'ja-JP': 'シーンと照明' },
+    materials:      { 'zh-TW': '材質控制', 'en-US': 'Material Control', 'zh-CN': '材质控制', 'es-ES': 'Control de Materiales', 'pt-BR': 'Controle de Materiais', 'ja-JP': '素材コントロール' },
     photography:    { 'zh-TW': '攝影參數', 'en-US': 'Photography', 'zh-CN': '摄影参数', 'es-ES': 'Fotografía', 'pt-BR': 'Fotografia', 'ja-JP': '撮影設定' },
     rendering:      { 'zh-TW': '渲染精度', 'en-US': 'Render Quality', 'zh-CN': '渲染精度', 'es-ES': 'Calidad de Render', 'pt-BR': 'Qualidade de Render', 'ja-JP': 'レンダリング品質' }
 };
@@ -99,12 +102,23 @@ async function fetchT1Nodes() {
     }
 }
 
+async function fetchOptions() {
+    try {
+        const resp = await fetch(`${API_BASE}/api/stats?action=get_options`);
+        const data = await resp.json();
+        if (data.code === 0) {
+            optionsData = data.options || [];
+            renderT1Nodes(); // 重新渲染各節點 chips
+        }
+    } catch (e) { /* 靜默降級 */ }
+}
+
 function renderT1Nodes() {
     const container = document.getElementById('t1-dynamic-nodes');
     if (!container) return;
     container.innerHTML = '';
 
-    const GROUP_ORDER = ['scene_lighting', 'photography', 'rendering'];
+    const GROUP_ORDER = ['meta', 'scene_lighting', 'materials', 'photography', 'rendering'];
     const grouped = {};
     t1NodesData.forEach(node => {
         const g = node.group || 'other';
@@ -154,12 +168,43 @@ function renderT1Nodes() {
                 const valSpan = item.querySelector('.node-slider-val');
                 slider.addEventListener('input', (e) => { valSpan.textContent = e.target.value; });
             } else {
+                const nodeOpts = optionsData.filter(o => o.field_id === node.id);
+                const chipsHtml = nodeOpts.length > 0
+                    ? '<div class="node-chips">' + nodeOpts.map(o => '<button type="button" class="node-chip" data-chip-label="' + o.label.replace(/"/g, '&quot;') + '" data-chip-value="' + (o.value || o.label).replace(/"/g, '&quot;') + '" data-chip-strategy="' + (o.strategy || 'replace') + '">' + o.label + '</button>').join('') + '</div>'
+                    : '';
                 item.innerHTML = `
                     <label class="node-label">${label}</label>
                     <div class="node-input-wrapper">
                         <input type="text" id="t1-node-${node.id}" class="node-text-input" placeholder="${ph}">
+                        ${chipsHtml}
                     </div>
                 `;
+                if (nodeOpts.length > 0) {
+                    const input = item.querySelector('#t1-node-' + node.id);
+                    item.querySelectorAll('.node-chip').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            const val = btn.dataset.chipValue;
+                            const strategy = btn.dataset.chipStrategy;
+                            if (strategy === 'append') {
+                                const parts = input.value ? input.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+                                const i = parts.indexOf(val);
+                                if (i >= 0) { parts.splice(i, 1); btn.classList.remove('active'); }
+                                else { parts.push(val); btn.classList.add('active'); }
+                                input.value = parts.join(', ');
+                            } else {
+                                // replace：點同一個切換，點不同直接替換
+                                if (btn.classList.contains('active')) {
+                                    btn.classList.remove('active');
+                                    input.value = '';
+                                } else {
+                                    item.querySelectorAll('.node-chip').forEach(b => b.classList.remove('active'));
+                                    btn.classList.add('active');
+                                    input.value = val;
+                                }
+                            }
+                        });
+                    });
+                }
             }
             groupEl.appendChild(item);
         });
@@ -1114,8 +1159,9 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Fetch T1 dynamic nodes configuration
+    // Fetch T1 dynamic nodes + options library
     fetchT1Nodes();
+    fetchOptions();
 
     // 解析度切換時更新按鈕點數預覽，並顯示 4K 方案限制提示
     document.querySelectorAll('input[name="resolution"]').forEach(radio => {
@@ -1132,31 +1178,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // 初始化時立即顯示預設成本
     updateCostPreview();
 
-    // 材質標籤點擊事件 (組合提示詞迴圈)
     const textPrompt = document.getElementById('user-prompt-input');
-    const materialTags = document.querySelectorAll('#material-tags span');
-    materialTags.forEach(tag => {
-        tag.addEventListener('click', () => {
-            const val = tag.getAttribute('data-tag');
-            if (val) {
-                // 如果原本有字且最後不是逗號或空白，補個逗號
-                let currentVal = textPrompt.value.trim();
-                let appendText = val;
-                if (currentVal && !currentVal.endsWith(',')) {
-                    appendText = ', ' + val;
-                } else if (currentVal && currentVal.endsWith(',')) {
-                    appendText = ' ' + val;
-                }
-                textPrompt.value = currentVal + appendText;
-
-                // 視覺回饋: 讓標籤閃爍一下
-                tag.classList.add('bg-white/30', 'text-white', 'border-white/50');
-                setTimeout(() => {
-                    tag.classList.remove('bg-white/30', 'text-white', 'border-white/50');
-                }, 200);
-            }
-        });
-    });
 
     // 批量渲染前建立場景骨架卡片（Start Engine 時立即顯示，截圖回來再填縮略圖）
     function _buildReadyGrid(scenes) {
@@ -1690,39 +1712,6 @@ function _buildShareUrl() {
     return url;
 }
 
-// 下載渲染圖（fetch blob → 觸發下載；失敗時開新分頁）
-window.downloadShareImage = async function() {
-    const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
-    const url = afterImg ? (afterImg.cloud_url || afterImg.file_url || '') : '';
-    if (!url) return;
-    try {
-        const resp = await fetch(url);
-        const blob = await resp.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = 'loamlab-render.jpg';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-    } catch (e) {
-        window.open(url, '_blank');
-    }
-};
-
-// 根據 _shareImagesPool 更新下載按鈕狀態
-function _updateDownloadBtn() {
-    const btn = document.getElementById('btn-download-render');
-    if (!btn) return;
-    const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
-    const url = afterImg ? (afterImg.cloud_url || afterImg.file_url || '') : '';
-    if (url) {
-        btn.classList.remove('opacity-30', 'pointer-events-none');
-    } else {
-        btn.classList.add('opacity-30', 'pointer-events-none');
-    }
-}
 
 function _renderQRCode(qrContainer, url) {
     qrContainer.innerHTML = '';
@@ -1768,7 +1757,6 @@ window.openShareModal = function() {
     // 即時產生 QR
     const qrContainer = document.getElementById('share-qrcode');
     if (qrContainer) _renderQRCode(qrContainer, _buildShareUrl());
-    _updateDownloadBtn();
 
     // 輸入框變更時 debounce 重建 QR + 更新文字預覽（內容已放回 QR URL 中）
     window._updateQRCode = function() {
@@ -2278,7 +2266,6 @@ window.renderShareImagePool = function() {
     const pool = document.getElementById('share-image-pool');
     const count = document.getElementById('share-img-count');
     if (!pool || !count || !window._shareImagesPool) return;
-    _updateDownloadBtn();
     count.textContent = window._shareImagesPool.length + " 張圖片";
     
     if(window._shareImagesPool.length === 0){

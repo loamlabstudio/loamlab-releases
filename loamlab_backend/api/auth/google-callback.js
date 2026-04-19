@@ -114,7 +114,33 @@ export default async function handler(req, res) {
     }
 
     // 5. 確保 users 資料存在（新用戶給 60 點，舊用戶忽略衝突）
-    await supabase.from('users').upsert({ email, points: 60 }, {
+    let referredBy = null;
+    try {
+        if (req.headers.cookie) {
+            const cookies = req.headers.cookie.split(';');
+            for (let c of cookies) {
+                const [k, v] = c.trim().split('=');
+                if (k === 'loamlab_ref') {
+                    const referrerCode = decodeURIComponent(v);
+                    const { data: inviter } = await supabase.from('users')
+                        .select('email')
+                        .eq('referral_code', referrerCode.toUpperCase())
+                        .single();
+                    if (inviter && inviter.email !== email) {
+                        referredBy = inviter.email;
+                    }
+                    break;
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[google-callback] Failed to parse referral cookie:', e);
+    }
+
+    const upsertData = { email, points: 60 };
+    if (referredBy) upsertData.referred_by = referredBy;
+
+    await supabase.from('users').upsert(upsertData, {
         onConflict: 'email',
         ignoreDuplicates: true
     });

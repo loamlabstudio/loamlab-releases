@@ -129,63 +129,193 @@
     </div>
   </div>
 
-  <!-- 渲染工作流預設咒語管理 (Workflow Prompts) -->
-  <div class="card mb-5 border border-purple-600/30 bg-[#160f2e]/40">
+  <!-- IG 預設發文範本管理 (Share Template) -->
+  <div class="card mb-5 border border-pink-600/30 bg-[#2e1525]/40">
     <div class="flex items-center justify-between mb-3">
       <div class="text-sm font-semibold text-white flex items-center gap-2">
-        <span class="text-purple-400">✨</span> 渲染工作流預設咒語管理
+        <span class="text-pink-400">📸</span> IG 預設發文範本管理
       </div>
-      <div class="text-xs text-gray-500">修改後即時生效，取代原 Coze 的設定</div>
+      <div class="text-xs text-gray-500">提供外掛與手機版自動帶入。可用變數：{referral_code}</div>
+    </div>
+    <div class="flex items-center gap-2 mb-3">
+      <span class="text-xs text-gray-500">來源語言：</span>
+      <select id="share-source-lang" class="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-pink-400 outline-none focus:border-pink-600/50 transition-colors">
+        <option value="tw">🇹🇼 繁體中文</option>
+        <option value="cn">🇨🇳 简体中文</option>
+        <option value="us">🇺🇸 English</option>
+        <option value="es">🇪🇸 Español</option>
+        <option value="br">🇧🇷 Português</option>
+        <option value="jp">🇯🇵 日本語</option>
+      </select>
+      <button onclick="translateShareTemplate()" id="btn-translate-share" class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-600/50 px-3 py-1 rounded-lg text-xs font-semibold transition-colors">
+        一鍵翻譯至其他語言
+      </button>
+      <span id="translate-share-status" class="text-xs text-gray-500 hidden"></span>
+    </div>
+    <div class="grid grid-cols-2 gap-2 mb-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">🇺🇸 English</label>
+        <textarea id="share-us" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-pink-300/90 outline-none focus:border-pink-600/50 transition-colors placeholder-gray-600 resize-none h-24" placeholder="English..."></textarea>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">🇹🇼 繁體中文</label>
+        <textarea id="share-tw" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-pink-300/90 outline-none focus:border-pink-600/50 transition-colors placeholder-gray-600 resize-none h-24" placeholder="繁體中文..."></textarea>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">🇨🇳 简体中文</label>
+        <textarea id="share-cn" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-pink-300/90 outline-none focus:border-pink-600/50 transition-colors placeholder-gray-600 resize-none h-24" placeholder="简体中文..."></textarea>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">🇪🇸 Español</label>
+        <textarea id="share-es" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-pink-300/90 outline-none focus:border-pink-600/50 transition-colors placeholder-gray-600 resize-none h-24" placeholder="Español..."></textarea>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">🇧🇷 Português</label>
+        <textarea id="share-br" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-pink-300/90 outline-none focus:border-pink-600/50 transition-colors placeholder-gray-600 resize-none h-24" placeholder="Português..."></textarea>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">🇯🇵 日本語</label>
+        <textarea id="share-jp" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-pink-300/90 outline-none focus:border-pink-600/50 transition-colors placeholder-gray-600 resize-none h-24" placeholder="日本語..."></textarea>
+      </div>
+    </div>
+    <div class="flex justify-between items-center">
+      <div id="share-status" class="text-xs hidden text-green-400"></div>
+      <button onclick="saveShareTemplate()" class="bg-pink-600/20 hover:bg-pink-600/40 text-pink-400 border border-pink-600/50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ml-auto min-w-[5rem] flex items-center justify-center whitespace-nowrap" id="btn-save-share">
+        儲存範本
+      </button>
+    </div>
+  </div>
+
+  <!-- Prompt Engine Mode 切換 -->
+  <div class="card mb-4 border border-amber-600/30 bg-[#1a120a]/40">
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-sm font-semibold text-white flex items-center gap-2">
+        <span class="text-amber-400">⚙️</span> Prompt Engine Mode
+      </div>
+      <div id="engine-mode-badge" class="text-xs px-2 py-0.5 rounded-full bg-cyan-600/20 text-cyan-300 border border-cyan-600/30">讀取中...</div>
+    </div>
+    <div class="text-[11px] text-gray-500 mb-3 leading-relaxed">
+      <b class="text-cyan-300">Nodes</b>：使用 T1 節點系統組裝 JSON 結構化提示詞（推薦）。<br>
+      <b class="text-amber-300">Legacy</b>：節點系統維護時切換，直接使用備用咒語 + 用戶輸入拼接。
+    </div>
+    <div class="flex gap-2">
+      <button onclick="setEngineMode('nodes')" id="btn-mode-nodes"
+        class="flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors">
+        ● Nodes Mode
+      </button>
+      <button onclick="setEngineMode('legacy')" id="btn-mode-legacy"
+        class="flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors">
+        Legacy Mode
+      </button>
+    </div>
+    <div id="engine-mode-status" class="text-xs text-green-400 mt-2 hidden"></div>
+  </div>
+
+  <!-- 渲染工作流咒語管理 -->
+  <div class="card mb-5 border border-purple-600/30 bg-[#160f2e]/40">
+    <div class="flex items-center justify-between mb-4">
+      <div class="text-sm font-semibold text-white flex items-center gap-2">
+        <span class="text-purple-400">✨</span> 渲染工作流咒語管理
+      </div>
     </div>
 
-    <!-- 工作流結構預覽 -->
-    <div class="mb-4 bg-black/40 border border-purple-500/20 rounded-lg p-3 text-xs text-purple-300 font-mono leading-relaxed">
-      <div class="font-bold mb-2 text-purple-400">🔍 目前系統工作流架構 (直連 AtlasCloud)：</div>
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <div class="border border-white/5 p-2 rounded">
-          <span class="text-white">Tool 1: 真實渲染</span><br>
-          模型: google/nano-banana-2/edit<br>
-          組裝: [系統咒語] + [用戶咒語]<br>
-          輸入: [白模, 通道圖, 深度圖]
+    <!-- Tool 1 狀態提示（已由節點接管）-->
+    <div class="mb-4 bg-cyan-950/30 border border-cyan-600/20 rounded-lg p-3 flex items-start gap-3">
+      <div class="text-cyan-400 text-lg mt-0.5">🔗</div>
+      <div>
+        <div class="text-xs font-semibold text-cyan-300 mb-1">Tool 1 真實渲染 — 已由下方「進階節點管理」接管</div>
+        <div class="text-[11px] text-gray-500 leading-relaxed">
+          提示詞由「核心約束節點（系統固定）」＋「場景／攝影／渲染節點（用戶輸入）」自動組裝成 JSON 英文發送。<br>
+          僅在無節點配置時才使用下方備用咒語。
         </div>
-        <div class="border border-white/5 p-2 rounded">
-          <span class="text-white">Tool 2: 空間重塑</span><br>
-          模型: google/nano-banana-2/edit<br>
-          組裝: 套入 {{CHANGES}} 變數<br>
-          輸入: [實景相片, 遮罩圖]
-        </div>
-        <div class="border border-white/5 p-2 rounded">
-          <span class="text-white">Tool 3: 九宮格</span><br>
-          模型: google/nano-banana-2/edit<br>
-          組裝: [系統咒語] + [用戶附加]<br>
-          輸入: [參考圖]
-        </div>
+        <details class="mt-2">
+          <summary class="text-[10px] text-gray-600 cursor-pointer hover:text-gray-400 transition-colors">▶ Tool 1 備用咒語（無節點時生效）</summary>
+          <textarea id="prompt-t1" class="mt-2 w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[12px] text-gray-500 outline-none resize-y h-16 leading-relaxed"></textarea>
+        </details>
       </div>
     </div>
 
-    <div class="space-y-3">
+    <!-- Tool 1 批量風格一致性 -->
+    <div class="mb-4">
+      <label class="block text-xs font-semibold text-purple-300 mb-1">Tool 1 — 批量出圖風格鎖定 <span class="text-white/25 font-normal">（第二張起附加，鎖定第一張的光線色調）</span></label>
+      <textarea id="prompt-t1-batch-style" class="w-full bg-black/40 border border-purple-500/20 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-14 leading-relaxed"></textarea>
+    </div>
+
+    <div class="border-t border-white/5 pt-4 space-y-4">
+      <!-- Tool 2 -->
       <div>
-        <label class="block text-xs text-gray-400 mb-1">Tool 1: 真實渲染 / SmartCanvas</label>
-        <textarea id="prompt-t1" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-20 leading-relaxed"></textarea>
+        <label class="block text-xs font-semibold text-white/60 mb-1">Tool 2 — 空間重塑 SpaceReform <span class="text-white/25 font-normal">（使用 {{CHANGES}} 插入替換內容）</span></label>
+        <textarea id="prompt-t2" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-40 leading-relaxed"></textarea>
       </div>
+      <!-- Tool 3 -->
       <div>
-        <label class="block text-xs text-gray-400 mb-1">Tool 1: 批量出圖 — 風格一致性附加提示詞 <span class="text-white/30">（第二張起附加於主提示詞後，用於鎖定第一張的光線與色調）</span></label>
-        <textarea id="prompt-t1-batch-style" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-16 leading-relaxed"></textarea>
-      </div>
-      <div>
-        <label class="block text-xs text-gray-400 mb-1">Tool 2: 空間重塑 (SpaceReform)</label>
-        <textarea id="prompt-t2" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-48 leading-relaxed"></textarea>
-      </div>
-      <div>
-        <label class="block text-xs text-gray-400 mb-1">Tool 3: 九宮格 Collage</label>
-        <textarea id="prompt-t3" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-48 leading-relaxed"></textarea>
+        <label class="block text-xs font-semibold text-white/60 mb-1">Tool 3 — 九宮格 Collage</label>
+        <textarea id="prompt-t3" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-40 leading-relaxed"></textarea>
       </div>
     </div>
+
     <div class="flex justify-between mt-3 items-center">
       <div id="prompt-status" class="text-xs text-green-400 hidden"></div>
       <button onclick="savePrompts()" class="bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-600/50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ml-auto" id="btn-save-prompts">
-        儲存所有工作流設定
+        儲存工作流設定
       </button>
+    </div>
+  </div>
+
+  <!-- 工具 1 進階節點管理 (T1 Advanced Nodes) -->
+  <div class="card mb-5 border border-cyan-600/30 bg-[#0a1e2e]/40">
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-sm font-semibold text-white flex items-center gap-2">
+        <span class="text-cyan-400">🛠️</span> 工具 1 進階節點管理
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <button onclick="loadDefaultOptions()" class="bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 px-3 py-1 rounded-lg text-xs transition-colors">
+          載入官方 57 選項
+        </button>
+        <button onclick="translateAllOptions()" class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-600/50 px-3 py-1 rounded-lg text-xs transition-colors" id="btn-translate-options">
+          一鍵翻譯 Value
+        </button>
+        <button onclick="translateAllT1Nodes()" id="btn-translate-nodes" class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-600/50 px-3 py-1 rounded-lg text-xs transition-colors">
+          一鍵翻譯節點
+        </button>
+        <button onclick="loadDefaultT1Nodes()" class="bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 px-3 py-1 rounded-lg text-xs transition-colors">
+          載入預設 17 節點
+        </button>
+        <button onclick="addT1Node()" class="bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 border border-cyan-600/50 px-3 py-1 rounded-lg text-xs font-semibold transition-colors">
+          + 新增節點
+        </button>
+      </div>
+    </div>
+    
+    <!-- 雙欄：左節點清單 + 右黏性預覽 -->
+    <div class="flex gap-5 items-start mt-3">
+      <div id="t1-nodes-container" class="flex-1 space-y-3 min-w-0">
+        <!-- 節點清單將在此生成 -->
+      </div>
+      <div class="w-72 shrink-0 sticky top-4 self-start">
+        <div class="bg-black/60 border border-white/10 rounded-xl p-3">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-[10px] text-gray-500 uppercase tracking-wider">Prompt Preview</span>
+            <button onclick="previewPrompt()" class="text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors">↻ 重整</button>
+          </div>
+          <pre id="prompt-preview-output" class="text-[10px] text-green-300 font-mono whitespace-pre-wrap leading-relaxed overflow-auto max-h-[60vh]">點「↻ 重整」查看組裝結果</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex justify-between mt-5 items-center">
+      <div class="flex items-center gap-3">
+        <div id="t1-nodes-status" class="text-xs text-green-400 hidden"></div>
+        <span id="options-status" class="text-xs text-green-400 hidden"></span>
+      </div>
+      <div class="flex gap-2 ml-auto">
+        <button onclick="saveOptions()" class="bg-teal-600/20 hover:bg-teal-600/40 text-teal-400 border border-teal-600/50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors" id="btn-save-options">
+          儲存選項庫
+        </button>
+        <button onclick="saveT1Nodes()" class="bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 border border-cyan-600/50 px-6 py-2 rounded-lg text-sm font-semibold transition-colors" id="btn-save-t1-nodes">
+          儲存節點配置
+        </button>
+      </div>
     </div>
   </div>
 
@@ -482,8 +612,12 @@ async function loadAll() {
     });
 
     loadAnnouncement();
+    loadShareTemplate();
     loadPrompts();
     loadModels();
+    loadEngineConfig();
+    if (!t1NodesDirty) loadT1Nodes();
+    if (!optionsDirty) loadOptions();
     
     // 聚合數據
     const combined = { 
@@ -650,6 +784,96 @@ async function translateAnnouncement() {
   btn.disabled = false;
 }
 
+// ── IG 預設發文範本管理 ─────────────────────────────────────────────────
+async function loadShareTemplate() {
+  const defaultShare = "Created with @LoamLab Camera plugin for SketchUp 🚀\n#SketchUp #InteriorDesign #3DRender #Architecture #LoamLab\n\n🎁 Try it for free & get 100 bonus points:\nhttps://loamlab.com/?ref={referral_code}";
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=get_share_template`);
+    const j = await r.json();
+    if (j.code === 0) {
+      const t = j.template || {};
+      ['us','tw','cn','es','br','jp'].forEach(l => {
+        const el = document.getElementById(`share-${l}`);
+        if (el) el.value = t[l] || defaultShare;
+      });
+    }
+  } catch(e) {}
+}
+
+async function saveShareTemplate() {
+  const btn = document.getElementById('btn-save-share');
+  const status = document.getElementById('share-status');
+  const template = {};
+  ['us','tw','cn','es','br','jp'].forEach(l => {
+    const el = document.getElementById(`share-${l}`);
+    template[l] = el ? el.value.trim() : '';
+  });
+  btn.innerText = '處理中...';
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=set_share_template`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+      body: JSON.stringify({ template })
+    });
+    if (r.ok) {
+      status.innerText = '✅ 文案範本已儲存';
+      status.classList.remove('hidden');
+      setTimeout(() => status.classList.add('hidden'), 3000);
+    } else {
+      alert('儲存失敗');
+    }
+  } catch(e) {
+    alert('儲存錯誤');
+  }
+  btn.innerText = '儲存範本';
+}
+
+async function translateShareTemplate() {
+  const gtLangMap = { us: 'en', tw: 'zh-TW', cn: 'zh-CN', es: 'es', br: 'pt', jp: 'ja' };
+  let sourceLang = document.getElementById('share-source-lang').value;
+  let sourceText = document.getElementById(`share-${sourceLang}`).value.trim();
+
+  if (!sourceText) {
+    const priority = [sourceLang, 'tw', 'cn', 'us', 'es', 'br', 'jp'];
+    for (const l of priority) {
+      const v = document.getElementById(`share-${l}`).value.trim();
+      if (v) { sourceLang = l; sourceText = v; break; }
+    }
+  }
+  if (!sourceText) { alert('請先在任一語言欄輸入內容'); return; }
+
+  const btn = document.getElementById('btn-translate-share');
+  const status = document.getElementById('translate-share-status');
+  btn.innerText = '翻譯中...'; btn.disabled = true;
+  status.innerText = ''; status.classList.remove('hidden');
+
+  async function gtTranslate(text, sl, tl) {
+    try {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
+      const r = await fetch(url); const j = await r.json();
+      return j[0].map(s => s[0]).join('');
+    } catch (e) { return text; }
+  }
+
+  try {
+    const sl = gtLangMap[sourceLang];
+    const allLangs = ['us', 'tw', 'cn', 'es', 'br', 'jp'];
+    const results = await Promise.all(allLangs.map(t =>
+      t === sourceLang ? Promise.resolve({ lang: t, text: sourceText })
+      : gtTranslate(sourceText, sl, gtLangMap[t]).then(text => ({ lang: t, text }))
+    ));
+    results.forEach(({ lang, text }) => {
+      // 確保變數沒有被翻譯引擎弄壞
+      let translated = text.replace(/\{\s*referral_code\s*\}/gi, '{referral_code}');
+      document.getElementById(`share-${lang}`).value = translated;
+    });
+    status.innerText = '✅ 翻譯完成';
+  } catch(e) {
+    status.innerText = '❌ 翻譯失敗';
+  }
+  btn.innerText = '一鍵翻譯至其他語言'; btn.disabled = false;
+}
+
 // ── 渲染工作流預設咒語管理 ─────────────────────────────────────────────────
 async function loadPrompts() {
   const defaultP1 = "這是sketchup室內建模的模型（圖1），最後的目的是要轉換成iPhone拍的照片：先在後端生成一張鎖死空間感的深度圖（圖2）和一張所有元素鎖死並且轉換成色彩分明的通道圖（圖三），使用圖1參考圖2和圖3，在不改變模型材質和結構的情況下，99%還原圖片的空間感、相機位置、材質紋理方向，轉換成iPhone拍攝室內空間寫實照片，自然的光感，補充其他區域的漫反射光線，避免局部死黑或過曝，根據室內空間合理化極小不合理的元素，專業攝影級色彩，照片整體有自然的明暗過渡的層次,ultra-detailed";
@@ -737,6 +961,615 @@ async function saveModels() {
     alert('儲存錯誤');
   }
   btn.innerText = '儲存模型設定';
+}
+
+// ── Prompt Engine Mode ────────────────────────────────────────────────────
+async function loadEngineConfig() {
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=get_system_config`);
+    const j = await r.json();
+    const mode = j.config?.prompt_engine_mode || 'nodes';
+    applyEngineModeBadge(mode);
+  } catch(e) { console.error('Failed to load engine config:', e); }
+}
+
+function applyEngineModeBadge(mode) {
+  const badge = document.getElementById('engine-mode-badge');
+  const btnNodes = document.getElementById('btn-mode-nodes');
+  const btnLegacy = document.getElementById('btn-mode-legacy');
+  if (mode === 'legacy') {
+    badge.innerText = '⚠️ Legacy Mode';
+    badge.className = 'text-xs px-2 py-0.5 rounded-full bg-amber-600/20 text-amber-300 border border-amber-600/30';
+    btnNodes.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-white/10 text-white/30 hover:text-white/60';
+    btnLegacy.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-amber-500/60 text-amber-300 bg-amber-600/20';
+  } else {
+    badge.innerText = '● Nodes Mode';
+    badge.className = 'text-xs px-2 py-0.5 rounded-full bg-cyan-600/20 text-cyan-300 border border-cyan-600/30';
+    btnNodes.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-cyan-500/60 text-cyan-300 bg-cyan-600/20';
+    btnLegacy.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-white/10 text-white/30 hover:text-white/60';
+  }
+}
+
+async function setEngineMode(mode) {
+  const status = document.getElementById('engine-mode-status');
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=set_system_config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+      body: JSON.stringify({ config: { prompt_engine_mode: mode } })
+    });
+    if (r.ok) {
+      applyEngineModeBadge(mode);
+      status.innerText = `✅ 已切換為 ${mode === 'legacy' ? 'Legacy' : 'Nodes'} Mode，即刻生效`;
+      status.classList.remove('hidden');
+      setTimeout(() => status.classList.add('hidden'), 3000);
+    } else {
+      alert('切換失敗，請確認 Admin Key 正確');
+    }
+  } catch(e) {
+    alert('切換錯誤: ' + e.message);
+  }
+}
+
+// ── 工具 1 進階節點管理 ──────────────────────────────────────────────────
+let t1NodesData = [];
+let t1NodesDirty = false;
+
+// locale 短代碼 → 完整代碼對照
+const LOCALE_MAP = { us: 'en-US', tw: 'zh-TW', cn: 'zh-CN', es: 'es-ES', br: 'pt-BR', jp: 'ja-JP' };
+
+async function loadT1Nodes() {
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=get_t1_nodes`);
+    const j = await r.json();
+    t1NodesData = j.nodes || [];
+    t1NodesDirty = false;
+    renderT1Nodes();
+  } catch(e) { console.error('Failed to load T1 nodes:', e); }
+}
+
+function renderT1Nodes() {
+  const container = document.getElementById('t1-nodes-container');
+  if (!container) return;
+
+  if (t1NodesData.length === 0) {
+    container.innerHTML = '<div class="text-center py-5 text-gray-600 text-xs">尚無節點，可點「一鍵載入預設 9 節點」初始化</div>';
+    return;
+  }
+
+  const locales = [['us','en-US'],['tw','zh-TW'],['cn','zh-CN'],['es','es-ES'],['br','pt-BR'],['jp','ja-JP']];
+
+  container.innerHTML = t1NodesData.map((node, idx) => node.system ? `
+    <div class="bg-amber-950/20 border border-amber-600/20 rounded-xl p-4 relative group">
+      <button onclick="removeT1Node(${idx})" class="absolute top-3 right-3 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+      </button>
+      <div class="text-[9px] text-amber-500/70 uppercase font-bold mb-3 tracking-widest">🔒 核心約束節點（System）— 插件不顯示，值直接作為 JSON 約束發送</div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="space-y-2">
+          <div>
+            <label class="block text-[10px] text-gray-500 uppercase mb-1">JSON Key (英文 ID)</label>
+            <input type="text" value="${node.id}" onchange="updateNode(${idx}, 'id', this.value)" class="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white">
+          </div>
+          <div>
+            <label class="block text-[10px] text-gray-500 uppercase mb-1">顯示名稱（en-US，作為 JSON key）</label>
+            <input type="text" value="${node.labels?.['en-US'] || ''}" onchange="updateNodeI18n(${idx}, 'labels', 'en-US', this.value)" class="w-full bg-black/20 border border-white/5 rounded px-2 py-1 text-xs text-gray-300">
+          </div>
+        </div>
+        <div>
+          <label class="block text-[10px] text-gray-500 uppercase mb-1">約束描述（英文，直接作為 JSON value 發送）</label>
+          <textarea onchange="updateNode(${idx}, 'value', this.value)" class="w-full bg-black/40 border border-amber-500/20 rounded px-2 py-2 text-xs text-amber-200 resize-y h-24 leading-relaxed outline-none focus:border-amber-500/50">${node.value || ''}</textarea>
+        </div>
+      </div>
+    </div>
+  ` : `
+    <div class="bg-black/30 border border-white/5 rounded-xl p-3">
+      <!-- 頂欄：ID | en-US label | Group | Type | 刪除 -->
+      <div class="flex items-center gap-2 mb-3">
+        <input type="text" value="${node.id}" onchange="updateNode(${idx}, 'id', this.value)"
+               class="w-28 bg-black/40 border border-white/10 rounded px-2 py-1 text-[11px] text-gray-400 font-mono outline-none"
+               placeholder="field_id">
+        <input type="text" value="${node.labels?.['en-US'] || ''}" onchange="updateNodeI18n(${idx}, 'labels', 'en-US', this.value)"
+               class="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none"
+               placeholder="en-US label (JSON key)">
+        <select onchange="updateNode(${idx}, 'group', this.value)" class="bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none">
+          <option value="meta" ${node.group === 'meta' ? 'selected' : ''}>場景類型</option>
+          <option value="scene_lighting" ${node.group === 'scene_lighting' ? 'selected' : ''}>場景光效</option>
+          <option value="materials" ${node.group === 'materials' ? 'selected' : ''}>材質</option>
+          <option value="photography" ${node.group === 'photography' ? 'selected' : ''}>攝影</option>
+          <option value="rendering" ${node.group === 'rendering' ? 'selected' : ''}>渲染</option>
+        </select>
+        <select onchange="updateNode(${idx}, 'type', this.value); renderT1Nodes()" class="bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-gray-400 outline-none">
+          <option value="text" ${node.type === 'text' ? 'selected' : ''}>Text</option>
+          <option value="slider" ${node.type === 'slider' ? 'selected' : ''}>Slider</option>
+        </select>
+        <button onclick="removeT1Node(${idx})" class="text-gray-600 hover:text-red-400 transition-colors ml-1 shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        </button>
+      </div>
+
+      ${node.type !== 'slider' ? `
+      <!-- 快選 Chips -->
+      <div class="mb-2.5">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[10px] text-gray-500 uppercase tracking-wider">快選 Chips</span>
+          <button type="button" onclick="addOptionToNode('${node.id}')" class="text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors">+ 新增</button>
+        </div>
+        ${(() => {
+          const nodeOpts = optionsData.map((o,i) => ({...o, _gi: i})).filter(o => o.field_id === node.id);
+          if (!nodeOpts.length) return '<div class="text-[10px] text-gray-600 py-1 border border-dashed border-white/5 rounded px-2">尚無選項，點 + 新增</div>';
+          return '<div class="space-y-1">' + nodeOpts.map(opt => `
+            <div class="flex gap-1.5 items-center">
+              <input value="${(opt.label||'').replace(/"/g,'&quot;')}" placeholder="標籤" oninput="updateOptionField(${opt._gi},'label',this.value)" class="w-20 bg-black/40 border border-white/10 rounded px-2 py-0.5 text-[11px] text-white outline-none" />
+              <input value="${(opt.value||'').replace(/"/g,'&quot;')}" placeholder="英文值（留空=渲染時翻譯）" oninput="updateOptionField(${opt._gi},'value',this.value)" class="flex-1 bg-black/40 border border-white/10 rounded px-2 py-0.5 text-[11px] text-green-300/80 outline-none" />
+              <select onchange="updateOptionField(${opt._gi},'strategy',this.value)" class="bg-black/40 border border-white/10 rounded px-1 py-0.5 text-[10px] text-gray-300 outline-none">
+                <option value="replace" ${(opt.strategy||'replace')==='replace'?'selected':''}>單選</option>
+                <option value="append" ${opt.strategy==='append'?'selected':''}>多選</option>
+              </select>
+              <button type="button" onclick="removeOptionInNode(${opt._gi})" class="text-gray-600 hover:text-red-400 transition-colors text-[11px] leading-none">✕</button>
+            </div>
+          `).join('') + '</div>';
+        })()}
+      </div>
+      <!-- 預設值 -->
+      <div class="mb-2.5">
+        <label class="text-[10px] text-gray-500 uppercase tracking-wider">預設值</label>
+        <textarea id="t1-admin-default-${idx}" oninput="updateNode(${idx}, 'default', this.value)"
+                  class="w-full bg-black/40 border border-cyan-500/20 rounded px-2 py-1.5 text-xs text-cyan-100 resize-y h-10 leading-relaxed outline-none focus:border-cyan-500/40 mt-1"
+                  placeholder="英文或中文均可（中文渲染時自動翻譯）">${node.default || ''}</textarea>
+      </div>
+      ` : `
+      <!-- Slider 數值範圍 -->
+      <div class="mb-2.5">
+        <div class="grid grid-cols-4 gap-2">
+          <div><label class="text-[9px] text-gray-600 block mb-0.5">Min</label><input type="number" step="any" value="${node.min ?? 0}" onchange="updateNode(${idx}, 'min', parseFloat(this.value))" class="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none"></div>
+          <div><label class="text-[9px] text-gray-600 block mb-0.5">Max</label><input type="number" step="any" value="${node.max ?? 100}" onchange="updateNode(${idx}, 'max', parseFloat(this.value))" class="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none"></div>
+          <div><label class="text-[9px] text-gray-600 block mb-0.5">Step</label><input type="number" step="any" value="${node.step ?? 1}" onchange="updateNode(${idx}, 'step', parseFloat(this.value))" class="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none"></div>
+          <div><label class="text-[9px] text-gray-600 block mb-0.5">Default</label><input type="number" step="any" value="${node.default ?? 0}" onchange="updateNode(${idx}, 'default', parseFloat(this.value))" class="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none"></div>
+        </div>
+      </div>
+      `}
+
+      <!-- 多語系設定（折疊） -->
+      <details class="border-t border-white/5 pt-2">
+        <summary class="text-[10px] text-gray-600 cursor-pointer hover:text-gray-400 transition-colors select-none">▶ 多語系設定 (Labels / Placeholders)</summary>
+        <div class="grid grid-cols-2 gap-4 mt-2">
+          <div class="space-y-1">
+            <div class="text-[9px] text-gray-600 uppercase mb-1">Labels</div>
+            ${locales.map(([s, l]) => `
+              <div class="flex items-center gap-1.5">
+                <span class="text-[9px] text-gray-600 w-4 uppercase">${s}</span>
+                <input type="text" value="${node.labels?.[l] || ''}" onchange="updateNodeI18n(${idx}, 'labels', '${l}', this.value)" class="flex-1 bg-black/20 border border-white/5 rounded px-2 py-0.5 text-[11px] text-gray-300 outline-none">
+              </div>
+            `).join('')}
+          </div>
+          <div class="space-y-1">
+            <div class="text-[9px] text-gray-600 uppercase mb-1">Placeholders</div>
+            ${locales.map(([s, l]) => `
+              <div class="flex items-center gap-1.5">
+                <span class="text-[9px] text-gray-600 w-4 uppercase">${s}</span>
+                <input type="text" value="${node.placeholders?.[l] || ''}" onchange="updateNodeI18n(${idx}, 'placeholders', '${l}', this.value)" class="flex-1 bg-black/20 border border-white/5 rounded px-2 py-0.5 text-[11px] text-gray-500 italic outline-none">
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </details>
+    </div>
+  `).join('');
+}
+
+function addT1Node() {
+  t1NodesData.push({
+    id: 'new_node_' + Date.now().toString(36),
+    type: 'text',
+    group: 'scene_lighting',
+    labels: { 'en-US': 'New Node', 'zh-TW': '新節點', 'zh-CN': '新节点', 'es-ES': 'Nuevo nodo', 'pt-BR': 'Novo nó', 'ja-JP': '新規ノード' },
+    placeholders: { 'en-US': 'Enter value...', 'zh-TW': '請輸入...', 'zh-CN': '请输入...', 'es-ES': 'Ingrese valor...', 'pt-BR': 'Digite o valor...', 'ja-JP': '値を入力...' },
+    prompt_fragment: '{{val}}'
+  });
+  renderT1Nodes();
+}
+
+function loadDefaultT1Nodes() {
+  if (!confirm('將以預設 17 個節點覆蓋現有設定，確定繼續？')) return;
+  t1NodesData = [
+    // ── 核心約束（System，插件不顯示）──
+    { id: 'geometric_fidelity', group: 'core_constraints', system: true,
+      labels: { 'en-US': 'Geometric Fidelity' },
+      value: "This is a SketchUp interior model (Image 1). Backend pre-generates a spatial depth map (Image 2) and color-segmented channel map (Image 3). Using Image 1 with reference to Image 2 and Image 3, restore 99% of spatial depth, camera position, and material texture direction. Strictly maintain original scene structure, object positions, and geometry. No spatial layout changes permitted." },
+    { id: 'object_integrity', group: 'core_constraints', system: true,
+      labels: { 'en-US': 'Object Integrity' },
+      value: "Preserve all furniture, lighting fixtures, and decorations in their original style and proportion. Do not alter, remove, or reposition any elements." },
+    { id: 'conversion_logic', group: 'core_constraints', system: true,
+      labels: { 'en-US': 'Conversion Logic' },
+      value: "Transform base SU model surfaces into high-precision, physically accurate PBR materials. Apply natural light with supplemental diffuse fill to eliminate pure black shadows and overexposure. Rationalize minor spatial inconsistencies while maintaining overall integrity. Professional photography-grade color grading with natural tonal gradation." },
+    // ── 場景類型（Meta，用戶可填，組裝到 Project key）──
+    { id: 'project_type', group: 'meta', type: 'text', prompt_fragment: 'project type: {{val}}',
+      labels: { 'zh-TW': '場景類型', 'en-US': 'Project Type', 'zh-CN': '场景类型', 'es-ES': 'Tipo de proyecto', 'pt-BR': 'Tipo de projeto', 'ja-JP': 'プロジェクト種別' },
+      placeholders: { 'zh-TW': '例：室內商鋪、現代客廳、中式庭院', 'en-US': 'e.g. Indoor Shop, Modern Living Room', 'zh-CN': '例：室内商铺、现代客厅', 'es-ES': 'ej. Tienda interior, Sala de estar', 'pt-BR': 'ex. Loja interna, Sala moderna', 'ja-JP': '例：室内店舗、モダンリビング' },
+      default: '' },
+    // ── 場景與光效 ──
+    { id: 'design_style', group: 'scene_lighting', type: 'text', prompt_fragment: 'design style: {{val}}',
+      labels: { 'zh-TW': '設計風格', 'en-US': 'Design Style', 'zh-CN': '设计风格', 'es-ES': 'Estilo de diseño', 'pt-BR': 'Estilo de design', 'ja-JP': 'デザインスタイル' },
+      placeholders: { 'zh-TW': '例：北歐極簡、工業風', 'en-US': 'e.g. Nordic Minimalist, Industrial', 'zh-CN': '例：北欧极简、工业风', 'es-ES': 'ej. Minimalismo Nórdico', 'pt-BR': 'ex. Minimalismo Nórdico', 'ja-JP': '例：北欧ミニマル' } },
+    { id: 'people', group: 'scene_lighting', type: 'text', prompt_fragment: 'scene people: {{val}}',
+      labels: { 'zh-TW': '人物', 'en-US': 'People', 'zh-CN': '人物', 'es-ES': 'Personas', 'pt-BR': 'Pessoas', 'ja-JP': '人物' },
+      placeholders: { 'zh-TW': '例：無人、長曝光下人物虛影', 'en-US': 'e.g. no people, long-exposure ghost figures', 'zh-CN': '例：无人、长曝光人物虚影', 'es-ES': 'ej. sin personas, figuras fantasma', 'pt-BR': 'ex. sem pessoas, figuras fantasmas', 'ja-JP': '例：人なし、長秒撮影の幽霊人物' } },
+    { id: 'time_of_day', group: 'scene_lighting', type: 'text', prompt_fragment: 'time of day: {{val}}',
+      labels: { 'zh-TW': '時間', 'en-US': 'Time of Day', 'zh-CN': '时间', 'es-ES': 'Hora del día', 'pt-BR': 'Hora do dia', 'ja-JP': '時間帯' },
+      placeholders: { 'zh-TW': '例：晚上22點、黃昏', 'en-US': 'e.g. 10pm night, golden hour dusk', 'zh-CN': '例：晚上22点、黄昏', 'es-ES': 'ej. 22h noche, atardecer', 'pt-BR': 'ex. 22h noite, crepúsculo', 'ja-JP': '例：夜22時、夕暮れ' } },
+    { id: 'outdoor_elements', group: 'scene_lighting', type: 'text', prompt_fragment: 'exterior view through windows: {{val}}',
+      labels: { 'zh-TW': '外景元素', 'en-US': 'Outdoor Elements', 'zh-CN': '外景元素', 'es-ES': 'Elementos exteriores', 'pt-BR': 'Elementos externos', 'ja-JP': '外景要素' },
+      placeholders: { 'zh-TW': '例：人行道、霓虹燈、薄霧', 'en-US': 'e.g. sidewalk, neon lights, haze', 'zh-CN': '例：人行道、霓虹灯、薄雾', 'es-ES': 'ej. acera, luces de neón, bruma', 'pt-BR': 'ex. calçada, luzes de néon, névoa', 'ja-JP': '例：歩道、ネオン、霞' } },
+    { id: 'ambient_light', group: 'scene_lighting', type: 'text', prompt_fragment: 'ambient lighting mood: {{val}}',
+      labels: { 'zh-TW': '環境光', 'en-US': 'Ambient Light', 'zh-CN': '环境光', 'es-ES': 'Iluminación ambiental', 'pt-BR': 'Iluminação ambiente', 'ja-JP': '環境光' },
+      placeholders: { 'zh-TW': '例：左側柔和低飽和月光', 'en-US': 'e.g. soft low-saturation moonlight from left', 'zh-CN': '例：左侧柔和低饱和月光', 'es-ES': 'ej. luz de luna suave desde la izquierda', 'pt-BR': 'ex. luz de lua suave vinda da esquerda', 'ja-JP': '例：左からの柔らかな月光' } },
+    { id: 'indoor_light', group: 'scene_lighting', type: 'text', prompt_fragment: 'interior lighting: {{val}}',
+      labels: { 'zh-TW': '室內光', 'en-US': 'Interior Light', 'zh-CN': '室内光', 'es-ES': 'Luz interior', 'pt-BR': 'Luz interior', 'ja-JP': '室内光' },
+      placeholders: { 'zh-TW': '例：暖白色筒燈、暖黃色情調燈', 'en-US': 'e.g. warm white downlights, warm yellow accent lights', 'zh-CN': '例：暖白色筒灯、暖黄色情调灯', 'es-ES': 'ej. downlights blanco cálido', 'pt-BR': 'ex. luminárias brancas quentes', 'ja-JP': '例：温白色ダウンライト' } },
+    { id: 'light_quality', group: 'scene_lighting', type: 'text', prompt_fragment: 'light and shadow quality: {{val}}',
+      labels: { 'zh-TW': '光影品質', 'en-US': 'Light Quality', 'zh-CN': '光影质量', 'es-ES': 'Calidad de luz', 'pt-BR': 'Qualidade de luz', 'ja-JP': '光の質' },
+      placeholders: { 'zh-TW': '例：暖冷對比、窗格光影', 'en-US': 'e.g. warm-cool contrast, window grid shadows', 'zh-CN': '例：暖冷对比、窗格光影', 'es-ES': 'ej. contraste cálido-frío', 'pt-BR': 'ex. contraste quente-frio', 'ja-JP': '例：暖冷コントラスト' } },
+    { id: 'atmosphere', group: 'scene_lighting', type: 'text', prompt_fragment: 'atmosphere effects: {{val}}',
+      labels: { 'zh-TW': '氛圍效果', 'en-US': 'Atmosphere', 'zh-CN': '氛围效果', 'es-ES': 'Atmósfera', 'pt-BR': 'Atmosfera', 'ja-JP': '雰囲気' },
+      placeholders: { 'zh-TW': '例：微塵光束、煙霧感', 'en-US': 'e.g. dust rays, smoke haze', 'zh-CN': '例：微尘光束、烟雾感', 'es-ES': 'ej. rayos de polvo, niebla', 'pt-BR': 'ex. raios de poeira, névoa', 'ja-JP': '例：塵のビーム、霞' } },
+    // ── 材質控制 ──
+    { id: 'wall_ceiling', group: 'materials', type: 'text', prompt_fragment: 'wall and ceiling material: {{val}}',
+      labels: { 'zh-TW': '牆面頂面', 'en-US': 'Wall & Ceiling', 'zh-CN': '墙面顶面', 'es-ES': 'Pared y techo', 'pt-BR': 'Parede e teto', 'ja-JP': '壁・天井' },
+      placeholders: { 'zh-TW': '例：白色乳膠漆、微水泥', 'en-US': 'e.g. white latex paint, micro-cement', 'zh-CN': '例：白色乳胶漆、微水泥', 'es-ES': 'ej. pintura blanca, microcemento', 'pt-BR': 'ex. tinta branca, microcimento', 'ja-JP': '例：白いラテックス塗料、マイクロセメント' } },
+    { id: 'floor_material', group: 'materials', type: 'text', prompt_fragment: 'floor material: {{val}}',
+      labels: { 'zh-TW': '地面', 'en-US': 'Floor Material', 'zh-CN': '地面', 'es-ES': 'Suelo', 'pt-BR': 'Piso', 'ja-JP': '床材' },
+      placeholders: { 'zh-TW': '例：橡木人字拼地板、深色大理石', 'en-US': 'e.g. oak herringbone floor, dark marble', 'zh-CN': '例：橡木人字拼地板、深色大理石', 'es-ES': 'ej. piso de roble espiga', 'pt-BR': 'ex. piso de carvalho espinha', 'ja-JP': '例：オーク寄木張り床' } },
+    { id: 'soft_furnishing', group: 'materials', type: 'text', prompt_fragment: 'soft furnishings: {{val}}',
+      labels: { 'zh-TW': '軟裝', 'en-US': 'Soft Furnishing', 'zh-CN': '软装', 'es-ES': 'Textiles', 'pt-BR': 'Têxteis', 'ja-JP': 'ソフトファニッシング' },
+      placeholders: { 'zh-TW': '例：奶油麻布沙發、波斯地毯', 'en-US': 'e.g. cream linen sofa, Persian rug', 'zh-CN': '例：奶油麻布沙发、波斯地毯', 'es-ES': 'ej. sofá lino crema, alfombra persa', 'pt-BR': 'ex. sofá linho creme, tapete persa', 'ja-JP': '例：クリームリネンソファ、ペルシャ絨毯' } },
+    // ── 攝影參數 ──
+    { id: 'camera', group: 'photography', type: 'text', prompt_fragment: 'shot on {{val}}',
+      labels: { 'zh-TW': '相機型號', 'en-US': 'Camera Model', 'zh-CN': '相机型号', 'es-ES': 'Modelo de cámara', 'pt-BR': 'Modelo de câmera', 'ja-JP': 'カメラモデル' },
+      placeholders: { 'zh-TW': '例：佳能R6、Sony A7R IV', 'en-US': 'e.g. Canon EOS R6, Sony A7R IV', 'zh-CN': '例：佳能R6、Sony A7R IV', 'es-ES': 'ej. Canon EOS R6', 'pt-BR': 'ex. Canon EOS R6', 'ja-JP': '例：Canon EOS R6' } },
+    { id: 'aperture', group: 'photography', type: 'slider', prompt_fragment: 'aperture f/{{val}}',
+      min: 1.4, max: 16, step: 0.1, default: 2.8,
+      labels: { 'zh-TW': '光圈', 'en-US': 'Aperture', 'zh-CN': '光圈', 'es-ES': 'Apertura', 'pt-BR': 'Abertura', 'ja-JP': '絞り値' },
+      placeholders: { 'zh-TW': 'f/1.4 – f/16', 'en-US': 'f/1.4 – f/16', 'zh-CN': 'f/1.4 – f/16', 'es-ES': 'f/1.4 – f/16', 'pt-BR': 'f/1.4 – f/16', 'ja-JP': 'f/1.4 – f/16' } },
+    { id: 'shutter', group: 'photography', type: 'text', prompt_fragment: 'shutter speed {{val}}',
+      labels: { 'zh-TW': '快門', 'en-US': 'Shutter Speed', 'zh-CN': '快门', 'es-ES': 'Velocidad de obturación', 'pt-BR': 'Velocidade do obturador', 'ja-JP': 'シャッタースピード' },
+      placeholders: { 'zh-TW': '例：1s、1/60s', 'en-US': 'e.g. 1s, 1/60s', 'zh-CN': '例：1s、1/60s', 'es-ES': 'ej. 1s, 1/60s', 'pt-BR': 'ex. 1s, 1/60s', 'ja-JP': '例：1s、1/60s' } },
+    { id: 'imaging_style', group: 'photography', type: 'text', prompt_fragment: 'imaging style: {{val}}',
+      labels: { 'zh-TW': '成像風格', 'en-US': 'Imaging Style', 'zh-CN': '成像风格', 'es-ES': 'Estilo de imagen', 'pt-BR': 'Estilo de imagem', 'ja-JP': '撮影スタイル' },
+      placeholders: { 'zh-TW': '例：35mm膠片感、LOMO效果', 'en-US': 'e.g. 35mm film look, LOMO effect', 'zh-CN': '例：35mm胶片感、LOMO效果', 'es-ES': 'ej. aspecto de película 35mm', 'pt-BR': 'ex. visual de filme 35mm', 'ja-JP': '例：35mmフィルム風' } },
+    { id: 'capture_technique', group: 'photography', type: 'text', prompt_fragment: 'capture technique: {{val}}',
+      labels: { 'zh-TW': '拍攝技術', 'en-US': 'Capture Technique', 'zh-CN': '拍摄技术', 'es-ES': 'Técnica de captura', 'pt-BR': 'Técnica de captura', 'ja-JP': '撮影技術' },
+      placeholders: { 'zh-TW': '例：長曝光拖軌、移軸效果', 'en-US': 'e.g. long exposure light trails, tilt-shift', 'zh-CN': '例：长曝光拖轨、移轴效果', 'es-ES': 'ej. exposición larga, tilt-shift', 'pt-BR': 'ex. longa exposição, tilt-shift', 'ja-JP': '例：長時間露光、ティルトシフト' } },
+    // ── 渲染精度 ──
+    { id: 'render_quality', group: 'rendering', type: 'text', prompt_fragment: 'render quality: {{val}}',
+      labels: { 'zh-TW': '畫面表現', 'en-US': 'Render Quality', 'zh-CN': '画面表现', 'es-ES': 'Calidad de renderizado', 'pt-BR': 'Qualidade de renderização', 'ja-JP': 'レンダリング品質' },
+      placeholders: { 'zh-TW': '例：cc濾鏡+超大光圈散景', 'en-US': 'e.g. cc filter + ultra-wide aperture bokeh', 'zh-CN': '例：cc滤镜+超大光圈散景', 'es-ES': 'ej. filtro cc + bokeh gran apertura', 'pt-BR': 'ex. filtro cc + bokeh grande abertura', 'ja-JP': '例：CCフィルター＋大口径ボケ' } }
+  ];
+  t1NodesDirty = true;
+  renderT1Nodes();
+}
+
+function removeT1Node(idx) {
+  if (confirm('確定要刪除此節點及其對應的提示詞片段嗎？')) {
+    t1NodesData.splice(idx, 1);
+    renderT1Nodes();
+  }
+}
+
+async function translateAllT1Nodes() {
+  const gtLangMap = { 'zh-TW': 'zh-TW', 'en-US': 'en', 'zh-CN': 'zh-CN', 'es-ES': 'es', 'pt-BR': 'pt', 'ja-JP': 'ja' };
+  const allLocales = ['zh-TW', 'en-US', 'zh-CN', 'es-ES', 'pt-BR', 'ja-JP'];
+
+  async function gtTranslate(text, sl, tl) {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
+    const r = await fetch(url);
+    const j = await r.json();
+    return j[0].map(s => s[0]).join('');
+  }
+
+  function findBestSource(obj) {
+    for (const l of ['zh-TW', 'zh-CN', 'en-US', 'es-ES', 'pt-BR', 'ja-JP']) {
+      if (obj?.[l]?.trim()) return { locale: l, text: obj[l].trim() };
+    }
+    return null;
+  }
+
+  const btn = document.getElementById('btn-translate-nodes');
+  const status = document.getElementById('t1-nodes-status');
+  btn.innerText = '翻譯中...';
+  btn.disabled = true;
+  status.classList.remove('hidden');
+
+  const userNodes = t1NodesData.filter(n => !n.system);
+  let done = 0;
+
+  try {
+    for (let idx = 0; idx < t1NodesData.length; idx++) {
+      const node = t1NodesData[idx];
+      if (node.system) continue;
+
+      // 翻譯 labels
+      const labelSrc = findBestSource(node.labels);
+      if (labelSrc) {
+        const sl = gtLangMap[labelSrc.locale];
+        const results = await Promise.all(allLocales.map(locale =>
+          locale === labelSrc.locale
+            ? Promise.resolve(labelSrc.text)
+            : gtTranslate(labelSrc.text, sl, gtLangMap[locale]).catch(() => node.labels?.[locale] || '')
+        ));
+        if (!t1NodesData[idx].labels) t1NodesData[idx].labels = {};
+        allLocales.forEach((locale, i) => { t1NodesData[idx].labels[locale] = results[i]; });
+      }
+
+      // 翻譯 placeholders
+      const phSrc = findBestSource(node.placeholders);
+      if (phSrc) {
+        const sl = gtLangMap[phSrc.locale];
+        const results = await Promise.all(allLocales.map(locale =>
+          locale === phSrc.locale
+            ? Promise.resolve(phSrc.text)
+            : gtTranslate(phSrc.text, sl, gtLangMap[locale]).catch(() => node.placeholders?.[locale] || '')
+        ));
+        if (!t1NodesData[idx].placeholders) t1NodesData[idx].placeholders = {};
+        allLocales.forEach((locale, i) => { t1NodesData[idx].placeholders[locale] = results[i]; });
+      }
+
+      // 翻譯 default → 英文（若含中文，渲染提示詞需為英文）
+      if (node.default && /[\u4e00-\u9fff\u3040-\u30ff]/.test(String(node.default))) {
+        const translated = await gtTranslate(String(node.default), 'auto', 'en').catch(() => String(node.default));
+        t1NodesData[idx].default = translated.trim();
+      }
+
+      done++;
+      status.innerText = `翻譯中... ${done} / ${userNodes.length}`;
+    }
+
+    t1NodesDirty = true;
+    renderT1Nodes();
+    status.innerText = `✅ 已翻譯 ${done} 個節點，請確認後儲存`;
+    setTimeout(() => status.classList.add('hidden'), 5000);
+  } catch(e) {
+    status.innerText = '❌ 翻譯失敗，請手動填寫';
+  }
+  btn.innerText = '一鍵翻譯所有節點';
+  btn.disabled = false;
+}
+
+let _previewTimer = null;
+function _schedulePreview() {
+  clearTimeout(_previewTimer);
+  _previewTimer = setTimeout(previewPrompt, 350);
+}
+
+function updateNode(idx, key, val) {
+  t1NodesData[idx][key] = val;
+  t1NodesDirty = true;
+  _schedulePreview();
+}
+
+function updateNodeI18n(idx, key, lang, val) {
+  if (!t1NodesData[idx][key]) t1NodesData[idx][key] = {};
+  t1NodesData[idx][key][lang] = val;
+  t1NodesDirty = true;
+}
+
+async function saveT1Nodes() {
+  const btn = document.getElementById('btn-save-t1-nodes');
+  const status = document.getElementById('t1-nodes-status');
+  btn.innerText = '儲存中...';
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=set_t1_nodes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+      body: JSON.stringify({ nodes: t1NodesData })
+    });
+    if (r.ok) {
+      t1NodesDirty = false;
+      status.innerText = '✅ 節點配置已儲存，插件重新開啟後生效';
+      status.classList.remove('hidden');
+      setTimeout(() => status.classList.add('hidden'), 3000);
+    } else { alert('儲存失敗'); }
+  } catch(e) { alert('儲存錯誤'); }
+  btn.innerText = '儲存節點配置';
+}
+
+// ── 選項庫管理 (SYSTEM_OPTIONS) ─────────────────────────────────────────────
+let optionsData = [];
+let optionsDirty = false;
+
+async function loadOptions() {
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=get_options`);
+    const j = await r.json();
+    optionsData = j.options || [];
+    optionsDirty = false;
+    renderT1Nodes();
+  } catch(e) { console.error('Failed to load options:', e); }
+}
+
+
+function addOptionToNode(fieldId) {
+  optionsData.push({
+    id: fieldId + '_opt_' + Date.now().toString(36),
+    field_id: fieldId,
+    label: '',
+    value: '',
+    strategy: 'replace'
+  });
+  optionsDirty = true;
+  renderT1Nodes();
+}
+
+function updateOptionField(globalIdx, key, value) {
+  if (optionsData[globalIdx]) { optionsData[globalIdx][key] = value; optionsDirty = true; }
+}
+
+function removeOptionInNode(globalIdx) {
+  optionsData.splice(globalIdx, 1);
+  optionsDirty = true;
+  renderT1Nodes();
+}
+
+async function saveOptions() {
+  const btn = document.getElementById('btn-save-options');
+  const status = document.getElementById('options-status');
+  btn.innerText = '儲存中...';
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=set_options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+      body: JSON.stringify({ options: optionsData })
+    });
+    if (r.ok) {
+      optionsDirty = false;
+      status.innerText = '✅ 選項庫已儲存';
+      status.classList.remove('hidden');
+      setTimeout(() => status.classList.add('hidden'), 3000);
+    } else { alert('儲存失敗'); }
+  } catch(e) { alert('儲存錯誤: ' + e.message); }
+  btn.innerText = '儲存選項庫';
+}
+
+async function translateAllOptions() {
+  const toTranslate = optionsData.filter(o => !o.value && o.label);
+  if (toTranslate.length === 0) { alert('所有選項已有英文值，無需翻譯'); return; }
+  const btn = document.getElementById('btn-translate-options');
+  btn.innerText = '翻譯中...';
+  let done = 0;
+  for (const opt of toTranslate) {
+    try {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(opt.label)}`;
+      const r = await fetch(url);
+      const j = await r.json();
+      const translated = j[0].map(s => s[0]).join('').trim();
+      if (translated) { opt.value = translated; done++; optionsDirty = true; }
+    } catch(e) {}
+  }
+  renderT1Nodes();
+  btn.innerText = '一鍵翻譯 Value';
+  const status = document.getElementById('options-status');
+  status.innerText = `✅ 已翻譯 ${done} 個選項`;
+  status.classList.remove('hidden');
+  setTimeout(() => status.classList.add('hidden'), 3000);
+}
+
+function loadDefaultOptions() {
+  if (!confirm('將以官方 57 個原子選項覆蓋現有選項庫，確定繼續？')) return;
+  optionsData = [
+    // ── 時間 (time_of_day) ──
+    { id: 'time_golden_hour',     field_id: 'time_of_day',      label: '黃金時刻',   value: 'golden hour warm sunset light',     strategy: 'replace' },
+    { id: 'time_morning',         field_id: 'time_of_day',      label: '清晨',       value: 'early morning soft light',           strategy: 'replace' },
+    { id: 'time_blue_hour',       field_id: 'time_of_day',      label: '藍調時刻',   value: 'blue hour twilight dusk',            strategy: 'replace' },
+    { id: 'time_night',           field_id: 'time_of_day',      label: '深夜',       value: 'late night 22:00',                   strategy: 'replace' },
+    { id: 'time_noon',            field_id: 'time_of_day',      label: '正午',       value: 'midday noon bright',                 strategy: 'replace' },
+    // ── 人物 (people) ──
+    { id: 'human_none',           field_id: 'people',           label: '無人',       value: 'no people, empty space',            strategy: 'replace' },
+    { id: 'human_long_exposure',  field_id: 'people',           label: '動態虛影',   value: 'long exposure motion blur ghost figures', strategy: 'replace' },
+    { id: 'human_silhouette',     field_id: 'people',           label: '剪影',       value: 'backlit silhouette figure',          strategy: 'replace' },
+    { id: 'human_lifestyle',      field_id: 'people',           label: '生活場景',   value: 'lifestyle person naturally integrated', strategy: 'replace' },
+    // ── 外景 (outdoor_elements) ──
+    { id: 'outdoor_neon',         field_id: 'outdoor_elements', label: '霓虹燈',     value: 'neon signs glowing street',         strategy: 'append' },
+    { id: 'outdoor_sidewalk',     field_id: 'outdoor_elements', label: '人行道',     value: 'wet sidewalk reflections',          strategy: 'append' },
+    { id: 'outdoor_haze',         field_id: 'outdoor_elements', label: '薄霧',       value: 'atmospheric haze mist',             strategy: 'append' },
+    { id: 'outdoor_city_night',   field_id: 'outdoor_elements', label: '城市夜景',   value: 'city night skyline bokeh lights',   strategy: 'replace' },
+    { id: 'outdoor_garden',       field_id: 'outdoor_elements', label: '庭院',       value: 'lush garden greenery courtyard',    strategy: 'replace' },
+    { id: 'outdoor_mountain',     field_id: 'outdoor_elements', label: '山景',       value: 'mountain forest landscape',          strategy: 'replace' },
+    // ── 環境光 (ambient_light) ──
+    { id: 'light_moonlight',      field_id: 'ambient_light',    label: '月光',       value: 'soft cool moonlight from left',     strategy: 'replace' },
+    { id: 'light_sunbeam',        field_id: 'ambient_light',    label: '陽光束',     value: 'warm sunbeams through window',      strategy: 'replace' },
+    { id: 'light_overcast',       field_id: 'ambient_light',    label: '陰天漫射',   value: 'overcast diffused ambient light',   strategy: 'replace' },
+    // ── 室內光 (indoor_light) ──
+    { id: 'interior_light_warm',  field_id: 'indoor_light',     label: '暖黃情調',   value: 'warm yellow accent pendant lights', strategy: 'replace' },
+    { id: 'interior_light_neutral',field_id:'indoor_light',     label: '中性白筒燈', value: 'neutral white recessed downlights', strategy: 'replace' },
+    { id: 'interior_light_cold',  field_id: 'indoor_light',     label: '冷白工業',   value: 'cool white industrial LED strips',  strategy: 'replace' },
+    // ── 光影品質 (light_quality) ──
+    { id: 'quality_warm_cool',    field_id: 'light_quality',    label: '暖冷對比',   value: 'warm-cool color temperature contrast', strategy: 'replace' },
+    { id: 'quality_window_grid',  field_id: 'light_quality',    label: '窗格光影',   value: 'window grid shadow patterns on floor', strategy: 'append' },
+    { id: 'quality_soft_diffuse', field_id: 'light_quality',    label: '柔和漫射',   value: 'soft diffuse shadowless lighting',  strategy: 'replace' },
+    // ── 氛圍效果 (atmosphere) ──
+    { id: 'atmo_dust_rays',       field_id: 'atmosphere',       label: '微塵光束',   value: 'floating dust particles in light beams', strategy: 'append' },
+    { id: 'atmo_smoke',           field_id: 'atmosphere',       label: '煙霧感',     value: 'subtle smoke haze atmosphere',      strategy: 'append' },
+    { id: 'atmo_bokeh',           field_id: 'atmosphere',       label: '背景光斑',   value: 'creamy bokeh background lights',    strategy: 'append' },
+    // ── 牆面頂面 (wall_ceiling) ──
+    { id: 'wall_white_paint',     field_id: 'wall_ceiling',     label: '白色乳膠漆', value: 'white latex paint smooth walls',    strategy: 'replace' },
+    { id: 'wall_microcement',     field_id: 'wall_ceiling',     label: '微水泥',     value: 'micro-cement textured walls',       strategy: 'replace' },
+    { id: 'wall_exposed_brick',   field_id: 'wall_ceiling',     label: '清水磚',     value: 'exposed brick raw texture walls',   strategy: 'replace' },
+    { id: 'wall_wood_panel',      field_id: 'wall_ceiling',     label: '木飾面板',   value: 'walnut wood veneer panel walls',    strategy: 'replace' },
+    { id: 'wall_marble_slab',     field_id: 'wall_ceiling',     label: '大理石板',   value: 'marble slab feature wall',          strategy: 'replace' },
+    // ── 地面 (floor_material) ──
+    { id: 'floor_oak_herringbone',field_id: 'floor_material',   label: '橡木人字拼', value: 'oak herringbone wood flooring',     strategy: 'replace' },
+    { id: 'floor_dark_marble',    field_id: 'floor_material',   label: '深色大理石', value: 'dark marble polished floor',        strategy: 'replace' },
+    { id: 'floor_terrazzo',       field_id: 'floor_material',   label: '磨石子',     value: 'terrazzo speckled floor',           strategy: 'replace' },
+    { id: 'floor_concrete',       field_id: 'floor_material',   label: '清水混凝土', value: 'polished concrete floor',           strategy: 'replace' },
+    { id: 'floor_large_tile',     field_id: 'floor_material',   label: '大板磚',     value: 'large format porcelain tile',       strategy: 'replace' },
+    // ── 軟裝 (soft_furnishing) ──
+    { id: 'soft_linen_sofa',      field_id: 'soft_furnishing',  label: '麻布沙發',   value: 'cream linen fabric sofa',           strategy: 'append' },
+    { id: 'soft_persian_rug',     field_id: 'soft_furnishing',  label: '波斯地毯',   value: 'Persian area rug rich pattern',     strategy: 'append' },
+    { id: 'soft_sheer_curtain',   field_id: 'soft_furnishing',  label: '薄紗窗簾',   value: 'sheer linen curtains flowing',      strategy: 'append' },
+    { id: 'soft_velvet_cushion',  field_id: 'soft_furnishing',  label: '絨面抱枕',   value: 'velvet throw pillows accent',       strategy: 'append' },
+    // ── 成像風格 (imaging_style) ──
+    { id: 'style_35mm_film',      field_id: 'imaging_style',    label: '35mm膠片',   value: '35mm film grain analog photography', strategy: 'replace' },
+    { id: 'style_lomo',           field_id: 'imaging_style',    label: 'LOMO色調',   value: 'LOMO vignette cross-process tones', strategy: 'replace' },
+    { id: 'style_editorial',      field_id: 'imaging_style',    label: '雜誌大片',   value: 'editorial magazine photography',    strategy: 'replace' },
+    { id: 'style_cinematic',      field_id: 'imaging_style',    label: '電影感',     value: 'cinematic color grade anamorphic',  strategy: 'replace' },
+    // ── 拍攝技術 (capture_technique) ──
+    { id: 'tech_long_exp',        field_id: 'capture_technique',label: '長曝光',     value: 'long exposure light trails motion', strategy: 'replace' },
+    { id: 'tech_tilt_shift',      field_id: 'capture_technique',label: '移軸效果',   value: 'tilt-shift selective focus miniature', strategy: 'replace' },
+    { id: 'tech_wide_angle',      field_id: 'capture_technique',label: '廣角',       value: 'ultra-wide angle 16mm perspective', strategy: 'replace' },
+    { id: 'tech_telephoto',       field_id: 'capture_technique',label: '長焦壓縮',   value: 'telephoto compression 85mm',        strategy: 'replace' },
+    // ── 攝影機型號 (camera) ──
+    { id: 'cam_canon_r6',         field_id: 'camera',           label: '佳能R6',     value: 'Canon EOS R6',                      strategy: 'replace' },
+    { id: 'cam_sony_a7r4',        field_id: 'camera',           label: 'Sony A7R IV',value: 'Sony Alpha 7R IV',                  strategy: 'replace' },
+    { id: 'cam_leica_m',          field_id: 'camera',           label: 'Leica M',    value: 'Leica M11 rangefinder',             strategy: 'replace' },
+    // ── 畫面表現 (render_quality) ──
+    { id: 'rq_bokeh_cc',          field_id: 'render_quality',   label: 'CC+散景',    value: 'cc filter ultra-wide aperture bokeh', strategy: 'replace' },
+    { id: 'rq_hdr',               field_id: 'render_quality',   label: 'HDR動態',    value: 'HDR high dynamic range vivid',      strategy: 'replace' },
+    { id: 'rq_teal_orange',       field_id: 'render_quality',   label: '青橙調色',   value: 'teal and orange cinematic grade',   strategy: 'replace' },
+    { id: 'rq_texture_detail',    field_id: 'render_quality',   label: '豐富紋理',   value: 'ultra-detailed texture rich surface', strategy: 'append' },
+    { id: 'rq_post_grade',        field_id: 'render_quality',   label: '後期調色',   value: 'professional post-production grade', strategy: 'append' },
+    { id: 'rq_sharp',             field_id: 'render_quality',   label: '極致清晰',   value: '8K ultra-sharp zero noise',         strategy: 'append' },
+    { id: 'rq_natural',           field_id: 'render_quality',   label: '自然真實',   value: 'photorealistic natural rendering',  strategy: 'replace' }
+  ];
+  optionsDirty = true;
+  renderT1Nodes();
+}
+
+function previewPrompt() {
+  const output = document.getElementById('prompt-preview-output');
+  if (!output) return;
+
+  // 模擬 render.js 的 JSON 組裝邏輯（使用各節點預設值）
+  const GROUP_CONFIG = {
+    core_constraints: 'Core Constraints',
+    scene_lighting:   'Scene & Lighting',
+    materials:        'Material Control',
+    photography:      'Photography Settings',
+    rendering:        'Render Quality'
+  };
+
+  const jsonPrompt = {};
+  const projectTypeNode = t1NodesData.find(n => n.id === 'project_type');
+  const projectTypeVal = projectTypeNode ? (String(projectTypeNode.default || '').trim()) : '';
+  jsonPrompt['Project'] = `SU Screenshot to Realistic Photography${projectTypeVal ? ' - ' + projectTypeVal : ''}`;
+
+  const nodeValues = {};
+  t1NodesData.forEach(node => {
+    if (node.id === 'project_type') return; // 已單獨處理
+    // system 節點用 node.value；用戶節點用 node.default（預設值欄位填入的內容）
+    const val = node.system ? (node.value || '') : (String(node.default || ''));
+    if (val.trim()) nodeValues[node.id] = val;
+  });
+
+  Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
+    const section = {};
+    t1NodesData.filter(n => n.group === group).forEach(node => {
+      const val = nodeValues[node.id];
+      if (val) section[node.labels?.['en-US'] || node.id] = val;
+    });
+    if (Object.keys(section).length > 0) jsonPrompt[title] = section;
+  });
+
+  output.textContent = JSON.stringify(jsonPrompt, null, 2);
 }
 
 function renderDashboard(data) {
@@ -1114,7 +1947,14 @@ function startAutoRefresh() {
     countdown--;
     const label = document.getElementById('auto-refresh-label');
     if (label) label.textContent = countdown + 's';
-    if (countdown <= 0) { countdown = 60; loadAll(); }
+    if (countdown <= 0) {
+      countdown = 60;
+      if (t1NodesDirty) {
+        const s = document.getElementById('t1-nodes-status');
+        if (s) { s.textContent = '⚠️ 有未儲存的節點，已暫停節點同步'; s.classList.remove('hidden'); }
+      }
+      loadAll();
+    }
   }, 1000);
 }
 

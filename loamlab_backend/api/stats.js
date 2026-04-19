@@ -46,11 +46,12 @@ export default async function handler(req, res) {
     // --- 圖片代理（繞過 CORS，讓手機端可 fetch blob 下載）---
     if (action === 'proxy_img' && req.method === 'GET') {
         const imgUrl = req.query.url || '';
-        const ALLOWED = ['i.ibb.co', 'iili.io', 'freeimage.host', 'img.ibb.co'];
         let parsedHost = '';
         try { parsedHost = new URL(imgUrl).hostname; } catch(e) {}
-        if (!parsedHost || !ALLOWED.includes(parsedHost)) {
-            return res.status(403).json({ code: -1, msg: 'Domain not allowed' });
+        // SSRF protection: must be HTTPS, block private/local addresses
+        const privatePattern = /^(localhost$|127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|169\.254\.|0\.0\.0\.0|::1)/;
+        if (!imgUrl.startsWith('https://') || !parsedHost || privatePattern.test(parsedHost)) {
+            return res.status(403).json({ code: -1, msg: 'URL not allowed' });
         }
         try {
             const upstream = await fetch(imgUrl);
@@ -172,15 +173,26 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, config: data?.metadata?.config || { prompt_engine_mode: 'nodes' } });
     }
 
-    if (req.method === 'GET' && action === 'get_presets') {
+    if (req.method === 'GET' && action === 'get_options') {
         const { data, error } = await supabase.from('transactions')
             .select('metadata')
-            .eq('transaction_type', 'SYSTEM_PRESETS')
+            .eq('transaction_type', 'SYSTEM_OPTIONS')
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
         if (error) return res.status(500).json({ code: -1, msg: error.message });
-        return res.status(200).json({ code: 0, presets: data?.metadata?.presets || { categories: [] } });
+        return res.status(200).json({ code: 0, options: data?.metadata?.options || [] });
+    }
+
+    if (req.method === 'GET' && action === 'get_bundles') {
+        const { data, error } = await supabase.from('transactions')
+            .select('metadata')
+            .eq('transaction_type', 'SYSTEM_BUNDLES')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0, bundles: data?.metadata?.bundles || [] });
     }
 
     // --- Admin 端點（需要 ADMIN_KEY）---
@@ -279,16 +291,31 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
-    if (req.method === 'POST' && action === 'set_presets') {
-        const presets = req.body?.presets || { categories: [] };
+    if (req.method === 'POST' && action === 'set_options') {
+        const options = req.body?.options || [];
         const { error } = await supabase.from('transactions').insert([{
             user_email: null,
             amount: 0,
-            transaction_type: 'SYSTEM_PRESETS',
-            metadata: { presets }
+            transaction_type: 'SYSTEM_OPTIONS',
+            metadata: { options }
         }]);
         if (error) {
-            console.error('Save presets error:', error.message);
+            console.error('Save options error:', error.message);
+            return res.status(500).json({ code: -1, msg: error.message });
+        }
+        return res.status(200).json({ code: 0, msg: 'Saved' });
+    }
+
+    if (req.method === 'POST' && action === 'set_bundles') {
+        const bundles = req.body?.bundles || [];
+        const { error } = await supabase.from('transactions').insert([{
+            user_email: null,
+            amount: 0,
+            transaction_type: 'SYSTEM_BUNDLES',
+            metadata: { bundles }
+        }]);
+        if (error) {
+            console.error('Save bundles error:', error.message);
             return res.status(500).json({ code: -1, msg: error.message });
         }
         return res.status(200).json({ code: 0, msg: 'Saved' });

@@ -38,6 +38,9 @@ let _baseImageEntry = null; // 工具 2/3/4：從歷史選取的底圖
 let _referenceImageBase64 = null; // 工具 2：本地上傳的參考圖 base64
 let t1NodesData = []; // Store Tool 1 advanced nodes configuration
 let optionsData = []; // SYSTEM_OPTIONS from backend
+let userMaterialFields = JSON.parse(localStorage.getItem('loamlab_t1_materials') || '[]');
+// [{label:'墙面', value:''}]
+let promptEngineMode = localStorage.getItem('loamlab_prompt_mode') || 'nodes'; // Fix4: legacy/nodes
 
 const T1_GROUP_TITLES = {
     meta:           { 'zh-TW': '場景類型', 'en-US': 'Project', 'zh-CN': '场景类型', 'es-ES': 'Proyecto', 'pt-BR': 'Projeto', 'ja-JP': 'プロジェクト' },
@@ -95,7 +98,12 @@ async function fetchT1Nodes() {
         const data = await resp.json();
         if (data.code === 0) {
             t1NodesData = data.nodes || [];
+            // Fix4: 只在沒有本地 override 時採用後端模式
+            if (!localStorage.getItem('loamlab_prompt_mode')) {
+                promptEngineMode = data.prompt_engine_mode || 'nodes';
+            }
             renderT1Nodes();
+            _applyPromptMode();
         }
     } catch (e) {
         console.error('Failed to fetch T1 nodes:', e);
@@ -169,30 +177,81 @@ function renderT1Nodes() {
                 slider.addEventListener('input', (e) => { valSpan.textContent = e.target.value; });
             } else {
                 const nodeOpts = optionsData.filter(o => o.field_id === node.id);
+                // Fix2: 依語言決定 chip 顯示文字（CJK→label，其他→value or label）
+                const isCJK = ['zh-TW', 'zh-CN'].includes(currentLang);
+                const chipDisplay = (o) => isCJK ? (o.label || o.value) : (o.value || o.label);
                 const chipsHtml = nodeOpts.length > 0
-                    ? '<div class="node-chips">' + nodeOpts.map(o => '<button type="button" class="node-chip" data-chip-label="' + o.label.replace(/"/g, '&quot;') + '" data-chip-value="' + (o.value || o.label).replace(/"/g, '&quot;') + '" data-chip-strategy="' + (o.strategy || 'replace') + '">' + o.label + '</button>').join('') + '</div>'
+                    ? '<div class="node-chips">' + nodeOpts.map(o =>
+                        '<button type="button" class="node-chip"' +
+                        ' data-chip-label="' + o.label.replace(/"/g, '&quot;') + '"' +
+                        ' data-chip-value="' + (o.value || o.label).replace(/"/g, '&quot;') + '"' +
+                        ' data-chip-strategy="' + (o.strategy || 'replace') + '"' +
+                        ' data-chip-default="' + (o.is_default ? '1' : '') + '">' +
+                        chipDisplay(o) + '</button>').join('') + '</div>'
                     : '';
-                item.innerHTML = `
-                    <label class="node-label">${label}</label>
-                    <div class="node-input-wrapper">
-                        <input type="text" id="t1-node-${node.id}" class="node-text-input" placeholder="${ph}">
-                        ${chipsHtml}
-                    </div>
-                `;
-                if (nodeOpts.length > 0) {
-                    const input = item.querySelector('#t1-node-' + node.id);
+                // Fix1: 有 append 策略的節點改用 tag pills
+                const hasAppend = nodeOpts.some(o => o.strategy === 'append');
+                if (hasAppend) {
+                    item.innerHTML = `
+                        <label class="node-label">${label}</label>
+                        <div class="node-input-wrapper">
+                            <div class="node-tags-wrapper" id="t1-tags-${node.id}">
+                                <span class="node-tags-placeholder">${ph || '點擊快選...'}</span>
+                            </div>
+                            <input type="hidden" id="t1-node-${node.id}" value="">
+                            ${chipsHtml}
+                        </div>`;
+                    const hiddenInput = item.querySelector('#t1-node-' + node.id);
+                    const tagsWrapper = item.querySelector('#t1-tags-' + node.id);
+                    function _rebuildTags() {
+                        const vals = hiddenInput.value ? hiddenInput.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+                        tagsWrapper.innerHTML = vals.length
+                            ? vals.map(v => '<span class="node-tag">' + v + '<span class="node-tag-remove" data-val="' + v.replace(/"/g, '&quot;') + '">✕</span></span>').join('')
+                            : '<span class="node-tags-placeholder">' + (ph || '點擊快選...') + '</span>';
+                        tagsWrapper.querySelectorAll('.node-tag-remove').forEach(rm => {
+                            rm.addEventListener('click', () => {
+                                const parts = hiddenInput.value.split(',').map(s => s.trim()).filter(s => s && s !== rm.dataset.val);
+                                hiddenInput.value = parts.join(', ');
+                                item.querySelectorAll('.node-chip').forEach(b => b.classList.toggle('active', parts.includes(b.dataset.chipValue)));
+                                _rebuildTags();
+                            });
+                        });
+                    }
+                    const defaultChip = item.querySelector('.node-chip[data-chip-default="1"]');
+                    if (defaultChip) {
+                        hiddenInput.value = defaultChip.dataset.chipValue;
+                        defaultChip.classList.add('active');
+                        _rebuildTags();
+                    }
                     item.querySelectorAll('.node-chip').forEach(btn => {
                         btn.addEventListener('click', () => {
                             const val = btn.dataset.chipValue;
-                            const strategy = btn.dataset.chipStrategy;
-                            if (strategy === 'append') {
-                                const parts = input.value ? input.value.split(',').map(s => s.trim()).filter(Boolean) : [];
-                                const i = parts.indexOf(val);
-                                if (i >= 0) { parts.splice(i, 1); btn.classList.remove('active'); }
-                                else { parts.push(val); btn.classList.add('active'); }
-                                input.value = parts.join(', ');
-                            } else {
-                                // replace：點同一個切換，點不同直接替換
+                            const parts = hiddenInput.value ? hiddenInput.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+                            const i = parts.indexOf(val);
+                            if (i >= 0) { parts.splice(i, 1); btn.classList.remove('active'); }
+                            else { parts.push(val); btn.classList.add('active'); }
+                            hiddenInput.value = parts.join(', ');
+                            _rebuildTags();
+                        });
+                    });
+                } else {
+                    // Replace 模式：原本 input 邏輯
+                    item.innerHTML = `
+                        <label class="node-label">${label}</label>
+                        <div class="node-input-wrapper">
+                            <input type="text" id="t1-node-${node.id}" class="node-text-input" placeholder="${ph}">
+                            ${chipsHtml}
+                        </div>`;
+                    if (nodeOpts.length > 0) {
+                        const input = item.querySelector('#t1-node-' + node.id);
+                        const defaultChip = item.querySelector('.node-chip[data-chip-default="1"]');
+                        if (defaultChip && !input.value) {
+                            input.value = defaultChip.dataset.chipValue;
+                            defaultChip.classList.add('active');
+                        }
+                        item.querySelectorAll('.node-chip').forEach(btn => {
+                            btn.addEventListener('click', () => {
+                                const val = btn.dataset.chipValue;
                                 if (btn.classList.contains('active')) {
                                     btn.classList.remove('active');
                                     input.value = '';
@@ -201,9 +260,9 @@ function renderT1Nodes() {
                                     btn.classList.add('active');
                                     input.value = val;
                                 }
-                            }
+                            });
                         });
-                    });
+                    }
                 }
             }
             groupEl.appendChild(item);
@@ -211,6 +270,87 @@ function renderT1Nodes() {
 
         container.appendChild(groupEl);
     });
+}
+
+// ── 用戶自訂材質控制 ────────────────────────────────────────────────────────
+function saveUserMaterials() {
+    localStorage.setItem('loamlab_t1_materials', JSON.stringify(userMaterialFields));
+}
+
+function renderUserMaterials() {
+    const wrap = document.getElementById('t1-user-materials');
+    if (!wrap) return;
+    const lang = currentLang || 'zh-TW';
+    const title = { 'zh-TW': '材質控制', 'en-US': 'Material Control', 'zh-CN': '材质控制', 'es-ES': 'Control de materiales', 'pt-BR': 'Controle de materiais', 'ja-JP': '素材コントロール' }[lang] || '材質控制';
+    const addLabel = { 'zh-TW': '+ 新增材質項', 'en-US': '+ Add material field', 'zh-CN': '+ 新增材质项', 'es-ES': '+ Agregar campo', 'pt-BR': '+ Adicionar campo', 'ja-JP': '+ フィールド追加' }[lang] || '+ 新增材質項';
+
+    wrap.innerHTML = `
+      <div class="node-group mt-1">
+        <div class="node-group-title flex items-center justify-between">
+          <span>${title}</span>
+          <button type="button" id="btn-add-mat" class="text-[10px] text-red-400/70 hover:text-red-400 transition-colors">${addLabel}</button>
+        </div>
+        <div id="user-mat-list" class="flex flex-col gap-1.5 mt-2">
+          ${userMaterialFields.map((f, i) => `
+            <div class="flex gap-1.5 items-center" data-mat-idx="${i}">
+              <input type="text" value="${(f.label||'').replace(/"/g,'&quot;')}"
+                placeholder="${lang === 'en-US' ? 'Field name' : '材質名稱'}"
+                class="w-20 shrink-0 node-text-input text-[11px] px-2 py-1" data-mat-label="${i}">
+              <input type="text" value="${(f.value||'').replace(/"/g,'&quot;')}"
+                placeholder="${lang === 'en-US' ? 'Value (e.g. latex paint)' : '例：乳膠漆'}"
+                class="flex-1 node-text-input text-[11px] px-2 py-1" data-mat-value="${i}">
+              <button type="button" data-mat-del="${i}" class="text-gray-600 hover:text-red-400 transition-colors text-[11px] shrink-0">✕</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+
+    document.getElementById('btn-add-mat')?.addEventListener('click', () => {
+        userMaterialFields.push({ label: '', value: '' });
+        saveUserMaterials();
+        renderUserMaterials();
+        // focus 新行 label
+        const rows = document.querySelectorAll('#user-mat-list [data-mat-label]');
+        rows[rows.length - 1]?.focus();
+    });
+    document.querySelectorAll('#user-mat-list [data-mat-label]').forEach(el => {
+        el.addEventListener('input', e => {
+            userMaterialFields[+el.dataset.matLabel].label = e.target.value;
+            saveUserMaterials();
+        });
+    });
+    document.querySelectorAll('#user-mat-list [data-mat-value]').forEach(el => {
+        el.addEventListener('input', e => {
+            userMaterialFields[+el.dataset.matValue].value = e.target.value;
+            saveUserMaterials();
+        });
+    });
+    document.querySelectorAll('#user-mat-list [data-mat-del]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            userMaterialFields.splice(+btn.dataset.matDel, 1);
+            saveUserMaterials();
+            renderUserMaterials();
+        });
+    });
+}
+
+// Fix4: Legacy/Nodes 模式即時切換 ────────────────────────────────────────────
+function togglePromptMode() {
+    promptEngineMode = promptEngineMode === 'nodes' ? 'legacy' : 'nodes';
+    localStorage.setItem('loamlab_prompt_mode', promptEngineMode);
+    _applyPromptMode();
+}
+
+function _applyPromptMode() {
+    const isLegacy = promptEngineMode === 'legacy';
+    const nodesEl = document.getElementById('t1-dynamic-nodes');
+    const matEl = document.getElementById('t1-user-materials');
+    const noticeEl = document.getElementById('t1-legacy-notice');
+    const btn = document.getElementById('btn-prompt-mode-toggle');
+    if (nodesEl) nodesEl.classList.toggle('hidden', isLegacy);
+    if (matEl) matEl.classList.toggle('hidden', isLegacy);
+    if (noticeEl) noticeEl.classList.toggle('hidden', !isLegacy);
+    if (btn) btn.textContent = isLegacy ? '⚡ Legacy' : '⚙ Nodes';
 }
 
 function setActiveTool(n, skipTutorial) {
@@ -243,11 +383,15 @@ function setActiveTool(n, skipTutorial) {
     }
 
     const t1NodesContainer = document.getElementById('t1-dynamic-nodes');
+    const t1MatContainer = document.getElementById('t1-user-materials');
     if (t1NodesContainer) {
         if (n === 1) {
-            t1NodesContainer.classList.remove('hidden');
+            renderUserMaterials();
+            _applyPromptMode(); // Fix4: 根據模式決定顯示節點或 legacy 提示
         } else {
             t1NodesContainer.classList.add('hidden');
+            if (t1MatContainer) t1MatContainer.classList.add('hidden');
+            document.getElementById('t1-legacy-notice')?.classList.add('hidden');
         }
     }
 
@@ -1309,6 +1453,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
             }
 
+            // 收集用戶自訂材質（過濾空值）
+            const user_materials = userMaterialFields
+                .filter(f => f.label && f.label.trim() && f.value && f.value.trim())
+                .map(f => ({ label: f.label.trim(), value: f.value.trim() }));
+
             sketchup.render_scene({
                 scenes: usingBaseImage ? [] : selectedScenes,
                 prompt: finalPrompt,
@@ -1316,6 +1465,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 expected_cost: totalCost,
                 tool: currentActiveTool,
                 advanced_settings,
+                ...(user_materials.length > 0 && { user_materials }),
                 ...(usingBaseImage && {
                     base_image_url: _baseImageEntry.file_url,
                     base_image_scene: _baseImageEntry.scene || '底圖'

@@ -152,14 +152,15 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET' && action === 'get_t1_nodes') {
-        const { data, error } = await supabase.from('transactions')
-            .select('metadata')
-            .eq('transaction_type', 'SYSTEM_T1_NODES')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        if (error) return res.status(500).json({ code: -1, msg: error.message });
-        return res.status(200).json({ code: 0, nodes: data?.metadata?.nodes || [] });
+        const [nodesRes, cfgRes] = await Promise.all([
+            supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_T1_NODES')
+                .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+            supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_ENGINE_CONFIG')
+                .order('created_at', { ascending: false }).limit(1).maybeSingle()
+        ]);
+        if (nodesRes.error) return res.status(500).json({ code: -1, msg: nodesRes.error.message });
+        const prompt_engine_mode = cfgRes.data?.metadata?.config?.prompt_engine_mode || 'nodes';
+        return res.status(200).json({ code: 0, nodes: nodesRes.data?.metadata?.nodes || [], prompt_engine_mode });
     }
 
     if (req.method === 'GET' && action === 'get_system_config') {

@@ -1091,32 +1091,69 @@ function renderT1Nodes() {
       ${node.type !== 'slider' ? `
       <!-- 快選 Chips -->
       <div class="mb-2.5">
-        <div class="flex items-center justify-between mb-1.5">
-          <span class="text-[10px] text-gray-500 uppercase tracking-wider">快選 Chips</span>
-          <button type="button" onclick="addOptionToNode('${node.id}')" class="text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors">+ 新增</button>
-        </div>
         ${(() => {
           const nodeOpts = optionsData.map((o,i) => ({...o, _gi: i})).filter(o => o.field_id === node.id);
-          if (!nodeOpts.length) return '<div class="text-[10px] text-gray-600 py-1 border border-dashed border-white/5 rounded px-2">尚無選項，點 + 新增</div>';
-          return '<div class="space-y-1">' + nodeOpts.map(opt => `
-            <div class="flex gap-1.5 items-center">
-              <input value="${(opt.label||'').replace(/"/g,'&quot;')}" placeholder="標籤" oninput="updateOptionField(${opt._gi},'label',this.value)" class="w-20 bg-black/40 border border-white/10 rounded px-2 py-0.5 text-[11px] text-white outline-none" />
-              <input value="${(opt.value||'').replace(/"/g,'&quot;')}" placeholder="英文值（留空=渲染時翻譯）" oninput="updateOptionField(${opt._gi},'value',this.value)" class="flex-1 bg-black/40 border border-white/10 rounded px-2 py-0.5 text-[11px] text-green-300/80 outline-none" />
-              <select onchange="updateOptionField(${opt._gi},'strategy',this.value)" class="bg-black/40 border border-white/10 rounded px-1 py-0.5 text-[10px] text-gray-300 outline-none">
-                <option value="replace" ${(opt.strategy||'replace')==='replace'?'selected':''}>單選</option>
-                <option value="append" ${opt.strategy==='append'?'selected':''}>多選</option>
+          const editingGi = _chipEditState[node.id] ?? null;
+          const editingOpt = editingGi != null ? nodeOpts.find(o => o._gi === editingGi) : null;
+
+          const pillsHtml = nodeOpts.map(opt => `
+            <span onclick="editChip(${opt._gi},'${node.id}')"
+              class="inline-flex items-center gap-1 cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] select-none transition-all
+                     ${editingGi === opt._gi
+                       ? 'bg-cyan-900/30 ring-1 ring-cyan-400/50 text-cyan-100'
+                       : 'bg-white/8 hover:bg-white/14 text-white/80'}
+                     ${opt.is_default ? 'ring-1 ring-yellow-400/40' : ''}">
+              ${opt.is_default ? '<span class="text-yellow-400 text-[9px]">◈</span>' : ''}
+              <span>${opt.label || '<span class="italic text-gray-500">未命名</span>'}</span>
+              <button type="button" onclick="event.stopPropagation();removeOptionInNode(${opt._gi},'${node.id}')"
+                class="text-[9px] text-gray-500 hover:text-red-400 transition-colors leading-none ml-0.5">✕</button>
+            </span>
+          `).join('');
+
+          const editPanelHtml = editingOpt ? `
+            <div class="mt-1.5 bg-black/50 border border-cyan-500/20 rounded-lg px-2 py-1.5 flex gap-1.5 items-center">
+              <input value="${(editingOpt.label||'').replace(/"/g,'&quot;')}" placeholder="標籤"
+                oninput="updateOptionField(${editingOpt._gi},'label',this.value)"
+                class="w-20 bg-black/40 border border-white/10 rounded px-2 py-0.5 text-[11px] text-white outline-none" autofocus />
+              <input value="${(editingOpt.value||'').replace(/"/g,'&quot;')}" placeholder="英文值（留空=渲染時翻譯）"
+                oninput="updateOptionField(${editingOpt._gi},'value',this.value)"
+                class="flex-1 bg-black/40 border border-white/10 rounded px-2 py-0.5 text-[11px] text-green-300/80 outline-none" />
+              <select onchange="updateOptionField(${editingOpt._gi},'strategy',this.value)"
+                class="bg-black/40 border border-white/10 rounded px-1 py-0.5 text-[10px] text-gray-300 outline-none">
+                <option value="replace" ${(editingOpt.strategy||'replace')==='replace'?'selected':''}>單選</option>
+                <option value="append" ${editingOpt.strategy==='append'?'selected':''}>多選</option>
               </select>
-              <button type="button" onclick="removeOptionInNode(${opt._gi})" class="text-gray-600 hover:text-red-400 transition-colors text-[11px] leading-none">✕</button>
+              <button type="button" onclick="setOptionDefault(${editingOpt._gi},'${node.id}')" title="設為預設"
+                class="text-[13px] leading-none transition-colors shrink-0 ${editingOpt.is_default ? 'text-yellow-400' : 'text-gray-600 hover:text-yellow-500'}">◈</button>
+            </div>` : '';
+
+          return `<div>
+            <div class="flex flex-wrap gap-1 items-center min-h-[26px]">
+              ${pillsHtml}
+              <button type="button" onclick="addOptionToNode('${node.id}')"
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] text-gray-600 hover:text-cyan-400 hover:bg-white/5 transition-colors">+ 新增</button>
             </div>
-          `).join('') + '</div>';
+            ${editPanelHtml}
+          </div>`;
         })()}
       </div>
-      <!-- 預設值 -->
+      <!-- 預設值（有 append chip 改為 tag pills，否則 textarea）-->
       <div class="mb-2.5">
         <label class="text-[10px] text-gray-500 uppercase tracking-wider">預設值</label>
-        <textarea id="t1-admin-default-${idx}" oninput="updateNode(${idx}, 'default', this.value)"
-                  class="w-full bg-black/40 border border-cyan-500/20 rounded px-2 py-1.5 text-xs text-cyan-100 resize-y h-10 leading-relaxed outline-none focus:border-cyan-500/40 mt-1"
-                  placeholder="英文或中文均可（中文渲染時自動翻譯）">${node.default || ''}</textarea>
+        ${(() => {
+          const nodeHasAppend = optionsData.some(o => o.field_id === node.id && o.strategy === 'append');
+          if (nodeHasAppend) {
+            const defVals = (node.default || '').split(',').map(s => s.trim()).filter(Boolean);
+            const tagsHtml = defVals.length
+              ? defVals.map(v => `<span class="inline-flex items-center gap-1 bg-cyan-900/30 border border-cyan-500/30 text-cyan-100 rounded px-1.5 py-0.5 text-[10px]">${v}<button type="button" onclick="removeAdminDefaultTag(${idx},'${v.replace(/'/g, "\\'")}')" class="text-cyan-400/50 hover:text-red-400 leading-none ml-0.5">✕</button></span>`).join('')
+              : '<span class="text-[10px] text-gray-600 italic">點 ◈ 設定預設快選</span>';
+            return `<div id="t1-admin-default-tags-${idx}" class="flex flex-wrap gap-1 mt-1 min-h-[28px] items-center bg-black/30 border border-cyan-500/10 rounded px-2 py-1">${tagsHtml}</div>
+                    <input type="hidden" id="t1-admin-default-${idx}" value="${(node.default || '').replace(/"/g,'&quot;')}">`;
+          }
+          return `<textarea id="t1-admin-default-${idx}" oninput="updateNode(${idx}, 'default', this.value)"
+                    class="w-full bg-black/40 border border-cyan-500/20 rounded px-2 py-1.5 text-xs text-cyan-100 resize-y h-10 leading-relaxed outline-none focus:border-cyan-500/40 mt-1"
+                    placeholder="英文或中文均可（中文渲染時自動翻譯）">${node.default || ''}</textarea>`;
+        })()}
       </div>
       ` : `
       <!-- Slider 數值範圍 -->
@@ -1376,6 +1413,12 @@ async function saveT1Nodes() {
 // ── 選項庫管理 (SYSTEM_OPTIONS) ─────────────────────────────────────────────
 let optionsData = [];
 let optionsDirty = false;
+let _chipEditState = {}; // { fieldId: globalIdx | null } — 記錄各節點目前展開的 chip
+
+function editChip(gi, fieldId) {
+  _chipEditState[fieldId] = (_chipEditState[fieldId] === gi) ? null : gi;
+  renderT1Nodes();
+}
 
 async function loadOptions() {
   try {
@@ -1397,6 +1440,7 @@ function addOptionToNode(fieldId) {
     strategy: 'replace'
   });
   optionsDirty = true;
+  _chipEditState[fieldId] = optionsData.length - 1; // 新增後自動展開編輯
   renderT1Nodes();
 }
 
@@ -1404,9 +1448,45 @@ function updateOptionField(globalIdx, key, value) {
   if (optionsData[globalIdx]) { optionsData[globalIdx][key] = value; optionsDirty = true; }
 }
 
-function removeOptionInNode(globalIdx) {
+function setOptionDefault(globalIdx, fieldId) {
+  const isAlreadyDefault = !!optionsData[globalIdx]?.is_default;
+  // 清除此 field 所有 is_default
+  optionsData.forEach(o => { if (o.field_id === fieldId) o.is_default = false; });
+  // 若不是已選中才切換為預設（再按一次 = 取消預設）
+  if (!isAlreadyDefault) optionsData[globalIdx].is_default = true;
+  optionsDirty = true;
+  // 同步更新 node.default
+  const nodeIdx = t1NodesData.findIndex(n => n.id === fieldId);
+  if (nodeIdx >= 0) {
+    const opt = optionsData[globalIdx];
+    const newDefault = !isAlreadyDefault ? (opt.value || opt.label || '') : '';
+    t1NodesData[nodeIdx].default = newDefault;
+    t1NodesDirty = true;
+    const ta = document.getElementById('t1-admin-default-' + nodeIdx);
+    if (ta) ta.value = newDefault;
+    _schedulePreview();
+  }
+  renderT1Nodes();
+}
+
+function removeOptionInNode(globalIdx, fieldId) {
   optionsData.splice(globalIdx, 1);
   optionsDirty = true;
+  // 若正在編輯這個 chip，關閉 panel；index 位移後舊狀態已無效
+  if (fieldId && _chipEditState[fieldId] != null) {
+    _chipEditState[fieldId] = null;
+  }
+  renderT1Nodes();
+}
+
+function removeAdminDefaultTag(nodeIdx, val) {
+  const hidden = document.getElementById('t1-admin-default-' + nodeIdx);
+  if (!hidden) return;
+  const parts = hidden.value.split(',').map(s => s.trim()).filter(s => s && s !== val);
+  hidden.value = parts.join(', ');
+  t1NodesData[nodeIdx].default = hidden.value;
+  t1NodesDirty = true;
+  _schedulePreview();
   renderT1Nodes();
 }
 

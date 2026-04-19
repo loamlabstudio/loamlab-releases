@@ -285,6 +285,7 @@ function renderT1Nodes() {
             groupEl.appendChild(item);
         });
 
+        if (groupKey === 'materials') groupEl.appendChild(_createUserMaterialsSection());
         container.appendChild(groupEl);
     });
 }
@@ -295,6 +296,79 @@ function _applyPromptMode() {
     document.getElementById('t1-dynamic-nodes')?.classList.toggle('hidden', isLegacy);
     document.getElementById('t1-legacy-notice')?.classList.toggle('hidden', !isLegacy);
     document.getElementById('t1-presets-section')?.classList.toggle('hidden', isLegacy);
+}
+
+// ── 用戶自訂材質節點 ──────────────────────────────────────────────────────────
+let userMaterialNodes = JSON.parse(localStorage.getItem('loamlab_user_mat_nodes') || '[]');
+
+function _saveUserMatNodes() {
+    localStorage.setItem('loamlab_user_mat_nodes', JSON.stringify(userMaterialNodes));
+}
+
+function addUserMaterialNode() {
+    const labelEl = document.getElementById('user-mat-label-input');
+    const valueEl = document.getElementById('user-mat-value-input');
+    const label = (labelEl?.value || '').trim();
+    const value = (valueEl?.value || '').trim();
+    if (!label || !value) return;
+    userMaterialNodes.push({ id: Date.now().toString(36), label, value });
+    _saveUserMatNodes();
+    if (labelEl) labelEl.value = '';
+    if (valueEl) valueEl.value = '';
+    renderUserMaterialList();
+    // 收起新增列
+    document.getElementById('user-mat-add-row')?.classList.add('hidden');
+}
+
+function removeUserMaterialNode(id) {
+    userMaterialNodes = userMaterialNodes.filter(m => m.id !== id);
+    _saveUserMatNodes();
+    renderUserMaterialList();
+}
+
+function renderUserMaterialList() {
+    const list = document.getElementById('user-mat-list');
+    if (!list) return;
+    if (userMaterialNodes.length === 0) {
+        list.innerHTML = '';
+        return;
+    }
+    list.innerHTML = userMaterialNodes.map(m => `
+        <div class="flex items-center gap-1 bg-white/5 border border-white/5 rounded px-2 py-1 text-[10px]">
+            <span class="text-white/60 font-medium shrink-0">${m.label}</span>
+            <span class="text-white/20 shrink-0">→</span>
+            <span class="text-white/40 flex-1 min-w-0 truncate">${m.value}</span>
+            <button onclick="removeUserMaterialNode('${m.id}')"
+                class="text-white/20 hover:text-red-400 shrink-0 ml-1 transition-colors">✕</button>
+        </div>
+    `).join('');
+}
+
+function _createUserMaterialsSection() {
+    const section = document.createElement('div');
+    section.className = 'node-item mt-1';
+    section.innerHTML = `
+        <div class="flex items-center justify-between mb-1">
+            <span class="text-[9px] text-white/25 uppercase tracking-widest">自訂材質</span>
+            <button onclick="document.getElementById('user-mat-add-row').classList.toggle('hidden')"
+                class="text-[10px] text-[#dc2626]/60 hover:text-[#dc2626] transition-colors">+ 新增</button>
+        </div>
+        <div id="user-mat-add-row" class="hidden flex flex-col gap-1 mb-1.5">
+            <input id="user-mat-label-input"
+                class="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-[11px] text-white/80 outline-none focus:border-[#dc2626]/50 placeholder-white/20"
+                placeholder="材質名稱，例：綠色部分">
+            <div class="flex gap-1">
+                <input id="user-mat-value-input"
+                    class="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-[11px] text-white/80 outline-none focus:border-[#dc2626]/50 placeholder-white/20"
+                    placeholder="描述，例：鏡面反射，高光澤">
+                <button onclick="addUserMaterialNode()"
+                    class="shrink-0 bg-[#dc2626]/15 border border-[#dc2626]/30 text-red-300 hover:bg-[#dc2626]/30 rounded px-2 text-[10px] transition-colors">確認</button>
+            </div>
+        </div>
+        <div id="user-mat-list" class="flex flex-col gap-1"></div>
+    `;
+    setTimeout(() => renderUserMaterialList(), 0);
+    return section;
 }
 
 // ── 用戶個人 Chips ──────────────────────────────────────────────────────────
@@ -1529,10 +1603,11 @@ document.addEventListener("DOMContentLoaded", () => {
             if (currentActiveTool === 1) {
                 t1NodesData.forEach(node => {
                     const input = document.getElementById(`t1-node-${node.id}`);
-                    if (input) {
-                        advanced_settings[node.id] = input.value;
-                    }
+                    if (input) advanced_settings[node.id] = input.value;
                 });
+                if (userMaterialNodes.length > 0) {
+                    advanced_settings.user_material_nodes = userMaterialNodes.map(m => ({ label: m.label, value: m.value }));
+                }
             }
 
             sketchup.render_scene({

@@ -395,6 +395,12 @@ export default async function handler(req, res) {
                     const val = node.system ? (node.value || '') : (adv[node.id] || node.default || '');
                     if (val.toString().trim()) rawValues[node.id] = val.toString().trim();
                 });
+                // 用戶自訂材質節點（label + value 一併翻譯）
+                const userMatNodes = adv.user_material_nodes || [];
+                userMatNodes.forEach((m, i) => {
+                    if (m.label?.trim()) rawValues[`__umat_${i}_label`] = m.label.trim();
+                    if (m.value?.trim()) rawValues[`__umat_${i}_value`] = m.value.trim();
+                });
                 // 2. Gemini 翻譯（有 CJK 才翻，無 API Key 則原值）
                 const translatedValues = await translateValues(rawValues);
                 const translatedUserPrompt = translatedValues['__userPrompt__'] || userPrompt.trim();
@@ -419,6 +425,16 @@ export default async function handler(req, res) {
                     });
                     if (Object.keys(section).length > 0) jsonPrompt[title] = section;
                 });
+
+                // 3b. 用戶自訂材質節點 → 注入 Material Control
+                if (userMatNodes.length > 0) {
+                    if (!jsonPrompt['Material Control']) jsonPrompt['Material Control'] = {};
+                    userMatNodes.forEach((m, i) => {
+                        const key = translatedValues[`__umat_${i}_label`] || m.label;
+                        const val = translatedValues[`__umat_${i}_value`] || m.value;
+                        if (key && val?.trim()) jsonPrompt['Material Control'][key] = val.trim();
+                    });
+                }
 
                 // 4. 批量出圖風格一致性附加
                 if (styleRefUrl && styleRefNote) {

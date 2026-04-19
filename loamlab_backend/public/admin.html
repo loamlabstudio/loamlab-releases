@@ -1346,10 +1346,18 @@ async function _gtTranslate(text, sl, tl) {
   return j[0].map(s => s[0]).join('');
 }
 
-function _findBestSrc(obj) {
+// 預設佔位文字集合，翻譯時跳過這些值
+const _DEFAULT_LABELS = new Set(['new node','新節點','新节点','nuevo nodo','novo nó','新しいノード']);
+const _DEFAULT_PH    = new Set(['enter value...','please enter...','請輸入...','请输入...','por favor ingresa...','por favor insira...','入力してください...']);
+
+function _findBestSrc(obj, fallbackId) {
   for (const l of ['zh-TW', 'zh-CN', 'en-US', 'es-ES', 'pt-BR', 'ja-JP']) {
-    if (obj?.[l]?.trim()) return { locale: l, text: obj[l].trim() };
+    const v = obj?.[l]?.trim();
+    if (v && !_DEFAULT_LABELS.has(v.toLowerCase()) && !_DEFAULT_PH.has(v.toLowerCase()))
+      return { locale: l, text: v };
   }
+  // 全是預設值時，用 node.id 做來源
+  if (fallbackId) return { locale: 'en-US', text: fallbackId.replace(/_/g, ' ') };
   return null;
 }
 
@@ -1361,8 +1369,8 @@ async function _doTranslateNodes(indices, btnEl, origText) {
   try {
     for (const idx of indices) {
       const node = t1NodesData[idx];
-      // labels
-      const labelSrc = _findBestSrc(node.labels);
+      // labels（跳過全預設值，fallback 用 node.id）
+      const labelSrc = _findBestSrc(node.labels, node.id);
       if (labelSrc) {
         const sl = _GT_LANG_MAP[labelSrc.locale];
         const results = await Promise.all(_ALL_LOCALES.map(l =>
@@ -1372,8 +1380,8 @@ async function _doTranslateNodes(indices, btnEl, origText) {
         if (!t1NodesData[idx].labels) t1NodesData[idx].labels = {};
         _ALL_LOCALES.forEach((l, i) => { t1NodesData[idx].labels[l] = results[i]; });
       }
-      // placeholders
-      const phSrc = _findBestSrc(node.placeholders);
+      // placeholders（不強制 fallback，空 placeholder 可接受）
+      const phSrc = _findBestSrc(node.placeholders, null);
       if (phSrc) {
         const sl = _GT_LANG_MAP[phSrc.locale];
         const results = await Promise.all(_ALL_LOCALES.map(l =>

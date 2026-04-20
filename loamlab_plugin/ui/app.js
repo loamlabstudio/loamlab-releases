@@ -152,6 +152,7 @@ function renderT1Nodes() {
 
         nodes.forEach(node => {
             if (node.system) return; // 核心約束由系統管理，插件不顯示
+            if (node.hidden) return; // 靜默節點：後端合併送出，插件不顯示
             const label = node.labels?.[currentLang] || node.labels?.['en-US'] || node.id;
             const ph = node.placeholders?.[currentLang] || node.placeholders?.['en-US'] || '';
 
@@ -1992,25 +1993,42 @@ function _autoPopulateShareImage(url) {
     }
 }
 
-// QR URL：ref + d(內容) + img（175px QR 可承載 ~350 chars，全部放進去）
-function _buildShareUrl() {
-    const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : 'https://loamlab-camera.vercel.app';
+// 後端建立 share session → QR 只帶短 session ID（~70 chars），可靠掃描
+async function _createAndRenderQR(qrContainer) {
+    if (!qrContainer) return;
+    qrContainer.innerHTML = '<div style="width:175px;height:175px;display:flex;align-items:center;justify-content:center;background:#111;border-radius:6px"><span style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;line-height:1.6">建立連結<br>請稍候...</span></div>';
+
+    const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) || 'https://loamlab-camera.vercel.app';
     const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
     const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
-    const rawUrl = afterImg ? (afterImg.cloud_url || '') : '';
+    // cloud_url = session render（有 AtlasCloud URL）；file_url = Ruby 存檔（本機路徑，不可用）
+    const rawUrl = afterImg ? (afterImg.cloud_url || afterImg.file_url || '') : '';
     const imgUrl = rawUrl.startsWith('http') ? rawUrl : '';
 
-    // 把用戶填入的內容也放進 QR，手機端才能顯示完整貼文
-    const payload = {
-        p: document.getElementById('share-input-project')?.value || '',
-        d: document.getElementById('share-input-designer')?.value || '',
-        c: document.getElementById('share-input-content')?.value || ''
-    };
-    const encodedText = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
 
-    let url = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&d=${encodedText}`;
-    if (imgUrl) url += `&img=${encodeURIComponent(imgUrl)}`;
-    return url;
+    const text_data = {
+        project: document.getElementById('share-input-project')?.value || '',
+        designer: document.getElementById('share-input-designer')?.value || '',
+        content: document.getElementById('share-input-content')?.value || ''
+    };
+    const images = imgUrl ? [{ type: 'after', url: imgUrl }] : [];
+
+    try {
+        const resp = await fetch(`${baseUrl}/api/stats?action=create_share_session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ images, text_data })
+        });
+        const data = await resp.json();
+        if (data.code === 0) {
+            const url = `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}&session=${encodeURIComponent(data.session_id)}`;
+            _renderQRCode(qrContainer, url);
+            return;
+        }
+    } catch(e) {}
+
+    // Fallback：只帶 ref，手機頁顯示通用文案
+    _renderQRCode(qrContainer, `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}`);
 }
 
 
@@ -2055,21 +2073,20 @@ window.openShareModal = function() {
 
     if (textContent) textContent.value = generateShareTextWithReferral();
 
-    // 即時產生 QR
     const qrContainer = document.getElementById('share-qrcode');
-    if (qrContainer) _renderQRCode(qrContainer, _buildShareUrl());
 
-    // 輸入框變更時 debounce 重建 QR + 更新文字預覽（內容已放回 QR URL 中）
+    // 手動建立 QR（確保圖文都準備好）
+    window.buildShareQR = function() {
+        _createAndRenderQR(qrContainer);
+    };
+
+    // 輸入框變更時更新文字預覽
     window._updateQRCode = function() {
         ['share-input-project', 'share-input-designer'].forEach(id => {
             const el = document.getElementById(id);
             if (el) localStorage.setItem(`loamlab_${id}`, el.value);
         });
         if (textContent) textContent.value = generateShareTextWithReferral();
-        clearTimeout(window._qrDebounce);
-        window._qrDebounce = setTimeout(() => {
-            if (qrContainer) _renderQRCode(qrContainer, _buildShareUrl());
-        }, 800);
     };
 
     modal.classList.remove('hidden');
@@ -2577,12 +2594,14 @@ window.renderShareImagePool = function() {
     pool.innerHTML = window._shareImagesPool.map((img, i) => {
         const src = img.file_url || img.cloud_url || '';
         const isBase = (img.filename || '').includes('原圖');
+        const hasCloudUrl = (img.cloud_url || '').startsWith('http');
         return `
-        <div class="relative w-16 h-16 shrink-0 rounded overflow-hidden border border-white/20 group cursor-pointer shadow-lg" onclick="removeShareImage(${i})" title="點擊移除">
-            <img src="${src}" class="w-full h-full object-cover">
+        <div class="relative w-16 h-16 shrink-0 rounded overflow-hidden border ${hasCloudUrl ? 'border-amber-500/40' : 'border-red-500/40'} group cursor-pointer shadow-lg" onclick="removeShareImage(${i})" title="點擊移除">
+            <img src="${src}" class="w-full h-full object-cover ${hasCloudUrl ? '' : 'opacity-50'}">
             <div class="absolute inset-0 bg-red-500/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                 <span class="text-white text-xs font-bold leading-none">&times;</span>
             </div>
+            ${!hasCloudUrl ? '<div class="absolute top-0 left-0 right-0 bg-red-600/90 text-[7px] text-white text-center py-0.5 font-bold">存檔圖 ✗</div>' : ''}
             <div class="absolute bottom-0 left-0 right-0 bg-black/80 text-[8px] text-center py-0.5 tracking-wider font-bold ${isBase ? 'text-[#e1306c]' : 'text-amber-500'}">${isBase ? 'BEFORE' : 'AFTER'}</div>
         </div>`;
     }).join('');

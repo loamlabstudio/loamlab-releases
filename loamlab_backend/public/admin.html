@@ -235,6 +235,11 @@
       </div>
     </div>
 
+    <!-- Tool 1 批量圖片角色 -->
+    <div class="mb-3">
+      <label class="block text-xs font-semibold text-purple-300 mb-1">Tool 1 — 批量圖片角色說明 <span class="text-white/25 font-normal">（Nodes ＆ Legacy 共用，告知模型 Image 1 = 來源場景、Image 2 = 光線參考）</span></label>
+      <textarea id="prompt-t1-batch-image-roles" class="w-full bg-black/40 border border-purple-500/20 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-14 leading-relaxed"></textarea>
+    </div>
     <!-- Tool 1 批量風格一致性 -->
     <div class="mb-4">
       <label class="block text-xs font-semibold text-purple-300 mb-1">Tool 1 — 批量出圖風格鎖定 <span class="text-white/25 font-normal">（第二張起附加，鎖定第一張的光線色調）</span></label>
@@ -301,9 +306,18 @@
         <div class="bg-black/60 border border-white/10 rounded-xl p-3">
           <div class="flex justify-between items-center mb-2">
             <span class="text-[10px] text-gray-500 uppercase tracking-wider">Prompt Preview</span>
-            <button onclick="previewPrompt()" class="text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors">↻ 重整</button>
+            <div class="flex items-center gap-2">
+              <button id="btn-preview-mode" onclick="setPreviewMode('view')" class="text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors font-semibold">👁 檢視</button>
+              <button id="btn-edit-mode" onclick="setPreviewMode('edit')" class="text-[10px] text-gray-600 hover:text-gray-400 transition-colors">✏️ 編輯</button>
+              <button onclick="previewPrompt()" class="text-[10px] text-gray-500 hover:text-cyan-300 transition-colors">↻</button>
+            </div>
           </div>
-          <pre id="prompt-preview-output" class="text-[10px] text-green-300 font-mono whitespace-pre-wrap leading-relaxed overflow-auto max-h-[60vh]">點「↻ 重整」查看組裝結果</pre>
+          <pre id="prompt-preview-output" class="text-[10px] text-green-300 font-mono whitespace-pre-wrap leading-relaxed overflow-auto max-h-[60vh]">點「↻」查看組裝結果</pre>
+          <textarea id="prompt-edit-input" class="hidden w-full text-[10px] text-yellow-200 font-mono bg-black/40 border border-yellow-500/30 rounded p-2 resize-y leading-relaxed outline-none focus:border-yellow-500/60 max-h-[60vh] min-h-[200px]" placeholder="在此直接編輯 JSON，點「▶ 套用」測試效果"></textarea>
+          <div id="prompt-edit-actions" class="hidden mt-2 flex gap-2">
+            <button onclick="applyEditedPrompt()" class="flex-1 py-1 bg-yellow-600/20 hover:bg-yellow-600/40 text-yellow-400 border border-yellow-600/40 rounded text-[10px] font-semibold transition-colors">▶ 套用到預覽</button>
+            <button onclick="resetEditedPrompt()" class="py-1 px-2 bg-white/5 hover:bg-white/10 text-gray-500 border border-white/10 rounded text-[10px] transition-colors">重置</button>
+          </div>
         </div>
       </div>
     </div>
@@ -884,6 +898,7 @@ async function translateShareTemplate() {
 async function loadPrompts() {
   const defaultP1 = "這是sketchup室內建模的模型（圖1），最後的目的是要轉換成iPhone拍的照片：先在後端生成一張鎖死空間感的深度圖（圖2）和一張所有元素鎖死並且轉換成色彩分明的通道圖（圖三），使用圖1參考圖2和圖3，在不改變模型材質和結構的情況下，99%還原圖片的空間感、相機位置、材質紋理方向，轉換成iPhone拍攝室內空間寫實照片，自然的光感，補充其他區域的漫反射光線，避免局部死黑或過曝，根據室內空間合理化極小不合理的元素，專業攝影級色彩，照片整體有自然的明暗過渡的層次,ultra-detailed";
   const defaultP1BatchStyle = ". Ensure this image's overall lighting (direction, warmth, intensity) and color tone (temperature, saturation, luminance) match the second reference image so both appear from the same photography session. Spatial content and materials follow Image 1 only — do not reference the second image for those.";
+  const defaultP1BatchImageRoles = 'Image 1: current SketchUp scene screenshot — primary source for spatial structure, camera angle, geometry and materials. Image 2: style reference only — match its lighting direction, color temperature and overall tone; do NOT copy its camera position, spatial layout or composition.';
   const defaultP2 = "Edit IMAGE 1 (the original scene photo) by replacing objects as specified below.\nThe colored areas in IMAGE 2 are only location markers — do not use these marker colors in the final result.\n{{REF_TEXT}}\nChanges:\n{{CHANGES}}\n\nStrict Guidelines:\n① Final result must be based on IMAGE 1, appearing as a natural, original photograph — not based on IMAGE 2\n② Perspective & Proportion: Render all objects from IMAGE 1's camera angle, adjust orientation to match scene perspective; do not keep the reference photo's original angle\n③ Lighting & Color Temperature: Strictly follow IMAGE 1's light direction, intensity, shadows and color temperature; remove all color casts, glows and artificial lighting from references\n④ Boundary Control: Stay mainly within marked zones; minor edge feathering is allowed for seamless blending, but do not affect unrelated objects or surfaces\n⑤ Realism & Aesthetics: Replaced objects must have realistic materials, correct scale, elegant composition, and blend harmoniously into the original space with consistent style";
   const defaultP3 = "Based on the uploaded reference image, generate a single high-quality 3x3 interior visualization collage in exact 1:1 square aspect ratio. Output only the clean collage - no text, no titles, no watermarks, no borders, no labels.\nHighest priority: Faithfully extract and reproduce all details from the reference image, including material textures, light and shadow characteristics, color tones, object qualities, and unique atmosphere. All 9 panels must maintain the exact same spatial structure, furniture layout, and lighting direction. Accurate perspective with zero distortion or shifting.\n3x3 Mixed Grid Layout:\nTop Row Left: Left 45 wide long shot showing the full spatial layout and depth\nTop Row Center: Exact same viewpoint and framing as the uploaded reference image (visual anchor)\nTop Row Right: Close-up detail 1 - highly faithful reproduction of material textures and craftsmanship from the reference image\nMiddle Row Left: Medium shot focusing on main furniture arrangement and functional area, preserving the original light and shadow atmosphere\nMiddle Row Center: Close-up detail 2 - emphasizing light and shadow interaction and surface qualities from the reference image\nMiddle Row Right: Right 45 wide long shot showing the other side of the space\nBottom Row Left: Close-up detail 3 - faithfully presenting another dimension of details from the reference image (e.g., decorative elements, corner craftsmanship, or material contrast)\nBottom Row Center: Medium shot from an alternative angle showing spatial transparency and overall atmosphere, faithful to the original tone\nBottom Row Right: Balanced medium shot concluding with overall harmony and high-end quality\n\nTechnical Requirements:\nStrictly faithful to the reference image's materials, lighting, colors, and fine details; 8K ultra-high resolution with extreme detail; photorealistic material rendering with accurate reflections, refractions, and micro-surface details; professional multi-layer lighting; cinematic color grading with sophisticated, soft, and luxurious tones; extremely sharp, clean, noise-free, and distortion-free.\nGenerate a single cohesive 3x3 collage with strong visual rhythm and dramatic scale contrast, while perfectly capturing the unique details and atmosphere of the reference image.";
   
@@ -891,6 +906,7 @@ async function loadPrompts() {
     const r = await fetch(`${API_BASE}/api/stats?action=get_prompts`);
     const j = await r.json();
     document.getElementById('prompt-t1').value = (j.prompts && j.prompts.TOOL_1) ? j.prompts.TOOL_1 : defaultP1;
+    document.getElementById('prompt-t1-batch-image-roles').value = (j.prompts && j.prompts.TOOL_1_BATCH_IMAGE_ROLES) ? j.prompts.TOOL_1_BATCH_IMAGE_ROLES : defaultP1BatchImageRoles;
     document.getElementById('prompt-t1-batch-style').value = (j.prompts && j.prompts.TOOL_1_BATCH_STYLE) ? j.prompts.TOOL_1_BATCH_STYLE : defaultP1BatchStyle;
     document.getElementById('prompt-t2').value = (j.prompts && j.prompts.TOOL_2) ? j.prompts.TOOL_2 : defaultP2;
     document.getElementById('prompt-t3').value = (j.prompts && j.prompts.TOOL_3) ? j.prompts.TOOL_3 : defaultP3;
@@ -903,6 +919,7 @@ async function savePrompts() {
   
   const prompts = {
     TOOL_1: document.getElementById('prompt-t1').value.trim(),
+    TOOL_1_BATCH_IMAGE_ROLES: document.getElementById('prompt-t1-batch-image-roles').value.trim(),
     TOOL_1_BATCH_STYLE: document.getElementById('prompt-t1-batch-style').value.trim(),
     TOOL_2: document.getElementById('prompt-t2').value.trim(),
     TOOL_3: document.getElementById('prompt-t3').value.trim()
@@ -1052,6 +1069,8 @@ function renderT1Nodes() {
   const GROUP_ORDER = ['meta', 'core_constraints', 'scene_lighting', 'materials', 'photography', 'rendering'];
   // 將節點按 group 排序，插入群組標頭
   let lastGroup = null;
+  let systemHeaderAdded = false;
+  let userHeaderAdded = false;
   const pieces = [];
   // 先按 GROUP_ORDER 排序非 system 節點（system 節點保持原位）
   const sorted = [...t1NodesData];
@@ -1068,6 +1087,24 @@ function renderT1Nodes() {
   sorted.forEach((node) => {
     const idx = t1NodesData.indexOf(node); // 原始 index（供 onclick 使用）
     const grp = node.group || 'other';
+    // 系統節點區塊標頭（只加一次）
+    if (node.system && !systemHeaderAdded) {
+      systemHeaderAdded = true;
+      pieces.push(`<div class="flex items-center gap-2 mb-2">
+        <div class="h-px flex-1 bg-amber-600/20"></div>
+        <span class="text-[9px] uppercase tracking-widest text-amber-600/80 font-bold shrink-0 px-2">🔒 系統層提示（後端約束）</span>
+        <div class="h-px flex-1 bg-amber-600/20"></div>
+      </div>`);
+    }
+    // 用戶控制項區塊標頭（只加一次，在第一個非系統節點前）
+    if (!node.system && !userHeaderAdded) {
+      userHeaderAdded = true;
+      pieces.push(`<div class="flex items-center gap-2 mt-5 mb-2">
+        <div class="h-px flex-1 bg-cyan-600/20"></div>
+        <span class="text-[9px] uppercase tracking-widest text-cyan-600/80 font-bold shrink-0 px-2">🎛 用戶控制項（Plugin UI）</span>
+        <div class="h-px flex-1 bg-cyan-600/20"></div>
+      </div>`);
+    }
     if (!node.system && grp !== lastGroup) {
       lastGroup = grp;
       const label = GROUP_LABELS[grp] || grp;
@@ -1103,8 +1140,9 @@ function renderT1Nodes() {
       </div>
     </div>
   ` : `
-    <div class="bg-black/30 border border-white/5 rounded-xl p-3">
-      <!-- 頂欄：ID | en-US label | Group | Type | 刪除 -->
+    <div class="${node.hidden ? 'bg-purple-950/20 border border-purple-500/20' : 'bg-black/30 border border-white/5'} rounded-xl p-3">
+      ${node.hidden ? '<div class="text-[9px] text-purple-400/70 uppercase font-bold mb-2 tracking-widest">🙈 靜默節點（Hidden）— 後端合併送出，插件和分享不顯示</div>' : ''}
+      <!-- 頂欄：ID | en-US label | Group | Type | Hidden | 刪除 -->
       <div class="flex items-center gap-2 mb-3">
         <input type="text" value="${node.id}" onchange="updateNode(${idx}, 'id', this.value)"
                class="w-28 bg-black/40 border border-white/10 rounded px-2 py-1 text-[11px] text-gray-400 font-mono outline-none"
@@ -1123,6 +1161,10 @@ function renderT1Nodes() {
           <option value="text" ${node.type === 'text' ? 'selected' : ''}>Text</option>
           <option value="slider" ${node.type === 'slider' ? 'selected' : ''}>Slider</option>
         </select>
+        <button onclick="updateNode(${idx}, 'hidden', !t1NodesData[${idx}].hidden); renderT1Nodes(); _schedulePreview();"
+                class="${node.hidden ? 'text-purple-400 hover:text-purple-300' : 'text-gray-600 hover:text-purple-400'} transition-colors shrink-0" title="${node.hidden ? '取消靜默' : '設為靜默節點（Hidden）'}">
+          ${node.hidden ? '🙈' : '👁'}
+        </button>
         <button onclick="removeT1Node(${idx})" class="text-gray-600 hover:text-red-400 transition-colors ml-1 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
         </button>
@@ -1753,6 +1795,56 @@ function importAdminPreset() {
   input.click();
 }
 
+let _previewEditMode = false;
+
+function setPreviewMode(mode) {
+  _previewEditMode = (mode === 'edit');
+  const pre = document.getElementById('prompt-preview-output');
+  const ta  = document.getElementById('prompt-edit-input');
+  const actions = document.getElementById('prompt-edit-actions');
+  const btnView = document.getElementById('btn-preview-mode');
+  const btnEdit = document.getElementById('btn-edit-mode');
+  if (_previewEditMode) {
+    previewPrompt(); // 先確保 pre 有最新內容
+    ta.value = pre.textContent;
+    pre.classList.add('hidden');
+    ta.classList.remove('hidden');
+    actions.classList.remove('hidden');
+    btnView.className = 'text-[10px] text-gray-600 hover:text-gray-400 transition-colors';
+    btnEdit.className = 'text-[10px] text-yellow-400 hover:text-yellow-300 transition-colors font-semibold';
+  } else {
+    pre.classList.remove('hidden');
+    ta.classList.add('hidden');
+    actions.classList.add('hidden');
+    btnView.className = 'text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors font-semibold';
+    btnEdit.className = 'text-[10px] text-gray-600 hover:text-gray-400 transition-colors';
+  }
+}
+
+function applyEditedPrompt() {
+  const ta = document.getElementById('prompt-edit-input');
+  const pre = document.getElementById('prompt-preview-output');
+  try {
+    const parsed = JSON.parse(ta.value);
+    pre.textContent = JSON.stringify(parsed, null, 2);
+    pre.classList.remove('text-green-300');
+    pre.classList.add('text-yellow-200');
+    const s = document.getElementById('t1-nodes-status');
+    if (s) { s.textContent = '✅ 已套用編輯 JSON（未儲存到節點）'; s.className = 'text-xs text-yellow-400'; s.classList.remove('hidden'); }
+  } catch(e) {
+    const s = document.getElementById('t1-nodes-status');
+    if (s) { s.textContent = '❌ JSON 格式錯誤：' + e.message; s.className = 'text-xs text-red-400'; s.classList.remove('hidden'); }
+  }
+}
+
+function resetEditedPrompt() {
+  const pre = document.getElementById('prompt-preview-output');
+  pre.classList.remove('text-yellow-200');
+  pre.classList.add('text-green-300');
+  previewPrompt();
+  setPreviewMode('view');
+}
+
 function previewPrompt() {
   const output = document.getElementById('prompt-preview-output');
   if (!output) return;
@@ -1779,14 +1871,21 @@ function previewPrompt() {
     if (val.trim()) nodeValues[node.id] = val;
   });
 
+  const hiddenSection = {};
   Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
     const section = {};
     t1NodesData.filter(n => n.group === group).forEach(node => {
       const val = nodeValues[node.id];
-      if (val) section[node.labels?.['en-US'] || node.id] = val;
+      if (!val) return;
+      if (node.hidden) {
+        hiddenSection[node.labels?.['en-US'] || node.id] = val + ' 🙈';
+      } else {
+        section[node.labels?.['en-US'] || node.id] = val;
+      }
     });
     if (Object.keys(section).length > 0) jsonPrompt[title] = section;
   });
+  if (Object.keys(hiddenSection).length > 0) jsonPrompt['[Hidden — 後端合併，不顯示給用戶]'] = hiddenSection;
 
   output.textContent = JSON.stringify(jsonPrompt, null, 2);
 }

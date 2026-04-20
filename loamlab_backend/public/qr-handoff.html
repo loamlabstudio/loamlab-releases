@@ -163,22 +163,9 @@
             let resolvedImg = '';
             let captionText = '';
 
-            // params.has() 用於判斷 key 是否存在（避免空字串 '' 被視為 falsy）
-            if (params.has('img') || params.has('d') || params.has('ref')) {
-                resolvedImg = imgParam;
-
-                let textData = { referral_code: ref };
-                if (dataBase64) {
-                    try {
-                        const decoded = decodeURIComponent(escape(atob(dataBase64)));
-                        const obj = JSON.parse(decoded);
-                        textData = { project: obj.p, designer: obj.d, content: obj.c, referral_code: ref };
-                    } catch(e) {}
-                }
-                captionText = buildPostText(textData);
-
-            } else if (sessionId) {
-                // 向下相容：session 模式
+            // session 優先；舊版 img/d 參數模式向下相容
+            if (sessionId) {
+                // session 模式（新）
                 try {
                     const resp = await fetch(`${API_BASE}/api/stats?action=get_share_session&session=${encodeURIComponent(sessionId)}`);
                     const data = await resp.json();
@@ -189,6 +176,18 @@
                     }
                 } catch(e) {}
 
+            } else if (params.has('img') || params.has('d') || params.has('ref')) {
+                // 舊版 URL 參數模式（向下相容）
+                resolvedImg = imgParam;
+                let textData = { referral_code: ref };
+                if (dataBase64) {
+                    try {
+                        const decoded = decodeURIComponent(escape(atob(dataBase64)));
+                        const obj = JSON.parse(decoded);
+                        textData = { project: obj.p, designer: obj.d, content: obj.c, referral_code: ref };
+                    } catch(e) {}
+                }
+                captionText = buildPostText(textData);
             } else {
                 loadingEl.classList.add('hidden');
                 mainEl.classList.remove('hidden');
@@ -224,7 +223,31 @@
             btnGo.addEventListener('click', async () => {
                 btnGo.disabled = true;
 
-                // 步驟一：嘗試下載圖片（Android 直接存；iOS 彈出分享表單）
+                // 優先：原生 navigator.share（Android/iOS 系統分享表單，圖文一起打包）
+                if (resolvedImg && navigator.canShare) {
+                    try {
+                        const proxyUrl = `${API_BASE}/api/stats?action=proxy_img&url=${encodeURIComponent(resolvedImg)}`;
+                        const resp = await fetch(proxyUrl);
+                        if (resp.ok) {
+                            const blob = await resp.blob();
+                            const file = new File([blob], 'loamlab-render.jpg', { type: blob.type || 'image/jpeg' });
+                            const shareData = { files: [file], text: captionText };
+                            if (navigator.canShare(shareData)) {
+                                await navigator.share(shareData);
+                                showToast('✅ 分享完成！', 2500);
+                                btnGo.classList.add('done');
+                                document.getElementById('btn-label').textContent = '✅ 已分享';
+                                document.getElementById('btn-sub').textContent = '邀請 @loamlab_barbarian 協作即可獲得 +300 點';
+                                return;
+                            }
+                        }
+                    } catch(e) {
+                        if (e.name === 'AbortError') { btnGo.disabled = false; return; }
+                        // 其他錯誤 fallback 到舊流程
+                    }
+                }
+
+                // Fallback：步驟一 下載圖片（Android 直接存；iOS 長按）
                 if (resolvedImg) {
                     const ok = await downloadImage(resolvedImg);
                     if (!ok && isIOS) {

@@ -103,10 +103,12 @@
 
         async function downloadImage(url) {
             if (!url) return false;
-            // 透過後端代理繞過 CORS（直接 fetch 第三方圖床會被跨域限制）
-            const proxyUrl = `${API_BASE}/api/stats?action=proxy_img&url=${encodeURIComponent(url)}`;
+            // resolvedImg 現在是後端代理 URL（/api/stats?action=share_img&...），直接 fetch 不需 proxy_img
+            const fetchUrl = (url.startsWith('/') || url.startsWith(API_BASE))
+                ? url
+                : `${API_BASE}/api/stats?action=proxy_img&url=${encodeURIComponent(url)}`;
             try {
-                const resp = await fetch(proxyUrl);
+                const resp = await fetch(fetchUrl);
                 if (!resp.ok) throw new Error(resp.status);
                 const blob = await resp.blob();
                 const blobUrl = URL.createObjectURL(blob);
@@ -226,8 +228,11 @@
                 // 優先：原生 navigator.share（Android/iOS 系統分享表單，圖文一起打包）
                 if (resolvedImg && navigator.canShare) {
                     try {
-                        const proxyUrl = `${API_BASE}/api/stats?action=proxy_img&url=${encodeURIComponent(resolvedImg)}`;
-                        const resp = await fetch(proxyUrl);
+                        // resolvedImg 是後端代理 URL，直接 fetch（不需再繞 proxy_img）
+                        const fetchUrl = (resolvedImg.startsWith('/') || resolvedImg.startsWith(API_BASE))
+                            ? (resolvedImg.startsWith('/') ? API_BASE + resolvedImg : resolvedImg)
+                            : `${API_BASE}/api/stats?action=proxy_img&url=${encodeURIComponent(resolvedImg)}`;
+                        const resp = await fetch(fetchUrl);
                         if (resp.ok) {
                             const blob = await resp.blob();
                             const file = new File([blob], 'loamlab-render.jpg', { type: blob.type || 'image/jpeg' });

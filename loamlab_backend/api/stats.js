@@ -102,29 +102,16 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, prompts: data?.metadata?.prompts || {} });
     }
 
-    // --- Share Session (POST: 建立; GET: 讀取) ---
+    // --- Share Session (POST: 建立; GET: 讀取) — 用 transactions 表儲存，避免建新表 ---
     if (action === 'create_share_session' && req.method === 'POST') {
-        const { images, text_data, user_email } = req.body || {};
-        const afterImages = (images || []).filter(img => img.type === 'after');
-        if (!afterImages.length) return res.status(400).json({ code: -1, msg: '渲染結果圖(After)為必填' });
-
+        const { images, text_data } = req.body || {};
         const sessionId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-
-        const { error: insertErr } = await supabase.from('share_sessions').insert({
-            id: sessionId, user_email: user_email || null,
-            images: images || [], text_data: text_data || {}, expires_at: expiresAt
+        const { error: insertErr } = await supabase.from('transactions').insert({
+            user_email: null, amount: 0,
+            transaction_type: 'SHARE_SESSION',
+            metadata: { session_id: sessionId, images: images || [], text_data: text_data || {} }
         });
         if (insertErr) return res.status(500).json({ code: -1, msg: insertErr.message });
-
-        // Wow Shot 申請：建立 pending reward_request
-        if (text_data && text_data.wow_shot_apply && user_email) {
-            await supabase.from('reward_requests').insert({
-                user_email, reward_points: 300,
-                ig_post_url: `share_session:${sessionId}`, status: 'pending',
-                expires_at: new Date(Date.now() + 7 * 86400000).toISOString()
-            });
-        }
         return res.status(200).json({ code: 0, session_id: sessionId });
     }
 
@@ -132,12 +119,86 @@ export default async function handler(req, res) {
         const sessionId = req.query.session;
         if (!sessionId) return res.status(400).json({ code: -1, msg: 'Missing session' });
         const { data, error } = await supabase
-            .from('share_sessions')
-            .select('images, text_data, expires_at')
-            .eq('id', sessionId).single();
+            .from('transactions')
+            .select('metadata, created_at')
+            .eq('transaction_type', 'SHARE_SESSION')
+            .filter('metadata->>session_id', 'eq', sessionId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
         if (error || !data) return res.status(404).json({ code: -1, msg: 'Session not found' });
-        if (new Date(data.expires_at) < new Date()) return res.status(410).json({ code: -1, msg: 'Session expired' });
-        return res.status(200).json({ code: 0, ...data });
+        const age = Date.now() - new Date(data.created_at).getTime();
+        if (age > 48 * 3600 * 1000) return res.status(410).json({ code: -1, msg: 'Session expired' });
+        // 將原始圖片 URL 替換為後端代理 URL，避免暴露上游域名
+        const proxiedImages = (data.metadata.images || []).map((img, idx) => ({
+            ...img,
+            url: `/api/stats?action=share_img&session=${encodeURIComponent(sessionId)}&idx=${idx}`
+        }));
+        return res.status(200).json({ code: 0, images: proxiedImages, text_data: data.metadata.text_data || {} });
+    }
+
+    // 圖片代理端點：session ID + idx → 後端查真實 URL 後回傳圖片位元組（不暴露上游域名）
+    if (action === 'share_img' && req.method === 'GET') {
+        const sessionId = req.query.session;
+        const idx = parseInt(req.query.idx || '0', 10);
+        if (!sessionId) return res.status(400).end();
+        const { data, error } = await supabase
+            .from('transactions')
+            .select('metadata, created_at')
+            .eq('transaction_type', 'SHARE_SESSION')
+            .filter('metadata->>session_id', 'eq', sessionId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (error || !data) return res.status(404).end();
+        const age = Date.now() - new Date(data.created_at).getTime();
+        if (age > 48 * 3600 * 1000) return res.status(410).end();
+        const img = (data.metadata.images || [])[idx];
+        if (!img?.url?.startsWith('https://')) return res.status(404).end();
+        try {
+            const upstream = await fetch(img.url);
+            if (!upstream.ok) return res.status(502).end();
+            const ct = upstream.headers.get('content-type') || 'image/jpeg';
+            const buf = Buffer.from(await upstream.arrayBuffer());
+            res.setHeader('Content-Type', ct);
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            return res.status(200).send(buf);
+        } catch(e) {
+            return res.status(502).end();
+        }
+    }
+
+    // --- 上傳本地圖到圖床，供無 cloud_url 的舊存檔使用 ---
+    if (action === 'upload_share_img' && req.method === 'POST') {
+        const { base64 } = req.body || {};
+        if (!base64) return res.status(400).json({ code: -1, msg: 'Missing base64' });
+        const IMGBB_API_KEY = process.env.IMGBB_API_KEY || '';
+        const clean = base64.replace(/^data:image\/\w+;base64,/, '');
+
+        // Try freeimage.host first (free, no key needed)
+        try {
+            const form = new FormData();
+            form.append('key', '6d207e02198a847aa98d0a2a901485a5');
+            form.append('action', 'upload');
+            form.append('source', clean);
+            form.append('format', 'json');
+            const r = await fetch('https://freeimage.host/api/1/upload', { method: 'POST', body: form });
+            const d = await r.json();
+            if (d.status_code === 200 && d.image?.url) return res.status(200).json({ code: 0, url: d.image.url });
+        } catch(_) {}
+
+        // Fallback: ImgBB
+        if (IMGBB_API_KEY) {
+            try {
+                const form2 = new FormData();
+                form2.append('image', clean);
+                const r2 = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, { method: 'POST', body: form2 });
+                const d2 = await r2.json();
+                if (d2.success && d2.data?.url) return res.status(200).json({ code: 0, url: d2.data.url });
+            } catch(_) {}
+        }
+
+        return res.status(500).json({ code: -1, msg: 'Upload failed' });
     }
 
     if (req.method === 'GET' && action === 'get_model_config') {

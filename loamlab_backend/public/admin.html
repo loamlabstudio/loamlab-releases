@@ -305,19 +305,10 @@
       <div class="w-72 shrink-0 sticky top-4 self-start">
         <div class="bg-black/60 border border-white/10 rounded-xl p-3">
           <div class="flex justify-between items-center mb-2">
-            <span class="text-[10px] text-gray-500 uppercase tracking-wider">Prompt Preview</span>
-            <div class="flex items-center gap-2">
-              <button id="btn-preview-mode" onclick="setPreviewMode('view')" class="text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors font-semibold">👁 檢視</button>
-              <button id="btn-edit-mode" onclick="setPreviewMode('edit')" class="text-[10px] text-gray-600 hover:text-gray-400 transition-colors">✏️ 編輯</button>
-              <button onclick="previewPrompt()" class="text-[10px] text-gray-500 hover:text-cyan-300 transition-colors">↻</button>
-            </div>
+            <span class="text-[10px] text-gray-500 uppercase tracking-wider">Prompt Preview — 最終送出 JSON</span>
+            <button onclick="previewPrompt()" class="text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors">↻ 重整</button>
           </div>
-          <pre id="prompt-preview-output" class="text-[10px] text-green-300 font-mono whitespace-pre-wrap leading-relaxed overflow-auto max-h-[60vh]">點「↻」查看組裝結果</pre>
-          <textarea id="prompt-edit-input" class="hidden w-full text-[10px] text-yellow-200 font-mono bg-black/40 border border-yellow-500/30 rounded p-2 resize-y leading-relaxed outline-none focus:border-yellow-500/60 max-h-[60vh] min-h-[200px]" placeholder="在此直接編輯 JSON，點「▶ 套用」測試效果"></textarea>
-          <div id="prompt-edit-actions" class="hidden mt-2 flex gap-2">
-            <button onclick="applyEditedPrompt()" class="flex-1 py-1 bg-yellow-600/20 hover:bg-yellow-600/40 text-yellow-400 border border-yellow-600/40 rounded text-[10px] font-semibold transition-colors">▶ 套用到預覽</button>
-            <button onclick="resetEditedPrompt()" class="py-1 px-2 bg-white/5 hover:bg-white/10 text-gray-500 border border-white/10 rounded text-[10px] transition-colors">重置</button>
-          </div>
+          <pre id="prompt-preview-output" class="text-[10px] text-green-300 font-mono whitespace-pre-wrap leading-relaxed overflow-auto max-h-[70vh]">點「↻ 重整」查看組裝結果</pre>
         </div>
       </div>
     </div>
@@ -1795,61 +1786,11 @@ function importAdminPreset() {
   input.click();
 }
 
-let _previewEditMode = false;
-
-function setPreviewMode(mode) {
-  _previewEditMode = (mode === 'edit');
-  const pre = document.getElementById('prompt-preview-output');
-  const ta  = document.getElementById('prompt-edit-input');
-  const actions = document.getElementById('prompt-edit-actions');
-  const btnView = document.getElementById('btn-preview-mode');
-  const btnEdit = document.getElementById('btn-edit-mode');
-  if (_previewEditMode) {
-    previewPrompt(); // 先確保 pre 有最新內容
-    ta.value = pre.textContent;
-    pre.classList.add('hidden');
-    ta.classList.remove('hidden');
-    actions.classList.remove('hidden');
-    btnView.className = 'text-[10px] text-gray-600 hover:text-gray-400 transition-colors';
-    btnEdit.className = 'text-[10px] text-yellow-400 hover:text-yellow-300 transition-colors font-semibold';
-  } else {
-    pre.classList.remove('hidden');
-    ta.classList.add('hidden');
-    actions.classList.add('hidden');
-    btnView.className = 'text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors font-semibold';
-    btnEdit.className = 'text-[10px] text-gray-600 hover:text-gray-400 transition-colors';
-  }
-}
-
-function applyEditedPrompt() {
-  const ta = document.getElementById('prompt-edit-input');
-  const pre = document.getElementById('prompt-preview-output');
-  try {
-    const parsed = JSON.parse(ta.value);
-    pre.textContent = JSON.stringify(parsed, null, 2);
-    pre.classList.remove('text-green-300');
-    pre.classList.add('text-yellow-200');
-    const s = document.getElementById('t1-nodes-status');
-    if (s) { s.textContent = '✅ 已套用編輯 JSON（未儲存到節點）'; s.className = 'text-xs text-yellow-400'; s.classList.remove('hidden'); }
-  } catch(e) {
-    const s = document.getElementById('t1-nodes-status');
-    if (s) { s.textContent = '❌ JSON 格式錯誤：' + e.message; s.className = 'text-xs text-red-400'; s.classList.remove('hidden'); }
-  }
-}
-
-function resetEditedPrompt() {
-  const pre = document.getElementById('prompt-preview-output');
-  pre.classList.remove('text-yellow-200');
-  pre.classList.add('text-green-300');
-  previewPrompt();
-  setPreviewMode('view');
-}
-
 function previewPrompt() {
   const output = document.getElementById('prompt-preview-output');
   if (!output) return;
 
-  // 模擬 render.js 的 JSON 組裝邏輯（使用各節點預設值）
+  // 鏡像 render.js Nodes 模式 JSON 組裝邏輯（使用節點預設值模擬）
   const GROUP_CONFIG = {
     core_constraints: 'Core Constraints',
     scene_lighting:   'Scene & Lighting',
@@ -1865,8 +1806,7 @@ function previewPrompt() {
 
   const nodeValues = {};
   t1NodesData.forEach(node => {
-    if (node.id === 'project_type') return; // 已單獨處理
-    // system 節點用 node.value；用戶節點用 node.default（預設值欄位填入的內容）
+    if (node.id === 'project_type') return;
     const val = node.system ? (node.value || '') : (String(node.default || ''));
     if (val.trim()) nodeValues[node.id] = val;
   });
@@ -1879,6 +1819,10 @@ function previewPrompt() {
     });
     if (Object.keys(section).length > 0) jsonPrompt[title] = section;
   });
+
+  // 批量出圖額外字段（有風格參考圖時 render.js 自動加入）
+  jsonPrompt['Image Roles'] = '[ 批量出圖 ] Image 1: Source Reference. Image 2: Style Reference.';
+  jsonPrompt['Style Consistency'] = '[ 批量出圖 ] Match lighting direction, color temperature and tone of Image 2.';
 
   output.textContent = JSON.stringify(jsonPrompt, null, 2);
 }

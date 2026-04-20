@@ -1,7 +1,23 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:www.atlascloud.ai)"
+      "WebFetch(domain:www.atlascloud.ai)",
+      "Bash(powershell -ExecutionPolicy Bypass -Command \"vercel --prod\")"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // \"\"' | grep -q 'git commit' && cd \"c:/Users/qingwen/.gemini/antigravity/workspaces/土窟設計su渲染插件\" && powershell -ExecutionPolicy Bypass -Command \"vercel --prod\" 2>&1 | tail -4 && powershell -ExecutionPolicy Bypass -File \".\\build_rbz.ps1\" 2>&1 | tail -3 || exit 0",
+            "timeout": 180,
+            "statusMessage": "🚀 偵測到 commit，自動部署中..."
+          }
+        ]
+      }
     ]
   }
 }

@@ -1871,21 +1871,14 @@ function previewPrompt() {
     if (val.trim()) nodeValues[node.id] = val;
   });
 
-  const hiddenSection = {};
   Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
     const section = {};
     t1NodesData.filter(n => n.group === group).forEach(node => {
       const val = nodeValues[node.id];
-      if (!val) return;
-      if (node.hidden) {
-        hiddenSection[node.labels?.['en-US'] || node.id] = val + ' 🙈';
-      } else {
-        section[node.labels?.['en-US'] || node.id] = val;
-      }
+      if (val) section[node.labels?.['en-US'] || node.id] = val;
     });
     if (Object.keys(section).length > 0) jsonPrompt[title] = section;
   });
-  if (Object.keys(hiddenSection).length > 0) jsonPrompt['[Hidden — 後端合併，不顯示給用戶]'] = hiddenSection;
 
   output.textContent = JSON.stringify(jsonPrompt, null, 2);
 }

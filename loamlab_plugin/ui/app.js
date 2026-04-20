@@ -2005,6 +2005,12 @@ async function _createAndRenderQR(qrContainer) {
     const rawUrl = afterImg ? (afterImg.cloud_url || afterImg.file_url || '') : '';
     const imgUrl = rawUrl.startsWith('http') ? rawUrl : '';
 
+    // 如果有選圖但沒有 cloud_url，顯示警告
+    if (afterImg && !imgUrl) {
+        qrContainer.innerHTML = '<div style="padding:10px;text-align:center;color:#f87171;font-size:10px;line-height:1.6">⚠️ 此圖片為本機存檔<br>無法包含在行動分享中<br><span style="color:rgba(255,255,255,0.4)">請選擇渲染完成的雲端圖片</span></div>';
+        return;
+    }
+
 
     const text_data = {
         project: document.getElementById('share-input-project')?.value || '',

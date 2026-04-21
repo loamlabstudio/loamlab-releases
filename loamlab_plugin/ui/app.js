@@ -2016,7 +2016,8 @@ function _buildFallbackShareTemplate() {
 
 function generateShareTextWithReferral() {
     const template = getCurrentShareTemplate() || _buildFallbackShareTemplate();
-    const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
+    // window.loamlabUserReferralCode 由 updateLoginUI 設定；localStorage 為 fallback
+    const myCode = window.loamlabUserReferralCode || localStorage.getItem('loamlab_user_referral_code') || '';
     const project = document.getElementById('share-input-project')?.value || '';
     const designer = document.getElementById('share-input-designer')?.value || '';
     const content = document.getElementById('share-input-content')?.value || '';
@@ -2087,7 +2088,7 @@ async function _createAndRenderQR(qrContainer) {
     }
 
     const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) || 'https://loamlab-camera.vercel.app';
-    const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
+    const myCode = window.loamlabUserReferralCode || localStorage.getItem('loamlab_user_referral_code') || '';
     const text_data = {
         project: document.getElementById('share-input-project')?.value || '',
         designer: document.getElementById('share-input-designer')?.value || '',

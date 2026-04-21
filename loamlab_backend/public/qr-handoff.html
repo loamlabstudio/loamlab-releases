@@ -51,7 +51,7 @@
                 </div>
                 <div class="flex items-start gap-2.5">
                     <span class="shrink-0 w-5 h-5 rounded-full bg-white/10 border border-white/20 text-[10px] font-bold text-white/50 flex items-center justify-center mt-0.5">2</span>
-                    <span class="text-[12px] text-white/50 leading-snug">在 IG 貼文框貼上文字（已自動複製）</span>
+                    <span class="text-[12px] text-white/50 leading-snug">開啟 IG → 新增貼文 → 選剛存的圖 → 貼上文字</span>
                 </div>
                 <div class="flex items-start gap-2.5">
                     <span class="shrink-0 w-5 h-5 rounded-full bg-white/10 border border-white/20 text-[10px] font-bold text-white/50 flex items-center justify-center mt-0.5">3</span>
@@ -120,9 +120,8 @@
             }
         }
 
-        async function downloadImage(url) {
+        async function downloadImage(url, filename) {
             if (!url) return false;
-            // resolvedImg 現在是後端代理 URL（/api/stats?action=share_img&...），直接 fetch 不需 proxy_img
             const fetchUrl = (url.startsWith('/') || url.startsWith(API_BASE))
                 ? url
                 : `${API_BASE}/api/stats?action=proxy_img&url=${encodeURIComponent(url)}`;
@@ -133,7 +132,7 @@
                 const blobUrl = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = blobUrl;
-                a.download = 'loamlab-render.jpg';
+                a.download = filename || 'loamlab-render.jpg';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -280,50 +279,19 @@
 
             btnGo.addEventListener('click', async () => {
                 btnGo.disabled = true;
+                document.getElementById('btn-label').textContent = '處理中...';
+                document.getElementById('btn-sub').textContent = '請稍候';
 
-                // 優先：原生 navigator.share（多圖一起打包）
-                if (resolvedImages.length > 0 && navigator.canShare) {
-                    try {
-                        const files = [];
-                        for (const [i, img] of resolvedImages.entries()) {
-                            const fetchUrl = (img.url.startsWith('/') || img.url.startsWith(API_BASE))
-                                ? (img.url.startsWith('/') ? API_BASE + img.url : img.url)
-                                : `${API_BASE}/api/stats?action=proxy_img&url=${encodeURIComponent(img.url)}`;
-                            const resp = await fetch(fetchUrl);
-                            if (resp.ok) {
-                                const blob = await resp.blob();
-                                files.push(new File([blob], `loamlab-render-${i+1}.jpg`, { type: blob.type || 'image/jpeg' }));
-                            }
-                        }
-                        if (files.length > 0) {
-                            const shareData = { files, text: captionText };
-                            if (navigator.canShare(shareData)) {
-                                // 先顯示步驟橫條，引導用戶在 OS 選單選 Instagram
-                                document.getElementById('steps-bar')?.classList.remove('hidden');
-                                document.getElementById('step-1-text').innerHTML = `在分享選單中點選 <span class="text-[#e1306c] font-bold">Instagram</span>`;
-                                document.getElementById('step-3-text').innerHTML = `邀請 <span class="text-[#e1306c]">${igHandle}</span> 協作 → 獲得 ${rewardText}`;
-                                await navigator.share(shareData);
-                                showToast('✅ 圖文已傳送！', 2500);
-                                btnGo.classList.add('done');
-                                document.getElementById('btn-label').textContent = '✅ 已完成';
-                                document.getElementById('btn-sub').textContent = `前往 IG 貼文並邀請 ${igHandle} 協作`;
-                                return;
-                            }
-                        }
-                    } catch(e) {
-                        if (e.name === 'AbortError') { btnGo.disabled = false; return; }
+                // Step 1: 下載所有圖片到本地相簿
+                let downloadedCount = 0;
+                if (resolvedImages.length > 0) {
+                    for (const [i, img] of resolvedImages.entries()) {
+                        const ok = await downloadImage(img.url, `loamlab-render-${i+1}.jpg`);
+                        if (ok) downloadedCount++;
                     }
                 }
 
-                // Fallback：下載第一張 after 圖
-                if (resolvedImg) {
-                    const ok = await downloadImage(resolvedImg);
-                    if (!ok && isIOS) {
-                        showToast('請長按上方圖片存入相簿', 3000);
-                    }
-                }
-
-                // 複製文字
+                // Step 2: 複製文字
                 let copied = false;
                 try {
                     if (navigator.clipboard && window.isSecureContext) {
@@ -336,30 +304,44 @@
                     }
                 } catch(e) {}
 
-                if (copied) {
-                    // 顯示步驟橫條（fallback 流程）
-                    const stepsBar = document.getElementById('steps-bar');
-                    if (stepsBar) {
-                        stepsBar.classList.remove('hidden');
-                        document.getElementById('step-1-text').innerHTML = resolvedImg ? `圖片已下載 / 長按圖片存入相簿` : `文字已複製至剪貼板`;
-                        document.getElementById('step-3-text').innerHTML = `邀請 <span class="text-[#e1306c]">${igHandle}</span> 協作 → 獲得 ${rewardText}`;
-                    }
-                    showToast('✅ 文字已複製！正在開啟 IG...', 3000);
-                    document.getElementById('btn-label').textContent = '✅ 已複製，開啟中...';
-                    document.getElementById('btn-sub').textContent = `貼上文字並邀請 ${igHandle} 協作`;
-                    btnGo.classList.add('done');
-                } else {
+                if (!copied) {
                     showToast('請手動複製下方文字', 2500);
                     document.getElementById('caption-box').classList.remove('hidden');
+                    document.getElementById('btn-label').textContent = '存圖 + 複製文字 + 開啟 IG';
+                    document.getElementById('btn-sub').textContent = '點一下完成全部步驟';
                     btnGo.disabled = false;
                     return;
                 }
 
-                // 步驟三：跳轉 IG（留 1.5s 讓下載/複製完成）
+                // Step 3: 顯示步驟橫條
+                const stepsBar = document.getElementById('steps-bar');
+                if (stepsBar) {
+                    stepsBar.classList.remove('hidden');
+                    let step1Msg = '文字已複製至剪貼板';
+                    if (resolvedImages.length > 0) {
+                        if (downloadedCount > 0) {
+                            step1Msg = `✅ ${downloadedCount} 張圖已存至相簿，文字已複製`;
+                        } else if (isIOS) {
+                            step1Msg = '✅ 文字已複製 — 請長按上方圖片存入相簿';
+                        } else {
+                            step1Msg = '✅ 文字已複製 — 請長按上方圖片存入相簿';
+                        }
+                    }
+                    document.getElementById('step-1-text').innerHTML = step1Msg;
+                    document.getElementById('step-3-text').innerHTML = `邀請 <span class="text-[#e1306c]">${igHandle}</span> 協作 → 獲得 ${rewardText}`;
+                }
+
+                showToast('✅ 文字已複製！開啟 IG 中...', 3000);
+                document.getElementById('btn-label').textContent = '✅ 完成！正在開啟 IG...';
+                document.getElementById('btn-sub').textContent = '新增貼文 → 選圖 → 貼文字 → 邀請協作';
+                btnGo.classList.add('done');
+
+                // Step 4: 開啟 IG（直接 Feed 入口，非 Camera/Story）
                 setTimeout(() => {
-                    window.location.href = 'instagram://camera';
-                    setTimeout(() => { window.location.href = 'https://www.instagram.com/'; }, 1500);
-                }, 1500);
+                    // instagram:// 無 camera 直接導到首頁，較容易新增 Feed 貼文
+                    window.location.href = 'instagram://';
+                    setTimeout(() => { window.open('https://www.instagram.com/', '_blank'); }, 1500);
+                }, 800);
             });
         });
     </script>

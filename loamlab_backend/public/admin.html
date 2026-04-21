@@ -2294,6 +2294,13 @@ function startAutoRefresh() {
     if (label) label.textContent = countdown + 's';
     if (countdown <= 0) {
       countdown = 60;
+      // 有 input/textarea 正在編輯時暫停刷新，避免打斷用戶
+      const ae = document.activeElement;
+      const isEditing = ae && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT') && ae.id !== 'key-input';
+      if (isEditing) {
+        if (label) label.textContent = '⏸';
+        return;
+      }
       if (t1NodesDirty) {
         const s = document.getElementById('t1-nodes-status');
         if (s) { s.textContent = '⚠️ 有未儲存的節點，已暫停節點同步'; s.classList.remove('hidden'); }

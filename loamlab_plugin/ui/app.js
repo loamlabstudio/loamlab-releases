@@ -120,7 +120,40 @@ async function fetchOptions() {
     } catch (e) { /* 靜默降級 */ }
 }
 
+function _syncNodeDisplay(nodeId) {
+    const el = document.getElementById('t1-node-' + nodeId);
+    if (!el) return;
+    const val = el.value || '';
+    const vals = val.split(',').map(s => s.trim()).filter(Boolean);
+    const wrapper = el.closest('.node-item');
+    if (!wrapper) return;
+    wrapper.querySelectorAll('.node-chip').forEach(btn => {
+        btn.classList.toggle('active', vals.includes(btn.dataset.chipValue));
+    });
+    const tagsWrapper = document.getElementById('t1-tags-' + nodeId);
+    if (tagsWrapper) {
+        const ph = tagsWrapper.dataset.placeholder || '點擊快選...';
+        tagsWrapper.innerHTML = vals.length
+            ? vals.map(v => `<span class="node-tag">${v}<span class="node-tag-remove" data-val="${v.replace(/"/g,'&quot;')}">✕</span></span>`).join('')
+            : `<span class="node-tags-placeholder">${ph}</span>`;
+        tagsWrapper.querySelectorAll('.node-tag-remove').forEach(rm => {
+            rm.addEventListener('click', () => {
+                const parts = el.value.split(',').map(s => s.trim()).filter(s => s && s !== rm.dataset.val);
+                el.value = parts.join(', ');
+                _syncNodeDisplay(nodeId);
+            });
+        });
+    }
+}
+
 function renderT1Nodes() {
+    // Preserve current user selections before re-render
+    const _savedVals = {};
+    t1NodesData.forEach(n => {
+        const el = document.getElementById('t1-node-' + n.id);
+        if (el && el.value) _savedVals[n.id] = el.value;
+    });
+
     const container = document.getElementById('t1-dynamic-nodes');
     if (!container) return;
     container.innerHTML = '';
@@ -152,7 +185,6 @@ function renderT1Nodes() {
 
         nodes.forEach(node => {
             if (node.system) return; // 核心約束由系統管理，插件不顯示
-            if (node.hidden) return; // 靜默節點：後端合併送出，插件不顯示
             const label = node.labels?.[currentLang] || node.labels?.['en-US'] || node.id;
             const ph = node.placeholders?.[currentLang] || node.placeholders?.['en-US'] || '';
 
@@ -186,6 +218,7 @@ function renderT1Nodes() {
                 const isCJK = ['zh-TW', 'zh-CN'].includes(currentLang);
                 const chipDisplay = (o) => isCJK ? (o.label || o.value) : (o.value || o.label);
                 const makeChipHtml = (o) => {
+                    if (o.is_silent) return ''; // 靜默 chip：自動加入提示詞，插件不顯示
                     const delSpan = o._isPersonal
                         ? '<span class="node-chip-del" onclick="event.stopPropagation();removeUserChip(\'' + node.id + '\',\'' + (o.value || '').replace(/'/g, "\\'") + '\')">✕</span>'
                         : '';
@@ -204,7 +237,7 @@ function renderT1Nodes() {
                     item.innerHTML = `
                         <label class="node-label">${label}</label>
                         <div class="node-input-wrapper">
-                            <div class="node-tags-wrapper" id="t1-tags-${node.id}">
+                            <div class="node-tags-wrapper" id="t1-tags-${node.id}" data-placeholder="${ph || '點擊快選...'}">
                                 <span class="node-tags-placeholder">${ph || '點擊快選...'}</span>
                             </div>
                             <input type="hidden" id="t1-node-${node.id}" value="">
@@ -215,26 +248,11 @@ function renderT1Nodes() {
                             </div>
                         </div>`;
                     const hiddenInput = item.querySelector('#t1-node-' + node.id);
-                    const tagsWrapper = item.querySelector('#t1-tags-' + node.id);
-                    function _rebuildTags() {
-                        const vals = hiddenInput.value ? hiddenInput.value.split(',').map(s => s.trim()).filter(Boolean) : [];
-                        tagsWrapper.innerHTML = vals.length
-                            ? vals.map(v => '<span class="node-tag">' + v + '<span class="node-tag-remove" data-val="' + v.replace(/"/g, '&quot;') + '">✕</span></span>').join('')
-                            : '<span class="node-tags-placeholder">' + (ph || '點擊快選...') + '</span>';
-                        tagsWrapper.querySelectorAll('.node-tag-remove').forEach(rm => {
-                            rm.addEventListener('click', () => {
-                                const parts = hiddenInput.value.split(',').map(s => s.trim()).filter(s => s && s !== rm.dataset.val);
-                                hiddenInput.value = parts.join(', ');
-                                item.querySelectorAll('.node-chip').forEach(b => b.classList.toggle('active', parts.includes(b.dataset.chipValue)));
-                                _rebuildTags();
-                            });
-                        });
-                    }
                     const defaultChip = item.querySelector('.node-chip[data-chip-default="1"]');
                     if (defaultChip) {
                         hiddenInput.value = defaultChip.dataset.chipValue;
                         defaultChip.classList.add('active');
-                        _rebuildTags();
+                        _syncNodeDisplay(node.id);
                     }
                     item.querySelectorAll('.node-chip').forEach(btn => {
                         btn.addEventListener('click', (e) => {
@@ -245,19 +263,20 @@ function renderT1Nodes() {
                             if (i >= 0) { parts.splice(i, 1); btn.classList.remove('active'); }
                             else { parts.push(val); btn.classList.add('active'); }
                             hiddenInput.value = parts.join(', ');
-                            _rebuildTags();
+                            _syncNodeDisplay(node.id);
                         });
                     });
                 } else {
-                    // Replace 模式：原本 input 邏輯
+                    // Replace 模式：chips 單選，hidden input 追蹤值
                     item.innerHTML = `
                         <label class="node-label">${label}</label>
                         <div class="node-input-wrapper">
-                            <div class="flex gap-1 items-center">
-                                <input type="text" id="t1-node-${node.id}" class="node-text-input flex-1" placeholder="${ph}">
-                                <button type="button" class="node-custom-chip-btn shrink-0" onclick="saveUserChip('${node.id}', document.getElementById('t1-node-${node.id}').value)" title="保存為快選">＋</button>
-                            </div>
+                            <input type="hidden" id="t1-node-${node.id}" value="">
                             ${chipsHtml}
+                            <div class="node-custom-chip-row">
+                                <input type="text" id="t1-custom-input-${node.id}" class="node-custom-chip-input" placeholder="自訂...">
+                                <button type="button" class="node-custom-chip-btn" onclick="saveUserChip('${node.id}', document.getElementById('t1-custom-input-${node.id}').value)">＋</button>
+                            </div>
                         </div>`;
                     if (nodeOpts.length > 0) {
                         const input = item.querySelector('#t1-node-' + node.id);
@@ -289,6 +308,18 @@ function renderT1Nodes() {
         if (groupKey === 'materials') groupEl.appendChild(_createUserMaterialsSection());
         container.appendChild(groupEl);
     });
+
+    // Restore user selections after DOM is rebuilt
+    if (Object.keys(_savedVals).length) {
+        setTimeout(() => {
+            Object.keys(_savedVals).forEach(nodeId => {
+                const el = document.getElementById('t1-node-' + nodeId);
+                if (!el) return;
+                el.value = _savedVals[nodeId];
+                _syncNodeDisplay(nodeId);
+            });
+        }, 0);
+    }
 }
 
 // ── Legacy/Nodes 模式：純後端控制 ────────────────────────────────────────────
@@ -1604,7 +1635,14 @@ document.addEventListener("DOMContentLoaded", () => {
             if (currentActiveTool === 1) {
                 t1NodesData.forEach(node => {
                     const input = document.getElementById(`t1-node-${node.id}`);
-                    if (input) advanced_settings[node.id] = input.value;
+                    if (input) {
+                        const userVal = input.value;
+                        const silentVals = optionsData
+                            .filter(o => o.field_id === node.id && o.is_silent)
+                            .map(o => o.value || o.label)
+                            .filter(Boolean);
+                        advanced_settings[node.id] = [userVal, ...silentVals].filter(Boolean).join(', ');
+                    }
                 });
                 if (userMaterialNodes.length > 0) {
                     advanced_settings.user_material_nodes = userMaterialNodes.map(m => ({ label: m.label, value: m.value }));

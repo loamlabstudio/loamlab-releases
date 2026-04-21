@@ -319,11 +319,8 @@
         <span id="options-status" class="text-xs text-green-400 hidden"></span>
       </div>
       <div class="flex gap-2 ml-auto">
-        <button onclick="saveOptions()" class="bg-teal-600/20 hover:bg-teal-600/40 text-teal-400 border border-teal-600/50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors" id="btn-save-options">
-          儲存選項庫
-        </button>
-        <button onclick="saveT1Nodes()" class="bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 border border-cyan-600/50 px-6 py-2 rounded-lg text-sm font-semibold transition-colors" id="btn-save-t1-nodes">
-          儲存節點配置
+        <button onclick="saveAll()" class="bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 border border-cyan-600/50 px-6 py-2 rounded-lg text-sm font-semibold transition-colors" id="btn-save-all">
+          儲存全部
         </button>
       </div>
     </div>
@@ -1131,8 +1128,7 @@ function renderT1Nodes() {
       </div>
     </div>
   ` : `
-    <div class="${node.hidden ? 'bg-purple-950/20 border border-purple-500/20' : 'bg-black/30 border border-white/5'} rounded-xl p-3">
-      ${node.hidden ? '<div class="text-[9px] text-purple-400/70 uppercase font-bold mb-2 tracking-widest">🙈 靜默節點（Hidden）— 後端合併送出，插件和分享不顯示</div>' : ''}
+    <div class="bg-black/30 border border-white/5 rounded-xl p-3">
       <!-- 頂欄：ID | en-US label | Group | Type | Hidden | 刪除 -->
       <div class="flex items-center gap-2 mb-3">
         <input type="text" value="${node.id}" onchange="updateNode(${idx}, 'id', this.value)"
@@ -1152,10 +1148,6 @@ function renderT1Nodes() {
           <option value="text" ${node.type === 'text' ? 'selected' : ''}>Text</option>
           <option value="slider" ${node.type === 'slider' ? 'selected' : ''}>Slider</option>
         </select>
-        <button onclick="updateNode(${idx}, 'hidden', !t1NodesData[${idx}].hidden); renderT1Nodes(); _schedulePreview();"
-                class="${node.hidden ? 'text-purple-400 hover:text-purple-300' : 'text-gray-600 hover:text-purple-400'} transition-colors shrink-0" title="${node.hidden ? '取消靜默' : '設為靜默節點（Hidden）'}">
-          ${node.hidden ? '🙈' : '👁'}
-        </button>
         <button onclick="removeT1Node(${idx})" class="text-gray-600 hover:text-red-400 transition-colors ml-1 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
         </button>
@@ -1172,11 +1164,13 @@ function renderT1Nodes() {
           const pillsHtml = nodeOpts.map(opt => `
             <span onclick="editChip(${opt._gi},'${node.id}')"
               class="inline-flex items-center gap-1 cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] select-none transition-all
-                     ${editingGi === opt._gi
-                       ? 'bg-cyan-900/30 ring-1 ring-cyan-400/50 text-cyan-100'
-                       : 'bg-white/8 hover:bg-white/14 text-white/80'}
-                     ${opt.is_default ? 'ring-1 ring-yellow-400/40' : ''}">
-              ${opt.is_default ? '<span class="text-yellow-400 text-[9px]">◈</span>' : ''}
+                     ${opt.is_silent
+                       ? 'bg-purple-900/20 ring-1 ring-purple-500/30 text-purple-300/70 opacity-70'
+                       : editingGi === opt._gi
+                         ? 'bg-cyan-900/30 ring-1 ring-cyan-400/50 text-cyan-100'
+                         : 'bg-white/8 hover:bg-white/14 text-white/80'}
+                     ${opt.is_default && !opt.is_silent ? 'ring-1 ring-yellow-400/40' : ''}">
+              ${opt.is_silent ? '<span class="text-purple-400 text-[9px]">🔇</span>' : opt.is_default ? '<span class="text-yellow-400 text-[9px]">◈</span>' : ''}
               <span>${opt.label || '<span class="italic text-gray-500">未命名</span>'}</span>
               <button type="button" onclick="event.stopPropagation();removeOptionInNode(${opt._gi},'${node.id}')"
                 class="text-[9px] text-gray-500 hover:text-red-400 transition-colors leading-none ml-0.5">✕</button>
@@ -1196,8 +1190,10 @@ function renderT1Nodes() {
                 <option value="replace" ${(editingOpt.strategy||'replace')==='replace'?'selected':''}>單選</option>
                 <option value="append" ${editingOpt.strategy==='append'?'selected':''}>多選</option>
               </select>
-              <button type="button" onclick="setOptionDefault(${editingOpt._gi},'${node.id}')" title="設為預設"
+              <button type="button" onclick="setOptionDefault(${editingOpt._gi},'${node.id}')" title="設為預設（插件預選）"
                 class="text-[13px] leading-none transition-colors shrink-0 ${editingOpt.is_default ? 'text-yellow-400' : 'text-gray-600 hover:text-yellow-500'}">◈</button>
+              <button type="button" onclick="toggleOptionSilent(${editingOpt._gi})" title="預設靜默（自動加入提示詞，插件不顯示）"
+                class="text-[13px] leading-none transition-colors shrink-0 ${editingOpt.is_silent ? 'text-purple-400' : 'text-gray-600 hover:text-purple-500'}">🔇</button>
             </div>` : '';
 
           return `<div>
@@ -1473,7 +1469,7 @@ function updateNodeI18n(idx, key, lang, val) {
 async function saveT1Nodes() {
   const btn = document.getElementById('btn-save-t1-nodes');
   const status = document.getElementById('t1-nodes-status');
-  btn.innerText = '儲存中...';
+  if (btn) btn.innerText = '儲存中...';
   try {
     const r = await fetch(`${API_BASE}/api/stats?action=set_t1_nodes`, {
       method: 'POST',
@@ -1487,7 +1483,7 @@ async function saveT1Nodes() {
       setTimeout(() => status.classList.add('hidden'), 3000);
     } else { alert('儲存失敗'); }
   } catch(e) { alert('儲存錯誤'); }
-  btn.innerText = '儲存節點配置';
+  if (btn) btn.innerText = '儲存節點配置';
 }
 
 // ── 選項庫管理 (SYSTEM_OPTIONS) ─────────────────────────────────────────────
@@ -1526,6 +1522,40 @@ function addOptionToNode(fieldId) {
 
 function updateOptionField(globalIdx, key, value) {
   if (optionsData[globalIdx]) { optionsData[globalIdx][key] = value; optionsDirty = true; }
+}
+
+function toggleOptionSilent(globalIdx) {
+  if (!optionsData[globalIdx]) return;
+  optionsData[globalIdx].is_silent = !optionsData[globalIdx].is_silent;
+  if (optionsData[globalIdx].is_silent) optionsData[globalIdx].is_default = false;
+  optionsDirty = true;
+  renderT1Nodes();
+}
+
+async function saveAll() {
+  const btn = document.getElementById('btn-save-all');
+  const status = document.getElementById('t1-nodes-status');
+  if (btn) { btn.innerText = '儲存中...'; btn.disabled = true; }
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(`${API_BASE}/api/stats?action=set_options`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+        body: JSON.stringify({ options: optionsData })
+      }),
+      fetch(`${API_BASE}/api/stats?action=set_t1_nodes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+        body: JSON.stringify({ nodes: t1NodesData })
+      })
+    ]);
+    if (r1.ok && r2.ok) {
+      optionsDirty = false;
+      t1NodesDirty = false;
+      if (status) { status.innerText = '✅ 全部已儲存'; status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 3000); }
+    } else { alert('儲存失敗'); }
+  } catch(e) { alert('儲存錯誤: ' + e.message); }
+  if (btn) { btn.innerText = '儲存全部'; btn.disabled = false; }
 }
 
 function setOptionDefault(globalIdx, fieldId) {
@@ -1573,7 +1603,7 @@ function removeAdminDefaultTag(nodeIdx, val) {
 async function saveOptions() {
   const btn = document.getElementById('btn-save-options');
   const status = document.getElementById('options-status');
-  btn.innerText = '儲存中...';
+  if (btn) btn.innerText = '儲存中...';
   try {
     const r = await fetch(`${API_BASE}/api/stats?action=set_options`, {
       method: 'POST',
@@ -1587,7 +1617,7 @@ async function saveOptions() {
       setTimeout(() => status.classList.add('hidden'), 3000);
     } else { alert('儲存失敗'); }
   } catch(e) { alert('儲存錯誤: ' + e.message); }
-  btn.innerText = '儲存選項庫';
+  if (btn) btn.innerText = '儲存選項庫';
 }
 
 async function translateAllOptions() {

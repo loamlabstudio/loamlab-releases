@@ -390,7 +390,7 @@
                 <div class="flex flex-col md:flex-row items-center justify-center gap-2 cursor-pointer hover:bg-white/5 py-1.5 px-3 rounded border border-transparent hover:border-white/10 transition-colors group"
                     title="分享至 IG 測試點數" data-i18n-title="tooltip_share" id="btn-show-share">
                     <span class="text-[#e1306c] tracking-wider text-[13px] font-semibold drop-shadow-md">📸</span>
-                    <span class="font-bold text-white/90 tracking-widest text-[10px] uppercase hidden md:block">Share</span>
+                    <span class="font-bold text-white/90 tracking-widest text-[10px] uppercase hidden md:block" data-i18n="header_share">Share</span>
                 </div>
 
                 <div class="h-4 w-[1px] bg-white/10 hidden md:block"></div>
@@ -400,7 +400,7 @@
                     title="邀請好友得 200 點" data-i18n-title="tooltip_referral" id="btn-show-referral">
                     <span class="text-white/40 tracking-wider text-[13px] font-semibold drop-shadow-md">🎟️</span>
                     <span
-                        class="font-bold text-white/90 tracking-widest text-[10px] uppercase hidden md:block">Invite</span>
+                        class="font-bold text-white/90 tracking-widest text-[10px] uppercase hidden md:block" data-i18n="header_invite">Invite</span>
                 </div>
 
                 <div class="h-4 w-[1px] bg-white/10 hidden md:block"></div>
@@ -955,24 +955,24 @@
                     <!-- QR Code（大，可掃） -->
                     <div class="flex flex-col items-center gap-2 shrink-0">
                         <div id="share-qrcode" class="bg-white p-3 rounded-xl w-[200px] h-[200px] flex items-center justify-center shadow-lg">
-                            <span class="text-[10px] text-gray-400 text-center leading-relaxed">選好渲染圖<br>填好文字後<br>點下方建立 QR</span>
+                            <span class="text-[10px] text-gray-400 text-center leading-relaxed" data-i18n="share_qr_hint">選好渲染圖<br>填好文字後<br>點下方建立 QR</span>
                         </div>
-                        <button onclick="window.buildShareQR && window.buildShareQR()" class="w-[200px] py-2 bg-white/10 hover:bg-white/15 border border-white/20 rounded-lg text-[11px] text-white/70 font-semibold tracking-wider transition-colors">📲 建立 QR 碼</button>
-                        <p class="text-[10px] text-white/25 tracking-wider">手機掃碼即可發佈</p>
+                        <button onclick="window.buildShareQR && window.buildShareQR()" class="w-[200px] py-2 bg-white/10 hover:bg-white/15 border border-white/20 rounded-lg text-[11px] text-white/70 font-semibold tracking-wider transition-colors">📲 <span data-i18n="share_btn_qr">建立 QR 碼</span></button>
+                        <p class="text-[10px] text-white/25 tracking-wider" data-i18n="share_qr_sub">手機掃碼即可發佈</p>
                     </div>
 
                     <!-- 步驟說明 + caption -->
                     <div class="flex flex-col flex-1 gap-3 min-w-0">
                         <div class="space-y-1.5">
-                            <p class="text-white/60 text-[11px] font-semibold">📱 手機</p>
-                            <p class="text-white/45 text-[11px] leading-relaxed">掃碼 → 長按存圖 → 複製文字 → 開 IG → 邀請 <span class="text-[#e1306c] font-bold">@loamlab_barbarian</span> 協作</p>
-                            <p class="text-white/60 text-[11px] font-semibold mt-2">💻 電腦</p>
-                            <p class="text-white/45 text-[11px] leading-relaxed">複製文字 → 開 IG 網頁 → 右鍵存圖 → 邀請 <span class="text-[#e1306c] font-bold">@loamlab_barbarian</span> 協作</p>
+                            <p class="text-white/60 text-[11px] font-semibold" data-i18n="share_phone">📱 手機</p>
+                            <p class="text-white/45 text-[11px] leading-relaxed" data-i18n="share_phone_desc">掃碼 → 長按存圖 → 複製文字 → 開 IG → 邀請 <span class="text-[#e1306c] font-bold">@loamlab_barbarian</span> 協作</p>
+                            <p class="text-white/60 text-[11px] font-semibold mt-2" data-i18n="share_pc">💻 電腦</p>
+                            <p class="text-white/45 text-[11px] leading-relaxed" data-i18n="share_pc_desc">複製文字 → 開 IG 網頁 → 右鍵存圖 → 邀請 <span class="text-[#e1306c] font-bold">@loamlab_barbarian</span> 協作</p>
                         </div>
                         <div class="border-t border-white/[0.06] pt-2">
-                            <label class="block text-[10px] text-white/40 mb-1.5">IG 貼文文字</label>
+                            <label class="block text-[10px] text-white/40 mb-1.5" data-i18n="share_label_ig">IG 貼文文字</label>
                             <textarea id="share-text-content" readonly class="w-full h-[90px] bg-black/50 border border-white/10 rounded-lg p-2.5 text-[11px] text-white/70 resize-none font-mono focus:outline-none custom-scrollbar leading-relaxed"></textarea>
-                            <button id="btn-share-pc-copy" class="w-full py-2 mt-2 bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:opacity-90 border-none text-white rounded-lg text-[11px] font-semibold tracking-widest transition-all">複製文字 + 開 IG 網頁版</button>
+                            <button id="btn-share-pc-copy" class="w-full py-2 mt-2 bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] hover:opacity-90 border-none text-white rounded-lg text-[11px] font-semibold tracking-widest transition-all" data-i18n="share_btn_pc_copy">複製文字 + 開 IG 網頁版</button>
                         </div>
                     </div>
                 </div>
@@ -980,34 +980,34 @@
                 <!-- 可折疊：自定義貼文內容 -->
                 <div class="border border-white/[0.08] rounded-xl overflow-hidden">
                     <button id="btn-share-customize-toggle" onclick="toggleShareCustomize()" class="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-white/5 transition-colors">
-                        <span class="text-[11px] text-white/50 font-semibold tracking-wider">✎ 自定義貼文內容（選填）</span>
+                        <span class="text-[11px] text-white/50 font-semibold tracking-wider" data-i18n="share_label_custom">✎ 自定義貼文內容（選填）</span>
                         <span id="share-customize-arrow" class="text-white/30 text-[10px]">▼</span>
                     </button>
                     <div id="share-customize-body" class="hidden px-4 pb-4 flex flex-col gap-3">
                         <div class="grid grid-cols-2 gap-3 pt-1">
                             <div>
-                                <label class="block text-[10px] text-white/40 mb-1">項目名稱 (Project)</label>
-                                <input type="text" id="share-input-project" class="w-full bg-black/50 border border-white/10 rounded pt-1.5 pb-1.5 px-2 text-[11px] text-white focus:border-[#e1306c]/50 focus:outline-none placeholder-white/20" placeholder="例如: 某某別墅設計">
+                                <label class="block text-[10px] text-white/40 mb-1" data-i18n="share_input_proj_label">項目名稱 (Project)</label>
+                                <input type="text" id="share-input-project" class="w-full bg-black/50 border border-white/10 rounded pt-1.5 pb-1.5 px-2 text-[11px] text-white focus:border-[#e1306c]/50 focus:outline-none placeholder-white/20" data-i18n="share_input_proj_ph" placeholder="例如: 某某別墅設計">
                             </div>
                             <div>
-                                <label class="block text-[10px] text-white/40 mb-1">設計單位 (Designer)</label>
-                                <input type="text" id="share-input-designer" class="w-full bg-black/50 border border-white/10 rounded pt-1.5 pb-1.5 px-2 text-[11px] text-white focus:border-[#e1306c]/50 focus:outline-none placeholder-white/20" placeholder="@username">
+                                <label class="block text-[10px] text-white/40 mb-1" data-i18n="share_input_desc_label">設計單位 (Designer)</label>
+                                <input type="text" id="share-input-designer" class="w-full bg-black/50 border border-white/10 rounded pt-1.5 pb-1.5 px-2 text-[11px] text-white focus:border-[#e1306c]/50 focus:outline-none placeholder-white/20" data-i18n="share_input_desc_ph" placeholder="@username">
                             </div>
                         </div>
                         <div>
-                            <label class="block text-[10px] text-white/40 mb-1">貼文內容 (Content)</label>
-                            <textarea id="share-input-content" rows="2" class="w-full bg-black/50 border border-white/10 rounded pt-1.5 pb-1.5 px-2 text-[11px] text-white resize-none focus:border-[#e1306c]/50 focus:outline-none placeholder-white/20" placeholder="寫一些設計理念..."></textarea>
+                            <label class="block text-[10px] text-white/40 mb-1" data-i18n="share_input_content_label">貼文內容 (Content)</label>
+                            <textarea id="share-input-content" rows="2" class="w-full bg-black/50 border border-white/10 rounded pt-1.5 pb-1.5 px-2 text-[11px] text-white resize-none focus:border-[#e1306c]/50 focus:outline-none placeholder-white/20" data-i18n="share_input_content_ph" placeholder="寫一些設計理念..."></textarea>
                         </div>
                         <!-- 圖片池 -->
                         <div>
                             <div class="flex items-center justify-between mb-1">
-                                <label class="text-[10px] text-white/40">手機掃碼後可長按存圖（點縮圖可移除）</label>
-                                <span class="text-[10px] text-white/30" id="share-img-count">0 張圖片</span>
+                                <label class="text-[10px] text-white/40" data-i18n="share_hint_pool">手機掃碼後可長按存圖（點縮圖可移除）</label>
+                                <span class="text-[10px] text-white/30" id="share-img-count">0 <span data-i18n="images_count_unit">張圖片</span></span>
                             </div>
                             <div id="share-image-pool" class="flex gap-2 overflow-x-auto pb-1 custom-scrollbar min-h-[50px]"></div>
                             <div class="grid grid-cols-2 gap-2 mt-1">
-                                <button onclick="openHistoryModalForSharePick('add', 'base')" class="bg-white/5 hover:bg-white/10 border border-dashed border-white/20 rounded py-1.5 transition-colors text-[10px] text-white/50 font-bold tracking-wider">+ Before 原圖（選填）</button>
-                                <button onclick="openHistoryModalForSharePick('add', 'render')" class="bg-white/5 hover:bg-amber-500/10 border border-dashed border-amber-500/30 rounded py-1.5 transition-colors text-[10px] text-amber-400/70 font-bold tracking-wider">+ After 渲染圖</button>
+                                <button onclick="openHistoryModalForSharePick('add', 'base')" class="bg-white/5 hover:bg-white/10 border border-dashed border-white/20 rounded py-1.5 transition-colors text-[10px] text-white/50 font-bold tracking-wider" data-i18n="share_btn_before">+ Before 原圖（選填）</button>
+                                <button onclick="openHistoryModalForSharePick('add', 'render')" class="bg-white/5 hover:bg-amber-500/10 border border-dashed border-amber-500/30 rounded py-1.5 transition-colors text-[10px] text-amber-400/70 font-bold tracking-wider" data-i18n="share_btn_after">+ After 渲染圖</button>
                             </div>
                         </div>
                     </div>

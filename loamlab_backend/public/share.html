@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoamLab | Redirecting...</title>
+    <script>
+        // Check for referral code in the URL
+        const params = new URLSearchParams(window.location.search);
+        const ref = params.get('ref');
+        
+        if (ref) {
+            // Save the referral code to localStorage
+            try {
+                localStorage.setItem('loamlab_referrer_code', ref);
+                
+                // Store in cookie as well, so backend could potentially read it during OAuth
+                document.cookie = `loamlab_ref=${encodeURIComponent(ref)}; path=/; max-age=2592000; SameSite=Lax`;
+            } catch (e) {
+                console.warn('Failed to save referral code:', e);
+            }
+        }
+        
+        // Redirect to homepage
+        window.location.replace('/' + (ref ? '?ref=' + encodeURIComponent(ref) : ''));
+    </script>
+</head>
+<body style="background-color: #09090b; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0;">
+    <div style="text-align: center;">
+        <div style="animation: spin 1s linear infinite; display: inline-block; width: 24px; height: 24px; border: 2px solid #333; border-top-color: #DA1E1F; border-radius: 50%;"></div>
+        <p style="margin-top: 16px; font-size: 12px; color: #888; letter-spacing: 0.1em; text-transform: uppercase;">Redirecting...</p>
+        <style>
+            @keyframes spin { to { transform: rotate(360deg); } }
+        </style>
+    </div>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "loamlab-video",
+  "version": "1.0.0",
+  "description": "Promotional video for LoamLab Suite",
+  "scripts": {
+    "start": "remotion preview",
+    "build": "remotion render src/index.ts",
+    "upgrade": "remotion upgrade"
+  },
+  "dependencies": {
+    "remotion": "4.0.231",
+    "@remotion/cli": "4.0.231",
+    "@remotion/renderer": "4.0.231",
+    "@remotion/player": "4.0.231",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "zod": "3.22.4"
+  },
+  "devDependencies": {
+    "@types/react": "18.2.48",
+    "@types/react-dom": "18.2.18",
+    "typescript": "5.3.3"
+  }
+}

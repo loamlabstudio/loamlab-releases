@@ -185,7 +185,10 @@ function renderT1Nodes() {
 
         nodes.forEach(node => {
             if (node.system) return; // 核心約束由系統管理，插件不顯示
-            const label = node.labels?.[currentLang] || node.labels?.['en-US'] || node.id;
+            let label = t(node.id);
+            if (!label || label === node.id) {
+                label = node.labels?.[currentLang] || node.labels?.['en-US'] || node.id;
+            }
             const ph = node.placeholders?.[currentLang] || node.placeholders?.['en-US'] || '';
 
             const item = document.createElement('div');
@@ -240,13 +243,13 @@ function renderT1Nodes() {
                     item.innerHTML = `
                         <label class="node-label">${label}</label>
                         <div class="node-input-wrapper">
-                            <div class="node-tags-wrapper" id="t1-tags-${node.id}" data-placeholder="${ph || '點擊快選...'}">
-                                <span class="node-tags-placeholder">${ph || '點擊快選...'}</span>
+                            <div class="node-tags-wrapper" id="t1-tags-${node.id}" data-placeholder="${ph || t('click_to_select') || '點擊快選...' }">
+                                <span class="node-tags-placeholder">${ph || t('click_to_select') || '點擊快選...'}</span>
                             </div>
                             <input type="hidden" id="t1-node-${node.id}" value="">
                             ${chipsHtml}
                             <div class="node-custom-chip-row">
-                                <input type="text" id="t1-custom-input-${node.id}" class="node-custom-chip-input" placeholder="自訂...">
+                                <input type="text" id="t1-custom-input-${node.id}" class="node-custom-chip-input" placeholder="${t('custom_placeholder') || '自訂...'}">
                                 <button type="button" class="node-custom-chip-btn" onclick="saveUserChip('${node.id}', document.getElementById('t1-custom-input-${node.id}').value)">＋</button>
                             </div>
                         </div>`;
@@ -277,7 +280,7 @@ function renderT1Nodes() {
                             <input type="hidden" id="t1-node-${node.id}" value="">
                             ${chipsHtml}
                             <div class="node-custom-chip-row">
-                                <input type="text" id="t1-custom-input-${node.id}" class="node-custom-chip-input" placeholder="自訂...">
+                                <input type="text" id="t1-custom-input-${node.id}" class="node-custom-chip-input" placeholder="${t('custom_placeholder') || '自訂...'}">
                                 <button type="button" class="node-custom-chip-btn" onclick="saveUserChip('${node.id}', document.getElementById('t1-custom-input-${node.id}').value)">＋</button>
                             </div>
                         </div>`;
@@ -384,20 +387,20 @@ function _createUserMaterialsSection() {
     section.className = 'node-item mt-1';
     section.innerHTML = `
         <div class="flex items-center justify-between mb-1">
-            <span class="text-[9px] text-white/25 uppercase tracking-widest">自訂材質</span>
+            <span class="text-[9px] text-white/25 uppercase tracking-widest">${t('custom_materials') || '自訂材質'}</span>
             <button onclick="document.getElementById('user-mat-add-row').classList.toggle('hidden')"
                 class="text-[10px] text-[#dc2626]/60 hover:text-[#dc2626] transition-colors">+ 新增</button>
         </div>
         <div id="user-mat-add-row" class="hidden flex flex-col gap-1 mb-1.5">
             <input id="user-mat-label-input"
                 class="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-[11px] text-white/80 outline-none focus:border-[#dc2626]/50 placeholder-white/20"
-                placeholder="材質名稱，例：綠色部分">
+                placeholder="${t('custom_mat_name_ph') || '材質名稱，例：綠色部分'}">
             <div class="flex gap-1">
                 <input id="user-mat-value-input"
                     class="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-[11px] text-white/80 outline-none focus:border-[#dc2626]/50 placeholder-white/20"
-                    placeholder="描述，例：鏡面反射，高光澤">
+                    placeholder="${t('custom_mat_desc_ph') || '描述，例：鏡面反射，高光澤'}">
                 <button onclick="addUserMaterialNode()"
-                    class="shrink-0 bg-[#dc2626]/15 border border-[#dc2626]/30 text-red-300 hover:bg-[#dc2626]/30 rounded px-2 text-[10px] transition-colors">確認</button>
+                    class="shrink-0 bg-[#dc2626]/15 border border-[#dc2626]/30 text-red-300 hover:bg-[#dc2626]/30 rounded px-2 text-[10px] transition-colors">${t('custom_mat_btn') || '確認'}</button>
             </div>
         </div>
         <div id="user-mat-list" class="flex flex-col gap-1"></div>
@@ -1764,6 +1767,8 @@ if (btnSync) {
     window.setLanguage(e.target.value);
     try { localStorage.setItem('loamlab_lang', e.target.value); } catch (_) {}
     if (window.sketchup) try { sketchup.save_ui_lang({ lang: e.target.value }); } catch (_) {}
+    if (typeof renderT1Nodes === 'function') renderT1Nodes();
+    if (typeof renderUserMaterialList === 'function') renderUserMaterialList();
 });
 
 // 更新存檔目錄路徑顯示

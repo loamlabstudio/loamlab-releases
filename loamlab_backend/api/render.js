@@ -347,6 +347,9 @@ export default async function handler(req, res) {
         const defaultStyleNote = ". Ensure this image's overall lighting (direction, warmth, intensity) and color tone (temperature, saturation, luminance) match the second reference image so both appear from the same photography session. Spatial content and materials follow Image 1 only — do not reference the second image for those.";
         const p1StyleNote = systemPrompts.TOOL_1_BATCH_STYLE || defaultStyleNote;
 
+        const defaultImageRoles = 'Image 1: current SketchUp scene screenshot — primary source for spatial structure, camera angle, geometry and materials. Image 2: style reference only — match its lighting direction, color temperature and overall tone; do NOT copy its camera position, spatial layout or composition.';
+        const p1ImageRoles = systemPrompts.TOOL_1_BATCH_IMAGE_ROLES || defaultImageRoles;
+
         // ── 進階節點配置 (T1 Nodes) ──
         let t1Nodes = [];
         try {
@@ -438,6 +441,7 @@ export default async function handler(req, res) {
 
                 // 4. 批量出圖風格一致性附加
                 if (styleRefUrl && styleRefNote) {
+                    jsonPrompt['Image Roles'] = p1ImageRoles;
                     jsonPrompt['Style Consistency'] = styleRefNote.replace(/^\.\s*/, '').trim();
                 }
 
@@ -445,7 +449,8 @@ export default async function handler(req, res) {
             } else {
                 // Legacy 模式 或 無節點 fallback：傳統拼接（翻譯後拼接）
                 const translatedPrompt1 = await translateToEnglish(userPrompt);
-                finalPrompt = translatedPrompt1.trim() ? p1 + ", " + translatedPrompt1 : p1;
+                const legacyBatchPrefix = styleRefUrl ? " " + p1ImageRoles + styleRefNote : "";
+                finalPrompt = translatedPrompt1.trim() ? p1 + legacyBatchPrefix + ", " + translatedPrompt1 : p1 + legacyBatchPrefix;
             }
         }
 

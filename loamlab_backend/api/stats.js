@@ -88,7 +88,7 @@ export default async function handler(req, res) {
             .limit(1)
             .maybeSingle();
         if (error) return res.status(500).json({ code: -1, msg: error.message });
-        return res.status(200).json({ code: 0, template: data?.metadata?.template || {} });
+        return res.status(200).json({ code: 0, template: data?.metadata?.template || {}, config: data?.metadata?.config || {} });
     }
 
     if (req.method === 'GET' && action === 'get_prompts') {
@@ -295,11 +295,12 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST' && action === 'set_share_template') {
         const template = req.body?.template || {};
+        const config = req.body?.config || {};
         const { error } = await supabase.from('transactions').insert([{
             user_email: null,
             amount: 0,
             transaction_type: 'SYSTEM_SHARE_TEMPLATE',
-            metadata: { template }
+            metadata: { template, config }
         }]);
         if (error) {
             console.error('Save share template error:', error.message);

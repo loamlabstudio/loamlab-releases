@@ -178,7 +178,23 @@
         <textarea id="share-jp" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-pink-300/90 outline-none focus:border-pink-600/50 transition-colors placeholder-gray-600 resize-none h-24" placeholder="日本語..."></textarea>
       </div>
     </div>
-    <div class="flex justify-between items-center">
+    <!-- 分享系統設定 -->
+    <div class="mt-3 pt-3 border-t border-white/8">
+      <div class="text-xs font-semibold text-white/60 mb-2">分享系統設定</div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">IG 標記帳號 <span class="text-white/25">（協作邀請對象）</span></label>
+          <input id="share-config-handle" type="text" placeholder="@loamlab_barbarian"
+            class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-pink-300/90 outline-none focus:border-pink-600/50 transition-colors">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">協作獎勵說明 <span class="text-white/25">（顯示在按鈕下方）</span></label>
+          <input id="share-config-reward" type="text" placeholder="+300 點"
+            class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-pink-300/90 outline-none focus:border-pink-600/50 transition-colors">
+        </div>
+      </div>
+    </div>
+    <div class="flex justify-between items-center mt-3">
       <div id="share-status" class="text-xs hidden text-green-400"></div>
       <button onclick="saveShareTemplate()" class="bg-pink-600/20 hover:bg-pink-600/40 text-pink-400 border border-pink-600/50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ml-auto min-w-[5rem] flex items-center justify-center whitespace-nowrap" id="btn-save-share">
         儲存範本
@@ -814,6 +830,11 @@ async function loadShareTemplate() {
         const el = document.getElementById(`share-${l}`);
         if (el) el.value = t[l] || defaultShare;
       });
+      const cfg = j.config || {};
+      const handleEl = document.getElementById('share-config-handle');
+      const rewardEl = document.getElementById('share-config-reward');
+      if (handleEl) handleEl.value = cfg.ig_handle || '@loamlab_barbarian';
+      if (rewardEl) rewardEl.value = cfg.reward_text || '+300 點';
     }
   } catch(e) {}
 }
@@ -826,12 +847,16 @@ async function saveShareTemplate() {
     const el = document.getElementById(`share-${l}`);
     template[l] = el ? el.value.trim() : '';
   });
+  const config = {
+    ig_handle: (document.getElementById('share-config-handle')?.value || '@loamlab_barbarian').trim(),
+    reward_text: (document.getElementById('share-config-reward')?.value || '+300 點').trim()
+  };
   btn.innerText = '處理中...';
   try {
     const r = await fetch(`${API_BASE}/api/stats?action=set_share_template`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
-      body: JSON.stringify({ template })
+      body: JSON.stringify({ template, config })
     });
     if (r.ok) {
       status.innerText = '✅ 文案範本已儲存';

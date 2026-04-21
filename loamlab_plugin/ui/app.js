@@ -2034,66 +2034,66 @@ function _autoPopulateShareImage(url) {
     }
 }
 
-window._onLocalImageBase64 = async function(base64, errMsg) {
+// Ruby 直接上傳圖床完成後回傳 cloud URL（支援多圖循序上傳隊列）
+window._onLocalImageUploaded = function(cloudUrl, errMsg) {
     const qrContainer = window._pendingQRContainer;
-    window._pendingQRContainer = null;
-    if (errMsg || !base64) {
-        if (qrContainer) qrContainer.innerHTML = `<div style="padding:10px;text-align:center;color:#f87171;font-size:10px;line-height:1.6">⚠️ 圖片讀取失敗<br><span style="color:rgba(255,255,255,0.4)">${errMsg || '未知錯誤'}</span></div>`;
+    // 更新當前圖片的 cloud_url
+    if (!errMsg && cloudUrl && window._currentUploadingImg) {
+        window._currentUploadingImg.cloud_url = cloudUrl;
+    }
+    // 繼續上傳下一張
+    if (window._localUploadQueue && window._localUploadQueue.length > 0) {
+        const next = window._localUploadQueue.shift();
+        window._currentUploadingImg = next;
+        const pool = window._shareImagesPool || [];
+        const done = pool.filter(img => (img.cloud_url || '').startsWith('http')).length;
+        const total = pool.filter(img => img.file_url).length;
+        if (qrContainer) qrContainer.innerHTML = `<div style="width:175px;height:175px;display:flex;align-items:center;justify-content:center;background:#111;border-radius:6px"><span style="font-size:10px;color:rgba(255,255,255,0.4);text-align:center;line-height:1.6">⬆️ 上傳中 ${done}/${total}...<br><span style="font-size:9px;color:rgba(255,255,255,0.25)">請稍候</span></span></div>`;
+        sketchup.upload_local_image_for_share({ file_url: next.file_url });
         return;
     }
-    if (qrContainer) qrContainer.innerHTML = '<div style="width:175px;height:175px;display:flex;align-items:center;justify-content:center;background:#111;border-radius:6px"><span style="font-size:10px;color:rgba(255,255,255,0.4);text-align:center;line-height:1.6">☁️ 上傳至雲端中...</span></div>';
-    try {
-        const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) || 'https://loamlab-camera.vercel.app';
-        const resp = await fetch(`${baseUrl}/api/stats?action=upload_share_img`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ base64 })
-        });
-        const data = await resp.json();
-        if (data.code === 0 && data.url) {
-            const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
-            if (afterImg) afterImg.cloud_url = data.url;
-            if (qrContainer) _createAndRenderQR(qrContainer);
-        } else {
-            if (qrContainer) qrContainer.innerHTML = '<div style="padding:10px;text-align:center;color:#f87171;font-size:10px;line-height:1.6">⚠️ 上傳失敗，請稍後再試</div>';
-        }
-    } catch(e) {
-        if (qrContainer) qrContainer.innerHTML = '<div style="padding:10px;text-align:center;color:#f87171;font-size:10px;line-height:1.6">⚠️ 網路錯誤，請稍後再試</div>';
+    // 全部上傳完成
+    window._pendingQRContainer = null;
+    window._currentUploadingImg = null;
+    if (errMsg && !cloudUrl && qrContainer) {
+        qrContainer.innerHTML = `<div style="padding:10px;text-align:center;color:#f87171;font-size:10px;line-height:1.6">⚠️ 上傳失敗<br><span style="color:rgba(255,255,255,0.4)">${errMsg || '請稍後再試'}</span></div>`;
+        return;
     }
+    if (qrContainer) _createAndRenderQR(qrContainer);
 };
 
-// 後端建立 share session → QR 只帶短 session ID（~70 chars），可靠掃描
+// 後端建立 share session → 傳送全部圖片，QR 帶短 session ID
 async function _createAndRenderQR(qrContainer) {
     if (!qrContainer) return;
     qrContainer.innerHTML = '<div style="width:175px;height:175px;display:flex;align-items:center;justify-content:center;background:#111;border-radius:6px"><span style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;line-height:1.6">建立連結<br>請稍候...</span></div>';
 
-    const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) || 'https://loamlab-camera.vercel.app';
-    const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
-    const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
-    // cloud_url = session render（有 AtlasCloud URL）；file_url = Ruby 存檔（本機路徑，不可用）
-    const rawUrl = afterImg ? (afterImg.cloud_url || afterImg.file_url || '') : '';
-    const imgUrl = rawUrl.startsWith('http') ? rawUrl : '';
+    const pool = window._shareImagesPool || [];
 
-    // 如果有選圖但沒有 cloud_url，嘗試上傳本機圖片
-    if (afterImg && !imgUrl) {
-        const fileUrl = afterImg.file_url || '';
-        if (fileUrl && window.sketchup) {
-            qrContainer.innerHTML = '<div style="width:175px;height:175px;display:flex;align-items:center;justify-content:center;background:#111;border-radius:6px"><span style="font-size:10px;color:rgba(255,255,255,0.4);text-align:center;line-height:1.6">⬆️ 上傳圖片中...<br><span style="font-size:9px;color:rgba(255,255,255,0.25)">需要約 5-15 秒</span></span></div>';
-            window._pendingQRContainer = qrContainer;
-            sketchup.upload_local_image_for_share({ file_url: fileUrl });
-        } else {
-            qrContainer.innerHTML = '<div style="padding:10px;text-align:center;color:#f87171;font-size:10px;line-height:1.6">⚠️ 此圖片為本機存檔<br>無法包含在行動分享中</div>';
-        }
+    // 找出還沒有 cloud_url 的本機圖片
+    const needUpload = pool.filter(img => img.file_url && !((img.cloud_url || '').startsWith('http')));
+    if (needUpload.length > 0 && window.sketchup) {
+        const total = pool.filter(img => img.file_url).length;
+        const done = pool.filter(img => (img.cloud_url || '').startsWith('http')).length;
+        qrContainer.innerHTML = `<div style="width:175px;height:175px;display:flex;align-items:center;justify-content:center;background:#111;border-radius:6px"><span style="font-size:10px;color:rgba(255,255,255,0.4);text-align:center;line-height:1.6">⬆️ 上傳圖片中...<br>${done}/${total}<br><span style="font-size:9px;color:rgba(255,255,255,0.25)">需要約 5-15 秒</span></span></div>`;
+        window._pendingQRContainer = qrContainer;
+        window._localUploadQueue = needUpload.slice(1);
+        window._currentUploadingImg = needUpload[0];
+        sketchup.upload_local_image_for_share({ file_url: needUpload[0].file_url });
         return;
     }
 
-
+    const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) || 'https://loamlab-camera.vercel.app';
+    const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
     const text_data = {
         project: document.getElementById('share-input-project')?.value || '',
         designer: document.getElementById('share-input-designer')?.value || '',
         content: document.getElementById('share-input-content')?.value || ''
     };
-    const images = imgUrl ? [{ type: 'after', url: imgUrl }] : [];
+
+    // 傳送所有已有 cloud URL 的圖片
+    const images = pool
+        .map(img => ({ type: img.type || 'after', url: img.cloud_url || '' }))
+        .filter(img => img.url.startsWith('http'));
 
     try {
         const resp = await fetch(`${baseUrl}/api/stats?action=create_share_session`, {
@@ -2109,7 +2109,7 @@ async function _createAndRenderQR(qrContainer) {
         }
     } catch(e) {}
 
-    // Fallback：只帶 ref，手機頁顯示通用文案
+    // Fallback：只帶 ref
     _renderQRCode(qrContainer, `${baseUrl}/qr-handoff.html?ref=${encodeURIComponent(myCode)}`);
 }
 

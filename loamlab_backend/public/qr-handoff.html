@@ -33,10 +33,10 @@
             <span class="text-[13px] font-bold text-white/60 tracking-widest uppercase">LoamLab × Instagram</span>
         </div>
 
-        <!-- 渲染圖（大圖顯示，iOS 可長按存圖） -->
+        <!-- 渲染圖（橫向捲動，iOS 可長按存圖） -->
         <div id="img-section" class="hidden relative w-full">
-            <img id="render-img" src="" alt="AI Render" class="w-full object-contain bg-black" style="max-height: 60vw;">
-            <div id="img-hint" class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent py-2 px-3 text-[11px] text-white/60 text-center">
+            <div id="img-strip" class="flex gap-2 overflow-x-auto px-4 pb-1" style="-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory"></div>
+            <div id="img-hint" class="py-1.5 px-3 text-[10px] text-white/40 text-center">
                 長按圖片可存入相簿（iOS）
             </div>
         </div>
@@ -48,7 +48,7 @@
                 <span id="btn-label">存圖 + 複製文字 + 開啟 IG</span>
                 <span id="btn-sub" class="text-[11px] font-normal opacity-75">點一下完成全部步驟</span>
             </button>
-            <p id="btn-hint" class="text-center text-[10px] text-white/30 mt-2">開啟 IG 後，新增貼文並貼上文字，邀請 <span class="text-[#e1306c]">@loamlab_barbarian</span> 協作即可獲得 +300 點</p>
+            <p id="btn-hint" class="text-center text-[10px] text-white/30 mt-2">開啟 IG 後，新增貼文並貼上文字，邀請協作即可獲得獎勵</p>
         </div>
 
         <!-- 貼文文字（折疊，點開查看） -->
@@ -125,16 +125,29 @@
             }
         }
 
-        function buildPostText(textData) {
+        function buildPostText(textData, adminTemplate) {
             const ref = textData.referral_code || '';
+            // 優先用 admin 後台設定的模板
+            if (adminTemplate) {
+                const lang = (navigator.language || 'en').toLowerCase();
+                let tmpl = '';
+                if (lang.startsWith('zh-tw') || lang.startsWith('zh-hant')) tmpl = adminTemplate.tw;
+                else if (lang.startsWith('zh')) tmpl = adminTemplate.cn;
+                else if (lang.startsWith('es')) tmpl = adminTemplate.es;
+                else if (lang.startsWith('pt')) tmpl = adminTemplate.br;
+                else if (lang.startsWith('ja')) tmpl = adminTemplate.jp;
+                if (!tmpl) tmpl = adminTemplate.us || Object.values(adminTemplate).find(v => v) || '';
+                if (tmpl) return tmpl
+                    .replace(/{project}/g, textData.project || '')
+                    .replace(/{designer}/g, textData.designer || '')
+                    .replace(/{content}/g, textData.content || '')
+                    .replace(/{referral_code}/g, ref)
+                    .replace(/{ref}/g, ref);
+            }
+            // 硬編碼 fallback
             const hasDetails = textData.project || textData.designer || textData.content;
             if (hasDetails) {
-                const tmpl = '【 {project} 】\n\n{content}\n\nDesign: {designer}\nRenderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n🎁 Try it free & get 100 bonus points:\nhttps://loamlab-camera.vercel.app/?ref={ref}\n\n#sketchup #architectural #render3d #AIrender';
-                return tmpl
-                    .replace('{project}', textData.project || '')
-                    .replace('{designer}', textData.designer || '')
-                    .replace('{content}', textData.content || '')
-                    .replace('{ref}', ref);
+                return `【 ${textData.project || ''} 】\n\n${textData.content || ''}\n\nDesign: ${textData.designer || ''}\nRenderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n🎁 Try it free & get 100 bonus points:\nhttps://loamlab-camera.vercel.app/?ref=${ref}\n\n#sketchup #architectural #render3d #AIrender`;
             }
             return `Rendered with loamlab-camera — SU Realistic Rendering & Multi-angle Gen\n\n🎁 Try it free & get 100 bonus points:\nhttps://loamlab-camera.vercel.app/?ref=${ref}\n\n#sketchup #architectural #render3d #AIrender`;
         }
@@ -161,26 +174,42 @@
             const errorEl = document.getElementById('error-state');
             const btnGo = document.getElementById('btn-go');
 
-            // ── 解析資料 ──────────────────────────────────────
-            let resolvedImg = '';
+            // ── 解析資料（session + template 並行）──────────────
+            let resolvedImages = []; // 所有圖片
             let captionText = '';
+            let adminTemplate = null;
+            let igHandle = '@loamlab_barbarian';
+            let rewardText = '+300 點';
 
-            // session 優先；舊版 img/d 參數模式向下相容
+            // 並行拉 session 與 admin 模板
+            const fetchTemplate = fetch(`${API_BASE}/api/stats?action=get_share_template`)
+                .then(r => r.json()).catch(() => null);
+
             if (sessionId) {
-                // session 模式（新）
                 try {
-                    const resp = await fetch(`${API_BASE}/api/stats?action=get_share_session&session=${encodeURIComponent(sessionId)}`);
-                    const data = await resp.json();
-                    if (data.code === 0) {
-                        const after = (data.images || []).find(i => i.type === 'after');
-                        if (after) resolvedImg = after.url;
-                        captionText = buildPostText({ ...(data.text_data || {}), referral_code: ref });
+                    const [sessionResp, tmplData] = await Promise.all([
+                        fetch(`${API_BASE}/api/stats?action=get_share_session&session=${encodeURIComponent(sessionId)}`).then(r => r.json()),
+                        fetchTemplate
+                    ]);
+                    if (tmplData?.code === 0) {
+                        adminTemplate = tmplData.template || null;
+                        igHandle = tmplData.config?.ig_handle || igHandle;
+                        rewardText = tmplData.config?.reward_text || rewardText;
+                    }
+                    if (sessionResp?.code === 0) {
+                        resolvedImages = sessionResp.images || [];
+                        captionText = buildPostText({ ...(sessionResp.text_data || {}), referral_code: ref }, adminTemplate);
                     }
                 } catch(e) {}
-
             } else if (params.has('img') || params.has('d') || params.has('ref')) {
-                // 舊版 URL 參數模式（向下相容）
-                resolvedImg = imgParam;
+                // 舊版向下相容
+                const tmplData = await fetchTemplate;
+                if (tmplData?.code === 0) {
+                    adminTemplate = tmplData.template || null;
+                    igHandle = tmplData.config?.ig_handle || igHandle;
+                    rewardText = tmplData.config?.reward_text || rewardText;
+                }
+                if (imgParam) resolvedImages = [{ type: 'after', url: imgParam }];
                 let textData = { referral_code: ref };
                 if (dataBase64) {
                     try {
@@ -189,7 +218,7 @@
                         textData = { project: obj.p, designer: obj.d, content: obj.c, referral_code: ref };
                     } catch(e) {}
                 }
-                captionText = buildPostText(textData);
+                captionText = buildPostText(textData, adminTemplate);
             } else {
                 loadingEl.classList.add('hidden');
                 mainEl.classList.remove('hidden');
@@ -202,57 +231,68 @@
             loadingEl.classList.add('hidden');
             mainEl.classList.remove('hidden');
 
-            if (resolvedImg) {
-                renderImg.src = resolvedImg;
+            const imgStrip = document.getElementById('img-strip');
+            if (resolvedImages.length > 0 && imgStrip) {
+                imgStrip.innerHTML = resolvedImages.map((img, i) =>
+                    `<img src="${img.url}" alt="render-${i+1}" loading="lazy"
+                        style="max-height:200px;border-radius:8px;object-fit:contain;background:#000;flex-shrink:0;scroll-snap-align:start">`
+                ).join('');
                 imgSection.classList.remove('hidden');
             }
             captionArea.value = captionText;
 
+            const resolvedImg = resolvedImages.find(i => i.type === 'after')?.url || resolvedImages[0]?.url || '';
+
             // ── 一鍵按鈕邏輯 ──────────────────────────────────
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
-            if (!resolvedImg) {
-                // 無圖：隱藏存圖提示，只複製文字 + 開 IG
+            if (resolvedImages.length === 0) {
                 document.getElementById('btn-label').textContent = '複製文字 + 開啟 IG';
                 document.getElementById('btn-sub').textContent = '點一下完成，開啟後貼上文字';
-                document.getElementById('btn-hint').innerHTML = '開啟後邀請 <span class="text-[#e1306c]">@loamlab_barbarian</span> 協作即可獲得 +300 點';
+                document.getElementById('btn-hint').innerHTML = `開啟後邀請 <span class="text-[#e1306c]">${igHandle}</span> 協作即可獲得 ${rewardText}`;
             } else if (isIOS) {
-                document.getElementById('img-hint').textContent = '① 長按圖片存入相簿';
+                document.getElementById('img-hint').textContent = `① 長按圖片存入相簿（共 ${resolvedImages.length} 張）`;
                 document.getElementById('btn-label').textContent = '② 複製文字 + 開啟 IG';
                 document.getElementById('btn-sub').textContent = '確認圖片已存後點此';
             }
+            // 更新 btn-hint 為動態 handle / reward
+            const btnHintEl = document.getElementById('btn-hint');
+            if (btnHintEl) btnHintEl.innerHTML = `開啟 IG 後，新增貼文並貼上文字，邀請 <span class="text-[#e1306c]">${igHandle}</span> 協作即可獲得 ${rewardText}`;
 
             btnGo.addEventListener('click', async () => {
                 btnGo.disabled = true;
 
-                // 優先：原生 navigator.share（Android/iOS 系統分享表單，圖文一起打包）
-                if (resolvedImg && navigator.canShare) {
+                // 優先：原生 navigator.share（多圖一起打包）
+                if (resolvedImages.length > 0 && navigator.canShare) {
                     try {
-                        // resolvedImg 是後端代理 URL，直接 fetch（不需再繞 proxy_img）
-                        const fetchUrl = (resolvedImg.startsWith('/') || resolvedImg.startsWith(API_BASE))
-                            ? (resolvedImg.startsWith('/') ? API_BASE + resolvedImg : resolvedImg)
-                            : `${API_BASE}/api/stats?action=proxy_img&url=${encodeURIComponent(resolvedImg)}`;
-                        const resp = await fetch(fetchUrl);
-                        if (resp.ok) {
-                            const blob = await resp.blob();
-                            const file = new File([blob], 'loamlab-render.jpg', { type: blob.type || 'image/jpeg' });
-                            const shareData = { files: [file], text: captionText };
+                        const files = [];
+                        for (const [i, img] of resolvedImages.entries()) {
+                            const fetchUrl = (img.url.startsWith('/') || img.url.startsWith(API_BASE))
+                                ? (img.url.startsWith('/') ? API_BASE + img.url : img.url)
+                                : `${API_BASE}/api/stats?action=proxy_img&url=${encodeURIComponent(img.url)}`;
+                            const resp = await fetch(fetchUrl);
+                            if (resp.ok) {
+                                const blob = await resp.blob();
+                                files.push(new File([blob], `loamlab-render-${i+1}.jpg`, { type: blob.type || 'image/jpeg' }));
+                            }
+                        }
+                        if (files.length > 0) {
+                            const shareData = { files, text: captionText };
                             if (navigator.canShare(shareData)) {
                                 await navigator.share(shareData);
                                 showToast('✅ 分享完成！', 2500);
                                 btnGo.classList.add('done');
                                 document.getElementById('btn-label').textContent = '✅ 已分享';
-                                document.getElementById('btn-sub').textContent = '邀請 @loamlab_barbarian 協作即可獲得 +300 點';
+                                document.getElementById('btn-sub').textContent = `邀請 ${igHandle} 協作即可獲得 ${rewardText}`;
                                 return;
                             }
                         }
                     } catch(e) {
                         if (e.name === 'AbortError') { btnGo.disabled = false; return; }
-                        // 其他錯誤 fallback 到舊流程
                     }
                 }
 
-                // Fallback：步驟一 下載圖片（Android 直接存；iOS 長按）
+                // Fallback：下載第一張 after 圖
                 if (resolvedImg) {
                     const ok = await downloadImage(resolvedImg);
                     if (!ok && isIOS) {
@@ -260,7 +300,7 @@
                     }
                 }
 
-                // 步驟二：複製文字
+                // 複製文字
                 let copied = false;
                 try {
                     if (navigator.clipboard && window.isSecureContext) {
@@ -276,7 +316,7 @@
                 if (copied) {
                     showToast('✅ 文字已複製！正在開啟 IG...', 3000);
                     document.getElementById('btn-label').textContent = '✅ 已複製，開啟中...';
-                    document.getElementById('btn-sub').textContent = '貼上文字並邀請 @loamlab_barbarian 協作';
+                    document.getElementById('btn-sub').textContent = `貼上文字並邀請 ${igHandle} 協作`;
                     btnGo.classList.add('done');
                 } else {
                     showToast('請手動複製下方文字', 2500);

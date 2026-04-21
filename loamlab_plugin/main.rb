@@ -258,19 +258,43 @@ module LoamLab
       end
 
       # 分享本機圖片：讀取本機圖片為 base64，傳給前端上傳至圖床
+      # 本機圖片分享：Ruby 直接上傳圖床，只把 cloud URL 回傳 JS（避免大型 base64 卡死 bridge）
       dialog.add_action_callback("upload_local_image_for_share") do |action_context, params|
-        begin
-          p = params.is_a?(Hash) ? params : {}
-          raw_url = (p["file_url"] || "").to_s
-          local_path = raw_url.start_with?("file:") ? file_uri_to_path(raw_url) : raw_url
-          raise "找不到圖片: #{local_path}" unless File.exist?(local_path)
-          img_data = File.read(local_path, mode: 'rb')
-          ext = File.extname(local_path).downcase
-          mime = (ext == '.png') ? 'image/png' : 'image/jpeg'
-          b64 = "data:#{mime};base64,#{Base64.strict_encode64(img_data)}"
-          dialog.execute_script("window._onLocalImageBase64(#{b64.to_json})")
-        rescue => e
-          dialog.execute_script("window._onLocalImageBase64(null, #{e.message.to_json})")
+        UI.start_timer(0.1, false) do
+          begin
+            require 'net/http'
+            require 'uri'
+            p = params.is_a?(Hash) ? params : {}
+            raw_url = (p["file_url"] || "").to_s
+            local_path = raw_url.start_with?("file:") ? file_uri_to_path(raw_url) : raw_url
+            raise "找不到圖片: #{local_path}" unless File.exist?(local_path)
+
+            img_data = File.read(local_path, mode: 'rb')
+            b64_clean = Base64.strict_encode64(img_data)
+
+            # 上傳到 freeimage.host（免費，不需 API key）
+            cloud_url = nil
+            begin
+              uri = URI('https://freeimage.host/api/1/upload')
+              http = Net::HTTP.new(uri.host, uri.port)
+              http.use_ssl = true
+              http.read_timeout = 30
+              req = Net::HTTP::Post.new(uri)
+              req.set_form_data('key' => '6d207e02198a847aa98d0a2a901485a5', 'action' => 'upload', 'source' => b64_clean, 'format' => 'json')
+              res = http.request(req)
+              result = JSON.parse(res.body)
+              cloud_url = result.dig('image', 'url') if result['status_code'] == 200
+            rescue => _upload_err
+            end
+
+            if cloud_url
+              dialog.execute_script("window._onLocalImageUploaded(#{cloud_url.to_json})")
+            else
+              dialog.execute_script("window._onLocalImageUploaded(null, '上傳失敗，請稍後再試')")
+            end
+          rescue => e
+            dialog.execute_script("window._onLocalImageUploaded(null, #{e.message.to_json})")
+          end
         end
       end
 

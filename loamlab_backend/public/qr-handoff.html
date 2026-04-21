@@ -33,11 +33,11 @@
             <span class="text-[13px] font-bold text-white/60 tracking-widest uppercase">LoamLab × Instagram</span>
         </div>
 
-        <!-- 渲染圖（橫向捲動，iOS 可長按存圖） -->
+        <!-- 渲染圖（橫向捲動，長按存圖） -->
         <div id="img-section" class="hidden relative w-full">
             <div id="img-strip" class="flex gap-2 overflow-x-auto px-4 pb-1" style="-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory"></div>
-            <div id="img-hint" class="py-1.5 px-3 text-[10px] text-white/40 text-center">
-                長按圖片可存入相簿（iOS）
+            <div id="img-hint" class="py-1.5 px-3 text-[11px] text-white/50 text-center font-medium">
+                👆 長按每張圖片 → 儲存至相簿
             </div>
         </div>
 
@@ -282,10 +282,12 @@
                 document.getElementById('btn-label').textContent = '處理中...';
                 document.getElementById('btn-sub').textContent = '請稍候';
 
-                // Step 1: 下載所有圖片到本地相簿
+                // Step 1: 下載所有圖片（多張之間加延遲，繞過瀏覽器限制）
                 let downloadedCount = 0;
                 if (resolvedImages.length > 0) {
                     for (const [i, img] of resolvedImages.entries()) {
+                        if (i > 0) await new Promise(r => setTimeout(r, 1200));
+                        document.getElementById('btn-sub').textContent = `正在儲存第 ${i+1}/${resolvedImages.length} 張...`;
                         const ok = await downloadImage(img.url, `loamlab-render-${i+1}.jpg`);
                         if (ok) downloadedCount++;
                     }
@@ -317,14 +319,15 @@
                 const stepsBar = document.getElementById('steps-bar');
                 if (stepsBar) {
                     stepsBar.classList.remove('hidden');
-                    let step1Msg = '文字已複製至剪貼板';
+                    let step1Msg = '✅ 文字已複製至剪貼板';
                     if (resolvedImages.length > 0) {
-                        if (downloadedCount > 0) {
-                            step1Msg = `✅ ${downloadedCount} 張圖已存至相簿，文字已複製`;
-                        } else if (isIOS) {
-                            step1Msg = '✅ 文字已複製 — 請長按上方圖片存入相簿';
+                        const total = resolvedImages.length;
+                        if (downloadedCount >= total) {
+                            step1Msg = `✅ 全部 ${total} 張圖已存至相簿，文字已複製`;
+                        } else if (downloadedCount > 0) {
+                            step1Msg = `✅ ${downloadedCount}/${total} 張已存，其餘請長按上方圖片手動存圖`;
                         } else {
-                            step1Msg = '✅ 文字已複製 — 請長按上方圖片存入相簿';
+                            step1Msg = `✅ 文字已複製 — 請長按上方每張圖片存入相簿`;
                         }
                     }
                     document.getElementById('step-1-text').innerHTML = step1Msg;

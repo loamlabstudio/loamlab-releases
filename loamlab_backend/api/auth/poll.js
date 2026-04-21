@@ -56,12 +56,25 @@ export default async function handler(req, res) {
             .gt('expires_at', new Date().toISOString());
 
         if (count >= maxDevices) {
-            return res.status(200).json({
-                status: 'device_limit',
-                max_devices: maxDevices,
-                current_plan: userPlan,
-                message: `Your plan allows ${maxDevices} active device(s). Please log out from another device or upgrade your plan.`
-            });
+            // 強制登出最舊的 session，讓新登入成功（而非擋住用戶）
+            const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            const adminClient = serviceKey ? createClient(url, serviceKey) : supabase;
+            const expireCount = count - maxDevices + 1;
+            const { data: oldSessions } = await adminClient
+                .from('auth_sessions')
+                .select('id')
+                .eq('email', data.email)
+                .eq('status', 'success')
+                .neq('id', session_id)
+                .gt('expires_at', new Date().toISOString())
+                .order('expires_at', { ascending: true })
+                .limit(expireCount);
+            if (oldSessions?.length) {
+                await adminClient
+                    .from('auth_sessions')
+                    .update({ expires_at: new Date().toISOString() })
+                    .in('id', oldSessions.map(s => s.id));
+            }
         }
 
         return res.status(200).json({

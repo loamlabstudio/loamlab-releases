@@ -219,14 +219,17 @@ function renderT1Nodes() {
                 const chipDisplay = (o) => isCJK ? (o.label || o.value) : (o.value || o.label);
                 const makeChipHtml = (o) => {
                     if (o.is_silent) return ''; // 靜默 chip：自動加入提示詞，插件不顯示
-                    const delSpan = o._isPersonal
-                        ? '<span class="node-chip-del" onclick="event.stopPropagation();removeUserChip(\'' + node.id + '\',\'' + (o.value || '').replace(/'/g, "\\'") + '\')">✕</span>'
-                        : '';
-                    return '<button type="button" class="node-chip' + (o._isPersonal ? ' node-chip-personal' : '') + '"' +
+                    const chipBtn = '<button type="button" class="node-chip' + (o._isPersonal ? ' node-chip-personal' : '') + '"' +
                         ' data-chip-value="' + (o.value || o.label).replace(/"/g, '&quot;') + '"' +
                         ' data-chip-strategy="' + (o.strategy || 'replace') + '"' +
                         ' data-chip-default="' + (o.is_default ? '1' : '') + '">' +
-                        chipDisplay(o) + delSpan + '</button>';
+                        chipDisplay(o) + '</button>';
+                    if (o._isPersonal) {
+                        // ✕ 獨立在 button 外，避免誤觸造成選取時意外刪除
+                        return '<span class="node-chip-wrap">' + chipBtn +
+                            '<span class="node-chip-del" onclick="removeUserChip(\'' + node.id + '\',\'' + (o.value || '').replace(/'/g, "\\'") + '\')">✕</span></span>';
+                    }
+                    return chipBtn;
                 };
                 const chipsHtml = nodeOpts.length > 0
                     ? '<div class="node-chips">' + nodeOpts.map(makeChipHtml).join('') + '</div>'
@@ -2031,6 +2034,34 @@ function _autoPopulateShareImage(url) {
     }
 }
 
+window._onLocalImageBase64 = async function(base64, errMsg) {
+    const qrContainer = window._pendingQRContainer;
+    window._pendingQRContainer = null;
+    if (errMsg || !base64) {
+        if (qrContainer) qrContainer.innerHTML = `<div style="padding:10px;text-align:center;color:#f87171;font-size:10px;line-height:1.6">⚠️ 圖片讀取失敗<br><span style="color:rgba(255,255,255,0.4)">${errMsg || '未知錯誤'}</span></div>`;
+        return;
+    }
+    if (qrContainer) qrContainer.innerHTML = '<div style="width:175px;height:175px;display:flex;align-items:center;justify-content:center;background:#111;border-radius:6px"><span style="font-size:10px;color:rgba(255,255,255,0.4);text-align:center;line-height:1.6">☁️ 上傳至雲端中...</span></div>';
+    try {
+        const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) || 'https://loamlab-camera.vercel.app';
+        const resp = await fetch(`${baseUrl}/api/stats?action=upload_share_img`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ base64 })
+        });
+        const data = await resp.json();
+        if (data.code === 0 && data.url) {
+            const afterImg = (window._shareImagesPool || []).find(img => img.type === 'after');
+            if (afterImg) afterImg.cloud_url = data.url;
+            if (qrContainer) _createAndRenderQR(qrContainer);
+        } else {
+            if (qrContainer) qrContainer.innerHTML = '<div style="padding:10px;text-align:center;color:#f87171;font-size:10px;line-height:1.6">⚠️ 上傳失敗，請稍後再試</div>';
+        }
+    } catch(e) {
+        if (qrContainer) qrContainer.innerHTML = '<div style="padding:10px;text-align:center;color:#f87171;font-size:10px;line-height:1.6">⚠️ 網路錯誤，請稍後再試</div>';
+    }
+};
+
 // 後端建立 share session → QR 只帶短 session ID（~70 chars），可靠掃描
 async function _createAndRenderQR(qrContainer) {
     if (!qrContainer) return;
@@ -2043,9 +2074,16 @@ async function _createAndRenderQR(qrContainer) {
     const rawUrl = afterImg ? (afterImg.cloud_url || afterImg.file_url || '') : '';
     const imgUrl = rawUrl.startsWith('http') ? rawUrl : '';
 
-    // 如果有選圖但沒有 cloud_url，顯示警告
+    // 如果有選圖但沒有 cloud_url，嘗試上傳本機圖片
     if (afterImg && !imgUrl) {
-        qrContainer.innerHTML = '<div style="padding:10px;text-align:center;color:#f87171;font-size:10px;line-height:1.6">⚠️ 此圖片為本機存檔<br>無法包含在行動分享中<br><span style="color:rgba(255,255,255,0.4)">請選擇渲染完成的雲端圖片</span></div>';
+        const fileUrl = afterImg.file_url || '';
+        if (fileUrl && window.sketchup) {
+            qrContainer.innerHTML = '<div style="width:175px;height:175px;display:flex;align-items:center;justify-content:center;background:#111;border-radius:6px"><span style="font-size:10px;color:rgba(255,255,255,0.4);text-align:center;line-height:1.6">⬆️ 上傳圖片中...<br><span style="font-size:9px;color:rgba(255,255,255,0.25)">需要約 5-15 秒</span></span></div>';
+            window._pendingQRContainer = qrContainer;
+            sketchup.upload_local_image_for_share({ file_url: fileUrl });
+        } else {
+            qrContainer.innerHTML = '<div style="padding:10px;text-align:center;color:#f87171;font-size:10px;line-height:1.6">⚠️ 此圖片為本機存檔<br>無法包含在行動分享中</div>';
+        }
         return;
     }
 

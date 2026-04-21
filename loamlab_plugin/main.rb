@@ -257,6 +257,23 @@ module LoamLab
         end
       end
 
+      # 分享本機圖片：讀取本機圖片為 base64，傳給前端上傳至圖床
+      dialog.add_action_callback("upload_local_image_for_share") do |action_context, params|
+        begin
+          p = params.is_a?(Hash) ? params : {}
+          raw_url = (p["file_url"] || "").to_s
+          local_path = raw_url.start_with?("file:") ? file_uri_to_path(raw_url) : raw_url
+          raise "找不到圖片: #{local_path}" unless File.exist?(local_path)
+          img_data = File.read(local_path, mode: 'rb')
+          ext = File.extname(local_path).downcase
+          mime = (ext == '.png') ? 'image/png' : 'image/jpeg'
+          b64 = "data:#{mime};base64,#{Base64.strict_encode64(img_data)}"
+          dialog.execute_script("window._onLocalImageBase64(#{b64.to_json})")
+        rescue => e
+          dialog.execute_script("window._onLocalImageBase64(null, #{e.message.to_json})")
+        end
+      end
+
       # 3. [Dev] 熱重載: 開發時一鍵刷新 UI 與讀取最新程式碼
       dialog.add_action_callback("dev_reload") do |action_context, params|
         begin
@@ -423,6 +440,8 @@ module LoamLab
           filename          = "#{timestamp}_#{safe_project_name}_#{safe_scene}_渲染圖.jpg"
           full_path         = File.join(save_path, filename)
           File.open(full_path, "wb") { |f| URI.open(url) { |img| f.write(img.read) } }
+          # 同時存 cloud URL，供 list_saved_renders 回傳給 JS（用於 QR 分享）
+          File.write(full_path.sub(/\.jpg$/i, '.cloudurl'), url) rescue nil
           LoamLab.log "[LoamLab] auto_save_render: #{filename}"
         rescue => e
           LoamLab.log "[LoamLab] auto_save_render failed: #{e.message}"
@@ -455,9 +474,13 @@ module LoamLab
                 ts = File.mtime(f).strftime("%Y%m%d_%H%M%S")
                 res = ''; scene = fname
               end
-              file_url = path_to_file_uri(f)
-              { 'filename' => fname, 'scene' => scene, 'resolution' => res,
-                'timestamp' => ts, 'file_url' => file_url }
+              file_url  = path_to_file_uri(f)
+              cloudurl_path = f.sub(/\.jpg$/i, '.cloudurl')
+              cloud_url = File.exist?(cloudurl_path) ? File.read(cloudurl_path).strip : nil
+              entry = { 'filename' => fname, 'scene' => scene, 'resolution' => res,
+                        'timestamp' => ts, 'file_url' => file_url }
+              entry['cloud_url'] = cloud_url if cloud_url && !cloud_url.empty?
+              entry
             end
           end
 

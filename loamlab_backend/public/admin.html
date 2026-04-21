@@ -237,7 +237,17 @@
 
     <!-- Tool 1 批量圖片角色 -->
     <div class="mb-3">
-      <label class="block text-xs font-semibold text-purple-300 mb-1">Tool 1 — 批量圖片角色說明 <span class="text-white/25 font-normal">（Nodes ＆ Legacy 共用，告知模型 Image 1 = 來源場景、Image 2 = 光線參考）</span></label>
+  <!-- 架構說明 -->
+  <div class="mb-3 bg-black/40 border border-white/8 rounded-xl px-4 py-3 text-[11px] leading-relaxed">
+    <div class="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">Prompt 架構層級</div>
+    <div class="flex flex-col gap-1.5">
+      <div class="flex items-start gap-2"><span class="shrink-0 text-amber-400 font-mono text-[10px] w-20">🔒 System</span><span class="text-gray-400">核心約束（Geometric Fidelity、Object Integrity…）— 每次渲染都自動加入，管理員設定</span></div>
+      <div class="flex items-start gap-2"><span class="shrink-0 text-cyan-400 font-mono text-[10px] w-20">🎛 Nodes</span><span class="text-gray-400">用戶控制項（Scene Type、Lighting、Materials…）— 插件 UI 顯示，用戶選擇 chips</span></div>
+      <div class="flex items-start gap-2"><span class="shrink-0 text-purple-400 font-mono text-[10px] w-20">📦 Batch</span><span class="text-gray-400">批量出圖補充（Image Roles、Style Consistency）— 有風格參考圖時 render.js 自動附加</span></div>
+      <div class="flex items-start gap-2"><span class="shrink-0 text-gray-500 font-mono text-[10px] w-20">📝 Legacy</span><span class="text-gray-400">舊版文字提示詞（TOOL_1/2/3 字串）— prompt_engine_mode = legacy 時使用</span></div>
+    </div>
+  </div>
+  <label class="block text-xs font-semibold text-purple-300 mb-1">批量出圖 — 圖片角色說明 <span class="text-white/25 font-normal">（Image 1 = 來源場景、Image 2 = 光線參考）</span></label>
       <textarea id="prompt-t1-batch-image-roles" class="w-full bg-black/40 border border-purple-500/20 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-14 leading-relaxed"></textarea>
     </div>
     <!-- Tool 1 批量風格一致性 -->
@@ -1850,9 +1860,11 @@ function previewPrompt() {
     if (Object.keys(section).length > 0) jsonPrompt[title] = section;
   });
 
-  // 批量出圖額外字段（有風格參考圖時 render.js 自動加入）
-  jsonPrompt['Image Roles'] = '[ 批量出圖 ] Image 1: Source Reference. Image 2: Style Reference.';
-  jsonPrompt['Style Consistency'] = '[ 批量出圖 ] Match lighting direction, color temperature and tone of Image 2.';
+  // 批量出圖額外字段：從管理介面的 textarea 讀取（render.js 有風格參考圖時自動加入）
+  const _batchRoles = document.getElementById('prompt-t1-batch-image-roles')?.value?.trim();
+  const _batchStyle = document.getElementById('prompt-t1-batch-style')?.value?.trim();
+  if (_batchRoles) jsonPrompt['Image Roles'] = _batchRoles;
+  if (_batchStyle) jsonPrompt['Style Consistency'] = _batchStyle;
 
   output.textContent = JSON.stringify(jsonPrompt, null, 2);
 }

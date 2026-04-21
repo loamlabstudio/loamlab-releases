@@ -1980,6 +1980,7 @@ window.sendFeedbackModal = function() {
    Share Modal / Low Point Interception
    ========================================================= */
 let _shareTemplates = null;
+let _shareConfig = {};
 
 async function fetchShareTemplates() {
     if (_shareTemplates) return _shareTemplates;
@@ -1988,34 +1989,37 @@ async function fetchShareTemplates() {
             const resp = await fetch(`${API_BASE}/api/stats?action=get_share_template`);
             if (resp.ok) {
                 const data = await resp.json();
-                if (data.data) {
-                    _shareTemplates = data.data;
+                if (data.template && Object.keys(data.template).length) {
+                    _shareTemplates = data.template;
+                    _shareConfig = data.config || {};
                     return _shareTemplates;
                 }
             }
         }
     } catch (e) { console.warn("Failed to fetch share templates", e); }
-    return null; 
+    return null;
 }
 
 function getCurrentShareTemplate() {
     if (_shareTemplates) {
-        const lang = (currentLang || 'en-US').toLowerCase();
-        if (_shareTemplates[lang]) return _shareTemplates[lang];
-        return _shareTemplates['en-us'] || _shareTemplates['zh-tw'] || t('share_text');
+        // currentLang 格式：zh-TW / en-US / zh-CN / es-ES / pt-BR / ja-JP → 對映模板 key：tw/us/cn/es/br/jp
+        const langMap = { 'zh-tw': 'tw', 'zh-cn': 'cn', 'en-us': 'us', 'es-es': 'es', 'pt-br': 'br', 'ja-jp': 'jp' };
+        const key = langMap[(currentLang || 'en-US').toLowerCase()] || 'us';
+        return _shareTemplates[key] || _shareTemplates['us'] || _shareTemplates[Object.keys(_shareTemplates)[0]] || null;
     }
+    return null;
+}
+
+function _buildFallbackShareTemplate() {
     return '【 {project} 】\n\n{content}\n\nDesign: {designer}\nRenderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n🎁 Try it for free & get 100 bonus points:\nhttps://loamlab-camera.vercel.app/?ref={referral_code}\n\n#sketchup #architectural #render3d';
 }
 
 function generateShareTextWithReferral() {
-    const template = getCurrentShareTemplate() || "";
+    const template = getCurrentShareTemplate() || _buildFallbackShareTemplate();
     const myCode = localStorage.getItem('loamlab_user_referral_code') || '';
-    
-    // 讀取輸入框數值，若無則提供預設範例
-    const project = document.getElementById('share-input-project')?.value || "Design Plan for Homestay Hot Spring Rooms";
-    const designer = document.getElementById('share-input-designer')?.value || "@jamie_jagon";
-    const content = document.getElementById('share-input-content')?.value || "Testing Buggggg";
-    
+    const project = document.getElementById('share-input-project')?.value || '';
+    const designer = document.getElementById('share-input-designer')?.value || '';
+    const content = document.getElementById('share-input-content')?.value || '';
     return template
         .replace(/{project}/g, project)
         .replace(/{designer}/g, designer)

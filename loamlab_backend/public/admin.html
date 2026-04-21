@@ -133,9 +133,32 @@
   <div class="card mb-5 border border-pink-600/30 bg-[#2e1525]/40">
     <div class="flex items-center justify-between mb-3">
       <div class="text-sm font-semibold text-white flex items-center gap-2">
-        <span class="text-pink-400">📸</span> IG 預設發文範本管理
+        <span class="text-pink-400">📸</span> 分享系統管理
       </div>
-      <div class="text-xs text-gray-500">提供外掛與手機版自動帶入。可用變數：{referral_code}</div>
+    </div>
+
+    <!-- 節點說明 -->
+    <div class="mb-4 bg-black/30 border border-white/8 rounded-xl px-4 py-3 text-[11px]">
+      <div class="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">內文節點說明</div>
+      <div class="grid grid-cols-2 gap-x-6 gap-y-1.5">
+        <div class="flex items-center gap-2">
+          <span class="text-pink-400 font-mono text-[10px] w-32 shrink-0">{project}</span>
+          <span class="text-gray-400">用戶填寫 — 項目名稱</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-pink-400 font-mono text-[10px] w-32 shrink-0">{designer}</span>
+          <span class="text-gray-400">用戶填寫 — 設計師/公司</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-pink-400 font-mono text-[10px] w-32 shrink-0">{content}</span>
+          <span class="text-gray-400">用戶填寫 — 貼文描述</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-cyan-400 font-mono text-[10px] w-32 shrink-0">{referral_code}</span>
+          <span class="text-gray-400">自動 — 用戶推薦碼</span>
+        </div>
+      </div>
+      <div class="mt-2 text-[10px] text-gray-600">Hashtags / CTA 建議直接寫進模板末尾；IG 帳號 / 獎勵說明在下方「分享系統設定」欄調整。</div>
     </div>
     <div class="flex items-center gap-2 mb-3">
       <span class="text-xs text-gray-500">來源語言：</span>

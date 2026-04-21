@@ -41,8 +41,27 @@
             </div>
         </div>
 
+        <!-- 步驟橫條（按完按鈕後顯示） -->
+        <div id="steps-bar" class="hidden px-4 pt-4">
+            <div class="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 flex flex-col gap-2">
+                <div class="text-[11px] font-bold text-white/60 tracking-wider uppercase mb-0.5">接下來的步驟</div>
+                <div id="step-1" class="flex items-start gap-2.5">
+                    <span class="shrink-0 w-5 h-5 rounded-full bg-[#e1306c]/20 border border-[#e1306c]/40 text-[10px] font-bold text-[#e1306c] flex items-center justify-center mt-0.5">1</span>
+                    <span id="step-1-text" class="text-[12px] text-white/70 leading-snug">在分享選單中點選 <span class="text-[#e1306c] font-bold">Instagram</span></span>
+                </div>
+                <div class="flex items-start gap-2.5">
+                    <span class="shrink-0 w-5 h-5 rounded-full bg-white/10 border border-white/20 text-[10px] font-bold text-white/50 flex items-center justify-center mt-0.5">2</span>
+                    <span class="text-[12px] text-white/50 leading-snug">在 IG 貼文框貼上文字（已自動複製）</span>
+                </div>
+                <div class="flex items-start gap-2.5">
+                    <span class="shrink-0 w-5 h-5 rounded-full bg-white/10 border border-white/20 text-[10px] font-bold text-white/50 flex items-center justify-center mt-0.5">3</span>
+                    <span id="step-3-text" class="text-[12px] text-white/50 leading-snug">邀請 <span class="text-[#e1306c]">@loamlab_barbarian</span> 協作 → 獲得獎勵</span>
+                </div>
+            </div>
+        </div>
+
         <!-- 一鍵大按鈕 -->
-        <div class="px-4 pt-5">
+        <div class="px-4 pt-4">
             <button id="btn-go"
                 class="w-full py-5 rounded-2xl bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] text-white font-bold text-[15px] tracking-wider shadow-[0_6px_24px_rgba(225,48,108,0.45)] flex flex-col items-center gap-1 border-none">
                 <span id="btn-label">存圖 + 複製文字 + 開啟 IG</span>
@@ -279,11 +298,15 @@
                         if (files.length > 0) {
                             const shareData = { files, text: captionText };
                             if (navigator.canShare(shareData)) {
+                                // 先顯示步驟橫條，引導用戶在 OS 選單選 Instagram
+                                document.getElementById('steps-bar')?.classList.remove('hidden');
+                                document.getElementById('step-1-text').innerHTML = `在分享選單中點選 <span class="text-[#e1306c] font-bold">Instagram</span>`;
+                                document.getElementById('step-3-text').innerHTML = `邀請 <span class="text-[#e1306c]">${igHandle}</span> 協作 → 獲得 ${rewardText}`;
                                 await navigator.share(shareData);
-                                showToast('✅ 分享完成！', 2500);
+                                showToast('✅ 圖文已傳送！', 2500);
                                 btnGo.classList.add('done');
-                                document.getElementById('btn-label').textContent = '✅ 已分享';
-                                document.getElementById('btn-sub').textContent = `邀請 ${igHandle} 協作即可獲得 ${rewardText}`;
+                                document.getElementById('btn-label').textContent = '✅ 已完成';
+                                document.getElementById('btn-sub').textContent = `前往 IG 貼文並邀請 ${igHandle} 協作`;
                                 return;
                             }
                         }
@@ -314,6 +337,13 @@
                 } catch(e) {}
 
                 if (copied) {
+                    // 顯示步驟橫條（fallback 流程）
+                    const stepsBar = document.getElementById('steps-bar');
+                    if (stepsBar) {
+                        stepsBar.classList.remove('hidden');
+                        document.getElementById('step-1-text').innerHTML = resolvedImg ? `圖片已下載 / 長按圖片存入相簿` : `文字已複製至剪貼板`;
+                        document.getElementById('step-3-text').innerHTML = `邀請 <span class="text-[#e1306c]">${igHandle}</span> 協作 → 獲得 ${rewardText}`;
+                    }
                     showToast('✅ 文字已複製！正在開啟 IG...', 3000);
                     document.getElementById('btn-label').textContent = '✅ 已複製，開啟中...';
                     document.getElementById('btn-sub').textContent = `貼上文字並邀請 ${igHandle} 協作`;

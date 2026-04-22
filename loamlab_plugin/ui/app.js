@@ -217,9 +217,9 @@ function renderT1Nodes() {
                     strategy: adminOpts[0]?.strategy || 'replace', is_default: false
                 }));
                 const nodeOpts = [...adminOpts, ...personalOpts];
-                // 依語言決定 chip 顯示文字（CJK→label，其他→value or label）
+                // 依語言決定 chip 顯示文字（如果沒有多語系設定，則回退到中文或英文值）
                 const isCJK = ['zh-TW', 'zh-CN'].includes(currentLang);
-                const chipDisplay = (o) => isCJK ? (o.label || o.value) : (o.value || o.label);
+                const chipDisplay = (o) => o.labels?.[currentLang] || (isCJK ? (o.label || o.value) : (o.value || o.label));
                 const makeChipHtml = (o) => {
                     if (o.is_silent) return ''; // 靜默 chip：自動加入提示詞，插件不顯示
                     const chipBtn = '<button type="button" class="node-chip' + (o._isPersonal ? ' node-chip-personal' : '') + '"' +
@@ -237,76 +237,59 @@ function renderT1Nodes() {
                 const chipsHtml = nodeOpts.length > 0
                     ? '<div class="node-chips">' + nodeOpts.map(makeChipHtml).join('') + '</div>'
                     : '';
-                // 有 append 策略的節點改用 tag pills
-                const hasAppend = nodeOpts.some(o => o.strategy === 'append');
-                if (hasAppend) {
-                    item.innerHTML = `
-                        <label class="node-label">${label}</label>
-                        <div class="node-input-wrapper">
-                            <div class="node-tags-wrapper" id="t1-tags-${node.id}" data-placeholder="${ph || t('click_to_select') || '點擊快選...' }">
-                                <span class="node-tags-placeholder">${ph || t('click_to_select') || '點擊快選...'}</span>
-                            </div>
-                            <input type="hidden" id="t1-node-${node.id}" value="">
-                            ${chipsHtml}
-                            <div class="node-custom-chip-row">
-                                <input type="text" id="t1-custom-input-${node.id}" class="node-custom-chip-input" placeholder="${t('custom_placeholder') || '自訂...'}">
-                                <button type="button" class="node-custom-chip-btn" onclick="saveUserChip('${node.id}', document.getElementById('t1-custom-input-${node.id}').value)">＋</button>
-                            </div>
-                        </div>`;
-                    const hiddenInput = item.querySelector('#t1-node-' + node.id);
-                    const defaultChip = item.querySelector('.node-chip[data-chip-default="1"]');
-                    if (defaultChip) {
-                        hiddenInput.value = defaultChip.dataset.chipValue;
-                        defaultChip.classList.add('active');
-                        _syncNodeDisplay(node.id);
-                    }
-                    item.querySelectorAll('.node-chip').forEach(btn => {
-                        btn.addEventListener('click', (e) => {
-                            if (e.target.classList.contains('node-chip-del')) return;
-                            const val = btn.dataset.chipValue;
-                            const parts = hiddenInput.value ? hiddenInput.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+                // 無論是否有 append 策略，統一使用 tag pills 和統一點擊邏輯
+                item.innerHTML = `
+                    <label class="node-label">${label}</label>
+                    <div class="node-input-wrapper">
+                        <div class="node-tags-wrapper" id="t1-tags-${node.id}" data-placeholder="${ph || t('click_to_select') || '點擊快選...' }">
+                            <span class="node-tags-placeholder">${ph || t('click_to_select') || '點擊快選...'}</span>
+                        </div>
+                        <input type="hidden" id="t1-node-${node.id}" value="">
+                        ${chipsHtml}
+                        <div class="node-custom-chip-row">
+                            <input type="text" id="t1-custom-input-${node.id}" class="node-custom-chip-input" placeholder="${t('custom_placeholder') || '自訂...'}">
+                            <button type="button" class="node-custom-chip-btn" onclick="saveUserChip('${node.id}', document.getElementById('t1-custom-input-${node.id}').value)">＋</button>
+                        </div>
+                    </div>`;
+                    
+                const hiddenInput = item.querySelector('#t1-node-' + node.id);
+                
+                // 初始化預設值
+                const defaultChips = item.querySelectorAll('.node-chip[data-chip-default="1"]');
+                if (defaultChips.length > 0) {
+                    const defVals = Array.from(defaultChips).map(c => c.dataset.chipValue);
+                    hiddenInput.value = defVals.join(', ');
+                    defaultChips.forEach(c => c.classList.add('active'));
+                    if (typeof _syncNodeDisplay === 'function') setTimeout(() => _syncNodeDisplay(node.id), 0);
+                }
+
+                item.querySelectorAll('.node-chip').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        if (e.target.classList.contains('node-chip-del')) return;
+                        const val = btn.dataset.chipValue;
+                        const strategy = btn.dataset.chipStrategy;
+                        const parts = hiddenInput.value ? hiddenInput.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+                        
+                        if (btn.classList.contains('active')) {
                             const i = parts.indexOf(val);
                             if (i >= 0) { parts.splice(i, 1); btn.classList.remove('active'); }
-                            else { parts.push(val); btn.classList.add('active'); }
-                            hiddenInput.value = parts.join(', ');
-                            _syncNodeDisplay(node.id);
-                        });
-                    });
-                } else {
-                    // Replace 模式：chips 單選，hidden input 追蹤值
-                    item.innerHTML = `
-                        <label class="node-label">${label}</label>
-                        <div class="node-input-wrapper">
-                            <input type="hidden" id="t1-node-${node.id}" value="">
-                            ${chipsHtml}
-                            <div class="node-custom-chip-row">
-                                <input type="text" id="t1-custom-input-${node.id}" class="node-custom-chip-input" placeholder="${t('custom_placeholder') || '自訂...'}">
-                                <button type="button" class="node-custom-chip-btn" onclick="saveUserChip('${node.id}', document.getElementById('t1-custom-input-${node.id}').value)">＋</button>
-                            </div>
-                        </div>`;
-                    if (nodeOpts.length > 0) {
-                        const input = item.querySelector('#t1-node-' + node.id);
-                        const defaultChip = item.querySelector('.node-chip[data-chip-default="1"]');
-                        if (defaultChip && !input.value) {
-                            input.value = defaultChip.dataset.chipValue;
-                            defaultChip.classList.add('active');
+                        } else {
+                            if (strategy === 'replace') {
+                                // 取消選擇同節點內的其他 replace chips
+                                item.querySelectorAll('.node-chip.active[data-chip-strategy="replace"]').forEach(otherBtn => {
+                                    otherBtn.classList.remove('active');
+                                    const ov = otherBtn.dataset.chipValue;
+                                    const oi = parts.indexOf(ov);
+                                    if (oi >= 0) parts.splice(oi, 1);
+                                });
+                            }
+                            parts.push(val);
+                            btn.classList.add('active');
                         }
-                        item.querySelectorAll('.node-chip').forEach(btn => {
-                            btn.addEventListener('click', (e) => {
-                                if (e.target.classList.contains('node-chip-del')) return;
-                                const val = btn.dataset.chipValue;
-                                if (btn.classList.contains('active')) {
-                                    btn.classList.remove('active');
-                                    input.value = '';
-                                } else {
-                                    item.querySelectorAll('.node-chip').forEach(b => b.classList.remove('active'));
-                                    btn.classList.add('active');
-                                    input.value = val;
-                                }
-                            });
-                        });
-                    }
-                }
+                        hiddenInput.value = parts.join(', ');
+                        if (typeof _syncNodeDisplay === 'function') _syncNodeDisplay(node.id);
+                    });
+                });
             }
             groupEl.appendChild(item);
         });
@@ -1643,11 +1626,20 @@ document.addEventListener("DOMContentLoaded", () => {
                     const input = document.getElementById(`t1-node-${node.id}`);
                     if (input) {
                         const userVal = input.value;
-                        const silentVals = optionsData
-                            .filter(o => o.field_id === node.id && o.is_silent)
-                            .map(o => o.value || o.label)
-                            .filter(Boolean);
-                        advanced_settings[node.id] = [userVal, ...silentVals].filter(Boolean).join(', ');
+                        const silentOpts = optionsData.filter(o => o.field_id === node.id && o.is_silent);
+                        
+                        const forcedSilentVals = silentOpts.filter(o => o.strategy === 'append').map(o => o.value || o.label);
+                        const fallbackSilentVals = silentOpts.filter(o => !o.strategy || o.strategy === 'replace').map(o => o.value || o.label);
+                        
+                        let finalVals = [];
+                        if (userVal) {
+                            finalVals.push(userVal);
+                        } else {
+                            finalVals.push(...fallbackSilentVals); // 用戶未選時，使用單選(替換)型靜默參數作為預設
+                        }
+                        finalVals.push(...forcedSilentVals); // 追加型靜默參數強制帶入
+                        
+                        advanced_settings[node.id] = finalVals.filter(Boolean).join(', ');
                     }
                 });
                 if (userMaterialNodes.length > 0) {

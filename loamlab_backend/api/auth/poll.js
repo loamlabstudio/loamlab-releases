@@ -14,13 +14,8 @@ export default async function handler(req, res) {
     if (!session_id) return res.status(400).json({ error: 'Missing session_id' });
 
     const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_ANON_KEY;
-
-    if (!url || !key) {
-        return res.status(500).json({ error: 'Server misconfigured' });
-    }
-
-    const supabase = createClient(url, key);
+    const supabaseKeyToUse = process.env.SUPABASE_SERVICE_ROLE_KEY || key;
+    const supabase = createClient(url, supabaseKeyToUse);
 
     // 查詢這個 Session 是否已經被 callback 頁面標記為 success
     const { data, error } = await supabase
@@ -75,6 +70,13 @@ export default async function handler(req, res) {
                     .update({ expires_at: new Date().toISOString() })
                     .in('id', oldSessions.map(s => s.id));
             }
+        }
+
+        // IP Pinning: 紀錄登入成功當下的 IP
+        const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+        if (clientIp && clientIp !== 'unknown') {
+            const adminClient = process.env.SUPABASE_SERVICE_ROLE_KEY ? createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY) : supabase;
+            await adminClient.from('users').update({ last_login_ip: clientIp }).eq('email', data.email);
         }
 
         return res.status(200).json({

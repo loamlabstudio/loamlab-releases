@@ -22,8 +22,21 @@ export default async function handler(req, res) {
     const { type, rating, content, tags, transaction_id, metadata } = req.body || {};
     if (!type) return res.status(400).json({ error: 'type is required' });
 
-    const userEmail = req.headers['x-user-email'] || null;
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+    const userEmail = req.headers['x-user-email'] || req.body?.email;
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    if (userEmail) {
+        // IP Pinning 驗證
+        const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+        if (clientIp !== 'unknown') {
+            const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
+            if (!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp) {
+                return res.status(401).json({ code: -1, msg: '登入憑證已過期或網路變更，請重新登入' });
+            }
+        }
+    }
 
     const { error } = await supabase.from('feedback').insert([{
         user_email: userEmail,

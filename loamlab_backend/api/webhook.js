@@ -2,9 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { PRICING_CONFIG } from '../config.js';
 
-// 初始化 Supabase
+// 初始化 Supabase (優先使用 Service Role)
 const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || ''; 
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || ''; 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const WEB_SECRET_LS = process.env.LEMONSQUEEZY_WEBHOOK_SECRET || '';

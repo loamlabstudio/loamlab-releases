@@ -30,8 +30,8 @@ export default async function handler(req, res) {
     if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).end();
 
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseKey) return res.status(500).json({ code: -1, msg: 'Missing SUPABASE env vars' });
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) return res.json({ code: -1, msg: 'Missing SUPABASE env vars' });
 
     const supabase = createClient(supabaseUrl, supabaseKey);
     const action = req.query.action;

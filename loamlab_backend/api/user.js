@@ -9,16 +9,32 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseKey) {
         return res.status(500).json({ code: -1, msg: 'Missing SUPABASE env vars' });
     }
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // 管理員請求豁免 IP 與 Email 驗證
+    const adminKey = req.headers['x-admin-key'] || req.body?.admin_key;
+    const isAdmin = process.env.ADMIN_KEY && adminKey === process.env.ADMIN_KEY;
+
+    // 若非管理員，必須驗證身分與 IP 指紋
+    if (!isAdmin) {
+        const email = req.query.email || req.headers['x-user-email'] || req.body?.email;
+        if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });
+
+        const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+        if (clientIp !== 'unknown') {
+            const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', email).maybeSingle();
+            if (!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp) {
+                return res.status(401).json({ code: -1, msg: '登入已過期或網路變更，請重新登入' });
+            }
+        }
+    }
+
     // --- GET: presets list / render history ---
     if (req.method === 'GET' && req.query.action === 'presets') {
-        const email = req.query.email || req.headers['x-user-email'];
-        if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });
         try {
             const { data, error } = await supabase
                 .from('user_presets')
@@ -33,10 +49,8 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET' && req.query.action === 'history') {
-        const email = req.query.email || req.headers['x-user-email'];
         const limit = parseInt(req.query.limit) || 20;
         const offset = parseInt(req.query.offset) || 0;
-        if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });
         try {
             const { data, error, count } = await supabase
                 .from('render_history')
@@ -51,11 +65,7 @@ export default async function handler(req, res) {
         }
     }
 
-    // --- GET: Fetch user info / Auto-register ---
     if (req.method === 'GET') {
-        const email = req.query.email || req.headers['x-user-email'];
-        if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });
-
         try {
             let { data, error } = await supabase
                 .from('users')

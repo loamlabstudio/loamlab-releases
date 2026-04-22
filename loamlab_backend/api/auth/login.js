@@ -10,8 +10,9 @@ export default async function handler(req, res) {
     if (!supabaseUrl || supabaseUrl === 'undefined') return res.status(500).send('SUPABASE_URL not configured');
     if (!googleClientId || googleClientId === 'undefined') return res.status(500).send('GOOGLE_CLIENT_ID not configured');
 
-    // 建立 pending auth_session（使用 supabase-js，錯誤自動回傳）
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // 建立 pending auth_session (使用 Service Role 確保繞過 RLS)
+    const supabaseKeyToUse = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey;
+    const supabase = createClient(supabaseUrl, supabaseKeyToUse);
     const { error: dbError } = await supabase
         .from('auth_sessions')
         .upsert({ id: session_id, status: 'pending' }, { onConflict: 'id' });

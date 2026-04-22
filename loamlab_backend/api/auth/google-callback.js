@@ -38,7 +38,7 @@ export default async function handler(req, res) {
         return res.status(200).send(renderHtml(false, '缺少授權碼或 Session ID', '請在 SketchUp 重新點擊登入。'));
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey);
 
     // 1. 驗證 session 存在（CSRF 防護：確認 session_id 是由我們的 plugin 發起的）
     const { data: sessions } = await supabase

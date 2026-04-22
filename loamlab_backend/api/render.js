@@ -100,12 +100,21 @@ export default async function handler(req, res) {
     }
     const pluginVersion = req.headers['x-plugin-version'] || null;
 
-    // 建立 Supabase 資料庫連線
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-    // Admin client（繞過 RLS，用於 Storage 私有 bucket）
-    const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
-        ? createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-        : null;
+    // 建立 Supabase 資料庫連線 (優先使用 Service Role 以確保具備管理權限並繞過 RLS)
+    const supabaseKeyToUse = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_KEY;
+    const supabase = createClient(SUPABASE_URL, supabaseKeyToUse);
+
+    // IP Pinning 驗證：防止 API 偽造 (Spoofing)
+    const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+    if (clientIp !== 'unknown') {
+        const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
+        // 嚴格模式：如果使用者不存在，或是該使用者從未紀錄過 IP，或是 IP 不符，一律攔截 (強迫舊用戶至少重登一次建立指紋)
+        if (!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp) {
+            return res.status(401).json({ code: -1, msg: '登入憑證已過期或網路環境發生變更。為保障您的點數安全，請在外掛首頁重新點擊登入以驗證身分。' });
+        }
+    }
+
+    const supabaseAdmin = supabase; // 相容於舊代碼中的 supabaseAdmin 參考
     let tempStorageFile = null; // 渲染後自動刪除的暫存圖路徑
     const cleanTemp = async () => {
         if (tempStorageFile && supabaseAdmin) {

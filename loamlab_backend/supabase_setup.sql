@@ -77,6 +77,7 @@ CREATE POLICY IF NOT EXISTS "Enable all access for service role" ON public.auth_
 -- users 表補欄位
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_beta_tester    BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_plan TEXT DEFAULT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_ip     TEXT DEFAULT NULL; -- IP Pinning 紀錄
 -- subscription_plan 值：NULL（無訂閱）| 'starter' | 'pro' | 'studio'
 
 -- transactions 表補 order_id（Webhook 冪等鍵）

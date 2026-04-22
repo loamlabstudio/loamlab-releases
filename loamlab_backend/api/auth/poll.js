@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     if (!session_id) return res.status(400).json({ error: 'Missing session_id' });
 
     const url = process.env.SUPABASE_URL;
-    const supabaseKeyToUse = process.env.SUPABASE_SERVICE_ROLE_KEY || key;
+    const supabaseKeyToUse = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
     const supabase = createClient(url, supabaseKeyToUse);
 
     // 查詢這個 Session 是否已經被 callback 頁面標記為 success

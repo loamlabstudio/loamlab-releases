@@ -1668,7 +1668,7 @@ function setOptionDefault(globalIdx, fieldId) {
   if (nodeIdx >= 0) {
     // 將所有被設為預設、且「非靜默」的選項，串接起來作為 UI 上顯示的預設值
     const defaultOpts = optionsData.filter(o => o.field_id === fieldId && o.is_default && !o.is_silent);
-    const newDefault = defaultOpts.map(o => o.value || o.label || '').filter(Boolean).join(', ');
+    const newDefault = defaultOpts.map(o => o.value || o.label || '').filter(Boolean).join(' + ');
     
     t1NodesData[nodeIdx].default = newDefault;
     t1NodesDirty = true;

@@ -1639,7 +1639,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         }
                         finalVals.push(...forcedSilentVals); // 追加型靜默參數強制帶入
                         
-                        advanced_settings[node.id] = finalVals.filter(Boolean).join(', ');
+                        advanced_settings[node.id] = finalVals.filter(Boolean).join(' + ');
                     }
                 });
                 if (userMaterialNodes.length > 0) {

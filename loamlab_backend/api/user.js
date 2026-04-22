@@ -19,9 +19,11 @@ export default async function handler(req, res) {
     const adminKey = req.headers['x-admin-key'] || req.body?.admin_key;
     const isAdmin = process.env.ADMIN_KEY && adminKey === process.env.ADMIN_KEY;
 
+    // 先行擷取 email
+    const email = req.query.email || req.headers['x-user-email'] || req.body?.email;
+
     // 若非管理員，必須驗證身分與 IP 指紋
     if (!isAdmin) {
-        const email = req.query.email || req.headers['x-user-email'] || req.body?.email;
         if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });
 
         const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';

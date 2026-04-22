@@ -5,13 +5,17 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
 
-    const { session_id } = req.query;
-    if (!session_id) return res.status(400).json({ error: 'Missing session_id' });
+    try {
+        const { session_id } = req.query;
+        if (!session_id) return res.status(400).json({ error: 'Missing session_id' });
 
     const url = process.env.SUPABASE_URL;
     const supabaseKeyToUse = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
@@ -86,6 +90,10 @@ export default async function handler(req, res) {
             subscription_plan: userData?.subscription_plan || null
         });
     }
-
     return res.status(200).json({ status: data.status });
+    } catch (e) {
+        console.error('[poll] Polling error:', e);
+        // 如果有非預期的系統級例外，以防插件卡死，回傳一個特殊狀態讓其能記錄
+        return res.status(200).json({ status: 'error', error: e.message });
+    }
 }

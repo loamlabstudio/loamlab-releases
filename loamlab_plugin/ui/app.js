@@ -1555,7 +1555,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 showUpdateToast('⚠️ ' + (langObj['base_image_required'] || '請先從歷史選擇一張底圖'));
                 return;
             }
-            openSmartCanvas('', _baseImageEntry.file_url, _baseImageEntry.scene || '');
+            openSmartCanvas('', _baseImageEntry.file_url || _baseImageEntry.cloud_url || '', _baseImageEntry.scene || '');
             return;
         }
 
@@ -1655,7 +1655,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 tool: currentActiveTool,
                 advanced_settings,
                 ...(usingBaseImage && {
-                    base_image_url: _baseImageEntry.file_url,
+                    base_image_url: _baseImageEntry.file_url || _baseImageEntry.cloud_url || '',
                     base_image_scene: _baseImageEntry.scene || '底圖'
                 }),
                 ...(currentActiveTool === 2 && _referenceImageBase64 && {
@@ -2576,9 +2576,9 @@ function renderHistoryGrid(files) {
         }
     }
     
-    // Also filter for regular "Pick Base Image" mode (which implies 'base')
+    // Pick Base Image mode: show only rendered results (exclude original SketchUp screenshots)
     if (window._historyPickMode) {
-        filteredFiles = filteredFiles.filter(f => (f.filename || '').includes('原圖'));
+        filteredFiles = filteredFiles.filter(f => !(f.filename || '').includes('原圖'));
     }
 
     if (!filteredFiles || filteredFiles.length === 0) {
@@ -2704,7 +2704,7 @@ function pickBaseImage(entry) {
     const empty = document.getElementById('base-image-empty');
     const filled = document.getElementById('base-image-filled');
     const meta = document.getElementById('base-image-meta');
-    if (thumb) thumb.src = entry.file_url || '';
+    if (thumb) thumb.src = entry.file_url || entry.cloud_url || '';
     if (empty) empty.classList.add('hidden');
     if (filled) filled.classList.remove('hidden');
     if (meta) {
@@ -2738,7 +2738,7 @@ function pickBaseImage(entry) {
             gridEl.innerHTML = `
                 <div data-base-preview="true" class="relative w-full rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
                     <div class="absolute top-3 left-3 bg-black/60 backdrop-blur-sm text-white/50 text-[9px] px-2.5 py-1 rounded z-10 font-mono tracking-widest">BASE IMAGE</div>
-                    <img src="${entry.file_url}" class="w-full object-cover cursor-zoom-in" onclick="openImagePreview('${entry.file_url}')" title="點擊檢視大圖">
+                    <img src="${entry.file_url || entry.cloud_url}" class="w-full object-cover cursor-zoom-in" onclick="openImagePreview('${entry.file_url || entry.cloud_url}')" title="點擊檢視大圖">
                 </div>
             `;
         }
@@ -2746,7 +2746,7 @@ function pickBaseImage(entry) {
 
     // 工具 2/4：選完底圖直接開 Smart Canvas
     if (currentActiveTool === 2 || currentActiveTool === 4) {
-        openSmartCanvas('', entry.file_url, entry.scene || '');
+        openSmartCanvas('', entry.file_url || entry.cloud_url || '', entry.scene || '');
     }
 }
 

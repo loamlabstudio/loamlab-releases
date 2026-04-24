@@ -15,6 +15,27 @@ module LoamLab
     puts msg if LoamLab::BUILD_TYPE == 'dev'
   end
 
+  # 全局 cloud URL 索引路徑（存於系統 AppData，不污染用戶資料夾）
+  def self.cloud_index_path
+    base = if Sketchup.platform == :platform_win
+      ENV['APPDATA'] || File.expand_path('~')
+    else
+      File.expand_path('~/Library/Application Support')
+    end
+    dir = File.join(base, 'LoamLab')
+    Dir.mkdir(dir) unless File.directory?(dir)
+    File.join(dir, 'cloud_index.json')
+  end
+
+  def self.read_cloud_index
+    path = cloud_index_path
+    File.exist?(path) ? (JSON.parse(File.read(path)) rescue {}) : {}
+  end
+
+  def self.write_cloud_index(index)
+    File.write(cloud_index_path, JSON.generate(index)) rescue nil
+  end
+
   module AIURenderer
 
     # 截圖時需要關閉的邊線樣式（插件開啟時套用至所有場景，關閉時還原）
@@ -464,8 +485,10 @@ module LoamLab
           filename          = "#{timestamp}_#{safe_project_name}_#{safe_scene}_渲染圖.jpg"
           full_path         = File.join(save_path, filename)
           File.open(full_path, "wb") { |f| URI.open(url) { |img| f.write(img.read) } }
-          # 同時存 cloud URL，供 list_saved_renders 回傳給 JS（用於 QR 分享）
-          File.write(full_path.sub(/\.jpg$/i, '.cloudurl'), url) rescue nil
+          # 將 cloud URL 寫入全局索引（AppData/LoamLab/cloud_index.json），不污染用戶資料夾
+          index = LoamLab.read_cloud_index
+          index[full_path] = url
+          LoamLab.write_cloud_index(index)
           LoamLab.log "[LoamLab] auto_save_render: #{filename}"
         rescue => e
           LoamLab.log "[LoamLab] auto_save_render failed: #{e.message}"
@@ -486,6 +509,8 @@ module LoamLab
             # 向後相容舊版的命名 (loamlab_camera.jpg)
             files += Dir.glob(File.join(save_path, "*_loamlab_camera.jpg"))
             files = files.uniq.sort_by { |f| -File.mtime(f).to_i }
+            # 載入全局 cloud URL 索引（key = 絕對路徑）
+            index = LoamLab.read_cloud_index
             history = files.first(60).map do |f|
               fname = File.basename(f)
               # 格式：YYYYMMDD_HHMMSS_SCENE_RES_loamlab_camera.jpg (舊版)
@@ -499,8 +524,14 @@ module LoamLab
                 res = ''; scene = fname
               end
               file_url  = path_to_file_uri(f)
-              cloudurl_path = f.sub(/\.jpg$/i, '.cloudurl')
-              cloud_url = File.exist?(cloudurl_path) ? File.read(cloudurl_path).strip : nil
+              # 優先從全局索引讀取（key = 絕對路徑），向後相容舊版 sidecar
+              cloud_url = index[f]
+              unless cloud_url
+                cache_cloudurl = File.join(save_path, '.loamlab_cache', fname.sub(/\.jpg$/i, '.cloudurl'))
+                old_cloudurl   = f.sub(/\.jpg$/i, '.cloudurl')
+                cloudurl_path  = File.exist?(cache_cloudurl) ? cache_cloudurl : old_cloudurl
+                cloud_url = File.exist?(cloudurl_path) ? File.read(cloudurl_path).strip : nil
+              end
               entry = { 'filename' => fname, 'scene' => scene, 'resolution' => res,
                         'timestamp' => ts, 'file_url' => file_url }
               entry['cloud_url'] = cloud_url if cloud_url && !cloud_url.empty?

@@ -616,16 +616,6 @@
                         </label>
                     </div>
 
-                    <!-- 工具 3：鏡頭風格選擇（置於 Advanced Settings 外側，收起時仍可見） -->
-                    <div id="shot-style-selector" class="hidden w-full flex flex-col">
-                        <label class="text-[11px] font-semibold tracking-wider text-white/50 mb-2 uppercase"><span data-i18n="shot_style_label">鏡頭風格</span></label>
-                        <div class="flex flex-wrap gap-1.5">
-                            <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="industrial" data-i18n="shot_industrial">硬朗工業</span>
-                            <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="natural" data-i18n="shot_natural">柔和自然</span>
-                            <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="dramatic" data-i18n="shot_dramatic">戲劇張力</span>
-                            <span class="shot-style-tag text-[10px] uppercase font-bold px-2 py-1 rounded bg-black/40 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 cursor-pointer transition-all active:scale-95 tracking-wide select-none" data-style="minimal" data-i18n="shot_minimal">極簡留白</span>
-                        </div>
-                    </div>
 
                     <!-- 摺疊進階設定區塊 (Advanced Settings Accordion) -->
                     <details
@@ -1456,7 +1446,11 @@
         .sc-region-card {
             background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
             border-radius: 10px; padding: 10px 12px;
-            display:flex; flex-direction:column; gap:6px;
+            display:flex; flex-direction:column; gap:6px; cursor: pointer;
+        }
+        .sc-region-card.sc-region-active {
+            border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.08);
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.15);
         }
         .sc-region-card .sc-region-swatch {
             width:12px; height:12px; border-radius:50%; flex-shrink:0; margin-top:2px;

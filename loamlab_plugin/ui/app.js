@@ -33,7 +33,6 @@ let finishedScenesCount = 0;
 // 工具切換系統 (Tool Switcher)
 // =========================================================
 let currentActiveTool = 1;
-let selectedShotStyle = 'dramatic';
 let _baseImageEntry = null; // 工具 2/3/4：從歷史選取的底圖
 let _referenceImageBase64 = null; // 工具 2：本地上傳的參考圖 base64
 let t1NodesData = []; // Store Tool 1 advanced nodes configuration
@@ -56,12 +55,6 @@ const PROXY_PREFIX = "This interior design scene contains simple geometric proxy
 
 const NINEGRID_PREFIX = "Generate a single 3×3 nine-panel grid composition image showing this interior from 9 distinct dramatic camera angles in a magazine-style layout: [1.Wide angle overview] [2.Eye-level straight-on] [3.Bird's eye top-down] [4.Worm's eye looking up] [5.45° corner diagonal] [6.Entrance threshold] [7.Close-up material detail] [8.Golden hour window shot] [9.Cinematic low dramatic angle]. Each panel separated by thin white dividing lines. ";
 
-const SHOT_MODIFIERS = {
-    industrial: "Hard dramatic shadows, high contrast, exposed concrete and raw industrial materials, cool tones. ",
-    natural: "Soft diffused daylight, warm earth tones, organic textures, airy and breathing atmosphere. ",
-    dramatic: "Golden hour side lighting, cinematic depth of field, bold light-shadow contrasts, editorial feel. ",
-    minimal: "Clean white walls, extreme negative space, calm and serene minimalist atmosphere, neutral palette. "
-};
 
 // 軟硬裝 Tag 群組資料（唯一來源，新增 tag 只改這裡）
 const SWAP_TAG_GROUPS = {
@@ -575,7 +568,6 @@ function setActiveTool(n, skipTutorial) {
     }
 
     const hintBanner = document.getElementById('tool-hint-banner');
-    const shotStyleSelector = document.getElementById('shot-style-selector');
     const materialTagsDiv = document.getElementById('material-tags');
     const promptInput = document.getElementById('user-prompt-input');
     const titleEl = document.querySelector('[data-i18n="title"]');
@@ -584,7 +576,6 @@ function setActiveTool(n, skipTutorial) {
     const advancedDetails = document.querySelector('details.group');
 
     if (hintBanner) hintBanner.classList.add('hidden');
-    if (shotStyleSelector) shotStyleSelector.classList.add('hidden');
     if (materialTagsDiv) materialTagsDiv.classList.remove('hidden');
     var refPicker = document.getElementById('reference-image-picker');
     if (refPicker) refPicker.classList.add('hidden');
@@ -643,7 +634,6 @@ function setActiveTool(n, skipTutorial) {
         // Tool 3: 隱藏場景列表，底圖必填 (blue 色系)
         if (scenesContainer) scenesContainer.classList.add('hidden');
         if (advancedDetails) advancedDetails.open = false;
-        if (shotStyleSelector) shotStyleSelector.classList.remove('hidden');
         if (materialTagsDiv) materialTagsDiv.classList.add('hidden');
         if (promptInput) promptInput.placeholder = lang3['tool_ninegrid_ph'];
         if (pickerLabel) { pickerLabel.className = 'text-[11px] font-semibold tracking-wider text-blue-400/80 uppercase'; pickerLabel.textContent = (lang3['base_image_label'] || '底圖 Base Image') + '  ★ ' + (lang3['required'] || 'Required'); }
@@ -1147,25 +1137,28 @@ window.receiveFromRuby = function (data) {
                                 </div>
                             </div>` : `<img src="${targetUrl}" class="w-full object-contain animate-blur-clear" onclick="openImagePreview('${targetUrl}')">`}
                             <div class="px-4 py-3 flex items-center justify-between border-t border-white/[0.05] bg-black/40">
-                                <span class="text-[10px] text-white/30 truncate max-w-[60%]">${(document.getElementById('user-prompt-input') ? (document.getElementById('user-prompt-input') || document.createElement('div')).value : '') || 'Furniture Swap'}</span>
-                                <div class="flex items-center gap-2">
-                                    ${!HIDE_UNFINISHED_FEATURES ? `<button id="tool2-swap-btn" class="text-[9px] px-2.5 py-1 rounded border border-amber-500/30 text-amber-300/80 hover:bg-amber-500/20 hover:text-amber-200 hover:border-amber-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> SWAP</button>` : ''}
-                                    <button id="tool2-save-btn" class="text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> SAVE</button>
-                                </div>
+                                <span class="text-[10px] text-white/30 truncate max-w-[40%]">${(document.getElementById('user-prompt-input') ? (document.getElementById('user-prompt-input') || document.createElement('div')).value : '') || 'Furniture Swap'}</span>
+                                <div id="tool2-btn-row" class="flex items-center gap-1.5"></div>
                             </div>
                         </div>
                     `;
-                    (document.getElementById('tool2-swap-btn') || document.createElement('div')).addEventListener('click', () => openSmartCanvas(channelB64, targetUrl, targetScene));
-                    (document.getElementById('tool2-save-btn') || document.createElement('div')).addEventListener('click', () => {
-                        const p = (document.getElementById('user-prompt-input') || document.createElement('div')).value || '';
-                        if (window.interceptDownloadIfLowPoints) {
-                            window.interceptDownloadIfLowPoints(() => {
-                                if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
-                            });
-                        } else {
-                            if (window.sketchup) sketchup.save_image({ url: targetUrl, prompt: p, lang: currentLang });
-                        }
-                    });
+                    const _t2BtnRow = document.getElementById('tool2-btn-row');
+                    const _t2EditBtn = document.createElement('button');
+                    _t2EditBtn.className = "text-[9px] px-2.5 py-1 rounded border border-blue-500/30 text-blue-300/80 hover:bg-blue-500/20 hover:text-blue-200 hover:border-blue-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 shadow-sm";
+                    _t2EditBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg> 編輯重試`;
+                    _t2EditBtn.onclick = (e) => { e.stopPropagation(); openSmartCanvas(channelB64, targetUrl, targetScene); };
+                    _t2BtnRow.appendChild(_t2EditBtn);
+                    if (window.loamlabUserReferralCode) {
+                        const _t2ShareClass = "text-[9px] px-2.5 py-1 rounded border border-green-500/30 text-green-300/80 hover:bg-green-500/20 hover:text-green-200 hover:border-green-400/50 transition-all cursor-pointer font-medium uppercase tracking-widest active:scale-90 shadow-sm";
+                        const _t2LineBtn = document.createElement('button');
+                        _t2LineBtn.className = _t2ShareClass; _t2LineBtn.textContent = 'LINE';
+                        _t2LineBtn.onclick = (e) => { e.stopPropagation(); openSharePlatform('line'); };
+                        const _t2WaBtn = document.createElement('button');
+                        _t2WaBtn.className = _t2ShareClass; _t2WaBtn.textContent = 'WA';
+                        _t2WaBtn.onclick = (e) => { e.stopPropagation(); openSharePlatform('wa'); };
+                        _t2BtnRow.appendChild(_t2LineBtn);
+                        _t2BtnRow.appendChild(_t2WaBtn);
+                    }
                 }
                 return;
             }
@@ -1574,8 +1567,6 @@ document.addEventListener("DOMContentLoaded", () => {
         let finalPrompt = userPrompt;
         if (currentActiveTool === 2) {
             finalPrompt = PROXY_PREFIX + userPrompt;
-        } else if (currentActiveTool === 3) {
-            finalPrompt = SHOT_MODIFIERS[selectedShotStyle] + userPrompt;
         }
 
         // 工具 2/3 有底圖時：以底圖取代 SketchUp 截圖，不需選場景
@@ -1687,18 +1678,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // 鏡頭風格標籤切換 (工具 3)
-    document.querySelectorAll('.shot-style-tag').forEach(tag => {
-        tag.addEventListener('click', () => {
-            selectedShotStyle = tag.getAttribute('data-style');
-            document.querySelectorAll('.shot-style-tag').forEach(t => {
-                t.classList.remove('bg-blue-500/20', 'border-blue-400/40', 'text-blue-200');
-                t.classList.add('bg-black/40', 'border-white/10', 'text-white/60');
-            });
-            tag.classList.remove('bg-black/40', 'border-white/10', 'text-white/60');
-            tag.classList.add('bg-blue-500/20', 'border-blue-400/40', 'text-blue-200');
-        });
-    });
 
     // 工具 3：Advanced Settings 開合時，同步切換底圖縮圖顯示
     (document.querySelector('details.group') || document.createElement('div')).addEventListener('toggle', (e) => {
@@ -4234,7 +4213,8 @@ function _scRenderRegionList() {
         const card = document.createElement('div');
         card.className = 'sc-region-card';
         const isEraserTarget = SmartCanvas.eraserTarget === idx;
-        card.className = 'sc-region-card' + (isEraserTarget ? ' sc-eraser-target-active' : '');
+        const isActive = SmartCanvas.focusedRegionIdx === idx;
+        card.className = 'sc-region-card' + (isEraserTarget ? ' sc-eraser-target-active' : '') + (isActive ? ' sc-region-active' : '');
         card.innerHTML = `
             <div class="flex items-center gap-2">
                 <div class="sc-region-swatch" style="background:${region.colorHex || '#ff6432'}"></div>
@@ -4255,8 +4235,17 @@ function _scRenderRegionList() {
                 }
             </label>
         `;
-        // 點擊任意卡片區域即更新焦點 index（供 Ctrl+V 貼圖使用）
-        card.addEventListener('mousedown', () => { SmartCanvas.focusedRegionIdx = idx; });
+        // 點擊任意卡片區域即更新焦點 index，並同步筆刷顏色到該區域（供 Ctrl+V 貼圖與筆刷追加使用）
+        card.addEventListener('mousedown', () => {
+            SmartCanvas.focusedRegionIdx = idx;
+            SmartCanvas.brushColor = region.colorHex;
+            const _cp = document.getElementById('sc-color-picker');
+            if (_cp) _cp.value = region.colorHex;
+            // 輕量刷新：只更新 active class，不重建 DOM
+            document.querySelectorAll('.sc-region-card').forEach((c, i) => {
+                c.classList.toggle('sc-region-active', i === idx);
+            });
+        });
         card.querySelector('.sc-erase-target-btn').onclick = () => {
             // 切換單擦鎖定：再點一次解除
             SmartCanvas.eraserTarget = (SmartCanvas.eraserTarget === idx) ? null : idx;
@@ -4315,7 +4304,7 @@ function _scRenderRegionList() {
 
     // 綁定 label input focus → 更新 focusedRegionIdx（供快速標籤使用）
     list.querySelectorAll('.sc-region-label-input').forEach((input, idx) => {
-        input.addEventListener('focus', () => { SmartCanvas.focusedRegionIdx = idx; });
+        input.addEventListener('focus', () => { SmartCanvas.focusedRegionIdx = idx; _scRenderRegionList(); });
     });
 
     // 快速標籤區：有 region 才顯示

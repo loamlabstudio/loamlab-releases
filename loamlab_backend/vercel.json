@@ -7,6 +7,8 @@
   "rewrites": [
     { "source": "/", "destination": "/public/index.html" },
     { "source": "/terms.html", "destination": "/public/terms.html" },
-    { "source": "/privacy.html", "destination": "/public/privacy.html" }
+    { "source": "/privacy.html", "destination": "/public/privacy.html" },
+    { "source": "/sitemap.xml", "destination": "/public/sitemap.xml" },
+    { "source": "/robots.txt", "destination": "/public/robots.txt" }
   ]
 }

@@ -904,6 +904,7 @@ window.receiveFromRuby = function (data) {
         if (data.device_id) {
             localStorage.setItem('loamlab_device_id', data.device_id);
         }
+        if (data.dist_channel) window.loamlabDistChannel = data.dist_channel;
         if (data.build_type === 'dev') {
             window._isDev = true;
             const badge = document.createElement('div');
@@ -944,6 +945,11 @@ window.receiveFromRuby = function (data) {
         // 初始化時主動請求第一張預覽圖
         if (window.sketchup) {
             setTimeout(() => { sketchup.sync_preview({}); }, 200);
+            // 靜默自動更新檢查（direct channel 才檢查，store 由 EW 管理）
+            if (data.dist_channel !== 'store') {
+                window._silentUpdateCheck = true;
+                setTimeout(() => { sketchup.check_for_updates({}); }, 3000);
+            }
         }
     } else if (data.status === 'rendering') {
         statusText.textContent = langObj['status_rendering'] || '傳送場景至大腦中...';
@@ -2877,8 +2883,16 @@ function showUpdateBanner(version, notes, url, manualUrl) {
 }
 
 function executeUpdate(_url) {
+    const url = _url || window._pendingUpdateUrl || '';
     (document.getElementById('update-banner') || document.createElement('div')).classList.add('hidden');
-    showUpdateToast('請前往 Extension Warehouse 安裝最新版本');
+    if (window.loamlabDistChannel === 'store') {
+        showUpdateToast('請前往 Extension Warehouse 安裝最新版本');
+    } else if (window.sketchup && url) {
+        showUpdateToast('⬇️ 下載更新中，請稍候...');
+        sketchup.install_update({ url });
+    } else {
+        UI.openURL(url);
+    }
 }
 
 // 結帳並跳轉付款頁面（接受 planKey: 'TOPUP'/'STARTER'/'PRO'/'STUDIO'）
@@ -3346,9 +3360,17 @@ if (btnCheckUpdate) {
         const svg = btnCheckUpdate.querySelector('svg');
         if (svg) svg.classList.add('animate-spin');
 
-        stopUpdateSpinner();
-        showUpdateToast('請前往 Extension Warehouse 取得最新版本');
-        if (svg) svg.classList.remove('animate-spin');
+        if (window.loamlabDistChannel === 'store') {
+            stopUpdateSpinner();
+            showUpdateToast('請前往 Extension Warehouse 取得最新版本');
+            if (svg) svg.classList.remove('animate-spin');
+        } else if (window.sketchup) {
+            window._silentUpdateCheck = false;
+            sketchup.check_for_updates({});
+        } else {
+            stopUpdateSpinner();
+            if (svg) svg.classList.remove('animate-spin');
+        }
     });
 }
 

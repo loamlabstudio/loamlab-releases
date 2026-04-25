@@ -206,6 +206,7 @@ module LoamLab
           version: LoamLab::VERSION,
           api_base: LoamLab::API_BASE_URL,
           build_type: LoamLab::BUILD_TYPE,
+          dist_channel: LoamLab::DIST_CHANNEL,
           lang: saved_lang.empty? ? nil : saved_lang,
           scenes: self.get_scene_names,
           save_path: save_path,
@@ -224,7 +225,18 @@ module LoamLab
         self.apply_render_keys(model)
       end
 
-      # 1.2 瀏覽器開啟與授權儲存
+      # 1.2 更新相關
+      dialog.add_action_callback("check_for_updates") do |action_context, params|
+        require_relative 'updater.rb'
+        LoamLab::Updater.check_for_updates(dialog, LoamLab::VERSION)
+      end
+
+      dialog.add_action_callback("install_update") do |action_context, params|
+        require_relative 'updater.rb'
+        LoamLab::Updater.download_and_install(dialog, (params || {})["url"].to_s)
+      end
+
+      # 1.3 瀏覽器開啟與授權儲存
       dialog.add_action_callback("open_browser") do |action_context, url|
         UI.openURL(url)
       end

@@ -2547,21 +2547,22 @@ function renderHistoryGrid(files) {
     
     // Apply filtering if we are in share picking mode
     let filteredFiles = files || [];
+    const isOriginal = f => /original|原圖|原图/.test(f.filename || '');
     // Normal browse mode: hide original screenshots, only show rendered results
     if (!window._historySharePickModeSlot && !window._historyPickMode) {
-        filteredFiles = filteredFiles.filter(f => !(f.filename || '').includes('原圖'));
+        filteredFiles = filteredFiles.filter(f => !isOriginal(f));
     }
     if (window._historySharePickModeSlot) {
         if (window._historyFilterMode === 'base') {
-            filteredFiles = filteredFiles.filter(f => (f.filename || '').includes('原圖'));
+            filteredFiles = filteredFiles.filter(f => isOriginal(f));
         } else if (window._historyFilterMode === 'render') {
-            filteredFiles = filteredFiles.filter(f => !(f.filename || '').includes('原圖'));
+            filteredFiles = filteredFiles.filter(f => !isOriginal(f));
         }
     }
-    
+
     // Pick Base Image mode: show only rendered results (exclude original SketchUp screenshots)
     if (window._historyPickMode) {
-        filteredFiles = filteredFiles.filter(f => !(f.filename || '').includes('原圖'));
+        filteredFiles = filteredFiles.filter(f => !isOriginal(f));
     }
 
     if (!filteredFiles || filteredFiles.length === 0) {
@@ -2660,7 +2661,7 @@ window.renderShareImagePool = function() {
     
     pool.innerHTML = window._shareImagesPool.map((img, i) => {
         const src = img.file_url || img.cloud_url || '';
-        const isBase = (img.filename || '').includes('原圖');
+        const isBase = /original|原圖|原图/.test(img.filename || '');
         const hasCloudUrl = (img.cloud_url || '').startsWith('http');
         return `
         <div class="relative w-16 h-16 shrink-0 rounded overflow-hidden border ${hasCloudUrl ? 'border-amber-500/40' : 'border-red-500/40'} group cursor-pointer shadow-lg" onclick="removeShareImage(${i})" title="點擊移除">

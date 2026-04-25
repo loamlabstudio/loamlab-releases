@@ -481,8 +481,8 @@ module LoamLab
           timestamp         = Time.now.strftime("%Y%m%d_%H%M%S")
           safe_project_name = project_name.gsub(/[:*?"<>|\\\/]/, "_")
           safe_scene        = scene.gsub(/[:*?"<>|\\\/]/, "_")[0, 30]
-          # 檔名範例：20231027_120000_專案名稱_場景名稱_渲染圖.jpg
-          filename          = "#{timestamp}_#{safe_project_name}_#{safe_scene}_渲染圖.jpg"
+          # 檔名範例：20231027_120000_專案名稱_場景名稱_render.jpg
+          filename          = "#{timestamp}_#{safe_project_name}_#{safe_scene}_render.jpg"
           full_path         = File.join(save_path, filename)
           File.open(full_path, "wb") { |f| URI.open(url) { |img| f.write(img.read) } }
           # 將 cloud URL 寫入全局索引（AppData/LoamLab/cloud_index.json），不污染用戶資料夾
@@ -503,9 +503,13 @@ module LoamLab
 
           history = []
           if !save_path.empty? && File.directory?(save_path)
-            # 掃描渲染圖與原圖
-            files = Dir.glob(File.join(save_path, "*_渲染圖.jpg"))
+            # 掃描渲染圖（新版 ASCII + 舊版繁/簡體向後相容）
+            files = Dir.glob(File.join(save_path, "*_render.jpg"))
+            files += Dir.glob(File.join(save_path, "*_original.jpg"))
+            files += Dir.glob(File.join(save_path, "*_渲染圖.jpg"))
+            files += Dir.glob(File.join(save_path, "*_渲染图.jpg"))
             files += Dir.glob(File.join(save_path, "*_原圖.jpg"))
+            files += Dir.glob(File.join(save_path, "*_原图.jpg"))
             # 向後相容舊版的命名 (loamlab_camera.jpg)
             files += Dir.glob(File.join(save_path, "*_loamlab_camera.jpg"))
             files = files.uniq.sort_by { |f| -File.mtime(f).to_i }
@@ -520,8 +524,17 @@ module LoamLab
                 scene = m[3].gsub('_', ' ')
                 res   = m[4]
               else
-                ts = File.mtime(f).strftime("%Y%m%d_%H%M%S")
-                res = ''; scene = fname
+                # 新版格式：YYYYMMDD_HHMMSS_專案_場景_(render|original|渲染圖|原圖).jpg
+                m2 = fname.match(/^(\d{8}_\d{6})_(.+)_(render|original|渲染圖|渲染图|原圖|原图)\.jpg$/i)
+                if m2
+                  ts    = m2[1]
+                  parts = m2[2].split('_')
+                  scene = parts.last || m2[2]
+                  res   = ''
+                else
+                  ts = File.mtime(f).strftime("%Y%m%d_%H%M%S")
+                  res = ''; scene = fname
+                end
               end
               file_url  = path_to_file_uri(f)
               # 優先從全局索引讀取（key = 絕對路徑），向後相容舊版 sidecar
@@ -973,7 +986,7 @@ module LoamLab
               if File.directory?(save_path)
                 safe_project_name = project_name.gsub(/[:*?"<>|\/\\]/, "_")
                 safe_scene_name = scene_name.gsub(/[:*?"<>|\/\\]/, "_")
-                before_name = "#{timestamp}_#{safe_project_name}_#{safe_scene_name}_原圖.jpg"
+                before_name = "#{timestamp}_#{safe_project_name}_#{safe_scene_name}_original.jpg"
                 require 'fileutils'
                 FileUtils.cp(temp_img_path, File.join(save_path, before_name)) rescue nil
               end

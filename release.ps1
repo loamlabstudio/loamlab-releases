@@ -3,12 +3,8 @@
 # Usage: .\release.ps1 -version "1.3.0" -notes "Fix render issue"
 # ============================================================
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$version,
-
-    [Parameter(Mandatory = $true)]
-    [string]$notes,
-
+    [string]$version = "",   # 不填則自動 bump patch
+    [string]$notes   = "",   # 不填則用預設訊息
     [string]$channel = "direct"   # "direct"（預設，官網版）| "store"（EW版）
 )
 
@@ -18,6 +14,16 @@ $CONFIG     = "$ROOT\loamlab_plugin\config.rb"
 $VERSION_JS = "$BACKEND\api\version.js"
 $OUT_RBZ    = "$ROOT\loamlab_plugin.rbz"
 $OUT_ZIP    = "$ROOT\loamlab_plugin.zip"
+
+# ── 自動 bump patch（若未指定版本）───────────────────────────────────────────
+$CONFIG_EARLY = "$PSScriptRoot\loamlab_plugin\config.rb"
+$CONFIG_RAW   = Get-Content $CONFIG_EARLY -Raw -Encoding UTF8
+if ($CONFIG_RAW -match "VERSION = '([^']+)'") { $currentVer = $matches[1] } else { Write-Error "Cannot read VERSION"; exit 1 }
+if (-not $version) {
+    $p = $currentVer.Split('.'); $p[2] = [int]$p[2] + 1; $version = $p -join '.'
+}
+if (-not $notes) { $notes = "v$version release" }
+Write-Host "版本: $currentVer → $version  |  notes: $notes" -ForegroundColor Cyan
 
 $GITHUB_USER = "loamlabstudio"
 $GITHUB_REPO = "loamlab-releases"
@@ -202,7 +208,8 @@ Set-Location $ROOT
 
 $gitStatus = git status --porcelain 2>&1
 if ($gitStatus) {
-    git add loamlab_backend/api/version.js loamlab_plugin.rb loamlab_plugin.rbz loamlab_plugin/config.rb loamlab_plugin/main.rb loamlab_plugin/updater.rb
+    git add -u
+    git add loamlab_plugin.rbz
     if (Test-Path "docs/generated") { git add docs/generated/ }
     git commit -m "release: v$version - $notes"
     git push origin main
@@ -254,6 +261,18 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "   [OK] GitHub Release v$version created" -ForegroundColor Green
+
+# ---------------------------------------------------------
+# Step 5.5: Deploy backend to Vercel
+# ---------------------------------------------------------
+Write-Host ""
+Write-Host "[5.5/5] 部署後端至 Vercel ..." -ForegroundColor Yellow
+& powershell -ExecutionPolicy Bypass -Command "vercel --prod"
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "   [OK] Vercel 部署完成" -ForegroundColor Green
+} else {
+    Write-Host "   [WARN] Vercel 部署失敗，請手動執行: vercel --prod" -ForegroundColor Red
+}
 
 # Verify remote asset
 Write-Host ""

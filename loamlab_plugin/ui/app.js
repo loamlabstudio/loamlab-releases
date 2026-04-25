@@ -2547,6 +2547,10 @@ function renderHistoryGrid(files) {
     
     // Apply filtering if we are in share picking mode
     let filteredFiles = files || [];
+    // Normal browse mode: hide original screenshots, only show rendered results
+    if (!window._historySharePickModeSlot && !window._historyPickMode) {
+        filteredFiles = filteredFiles.filter(f => !(f.filename || '').includes('原圖'));
+    }
     if (window._historySharePickModeSlot) {
         if (window._historyFilterMode === 'base') {
             filteredFiles = filteredFiles.filter(f => (f.filename || '').includes('原圖'));

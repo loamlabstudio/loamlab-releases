@@ -6,10 +6,22 @@ const LATEST = {
     manual_url: "https://github.com/loamlabstudio/loamlab-releases/releases/latest"
 };
 
+const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://loamlab-camera.vercel.app/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://loamlab-camera.vercel.app/privacy.html</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://loamlab-camera.vercel.app/terms.html</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>
+</urlset>`;
+
 export default function handler(req, res) {
+    // GET /sitemap.xml — rewritten from vercel.json
+    if (req.query && req.query._sitemap) {
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.status(200).send(SITEMAP_XML);
+    }
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cache-Control', 'no-store, max-age=0');
-    // GET /api/version?download=1 閳?301 redirect to latest .rbz閿涘牏鈹呯€规矮绗呮潛?URL閿?
     if (req.query && req.query.download) {
         return res.redirect(301, LATEST.download_url);
     }

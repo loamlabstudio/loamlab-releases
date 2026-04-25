@@ -8,7 +8,7 @@
     { "source": "/", "destination": "/public/index.html" },
     { "source": "/terms.html", "destination": "/public/terms.html" },
     { "source": "/privacy.html", "destination": "/public/privacy.html" },
-    { "source": "/sitemap.xml", "destination": "/public/sitemap.xml" },
+    { "source": "/sitemap.xml", "destination": "/api/version?_sitemap=1" },
     { "source": "/robots.txt", "destination": "/public/robots.txt" },
     { "source": "/google2ebcec5d5344e38d.html", "destination": "/public/google2ebcec5d5344e38d.html" }
   ]

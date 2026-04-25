@@ -18,17 +18,20 @@ Schema: `supabase_setup.sql`；定價邏輯: `POINTS_SYSTEM.md`。
 
 ---
 
-## 環境隔離（Dev vs Public Beta）
+## 環境隔離（Dev vs Direct vs EW）
 
 `.rbz` 是隔離邊界；開發者與用戶用各自帳號打同一個 Production Vercel。
 
-| 變數 | 開發版（repo 預設）| 發布版（.rbz）| 職責 |
-|---|---|---|---|
-| `BUILD_TYPE` | `"dev"` | `"release"` | DEV badge、preferences_key 分離 |
-| `ENV_MODE` | `"production"` | `"production"` | 恆定，不再用於環境區分 |
+| 變數 | 開發版（repo 預設）| Direct 發布版 | EW 審核版 | 職責 |
+|---|---|---|---|---|
+| `BUILD_TYPE` | `"dev"` | `"release"` | `"release"` | DEV badge、preferences_key 分離 |
+| `DIST_CHANNEL` | `"direct"` | `"direct"` | `"store"` | 控制自動更新邏輯 |
+| `ENV_MODE` | `"production"` | `"production"` | `"production"` | 恆定 |
+| `updater.rb` | 含 | 含 | **排除** | EW 審核不允許 update 功能 |
 
-- `config.rb` 在 repo 裡永遠是 `BUILD_TYPE = "dev"` — `build_rbz.ps1` 打包時自動切換，完成後恢復
+- `config.rb` 在 repo 裡永遠是 `BUILD_TYPE = "dev"`, `DIST_CHANNEL = "direct"` — 打包腳本自動切換，完成後恢復
 - **DEV Reload 選單項**必須包在 `if LoamLab::BUILD_TYPE == "dev"` 條件內（公測版不顯示）
+- **EW 版 update callbacks** 在 `main.rb` 以 `DIST_CHANNEL != 'store'` gate，審核員看不到 update 能力
 - Variant ID 雙維護點：`app.js` 的 `LS_VARIANTS` ↔ `webhook.js` 的 `VARIANT_*` 必須同步更新
 
 ---
@@ -45,9 +48,14 @@ powershell -ExecutionPolicy Bypass -File ".\script.ps1"
 
 ### Package Plugin (`.rbz`)
 ```powershell
+# Direct 版（官網發布，含自動更新）
 powershell -ExecutionPolicy Bypass -File ".\build_rbz.ps1"
+
+# EW 版（Extension Warehouse 審核專用，無更新功能）
+powershell -ExecutionPolicy Bypass -File ".\build_rbz.ps1" -ew
 ```
-Auto-switches `config.rb` to `BUILD_TYPE = "release"` before packaging. Output: `loamlab_plugin.rbz`
+Direct 版：`BUILD_TYPE=release`, `DIST_CHANNEL=direct`，輸出 `loamlab_plugin.rbz`
+EW 版：`BUILD_TYPE=release`, `DIST_CHANNEL=store`，排除 `updater.rb`，輸出 `loamlab_plugin_ew.rbz`
 
 ### Deploy to SketchUp (Development)
 ```powershell

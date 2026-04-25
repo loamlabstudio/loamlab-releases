@@ -3,27 +3,42 @@
 # Usage: .\release.ps1 -version "1.3.0" -notes "Fix render issue"
 # ============================================================
 param(
-    [string]$version = "",   # 不填則自動 bump patch
+    [string]$version = "",   # 不填則自動 bump patch（EW 模式下不 bump，直接沿用現有版本）
     [string]$notes   = "",   # 不填則用預設訊息
-    [string]$channel = "direct"   # "direct"（預設，官網版）| "store"（EW版）
+    [string]$channel = "direct"   # "direct"（預設，官網版）| "store"（EW審核版）
 )
 
 $ROOT       = $PSScriptRoot
 $BACKEND    = "$ROOT\loamlab_backend"
 $CONFIG     = "$ROOT\loamlab_plugin\config.rb"
 $VERSION_JS = "$BACKEND\api\version.js"
-$OUT_RBZ    = "$ROOT\loamlab_plugin.rbz"
 $OUT_ZIP    = "$ROOT\loamlab_plugin.zip"
 
-# ── 自動 bump patch（若未指定版本）───────────────────────────────────────────
+# EW 模式：輸出獨立檔名，不 bump 版本，不 push，只打包
+$isEW = ($channel -eq "store")
+if ($isEW) {
+    $OUT_RBZ = "$ROOT\loamlab_plugin_ew.rbz"
+} else {
+    $OUT_RBZ = "$ROOT\loamlab_plugin.rbz"
+}
+
+# ── 讀取目前版本 ──────────────────────────────────────────────────────────────
 $CONFIG_EARLY = "$PSScriptRoot\loamlab_plugin\config.rb"
 $CONFIG_RAW   = Get-Content $CONFIG_EARLY -Raw -Encoding UTF8
 if ($CONFIG_RAW -match "VERSION = '([^']+)'") { $currentVer = $matches[1] } else { Write-Error "Cannot read VERSION"; exit 1 }
-if (-not $version) {
-    $p = $currentVer.Split('.'); $p[2] = [int]$p[2] + 1; $version = $p -join '.'
+
+if ($isEW) {
+    # EW 版：沿用現有版本，不 bump
+    $version = $currentVer
+    if (-not $notes) { $notes = "EW submission v$version" }
+    Write-Host "EW mode: using current version v$version (no bump)" -ForegroundColor Magenta
+} else {
+    if (-not $version) {
+        $p = $currentVer.Split('.'); $p[2] = [int]$p[2] + 1; $version = $p -join '.'
+    }
+    if (-not $notes) { $notes = "v$version release" }
+    Write-Host "版本: $currentVer -> $version  |  notes: $notes" -ForegroundColor Cyan
 }
-if (-not $notes) { $notes = "v$version release" }
-Write-Host "版本: $currentVer → $version  |  notes: $notes" -ForegroundColor Cyan
 
 $GITHUB_USER = "loamlabstudio"
 $GITHUB_REPO = "loamlab-releases"
@@ -62,7 +77,7 @@ if ($channel -eq "store") {
 }
 Set-Content -Path $CONFIG -Value $configRelease -Encoding UTF8
 
-$loaderRelease = $loaderOriginal -replace "ext\.version\s*=\s*'[^']*'", "ext.version     = '$version'"
+$loaderRelease = $loaderOriginal -replace 'ext\.version\s*=\s*''[^'']*''', "ext.version     = '$version'"
 Set-Content -Path $loaderFile -Value $loaderRelease -Encoding UTF8
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -82,6 +97,8 @@ function Add-ToArchive($archive, $filePath, $entryName) {
 Add-ToArchive $archive $loaderFile "loamlab_plugin.rb"
 
 $excludePatterns = @('node_modules', 'test_', 'package-lock.json', 'package.json', '.testsprite', 'test_screenshot', '.git', '.agents')
+# EW 版額外排除 updater.rb：確保審核員看不到任何自動更新代碼
+if ($isEW) { $excludePatterns += 'updater.rb' }
 Get-ChildItem -Path "$ROOT\loamlab_plugin" -Recurse -File | Where-Object {
     $fp = $_.FullName
     $skip = $false
@@ -103,8 +120,9 @@ $configDev = $configRelease `
     -replace 'DIST_CHANNEL = "store"',  'DIST_CHANNEL = "direct"'
 Set-Content -Path $CONFIG -Value $configDev -Encoding UTF8
 
-Rename-Item -Path $OUT_ZIP -NewName "loamlab_plugin.rbz" -Force
-Write-Host "   [OK] loamlab_plugin.rbz packaged" -ForegroundColor Green
+$rbzFileName = if ($isEW) { "loamlab_plugin_ew.rbz" } else { "loamlab_plugin.rbz" }
+Rename-Item -Path $OUT_ZIP -NewName $rbzFileName -Force
+Write-Host "   [OK] $rbzFileName packaged" -ForegroundColor Green
 
 # ---------------------------------------------------------
 # Step 2: Validate RBZ integrity
@@ -161,9 +179,38 @@ if ($hasForbidden) {
     exit 1
 }
 
+# EW 版：確認 updater.rb 確實不存在
+if ($isEW) {
+    $ewVerifyStream = [System.IO.File]::OpenRead($OUT_RBZ)
+    $ewVerifyArchive = [System.IO.Compression.ZipArchive]::new($ewVerifyStream, [System.IO.Compression.ZipArchiveMode]::Read)
+    $hasUpdater = $ewVerifyArchive.Entries | Where-Object { $_.FullName -like '*updater.rb*' }
+    $ewVerifyArchive.Dispose(); $ewVerifyStream.Dispose()
+    if ($hasUpdater) {
+        Write-Host "   FATAL: updater.rb found in EW build! Aborting." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "   [OK] EW check: updater.rb absent (EW compliance)" -ForegroundColor Green
+}
+
 Write-Host ""
 $totalKb = [math]::Round($totalUncompressed / 1024, 1)
 Write-Host "   [OK] Structure OK - $entryCount files, $totalKb kB uncompressed" -ForegroundColor Green
+
+# EW 模式：打包完成即退出，不 bump version.js、不 push、不 deploy
+if ($isEW) {
+    Write-Host ""
+    Write-Host "=============================================" -ForegroundColor Magenta
+    Write-Host "  EW Build Complete: $OUT_RBZ" -ForegroundColor Magenta
+    Write-Host "=============================================" -ForegroundColor Magenta
+    Write-Host ""
+    Write-Host "  Upload to: https://extensions.sketchup.com/developer" -ForegroundColor Cyan
+    Write-Host "  File: $OUT_RBZ" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Version      : $version" -ForegroundColor White
+    Write-Host "  DIST_CHANNEL : store | updater.rb excluded" -ForegroundColor White
+    Write-Host ""
+    exit 0
+}
 
 # ---------------------------------------------------------
 # Step 3: Update version.js for auto-update

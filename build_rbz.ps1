@@ -1,9 +1,22 @@
+param([switch]$ew)
+
 $sourceDir = $PSScriptRoot
-$outZip = "$sourceDir\loamlab_plugin.zip"
-$outRbz = "$sourceDir\loamlab_plugin.rbz"
 $configFile = "$sourceDir\loamlab_plugin\config.rb"
 
-Write-Host "Packaging LoamLab Plugin (Commercial Release)..."
+# ─── 決定輸出檔名與排除清單 ───────────────────────────────────
+if ($ew) {
+    $outRbzName = "loamlab_plugin_ew.rbz"
+    # EW 版排除 updater.rb：審核員看不到任何更新相關 Ruby 代碼
+    $excludePatterns = @('node_modules', 'test_', 'package-lock.json', 'package.json', '.testsprite', 'test_screenshot', 'updater.rb')
+    Write-Host "Packaging LoamLab Plugin (EW Submission Build)..." -ForegroundColor Yellow
+} else {
+    $outRbzName = "loamlab_plugin.rbz"
+    $excludePatterns = @('node_modules', 'test_', 'package-lock.json', 'package.json', '.testsprite', 'test_screenshot')
+    Write-Host "Packaging LoamLab Plugin (Direct Release Build)..."
+}
+
+$outZip = "$sourceDir\loamlab_plugin.zip"
+$outRbz = "$sourceDir\$outRbzName"
 
 if (Test-Path $outZip) { Remove-Item $outZip -Force }
 if (Test-Path $outRbz) { Remove-Item $outRbz -Force }
@@ -11,11 +24,15 @@ if (Test-Path $outRbz) { Remove-Item $outRbz -Force }
 # ★ 環境隔離：打包前強制寫入 release 設定
 $configContent = Get-Content $configFile -Raw
 $prodContent = $configContent -replace 'BUILD_TYPE = "dev"', 'BUILD_TYPE = "release"'
+if ($ew) {
+    $prodContent = $prodContent -replace 'DIST_CHANNEL = "direct"', 'DIST_CHANNEL = "store"'
+    Write-Host "[Deploy] BUILD_TYPE → release, DIST_CHANNEL → store (EW)" -ForegroundColor Cyan
+} else {
+    Write-Host "[Deploy] BUILD_TYPE → release, DIST_CHANNEL = direct" -ForegroundColor Cyan
+}
 Set-Content -Path $configFile -Value $prodContent -Encoding UTF8
-Write-Host "[Deploy] BUILD_TYPE → release" -ForegroundColor Cyan
 
 # 手動建 zip，確保路徑分隔符為 /（跨平台相容 Mac）
-# 同時排除 node_modules、測試檔、開發工具
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 Add-Type -AssemblyName System.IO.Compression
 
@@ -34,8 +51,7 @@ function Add-ToZip($archive, $filePath, $entryName) {
 # 加入入口檔案
 Add-ToZip $archive "$sourceDir\loamlab_plugin.rb" "loamlab_plugin.rb"
 
-# 加入 loamlab_plugin/ 目錄，排除 node_modules、測試檔、開發工具
-$excludePatterns = @('node_modules', 'test_', 'package-lock.json', 'package.json', '.testsprite', 'test_screenshot')
+# 加入 loamlab_plugin/ 目錄
 Get-ChildItem -Path "$sourceDir\loamlab_plugin" -Recurse -File | Where-Object {
     $fullPath = $_.FullName
     $skip = $false
@@ -51,15 +67,21 @@ Get-ChildItem -Path "$sourceDir\loamlab_plugin" -Recurse -File | Where-Object {
 $archive.Dispose()
 $stream.Dispose()
 
-# ★ 打包完畢後明確還原為 dev 模式（不依賴原始快照，硬編碼保證結果恆為 dev）
+# ★ 打包完畢後明確還原為 dev 模式
 $restoredContent = $prodContent -replace 'BUILD_TYPE = "release"', 'BUILD_TYPE = "dev"'
+if ($ew) {
+    $restoredContent = $restoredContent -replace 'DIST_CHANNEL = "store"', 'DIST_CHANNEL = "direct"'
+}
 Set-Content -Path $configFile -Value $restoredContent -Encoding UTF8
-Write-Host "[Deploy] BUILD_TYPE restored to dev" -ForegroundColor Cyan
+Write-Host "[Deploy] config.rb restored to dev" -ForegroundColor Cyan
 
-Rename-Item -Path $outZip -NewName "loamlab_plugin.rbz" -Force
+Rename-Item -Path $outZip -NewName $outRbzName -Force
 
 Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Green
-Write-Host "Done! RBZ Plugin (Production Version) packaged at: $outRbz" -ForegroundColor Green
+Write-Host "Done! Output: $outRbz" -ForegroundColor Green
+if ($ew) {
+    Write-Host "⚠ EW build: updater.rb excluded, DIST_CHANNEL=store" -ForegroundColor Yellow
+}
 Write-Host "==========================================================" -ForegroundColor Green
 

@@ -461,7 +461,7 @@ function deletePreset(idx) {
 function exportPresetCode(idx) {
     const p = userPresets[idx];
     if (!p) return;
-    const code = btoa(encodeURIComponent(JSON.stringify(p.data)));
+    const code = btoa(encodeURIComponent(JSON.stringify({ name: p.name, data: p.data })));
     const row = document.getElementById('t1-export-code-row-' + idx);
     const codeEl = document.getElementById('t1-export-code-' + idx);
     if (!row || !codeEl) return;
@@ -479,8 +479,10 @@ function importPresetCode() {
     const code = input.value.trim();
     if (!code) return;
     try {
-        const data = JSON.parse(decodeURIComponent(atob(code)));
-        const name = '匯入 ' + new Date().toLocaleDateString();
+        const decoded = JSON.parse(decodeURIComponent(atob(code)));
+        const isNew = decoded && typeof decoded === 'object' && 'name' in decoded && 'data' in decoded;
+        const name = isNew ? decoded.name : ('匯入 ' + new Date().toLocaleDateString());
+        const data = isNew ? decoded.data : decoded;
         userPresets.unshift({ name, created_at: new Date().toISOString(), data });
         userPresets = userPresets.slice(0, 20);
         localStorage.setItem('loamlab_presets', JSON.stringify(userPresets));
@@ -500,10 +502,17 @@ function renderPresets() {
     list.innerHTML = userPresets.map((p, i) => `
         <div class="flex flex-col gap-1 bg-black/30 border border-white/5 rounded-lg px-2 py-1.5">
             <div class="flex items-center gap-1">
-                <span class="flex-1 text-[10px] text-gray-300 truncate" title="${p.name}">${p.name}</span>
+                <span id="t1-preset-name-${i}" class="flex-1 text-[10px] text-gray-300 truncate cursor-pointer hover:text-white" title="${p.name}" onclick="startRenamePreset(${i})">${p.name}</span>
                 <button onclick="applyPreset(${i})" class="text-[9px] px-1.5 py-0.5 rounded bg-red-600/20 border border-red-500/30 text-red-300 hover:bg-red-600/30 shrink-0">套用</button>
                 <button onclick="exportPresetCode(${i})" class="text-[9px] px-1.5 py-0.5 rounded border border-white/10 text-gray-500 hover:text-white shrink-0">分享</button>
                 <button onclick="deletePreset(${i})" class="text-[9px] text-gray-600 hover:text-red-400 shrink-0">✕</button>
+            </div>
+            <div id="t1-rename-row-${i}" class="hidden flex items-center gap-1">
+                <input id="t1-rename-input-${i}" type="text" value="${p.name.replace(/"/g, '&quot;')}"
+                    class="flex-1 min-w-0 text-[9px] bg-black/60 border border-white/20 rounded px-1.5 py-1 text-white"
+                    onkeydown="if(event.key==='Enter')confirmRenamePreset(${i});else if(event.key==='Escape')cancelRenamePreset(${i})">
+                <button onclick="confirmRenamePreset(${i})" class="text-[9px] px-1.5 py-1 rounded bg-white/10 border border-white/15 text-gray-300 hover:text-white shrink-0">${t('preset_rename_ok')}</button>
+                <button onclick="cancelRenamePreset(${i})" class="text-[9px] text-gray-600 hover:text-red-400 shrink-0">✕</button>
             </div>
             <div id="t1-export-code-row-${i}" class="hidden flex items-center gap-1">
                 <input id="t1-export-code-${i}" type="text" readonly
@@ -513,6 +522,39 @@ function renderPresets() {
                     class="text-[9px] px-1.5 py-1 rounded bg-white/5 border border-white/10 text-gray-400 hover:text-white shrink-0 transition-colors">複製</button>
             </div>
         </div>`).join('');
+}
+
+function startRenamePreset(idx) {
+    document.querySelectorAll('[id^="t1-rename-row-"]').forEach(row => {
+        if (!row.classList.contains('hidden')) {
+            const i = parseInt(row.id.replace('t1-rename-row-', ''));
+            if (i !== idx) cancelRenamePreset(i);
+        }
+    });
+    const row = document.getElementById('t1-rename-row-' + idx);
+    const nameEl = document.getElementById('t1-preset-name-' + idx);
+    if (!row) return;
+    row.classList.remove('hidden');
+    nameEl?.classList.add('hidden');
+    const input = document.getElementById('t1-rename-input-' + idx);
+    if (input) { input.focus(); input.select(); }
+}
+
+function confirmRenamePreset(idx) {
+    const input = document.getElementById('t1-rename-input-' + idx);
+    if (!input) return;
+    const newName = input.value.trim();
+    if (!newName) return;
+    userPresets[idx].name = newName;
+    localStorage.setItem('loamlab_presets', JSON.stringify(userPresets));
+    renderPresets();
+}
+
+function cancelRenamePreset(idx) {
+    const row = document.getElementById('t1-rename-row-' + idx);
+    const nameEl = document.getElementById('t1-preset-name-' + idx);
+    row?.classList.add('hidden');
+    nameEl?.classList.remove('hidden');
 }
 
 function copyPresetCode(idx) {
@@ -1786,17 +1828,31 @@ function updatePlanBadge(plan) {
     }
 }
 
+function syncPricingModalI18n() {
+    const modal = document.getElementById('pricing-modal');
+    if (!modal) return;
+    modal.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        const text = t(key);
+        if (text) el.textContent = text;
+    });
+}
+
 function refreshPricingModalBadge() {
     const plan = window.loamlabSubscriptionPlan;
     const planBtnMap = { starter: 'btn-plan-starter', pro: 'btn-plan-pro', studio: 'btn-plan-studio' };
     // btn-plan-topup 排除在外（內含 span#btn-plan-topup-label，不能用 textContent 覆蓋）
-    const originalText = { 'btn-plan-starter': 'SUBSCRIBE', 'btn-plan-pro': 'UPGRADE NOW', 'btn-plan-studio': 'SUBSCRIBE' };
+    const originalText = {
+        'btn-plan-starter': t('pricing_btn_subscribe'),
+        'btn-plan-pro':     t('pricing_btn_upgrade'),
+        'btn-plan-studio':  t('pricing_btn_subscribe')
+    };
     // 單獨重設 topup label span（保留 DOM 結構）
     const topupLabel = document.getElementById('btn-plan-topup-label');
     if (topupLabel) {
         const qty = document.getElementById('qty-topup');
         const n = qty ? parseInt(qty.value) || 1 : 1;
-        topupLabel.textContent = n > 1 ? 'BUY ' + n + ' UNITS' : 'BUY NOW';
+        topupLabel.textContent = n > 1 ? 'BUY ' + n + ' UNITS' : t('pricing_btn_buy');
     }
     const topupBtn = document.getElementById('btn-plan-topup');
     if (topupBtn) { topupBtn.disabled = false; topupBtn.style.opacity = ''; topupBtn.style.cursor = ''; }
@@ -1816,7 +1872,7 @@ function refreshPricingModalBadge() {
         const activeBtn = document.getElementById(planBtnMap[plan]);
         if (activeBtn) {
             activeBtn.disabled = true;
-            activeBtn.textContent = '✓ CURRENT PLAN';
+            activeBtn.textContent = t('pricing_btn_current');
             activeBtn.style.opacity = '0.6';
             activeBtn.style.cursor = 'not-allowed';
         }
@@ -1838,6 +1894,7 @@ function openPricingModal(ctx = null) {
     updateRenderHints();
     refreshPricingModalBadge();
     applyBetaDiscountDisplay();
+    syncPricingModalI18n();
     setTimeout(() => {
         pricingModal.classList.remove('opacity-0');
         pricingModalContent.classList.remove('scale-95');
@@ -2330,8 +2387,8 @@ const DODO_VARIANTS = {
     PRO: 'pdt_0NbImafnebUuGNrMRvJp4',
     STUDIO: 'pdt_0NbImhwhr5WXfNyDHpaA2'
 };
-const BETA_DISCOUNT_CODE = 'LOAM_BETA_30';
-const BETA_DISCOUNT_RATE = 0.70; // 公測 -30% 折扣
+const BETA_DISCOUNT_CODE = 'LOAM_BETA_30'; // 僅 LemonSqueezy fallback 使用；DODO 折扣碼由後端 DODO_DISCOUNT_CODE env var 管理
+const BETA_DISCOUNT_RATE = 0.70; // UI 顯示用（-30% 折扣視覺計算）
 
 function applyBetaDiscountDisplay() {
     document.querySelectorAll('[data-original-price]').forEach(container => {
@@ -2896,7 +2953,8 @@ function executeUpdate(_url) {
 }
 
 // 結帳並跳轉付款頁面（接受 planKey: 'TOPUP'/'STARTER'/'PRO'/'STUDIO'）
-window.openCheckout = function (planKey, quantity = 1) {
+// DODO 路由到後端 /api/checkout 取得帶折扣的 checkout URL（折扣碼由後端環境變數管理）
+window.openCheckout = async function (planKey, quantity = 1) {
     if (!window.loamlabUserEmail) {
         showUpdateToast('⚠️ 請先登入 Google 帳號再進行儲值');
         openLoginModal();
@@ -2906,26 +2964,38 @@ window.openCheckout = function (planKey, quantity = 1) {
     // 已訂閱相同方案 guard（防止誤觸重複購買）
     const planKeyLower = planKey.toLowerCase();
     if (planKeyLower !== 'topup' && window.loamlabSubscriptionPlan === planKeyLower) {
-        showUpdateToast('✓ ' + i18n('already_subscribed'));
+        showUpdateToast('✓ ' + t('already_subscribed'));
         return;
     }
 
-    // planKey → 實際 variant ID
-    const variantId = CURRENT_PAYMENT_PLATFORM === 'DODO'
-        ? (DODO_VARIANTS[planKey] || planKey)
-        : (LS_VARIANTS[planKey] !== undefined ? LS_VARIANTS[planKey] : planKey);
-
     const qty = Math.max(1, parseInt(quantity) || 1);
-
-    // 根據平台選擇 Store URL 與參數
     let finalUrl = "";
+
     if (CURRENT_PAYMENT_PLATFORM === 'DODO') {
-        const storeUrl = "https://checkout.dodopayments.com/buy";
-        finalUrl = `${storeUrl}/${variantId}?quantity=${qty}&customer_email=${encodeURIComponent(window.loamlabUserEmail)}`;
+        // 後端代理：取得帶折扣的 checkout session URL
+        showUpdateToast('🔄 取得結帳頁面中...');
+        try {
+            const res = await fetch(`${API_BASE}/api/checkout`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ planKey, email: window.loamlabUserEmail, quantity: qty })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            finalUrl = data.checkoutUrl;
+        } catch (e) {
+            console.error('[checkout]', e);
+            showUpdateToast('⚠️ 無法取得結帳連結，請稍後再試');
+            return;
+        }
     } else {
+        // LemonSqueezy fallback
+        const variantId = LS_VARIANTS[planKey] !== undefined ? LS_VARIANTS[planKey] : planKey;
         const storeUrl = "https://loamlabstudio.lemonsqueezy.com/checkout/buy/";
         finalUrl = `${storeUrl}${variantId}?checkout[email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[custom][user_email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[discount_code]=${BETA_DISCOUNT_CODE}`;
     }
+
+    if (!finalUrl) return;
 
     if (window.sketchup) {
         sketchup.open_browser(finalUrl);

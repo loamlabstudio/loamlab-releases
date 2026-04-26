@@ -2975,7 +2975,7 @@ window.openCheckout = async function (planKey, quantity = 1) {
         // 後端代理：取得帶折扣的 checkout session URL
         showUpdateToast('🔄 取得結帳頁面中...');
         try {
-            const res = await fetch(`${API_BASE}/api/checkout`, {
+            const res = await fetch(`${API_BASE}/api/user?action=checkout`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ planKey, email: window.loamlabUserEmail, quantity: qty })

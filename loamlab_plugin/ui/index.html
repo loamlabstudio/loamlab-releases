@@ -1030,7 +1030,7 @@
                 <p class="text-white/50 text-sm tracking-wide" data-i18n="pricing_subtitle">Choose the perfect plan for your architectural pipeline.</p>
                 <div class="flex flex-col items-center gap-1.5 mt-2.5">
                     <p class="text-[#dc2626]/80 text-[11px] font-medium tracking-widest uppercase">💡 Render Costs: 1K (<span id="ui-pricing-cost-1k">15</span> pts) | 2K (<span id="ui-pricing-cost-2k">20</span> pts) | 4K (<span id="ui-pricing-cost-4k">30</span> pts)</p>
-                    <p class="text-white/40 text-[10px] tracking-wide">Subscription points reset monthly (Use it or lose it). Top-up points are permanent.</p>
+                    <p class="text-white/40 text-[10px] tracking-wide" data-i18n="pricing_pts_reset_hint">Subscription points reset monthly (Use it or lose it). Top-up points are permanent.</p>
                 </div>
                 <div class="inline-flex items-center gap-2 mt-3 px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/25">
                     <span class="text-green-400 text-[11px] font-semibold tracking-wide" data-i18n="pricing_beta_banner">🎉 公測限時特惠 — 全方案 -30%，結帳自動套用</span>
@@ -1042,11 +1042,11 @@
 
                 <!-- 1. Top-up -->
                 <div class="bg-[#141420] border border-blue-500/20 rounded-xl p-5 flex flex-col hover:border-blue-400/40 transition-all shadow-inner relative">
-                    <div class="absolute top-0 right-0 bg-blue-500/20 text-blue-300 text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase">No Commitment</div>
+                    <div class="absolute top-0 right-0 bg-blue-500/20 text-blue-300 text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase" data-i18n="pricing_badge_no_commitment">No Commitment</div>
                     <h3 class="text-blue-300/80 font-semibold tracking-wider text-sm mb-1 uppercase">Top-up</h3>
                     <div class="flex items-end gap-1 mb-4" data-original-price="18" data-price-period="one-time">
                         <span class="text-2xl font-bold text-white">$18</span>
-                        <span class="text-[10px] text-white/40 mb-1">/Beta Sale</span>
+                        <span class="text-[10px] text-white/40 mb-1" data-i18n="pricing_period_one_time">/Beta Sale</span>
                     </div>
                     <ul class="text-[11px] text-white/50 mb-1 flex-1 space-y-2.5">
                         <li class="flex items-center gap-2"><svg class="w-3 h-3 text-white/40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span data-i18n="pricing_feat_topup_credits">200 Permanent Credits</span></li>
@@ -1059,7 +1059,7 @@
                     
                     <!-- 數量選擇器 (Quantity Selector) -->
                     <div class="flex items-center justify-between gap-2 mb-4 bg-black/40 rounded-lg p-2 border border-white/5">
-                        <span class="text-[10px] text-zinc-500 font-bold tracking-widest uppercase ml-1">Quantity</span>
+                        <span class="text-[10px] text-zinc-500 font-bold tracking-widest uppercase ml-1" data-i18n="pricing_quantity">Quantity</span>
                         <div class="flex items-center gap-3">
                             <button onclick="let inp = document.getElementById('qty-topup'); inp.value = Math.max(1, parseInt(inp.value)-1); document.getElementById('btn-plan-topup-label').textContent = 'BUY ' + inp.value + ' UNITS'" class="w-6 h-6 rounded bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 text-xs">-</button>
                             <input id="qty-topup" type="number" value="1" min="1" class="bg-transparent border-none text-white text-xs font-mono w-6 text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
@@ -1075,11 +1075,11 @@
 
                 <!-- 2. Starter -->
                 <div class="bg-[#18181d] border border-emerald-500/20 rounded-xl p-5 flex flex-col hover:border-emerald-400/40 transition-all relative group shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                    <div class="absolute top-0 right-0 bg-emerald-500/15 text-emerald-400 text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase">Best First Plan</div>
+                    <div class="absolute top-0 right-0 bg-emerald-500/15 text-emerald-400 text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase" data-i18n="pricing_badge_best_first">Best First Plan</div>
                     <h3 class="text-white/80 font-semibold tracking-wider text-sm mb-1 uppercase">Starter</h3>
                     <div class="flex items-end gap-1 mb-4 border-b border-white/5 pb-4" data-original-price="24" data-price-period="mo">
                         <span class="text-3xl font-bold text-white">$24</span>
-                        <span class="text-[10px] text-white/40 mb-1.5">/mo (Beta)</span>
+                        <span class="text-[10px] text-white/40 mb-1.5" data-i18n="pricing_period_mo_beta">/mo (Beta)</span>
                     </div>
                     <ul class="text-[12px] text-white/60 mb-6 flex-1 space-y-2.5 pt-1">
                         <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span class="text-white font-medium" data-i18n="pricing_feat_starter_credits">300 Monthly Credits</span></li>
@@ -1095,11 +1095,11 @@
 
                 <!-- 3. Pro (Hero) -->
                 <div class="bg-gradient-to-b from-[#2a1012] to-[#140809] border border-[#dc2626]/50 rounded-xl p-5 flex flex-col shadow-[0_0_30px_rgba(220,38,38,0.15)] relative transform md:-translate-y-2 z-10">
-                    <div class="absolute top-0 right-0 bg-[#dc2626] text-white text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase">Most Popular</div>
+                    <div class="absolute top-0 right-0 bg-[#dc2626] text-white text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase" data-i18n="pricing_badge_most_popular">Most Popular</div>
                     <h3 class="text-[#fca5a5] font-semibold tracking-wider text-sm mb-1 uppercase drop-shadow-sm">Pro</h3>
                     <div class="flex items-end gap-1 mb-4 border-b border-[#dc2626]/20 pb-4" data-original-price="52" data-price-period="mo">
                         <span class="text-4xl font-bold text-white">$52</span>
-                        <span class="text-[10px] text-white/40 mb-1.5">/mo (Beta)</span>
+                        <span class="text-[10px] text-white/40 mb-1.5" data-i18n="pricing_period_mo_beta">/mo (Beta)</span>
                     </div>
                     <ul class="text-[12px] text-white/70 mb-6 flex-1 space-y-2.5 pt-1">
                         <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-[#f87171] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span class="text-white font-bold tracking-wide" data-i18n="pricing_feat_pro_credits">2,000 Monthly Credits</span></li>
@@ -1118,7 +1118,7 @@
                     <h3 class="text-white/80 font-semibold tracking-wider text-sm mb-1 uppercase">Studio</h3>
                     <div class="flex items-end gap-1 mb-4 border-b border-white/5 pb-4" data-original-price="139" data-price-period="mo">
                         <span class="text-3xl font-bold text-white">$139</span>
-                        <span class="text-[10px] text-white/40 mb-1.5">/mo (Beta)</span>
+                        <span class="text-[10px] text-white/40 mb-1.5" data-i18n="pricing_period_mo_beta">/mo (Beta)</span>
                     </div>
                     <ul class="text-[12px] text-white/60 mb-6 flex-1 space-y-2.5 pt-1">
                         <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-emerald-500/80 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span class="text-white font-medium" data-i18n="pricing_feat_studio_credits">9,000 Monthly Credits</span></li>

@@ -242,7 +242,14 @@ const UI_LANG = {
         "pricing_feat_2devices": "2 台裝置同時使用",
         "pricing_feat_commercial": "商業授權",
         "pricing_feat_studio_credits": "9,000 月點數",
-        "pricing_feat_5devices": "5 台裝置同時使用"
+        "pricing_feat_5devices": "5 台裝置同時使用",
+        "pricing_pts_reset_hint": "訂閱點數每月重置（用不掉就消失）。儲值點數永久有效。",
+        "pricing_badge_no_commitment": "無需承諾",
+        "pricing_badge_best_first": "最佳入門",
+        "pricing_badge_most_popular": "最多人選",
+        "pricing_quantity": "數量",
+        "pricing_period_one_time": "/一次性",
+        "pricing_period_mo_beta": "/月（Beta）"
     },
     "en-US": {
         "title": "LoamLab Camera",
@@ -484,7 +491,14 @@ const UI_LANG = {
         "pricing_feat_2devices": "2 Devices Simultaneously",
         "pricing_feat_commercial": "Commercial License",
         "pricing_feat_studio_credits": "9,000 Monthly Credits",
-        "pricing_feat_5devices": "5 Devices Simultaneously"
+        "pricing_feat_5devices": "5 Devices Simultaneously",
+        "pricing_pts_reset_hint": "Subscription points reset monthly (Use it or lose it). Top-up points are permanent.",
+        "pricing_badge_no_commitment": "No Commitment",
+        "pricing_badge_best_first": "Best First Plan",
+        "pricing_badge_most_popular": "Most Popular",
+        "pricing_quantity": "Quantity",
+        "pricing_period_one_time": "/Beta Sale",
+        "pricing_period_mo_beta": "/mo (Beta)"
     },
     "zh-CN": {
         "title": "野人相机 (LoamLab Camera)",
@@ -726,7 +740,14 @@ const UI_LANG = {
         "pricing_feat_2devices": "2 台设备同时使用",
         "pricing_feat_commercial": "商业授权",
         "pricing_feat_studio_credits": "9,000 月积分",
-        "pricing_feat_5devices": "5 台设备同时使用"
+        "pricing_feat_5devices": "5 台设备同时使用",
+        "pricing_pts_reset_hint": "订阅积分每月重置（用不掉就消失）。充值积分永久有效。",
+        "pricing_badge_no_commitment": "无需承诺",
+        "pricing_badge_best_first": "最佳入门",
+        "pricing_badge_most_popular": "最受欢迎",
+        "pricing_quantity": "数量",
+        "pricing_period_one_time": "/一次性",
+        "pricing_period_mo_beta": "/月（Beta）"
     },
     "es-ES": {
         "title": "LoamLab Cámara",
@@ -968,7 +989,14 @@ const UI_LANG = {
         "pricing_feat_2devices": "2 Dispositivos simultáneos",
         "pricing_feat_commercial": "Licencia comercial",
         "pricing_feat_studio_credits": "9.000 Créditos mensuales",
-        "pricing_feat_5devices": "5 Dispositivos simultáneos"
+        "pricing_feat_5devices": "5 Dispositivos simultáneos",
+        "pricing_pts_reset_hint": "Los puntos de suscripción se reinician mensualmente. Los puntos de recarga son permanentes.",
+        "pricing_badge_no_commitment": "Sin compromiso",
+        "pricing_badge_best_first": "Mejor primer plan",
+        "pricing_badge_most_popular": "Más popular",
+        "pricing_quantity": "Cantidad",
+        "pricing_period_one_time": "/pago único",
+        "pricing_period_mo_beta": "/mes (Beta)"
     },
     "pt-BR": {
         "title": "Câmera LoamLab",
@@ -1210,7 +1238,14 @@ const UI_LANG = {
         "pricing_feat_2devices": "2 Dispositivos simultâneos",
         "pricing_feat_commercial": "Licença comercial",
         "pricing_feat_studio_credits": "9.000 Créditos mensais",
-        "pricing_feat_5devices": "5 Dispositivos simultâneos"
+        "pricing_feat_5devices": "5 Dispositivos simultâneos",
+        "pricing_pts_reset_hint": "Pontos de assinatura reiniciam mensalmente. Pontos de recarga são permanentes.",
+        "pricing_badge_no_commitment": "Sem compromisso",
+        "pricing_badge_best_first": "Melhor plano inicial",
+        "pricing_badge_most_popular": "Mais popular",
+        "pricing_quantity": "Quantidade",
+        "pricing_period_one_time": "/pagamento único",
+        "pricing_period_mo_beta": "/mês (Beta)"
     },
     "ja-JP": {
         "title": "野人カメラ (LoamLab Camera)",
@@ -1452,7 +1487,14 @@ const UI_LANG = {
         "pricing_feat_2devices": "2 台同時使用",
         "pricing_feat_commercial": "商用ライセンス",
         "pricing_feat_studio_credits": "9,000 月間ポイント",
-        "pricing_feat_5devices": "5 台同時使用"
+        "pricing_feat_5devices": "5 台同時使用",
+        "pricing_pts_reset_hint": "サブスクポイントは毎月リセット（使い切れないと消滅）。チャージポイントは永久有効。",
+        "pricing_badge_no_commitment": "縛りなし",
+        "pricing_badge_best_first": "入門最適プラン",
+        "pricing_badge_most_popular": "最人気",
+        "pricing_quantity": "数量",
+        "pricing_period_one_time": "/一回払い",
+        "pricing_period_mo_beta": "/月（Beta）"
     }
 };
 

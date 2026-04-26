@@ -1630,7 +1630,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         
                         let finalVals = [];
                         if (userVal) {
-                            finalVals.push(userVal);
+                            finalVals.push(...userVal.split(',').map(s => s.trim()).filter(Boolean));
                         } else {
                             finalVals.push(...fallbackSilentVals); // 用戶未選時，使用單選(替換)型靜默參數作為預設
                         }

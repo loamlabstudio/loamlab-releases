@@ -126,9 +126,12 @@ module LoamLab
       folder.force_encoding("UTF-8").gsub("\\", "/")
     end
 
-    # 取得當前有效的儲存路徑，若無則回傳 Downloads
+    # 取得當前有效的儲存路徑：per-model → global default → Downloads
     def self.get_effective_save_path(model)
       path = model.get_attribute("LoamLabAI", "save_path", "")
+      if path.empty? || !File.directory?(path)
+        path = Sketchup.read_default("LoamLabAI", "global_save_path", "")
+      end
       if path.empty? || !File.directory?(path)
         path = self.get_downloads_folder
       end
@@ -266,6 +269,7 @@ module LoamLab
         
         if chosen_dir && !chosen_dir.empty?
           model.set_attribute("LoamLabAI", "save_path", chosen_dir)
+          Sketchup.write_default("LoamLabAI", "global_save_path", chosen_dir)
           # 回傳給 JS 更新 UI
           json_str = chosen_dir.to_json
           dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64({action: 'updateSaveDir', path: chosen_dir}.to_json)}')")

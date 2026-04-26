@@ -4400,8 +4400,14 @@ function _scRenderRegionList() {
     }
 
     // 綁定 label input focus → 更新 focusedRegionIdx（供快速標籤使用）
+    // 注意：只更新 active class，不呼叫 _scRenderRegionList()，否則 DOM 重建會立即失焦
     list.querySelectorAll('.sc-region-label-input').forEach((input, idx) => {
-        input.addEventListener('focus', () => { SmartCanvas.focusedRegionIdx = idx; _scRenderRegionList(); });
+        input.addEventListener('focus', () => {
+            SmartCanvas.focusedRegionIdx = idx;
+            document.querySelectorAll('.sc-region-card').forEach((c, i) => {
+                c.classList.toggle('sc-region-active', i === idx);
+            });
+        });
     });
 
     // 快速標籤區：有 region 才顯示

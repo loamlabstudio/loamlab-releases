@@ -1107,7 +1107,7 @@ module LoamLab
               _s0_channel = captured_channel_b64.dup
               _s0_sref    = user_style_ref_url.dup
               _s0_req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::POST)
-              _s0_req.headers = { 'Content-Type' => 'application\json', 'x-user-email' => captured_email, 'x-plugin-version' => captured_version }
+              _s0_req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => captured_email, 'x-plugin-version' => captured_version }
               _s0_req.body = captured_body
               _s0_req.start do |_, response|
                 result = nil
@@ -1185,7 +1185,7 @@ module LoamLab
         _df_scene   = captured[:scene].dup
         _df_channel = captured[:channel].dup
         _df_req = Sketchup::Http::Request.new(captured[:url], Sketchup::Http::POST)
-        _df_req.headers = { 'Content-Type' => 'application\json', 'x-user-email' => captured[:email], 'x-plugin-version' => captured[:version] }
+        _df_req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => captured[:email], 'x-plugin-version' => captured[:version] }
         _df_req.body = final_body
         _df_req.start do |_, response|
           result = nil

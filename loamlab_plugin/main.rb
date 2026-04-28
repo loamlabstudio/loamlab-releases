@@ -1323,6 +1323,10 @@ module LoamLab
       # 脫敏與友善報錯處理
       def self.sanitize_error(msg)
         return msg unless msg.is_a?(String)
+        # Vercel 伺服器崩潰（未修復前的舊版後端）
+        if msg.include?('FUNCTION_INVOCATION_FAILED') || msg.include?('A server error has occurred')
+          return '渲染請求失敗，請稍後再試。如持續發生請聯繫客服。'
+        end
         # 針對常見的 Ruby 逾時報錯轉換為友好提示
         if msg.include?('execution expired') || msg.include?('Net::OpenTimeout') || msg.include?('Net::ReadTimeout')
           return '連線到伺服器逾時，請檢查您的網路狀態或稍後再試。'

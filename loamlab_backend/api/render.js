@@ -66,6 +66,13 @@ async function translateToEnglish(text) {
 }
 
 export default async function handler(req, res) {
+    try { return await _handleRender(req, res); }
+    catch (fatal) {
+        console.error('[render] uncaught fatal:', fatal?.message || fatal);
+        if (!res.headersSent) res.status(500).json({ code: -1, msg: `伺服器內部錯誤，請稍後再試。(${fatal?.message?.slice(0,80) || 'unknown'})` });
+    }
+}
+async function _handleRender(req, res) {
     // 1. 允許跨域請求 (CORS)
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -105,12 +112,16 @@ export default async function handler(req, res) {
     const supabase = createClient(SUPABASE_URL, supabaseKeyToUse);
 
     // IP Pinning 驗證：防止 API 偽造 (Spoofing)
+    // fail-open：DB 不可達時不攔截請求（避免 DB 網路抖動導致所有用戶無法渲染）
     const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
     if (clientIp !== 'unknown') {
-        const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
-        // 嚴格模式：如果使用者不存在，或是該使用者從未紀錄過 IP，或是 IP 不符，一律攔截 (強迫舊用戶至少重登一次建立指紋)
-        if (!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp) {
-            return res.status(401).json({ code: -1, msg: '登入憑證已過期或網路環境發生變更。為保障您的點數安全，請在外掛首頁重新點擊登入以驗證身分。' });
+        try {
+            const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
+            if (!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp) {
+                return res.status(401).json({ code: -1, msg: '登入憑證已過期或網路環境發生變更。為保障您的點數安全，請在外掛首頁重新點擊登入以驗證身分。' });
+            }
+        } catch (ipErr) {
+            console.warn('[render] IP check DB error, proceeding:', ipErr?.message);
         }
     }
 
@@ -122,7 +133,7 @@ export default async function handler(req, res) {
         }
     };
 
-    const userPayload = req.body;
+    const userPayload = req.body || {};
     const activeTool = userPayload.tool || 1;
 
 // 記錄原始輸入 URL（僅保存穩定的外部 URL，不保存 base64 或臨時簽名 URL）
@@ -241,7 +252,7 @@ export default async function handler(req, res) {
             userPayload.parameters.image = [signedData.signedUrl];
             tempStorageFile = fileName;
         } catch (uploadErr) {
-            await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
+            try { await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail); } catch(e) {}
             try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_UPLOAD_FAIL' }]); } catch(e) {}
             return res.status(500).json({ code: -1, msg: sanitizeError(`圖床代傳失敗: ${uploadErr.message}`), points_refunded: true });
         }
@@ -347,7 +358,7 @@ export default async function handler(req, res) {
         } catch(e) {}
 
         const defaultP1 = "SketchUp interior model (Image 1). Backend pre-generates a spatial depth map (Image 2) and a color-segmented channel map (Image 3). Using Image 1 with reference to Images 2 and 3, restore 99% of spatial depth, camera position, and material texture direction without altering geometry or materials. Convert to a realistic interior photo. Apply natural lighting with supplemental diffuse fill to eliminate pure-black shadows and overexposure. Rationalize minor spatial inconsistencies. Professional photography-grade color grading with natural tonal gradation. ultra-detailed";
-        const defaultP2 = "Edit IMAGE 1 (the original scene photo) by replacing objects as specified below.\nThe colored areas in IMAGE 2 are only location markers — do not use these marker colors in the final result.\n{{REF_TEXT}}\nChanges:\n{{CHANGES}}\n\nStrict Guidelines:\n① Final result must be based on IMAGE 1, appearing as a natural, original photograph — not based on IMAGE 2\n② Perspective & Proportion: Render all objects from IMAGE 1's camera angle, adjust orientation to match scene perspective; do not keep the reference photo's original angle\n③ Lighting & Color Temperature: Strictly follow IMAGE 1's light direction, intensity, shadows and color temperature; remove all color casts, glows and artificial lighting from references\n④ Boundary Control: Stay mainly within marked zones; minor edge feathering is allowed for seamless blending, but do not affect unrelated objects or surfaces\n⑤ Realism & Aesthetics: Replaced objects must have realistic materials, correct scale, elegant composition, and blend harmoniously into the original space with consistent style";
+        const defaultP2 = "Edit IMAGE 1 (the original scene photo) by replacing materials/objects as specified below.\nIMAGE 2 shows the same scene overlaid with ARTIFICIAL NEON MARKER COLORS (magenta, cyan, lime, red, yellow, etc.) — these are PURELY spatial location indicators and have ZERO relation to the target appearance. CRITICAL: The final output must contain ABSOLUTELY NO trace of these neon marker colors. Ignore all color information from IMAGE 2 entirely.\n{{REF_TEXT}}\nChanges:\n{{CHANGES}}\n\nStrict Guidelines:\n① Final result must be based on IMAGE 1, appearing as a natural, original photograph — never based on IMAGE 2's colors or tones\n② Perspective & Proportion: Render all objects from IMAGE 1's camera angle; do not use the reference photo's original angle\n③ Lighting & Color Temperature: Strictly follow IMAGE 1's light direction, intensity, shadows and color temperature; remove all color casts from IMAGE 2\n④ Boundary Control: Stay mainly within marked zones; minor edge feathering allowed for seamless blending; do not affect unrelated surfaces\n⑤ Realism & Aesthetics: Replaced objects must have realistic materials, correct scale, and blend harmoniously into the original space";
         const defaultP3 = "Based on the uploaded reference image, generate a single high-quality 3x3 interior visualization collage in exact 1:1 square aspect ratio. Output only the clean collage - no text, no titles, no watermarks, no borders, no labels.\nHighest priority: Faithfully extract and reproduce all details from the reference image, including material textures, light and shadow characteristics, color tones, object qualities, and unique atmosphere. All 9 panels must maintain the exact same spatial structure, furniture layout, and lighting direction. Accurate perspective with zero distortion or shifting.\n3x3 Mixed Grid Layout:\nTop Row Left: Left 45 wide long shot showing the full spatial layout and depth\nTop Row Center: Exact same viewpoint and framing as the uploaded reference image (visual anchor)\nTop Row Right: Close-up detail 1 - highly faithful reproduction of material textures and craftsmanship from the reference image\nMiddle Row Left: Medium shot focusing on main furniture arrangement and functional area, preserving the original light and shadow atmosphere\nMiddle Row Center: Close-up detail 2 - emphasizing light and shadow interaction and surface qualities from the reference image\nMiddle Row Right: Right 45 wide long shot showing the other side of the space\nBottom Row Left: Close-up detail 3 - faithfully presenting another dimension of details from the reference image (e.g., decorative elements, corner craftsmanship, or material contrast)\nBottom Row Center: Medium shot from an alternative angle showing spatial transparency and overall atmosphere, faithful to the original tone\nBottom Row Right: Balanced medium shot concluding with overall harmony and high-end quality\n\nTechnical Requirements:\nStrictly faithful to the reference image's materials, lighting, colors, and fine details; 8K ultra-high resolution with extreme detail; photorealistic material rendering with accurate reflections, refractions, and micro-surface details; professional multi-layer lighting; cinematic color grading with sophisticated, soft, and luxurious tones; extremely sharp, clean, noise-free, and distortion-free.\nGenerate a single cohesive 3x3 collage with strong visual rhythm and dramatic scale contrast, while perfectly capturing the unique details and atmosphere of the reference image.";
         
         const p1 = systemPrompts.TOOL_1 || defaultP1;
@@ -407,8 +418,11 @@ export default async function handler(req, res) {
                     const val = node.system ? (node.value || '') : (adv[node.id] || node.default || '');
                     if (val.toString().trim()) rawValues[node.id] = val.toString().trim();
                 });
-                // 用戶自訂材質節點（label + value 一併翻譯）
-                const userMatNodes = adv.user_material_nodes || [];
+                // 用戶自訂材質節點：_usr_<名稱> = 材質值，與系統節點同層 flat key
+                const userMatNodes = Object.keys(adv)
+                    .filter(k => k.startsWith('_usr_'))
+                    .map(k => ({ label: k.slice(5), value: adv[k] }))
+                    .filter(m => m.label && m.value?.trim());
                 userMatNodes.forEach((m, i) => {
                     if (m.label?.trim()) rawValues[`__umat_${i}_label`] = m.label.trim();
                     if (m.value?.trim()) rawValues[`__umat_${i}_value`] = m.value.trim();
@@ -435,18 +449,16 @@ export default async function handler(req, res) {
                         const val = translatedValues[node.id];
                         if (val) section[node.labels?.['en-US'] || node.id] = val;
                     });
+                    // 3b. 自訂材質節點與 Material Control 同批次建構，確保 JSON 結構一致
+                    if (group === 'materials' && userMatNodes.length > 0) {
+                        userMatNodes.forEach((m, i) => {
+                            const key = translatedValues[`__umat_${i}_label`] || m.label;
+                            const val = translatedValues[`__umat_${i}_value`] || m.value;
+                            if (key && val?.trim()) section[key] = val.trim();
+                        });
+                    }
                     if (Object.keys(section).length > 0) jsonPrompt[title] = section;
                 });
-
-                // 3b. 用戶自訂材質節點 → 注入 Material Control
-                if (userMatNodes.length > 0) {
-                    if (!jsonPrompt['Material Control']) jsonPrompt['Material Control'] = {};
-                    userMatNodes.forEach((m, i) => {
-                        const key = translatedValues[`__umat_${i}_label`] || m.label;
-                        const val = translatedValues[`__umat_${i}_value`] || m.value;
-                        if (key && val?.trim()) jsonPrompt['Material Control'][key] = val.trim();
-                    });
-                }
 
                 // 4. 批量出圖風格一致性附加
                 if (styleRefUrl && styleRefNote) {
@@ -551,17 +563,17 @@ export default async function handler(req, res) {
             saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool, inputUrl: inputUrlForHistory });
             return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: user.points + user.lifetime_points, transaction_id: transactionId });
         } else {
-            await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
+            try { await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail); } catch(e) {}
             try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL' }]); } catch(e) {}
             console.error('[render] no_url response:', JSON.stringify(data).slice(0, 200));
             return res.status(500).json({ code: -1, msg: '出圖完成但結果未返回，請稍後再試。', points_refunded: true });
         }
     } catch (apiError) {
-        await cleanTemp2();
-        await cleanTemp();
-        await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail);
+        await cleanTemp2().catch(() => {});
+        await cleanTemp().catch(() => {});
+        try { await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail); } catch(e) {}
         try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NETWORK_ERROR' }]); } catch(e) {}
-        return res.status(500).json({ code: -1, msg: sanitizeError(`出圖出錯/API 超時: ${apiError.message}`), points_refunded: true });
+        return res.status(500).json({ code: -1, msg: sanitizeError(apiError?.message || '渲染失敗，請稍後再試。'), points_refunded: true });
     }
 }
 

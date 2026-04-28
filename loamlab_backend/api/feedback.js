@@ -12,6 +12,14 @@ const TYPE_LABEL = {
 };
 
 export default async function handler(req, res) {
+    try { return await _handleFeedback(req, res); }
+    catch (fatal) {
+        console.error('[feedback] uncaught fatal:', fatal?.message || fatal);
+        if (!res.headersSent) res.status(500).json({ error: '伺服器內部錯誤，請稍後再試。' });
+    }
+}
+
+async function _handleFeedback(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-User-Email');
@@ -28,12 +36,16 @@ export default async function handler(req, res) {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     if (userEmail) {
-        // IP Pinning 驗證
+        // IP Pinning 驗證（fail-open：DB 異常時放行，不阻斷回報）
         const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
         if (clientIp !== 'unknown') {
-            const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
-            if (!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp) {
-                return res.status(401).json({ code: -1, msg: '登入憑證已過期或網路變更，請重新登入' });
+            try {
+                const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
+                if (!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp) {
+                    return res.status(401).json({ code: -1, msg: '登入憑證已過期或網路變更，請重新登入' });
+                }
+            } catch (ipErr) {
+                console.warn('[feedback] IP check DB error, proceeding:', ipErr?.message);
             }
         }
     }

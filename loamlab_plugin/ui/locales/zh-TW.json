@@ -220,5 +220,10 @@
     "外景": "外景",
     "環境光": "環境光",
     "header_share": "分享",
-    "header_invite": "邀請"
+    "header_invite": "邀請",
+    "style_ref_title": "風格參考",
+    "style_ref_clear": "✕ 清除",
+    "style_ref_upload_title": "上傳風格參考圖",
+    "style_ref_hint": "不選取不影響預設出圖。選取後，所有場景統一參照此圖的光感與色調，批量出圖風格一致性尤為明顯。",
+    "hint_new_engine_for_ao": "啟用環境光遮蔽（AO）可提升截圖品質，但需要新圖形引擎。請至 SketchUp 偏好設定 → 圖形 → 使用新圖形引擎。"
 }

@@ -391,7 +391,7 @@ async function _handleRender(req, res) {
                 const p = part.trim();
                 if (p.includes(': ')) {
                     const spl = p.split(/: (.+)/);
-                    if (spl[1]) changes.push(`• ${spl[1].trim()}`);
+                    if (spl[0] && spl[1]) changes.push(`[${spl[0].trim()}]: ${spl[1].trim()}`);
                 }
             }
             if (changes.length === 0) {

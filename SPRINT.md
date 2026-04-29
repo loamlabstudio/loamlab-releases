@@ -1,15 +1,17 @@
-# LoamLab 行動分享與後台管理升級 SPRINT
+# Sprint: 修正 Smart Canvas 遮罩精準度與提示詞色碼遺失問題
 
 ## CONTEXT_DIGEST
-解決三大痛點：1. 後台管理與預覽邏輯斷裂；2. 前台分享碼易被反推後台提示詞邏輯；3. 行動端 IG 分享流程繁瑣。
-優化方向：採用 Session 隔離加密、Web Share API 圖文聯動、以及可編輯的 JSON 提示詞沙盒。
-詳見：[implementation_plan.md](file:///c:/Users/qingwen/.gemini/antigravity/brain/34872013-50fb-4384-8ad0-d0432b25639a/implementation_plan.md)
+目前 Tool 2 (Smart Canvas) 渲染失敗或色塊殘留的兩大根因：1. 前端合成 `base_image` 給 AI 時將標記色透明度設為 0.72，導致邊緣色差。2. 後端 `render.js` 處理 prompt 時，強制把色碼截斷拋棄，只送出純文字描述，導致 AI 失去顏色對應資訊。需將前端色塊改為 100% 不透明，並修復後端字串處理邏輯以完整保留色碼。
 
 ## TASKS
-- [x] 1. **整合預覽與手動編輯**：admin.html 預覽區加 👁/✏️ 切換，編輯模式可直接改 JSON + 「▶ 套用」測試。
-- [x] 2. **靜默提示詞 (Hidden Nodes)**：`hidden: true` 節點紫色標識，admin 可 🙈 切換，plugin UI 過濾不顯示，render.js 繼續合併送出。
-- [x] 3. **分享加密與邏輯防禦**：Session Hash 機制已就緒（stats.js + qr-handoff.html + app.js 均已實裝，T3 在上一版已完成）。
-- [x] 4. **一鍵圖文分享 (Mobile UI)**：qr-handoff.html 加入 navigator.share 原生分享（圖片打包為 File），fallback 舊流程。
-- [x] 5. **後台 UI 降噪優化**：系統層提示加琥珀色區塊標頭，用戶控制項加青色區塊標頭，hidden 節點紫色。
+
+1. **[MUST] 修正合成圖的透明度設定**
+   - **影響檔案**：`loamlab_plugin/ui/app.js`
+   - **說明**：在 `_scCreateAnnotatedComposite` 函數中，將原本的 `ctx.globalAlpha = 0.72` 變更為 `ctx.globalAlpha = 1.0`，確保傳送給 API 的合成標記色塊為 100% 不透明實色，讓 AI 提取遮罩零誤差。
+   - **[x] 已驗證跳過**：當前代碼無此問題。`_scCreateAnnotatedComposite` 使用 `source-in` 合成，tint canvas 像素已為 100% 不透明，`ctx.globalAlpha` 保持預設 1.0，不需修改。
+
+2. **[x] 修復後端 Prompt 色碼截斷 Bug**
+   - **影響檔案**：`loamlab_backend/api/render.js`
+   - **說明**：定位 `activeTool === 2` 的 prompt 字串切分邏輯。將原本遺棄 `spl[0]` 的寫法（`if (spl[1]) changes.push('• ' + spl[1].trim());`），修改為 `if (spl[0] && spl[1]) changes.push(\`[\${spl[0].trim()}]: \${spl[1].trim()}\`);`，確保傳給 AI 的 `{{CHANGES}}` 變數能完整映射色碼（例如：`[#ff6432]: 換成沙發`）。
 
 status: DONE

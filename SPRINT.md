@@ -1,18 +1,18 @@
-# Sprint: 結構化 Smart Canvas 提示詞與色塊映射
+# Sprint: 精簡 Smart Canvas 遮罩提示詞映射結構
 
 ## CONTEXT_DIGEST
-為了讓 Atlas 的多模態模型能精準映射「多區域修改」，同時避免使用生硬符號（如 `[]`）導致解析崩潰，我們需要將後端 `render.js` 中處理 prompt 的邏輯重構。將原本的色碼與文字，轉化為結構化且語意明確的鍵值對（如 `Zone Color: #HEX, Target Object: XXX`），讓 AI 能嚴格對應色塊與物件。
+為了避免冗長的 Prompt 分散 AI 模型注意力，並加速解析，需將後端 `render.js` 傳遞的 `{{CHANGES}}` 鍵值對結構進一步極致精簡。我們將採用最短、最明確的箭頭映射語法（如 `Color #HEX -> Target`），去除不必要的形容詞。
 
 ## TASKS
 
-1. **[x] 重構後端色碼映射格式**
+1. **[x] 精簡後端色碼映射格式**
    - **影響檔案**：`loamlab_backend/api/render.js`
-   - **說明**：定位 `activeTool === 2` 的 prompt 字串切分邏輯。將字串組合的方式改為高可讀性的結構化輸出：
+   - **說明**：定位 `activeTool === 2` 的 prompt 字串切分邏輯。將其修改為最精簡的映射格式：
      ```javascript
      if (spl[0] && spl[1]) {
-         changes.push(`- Zone Color (HEX): ${spl[0].trim()}\n  Target Object: ${spl[1].trim()}`);
+         changes.push(`Color ${spl[0].trim()} -> ${spl[1].trim()}`);
      }
      ```
-     這會讓送給 AI 的 `{{CHANGES}}` 變數變成非常清晰的條列式結構，徹底消除結構模糊的問題，並確保色碼 100% 存活。
+     這會讓 `{{CHANGES}}` 變成最乾淨的 `Color #ff6432 -> 女鬼`，大幅降低視覺大模型的理解負擔。
 
 status: DONE

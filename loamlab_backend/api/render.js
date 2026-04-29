@@ -392,7 +392,7 @@ async function _handleRender(req, res) {
                 if (p.includes(': ')) {
                     const spl = p.split(/: (.+)/);
                     if (spl[0] && spl[1]) {
-                        changes.push(`- Zone Color (HEX): ${spl[0].trim()}\n  Target Object: ${spl[1].trim()}`);
+                        changes.push(`Color ${spl[0].trim()} -> ${spl[1].trim()}`);
                     }
                 }
             }

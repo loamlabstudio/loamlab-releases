@@ -23,25 +23,6 @@ function sanitizeMsg(msg) {
         .replace(/Failed to open TCP connection/gi, '伺服器連線失敗');
 }
 
-// KOL 推廣碼 — URL 捕捉與 localStorage 存取（30 天有效期）
-function captureKolRefFromUrl() {
-    try {
-        const params = new URLSearchParams(window.location.search);
-        const ref = params.get('ref');
-        if (!ref) return;
-        const expiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
-        localStorage.setItem('loamlab_kol_ref', JSON.stringify({ code: ref.toUpperCase(), expiry }));
-    } catch (e) {}
-}
-function getStoredKolRef() {
-    try {
-        const raw = localStorage.getItem('loamlab_kol_ref');
-        if (!raw) return null;
-        const { code, expiry } = JSON.parse(raw);
-        if (Date.now() > expiry) { localStorage.removeItem('loamlab_kol_ref'); return null; }
-        return code;
-    } catch (e) { return null; }
-}
 
 // 實時進度條計時器與背景列隊計數器
 let renderTimer = null;
@@ -1738,7 +1719,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // Fetch T1 dynamic nodes + options library
     fetchT1Nodes();
     fetchOptions();
-    captureKolRefFromUrl();
 
     // 解析度切換時更新按鈕點數預覽，並顯示 4K 方案限制提示
     document.querySelectorAll('input[name="resolution"]').forEach(radio => {
@@ -3197,7 +3177,7 @@ window.openCheckout = async function (planKey, quantity = 1) {
             const res = await fetch(`${API_BASE}/api/user?action=checkout`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ planKey, email: window.loamlabUserEmail, quantity: qty, referralCode: getStoredKolRef() })
+                body: JSON.stringify({ planKey, email: window.loamlabUserEmail, quantity: qty })
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();

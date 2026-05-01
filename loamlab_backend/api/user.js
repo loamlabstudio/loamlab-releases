@@ -17,7 +17,7 @@ export default async function handler(req, res) {
 
     // ── Checkout sub-route（不需要 Supabase auth）──────────────────────────
     if (req.method === 'POST' && req.query.action === 'checkout') {
-        const { planKey, email, quantity = 1 } = req.body || {};
+        const { planKey, email, quantity = 1, referralCode } = req.body || {};
         if (!planKey || !email) return res.status(400).json({ error: 'Missing planKey or email' });
         const productId = DODO_PRODUCTS[planKey.toUpperCase()];
         if (!productId) return res.status(400).json({ error: 'Invalid planKey' });
@@ -25,6 +25,28 @@ export default async function handler(req, res) {
         const DODO_API_KEY = process.env.DODO_API_KEY;
         const DODO_DISCOUNT_CODE = process.env.DODO_DISCOUNT_CODE || '';
         const fallbackUrl = `https://checkout.dodopayments.com/buy/${productId}?quantity=${qty}&customer_email=${encodeURIComponent(email)}`;
+
+        // 歸因綁定：若前端帶來 referralCode 且用戶尚未綁定，自動寫入 referred_by
+        if (referralCode) {
+            try {
+                const sbUrl = process.env.SUPABASE_URL;
+                const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+                if (sbUrl && sbKey) {
+                    const sb = createClient(sbUrl, sbKey);
+                    const { data: me } = await sb.from('users').select('referred_by').eq('email', email).maybeSingle();
+                    if (me && !me.referred_by) {
+                        const { data: kol } = await sb.from('users').select('email').eq('referral_code', referralCode.toUpperCase()).maybeSingle();
+                        if (kol && kol.email !== email) {
+                            await sb.from('users').update({ referred_by: kol.email }).eq('email', email);
+                            console.log(`[checkout] auto-bound referred_by: ${email} → ${kol.email}`);
+                        }
+                    }
+                }
+            } catch (bindErr) {
+                console.warn('[checkout] referral bind failed (non-fatal):', bindErr.message);
+            }
+        }
+
         if (!DODO_API_KEY) {
             console.warn('[checkout] DODO_API_KEY not set, using fallback URL');
             return res.json({ checkoutUrl: fallbackUrl, discountApplied: false });

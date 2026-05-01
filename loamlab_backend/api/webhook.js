@@ -160,7 +160,44 @@ async function processTopup(customerEmail, variantId, orderId, platform) {
         order_id: fullOrderId
     }]);
 
+    // KOL 分潤快照（每次付款均觸發，與首單點數獎勵並行）
+    const PLAN_PRICES_CENTS = { starter: 700, pro: 1500, studio: 3500, topup: 490 };
+    const amountPaid = planName ? (PLAN_PRICES_CENTS[planName] || 490) : 490;
+    await writeKolCommission(customerEmail, amountPaid, fullOrderId);
+
     console.log(`[🚀金流] 成功處理 ${platform} 充值: ${customerEmail} (+${pointsToAdd} pts)`);
+}
+
+async function writeKolCommission(buyerEmail, amountPaid, orderId) {
+    try {
+        const { data: buyer } = await supabase.from('users')
+            .select('referred_by').eq('email', buyerEmail).maybeSingle();
+        if (!buyer?.referred_by) return;
+
+        const kolEmail = buyer.referred_by;
+        const { data: kol } = await supabase.from('users')
+            .select('referral_code, referral_success_count').eq('email', kolEmail).maybeSingle();
+        if (!kol?.referral_code) return;
+
+        // 以 referral_success_count 判斷 Tier（已由首單獎勵邏輯維護）
+        const paidCount = kol.referral_success_count || 0;
+        const rate = paidCount < 50 ? 0.05 : paidCount < 100 ? 0.10 : 0.15;
+        const commission = Math.round(amountPaid * rate);
+
+        await supabase.from('kol_ledger').insert([{
+            kol_code: kol.referral_code,
+            kol_email: kolEmail,
+            buyer_email: buyerEmail,
+            transaction_id: orderId,
+            amount_paid: amountPaid,
+            commission_rate: rate,
+            commission_amount: commission,
+            status: 'pending'
+        }]);
+        console.log(`[💰KOL] ${kolEmail} Tier${paidCount < 50 ? 1 : paidCount < 100 ? 2 : 3} +${commission}¢ (rate=${rate})`);
+    } catch (e) {
+        console.warn('[KOL] writeKolCommission failed (non-fatal):', e.message);
+    }
 }
 
 function verifySignature(rawBody, signature, secret) {

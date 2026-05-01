@@ -23,6 +23,26 @@ function sanitizeMsg(msg) {
         .replace(/Failed to open TCP connection/gi, '伺服器連線失敗');
 }
 
+// KOL 推廣碼 — URL 捕捉與 localStorage 存取（30 天有效期）
+function captureKolRefFromUrl() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const ref = params.get('ref');
+        if (!ref) return;
+        const expiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
+        localStorage.setItem('loamlab_kol_ref', JSON.stringify({ code: ref.toUpperCase(), expiry }));
+    } catch (e) {}
+}
+function getStoredKolRef() {
+    try {
+        const raw = localStorage.getItem('loamlab_kol_ref');
+        if (!raw) return null;
+        const { code, expiry } = JSON.parse(raw);
+        if (Date.now() > expiry) { localStorage.removeItem('loamlab_kol_ref'); return null; }
+        return code;
+    } catch (e) { return null; }
+}
+
 // 實時進度條計時器與背景列隊計數器
 let renderTimer = null;
 let currentPct = 0;
@@ -35,6 +55,7 @@ let finishedScenesCount = 0;
 let currentActiveTool = 1;
 let _baseImageEntry = null; // 工具 2/3/4：從歷史選取的底圖
 let _referenceImageBase64 = null; // 工具 2：本地上傳的參考圖 base64
+let _tool1StyleRefUrl = null;     // 工具 1：從歷史選擇的風格參考圖 URL
 let t1NodesData = []; // Store Tool 1 advanced nodes configuration
 let optionsData = []; // SYSTEM_OPTIONS from backend
 let promptEngineMode = 'nodes'; // 由後端 get_t1_nodes 回傳值決定
@@ -192,17 +213,26 @@ function renderT1Nodes() {
                 const max = node.max ?? 100;
                 const step = node.step ?? 1;
                 const def = node.default ?? node.min ?? 0;
+                const _sliderVals = JSON.parse(localStorage.getItem('loamlab_node_vals') || '{}');
+                const initVal = _sliderVals[node.id] !== undefined ? _sliderVals[node.id] : def;
 
                 item.innerHTML = `
                     <label class="node-label">${label}</label>
                     <div class="node-slider-container">
-                        <input type="range" id="t1-node-${node.id}" class="node-slider" min="${min}" max="${max}" step="${step}" value="${def}">
-                        <span class="node-slider-val" id="t1-node-${node.id}-val">${def}</span>
+                        <input type="range" id="t1-node-${node.id}" class="node-slider" min="${min}" max="${max}" step="${step}" value="${initVal}">
+                        <span class="node-slider-val" id="t1-node-${node.id}-val">${initVal}</span>
                     </div>
                 `;
                 const slider = item.querySelector('.node-slider');
                 const valSpan = item.querySelector('.node-slider-val');
-                slider.addEventListener('input', (e) => { valSpan.textContent = e.target.value; });
+                slider.addEventListener('input', (e) => {
+                    valSpan.textContent = e.target.value;
+                    try {
+                        const _nv = JSON.parse(localStorage.getItem('loamlab_node_vals') || '{}');
+                        _nv[node.id] = e.target.value;
+                        localStorage.setItem('loamlab_node_vals', JSON.stringify(_nv));
+                    } catch(_) {}
+                });
             } else {
                 const adminOpts = optionsData.filter(o => o.field_id === node.id);
                 const personalOpts = (userChips[node.id] || []).map(c => ({
@@ -246,10 +276,19 @@ function renderT1Nodes() {
                     </div>`;
                     
                 const hiddenInput = item.querySelector('#t1-node-' + node.id);
-                
-                // 初始化預設值
+
+                // 初始化值：優先用 localStorage 保存的用戶選擇，否則套用 is_default
+                const _allNodeVals = JSON.parse(localStorage.getItem('loamlab_node_vals') || '{}');
+                const savedNodeVal = _allNodeVals[node.id];
                 const defaultChips = item.querySelectorAll('.node-chip[data-chip-default="1"]');
-                if (defaultChips.length > 0) {
+                if (savedNodeVal !== undefined && savedNodeVal !== '') {
+                    hiddenInput.value = savedNodeVal;
+                    const parts = savedNodeVal.split(',').map(s => s.trim()).filter(Boolean);
+                    item.querySelectorAll('.node-chip').forEach(c => {
+                        c.classList.toggle('active', parts.includes(c.dataset.chipValue));
+                    });
+                    if (typeof _syncNodeDisplay === 'function') setTimeout(() => _syncNodeDisplay(node.id), 0);
+                } else if (defaultChips.length > 0) {
                     const defVals = Array.from(defaultChips).map(c => c.dataset.chipValue);
                     hiddenInput.value = defVals.join(', ');
                     defaultChips.forEach(c => c.classList.add('active'));
@@ -280,6 +319,11 @@ function renderT1Nodes() {
                             btn.classList.add('active');
                         }
                         hiddenInput.value = parts.join(', ');
+                        try {
+                            const _nv = JSON.parse(localStorage.getItem('loamlab_node_vals') || '{}');
+                            _nv[node.id] = hiddenInput.value;
+                            localStorage.setItem('loamlab_node_vals', JSON.stringify(_nv));
+                        } catch(_) {}
                         if (typeof _syncNodeDisplay === 'function') _syncNodeDisplay(node.id);
                     });
                 });
@@ -304,6 +348,76 @@ function renderT1Nodes() {
     }
 }
 
+// ── 系統提示 Toast（一次性，可關閉）────────────────────────────────────────────
+function _showSystemHint(hintId) {
+    const dismissedKey = 'loamlab_hint_dismissed_' + hintId;
+    if (localStorage.getItem(dismissedKey)) return;
+    const existing = document.getElementById('system-hint-' + hintId);
+    if (existing) return;
+    const msg = t('hint_' + hintId) || hintId;
+    const el = document.createElement('div');
+    el.id = 'system-hint-' + hintId;
+    el.className = 'mx-3 mb-2 flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2';
+    el.innerHTML = `<svg class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><p class="text-[11px] text-amber-200/80 leading-relaxed flex-1">${msg}</p><button onclick="this.parentElement.remove();localStorage.setItem('${dismissedKey}','1')" class="text-white/30 hover:text-white/60 text-[10px] flex-shrink-0 mt-0.5">✕</button>`;
+    const anchor = document.getElementById('style-ref-picker') || document.querySelector('.tool-panel-top') || document.body;
+    anchor.parentNode?.insertBefore(el, anchor) || document.body.prepend(el);
+}
+
+// ── 工具1 風格參考圖（從歷史渲染選取） ────────────────────────────────────────
+function _renderStyleRefThumbs() {
+    const thumbsEl = document.getElementById('style-ref-thumbs');
+    const uploadArea = document.getElementById('style-ref-upload-area');
+    const clearBtn = document.getElementById('style-ref-clear-btn');
+    if (!thumbsEl) return;
+
+    const isDataUri = _tool1StyleRefUrl && _tool1StyleRefUrl.startsWith('data:');
+    const CHECK_SVG = '<svg class="w-3 h-3 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>';
+
+    // 上傳按鈕區：若已上傳圖片則顯示縮圖預覽+勾選狀態
+    if (uploadArea) {
+        if (isDataUri) {
+            uploadArea.className = 'relative flex-shrink-0 cursor-pointer rounded-md overflow-hidden ring-2 ring-amber-400 transition-all' ;
+            uploadArea.style.cssText = 'width:52px;height:39px;';
+            uploadArea.innerHTML = `<input type="file" id="style-ref-input" accept="image/*" class="hidden" onchange="_onStyleRefUpload(this)"><img src="${_tool1StyleRefUrl}" class="w-full h-full object-cover"><div class="absolute inset-0 flex items-center justify-center bg-amber-500/25">${CHECK_SVG}</div>`;
+            uploadArea.onclick = () => uploadArea.querySelector('input')?.click();
+        } else {
+            uploadArea.className = 'relative flex-shrink-0 cursor-pointer rounded-md border border-dashed border-white/20 hover:border-amber-400/50 hover:bg-amber-500/5 transition-all flex items-center justify-center overflow-hidden';
+            uploadArea.style.cssText = 'width:52px;height:39px;';
+            uploadArea.innerHTML = `<input type="file" id="style-ref-input" accept="image/*" class="hidden" onchange="_onStyleRefUpload(this)"><svg class="w-4 h-4 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>`;
+            uploadArea.onclick = null;
+        }
+    }
+
+    // 歷史縮圖列表
+    const renders = (window._sessionRenders || []).slice(0, 5);
+    thumbsEl.innerHTML = renders.map(r => {
+        const url = r.cloud_url || '';
+        const sel = url && url === _tool1StyleRefUrl;
+        return `<div onclick="_selectStyleRef('${url}')" title="${r.scene || ''}" class="relative flex-shrink-0 cursor-pointer rounded-md overflow-hidden transition-all ${sel ? 'ring-2 ring-amber-400 opacity-100' : 'ring-1 ring-white/10 opacity-50 hover:opacity-85 hover:ring-white/25'}" style="width:52px;height:39px;"><img src="${url}" class="w-full h-full object-cover">${sel ? `<div class="absolute inset-0 flex items-center justify-center bg-amber-500/25">${CHECK_SVG}</div>` : ''}</div>`;
+    }).join('');
+
+    if (clearBtn) clearBtn.classList.toggle('hidden', !_tool1StyleRefUrl);
+}
+function _onStyleRefUpload(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        _tool1StyleRefUrl = e.target.result;
+        _renderStyleRefThumbs();
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+}
+function _selectStyleRef(url) {
+    _tool1StyleRefUrl = url;
+    _renderStyleRefThumbs();
+}
+function _clearStyleRef() {
+    _tool1StyleRefUrl = null;
+    _renderStyleRefThumbs();
+}
+
 // ── Legacy/Nodes 模式：純後端控制 ────────────────────────────────────────────
 function _applyPromptMode() {
     const isLegacy = promptEngineMode === 'legacy';
@@ -312,50 +426,137 @@ function _applyPromptMode() {
     document.getElementById('t1-presets-section')?.classList.toggle('hidden', isLegacy);
 }
 
-// ── 用戶自訂材質節點 ──────────────────────────────────────────────────────────
-let userMaterialNodes = JSON.parse(localStorage.getItem('loamlab_user_mat_nodes') || '[]');
+// ── 用戶自訂材質節點（surface-node 架構）──────────────────────────────────────
+let userSurfaceNodes = JSON.parse(localStorage.getItem('loamlab_user_surface_nodes') || '[]');
+// [{id: string, name: string, value: string}]
 
-function _saveUserMatNodes() {
-    localStorage.setItem('loamlab_user_mat_nodes', JSON.stringify(userMaterialNodes));
+const _SURF_PRESETS_FALLBACK = [
+    { label: '磁磚', val: 'ceramic tiles' },
+    { label: '木地板', val: 'wood flooring' },
+    { label: '大理石', val: 'marble' },
+    { label: '混凝土', val: 'concrete' },
+    { label: '玻璃', val: 'glass' },
+];
+function _getSurfacePresets() {
+    const fromBackend = (typeof optionsData !== 'undefined' ? optionsData : [])
+        .filter(o => o.field_id === '_surf_presets');
+    return fromBackend.length > 0
+        ? fromBackend.map(o => ({ label: o.labels?.[currentLang] || o.label || o.value, val: o.value || o.label }))
+        : _SURF_PRESETS_FALLBACK;
 }
 
-function addUserMaterialNode() {
-    const labelEl = document.getElementById('user-mat-label-input');
-    const valueEl = document.getElementById('user-mat-value-input');
-    const label = (labelEl?.value || '').trim();
-    const value = (valueEl?.value || '').trim();
-    if (!label || !value) return;
-    userMaterialNodes.push({ id: Date.now().toString(36), label, value });
-    _saveUserMatNodes();
-    if (labelEl) labelEl.value = '';
-    if (valueEl) valueEl.value = '';
-    renderUserMaterialList();
-    // 收起新增列
-    document.getElementById('user-mat-add-row')?.classList.add('hidden');
+function _saveSurfaceNodes() {
+    localStorage.setItem('loamlab_user_surface_nodes', JSON.stringify(userSurfaceNodes));
 }
 
-function removeUserMaterialNode(id) {
-    userMaterialNodes = userMaterialNodes.filter(m => m.id !== id);
-    _saveUserMatNodes();
-    renderUserMaterialList();
+function addUserSurfaceNode() {
+    const nameEl = document.getElementById('user-surface-name-input');
+    const name = (nameEl?.value || '').trim();
+    if (!name) return;
+    userSurfaceNodes.push({ id: Date.now().toString(36), name, value: '' });
+    _saveSurfaceNodes();
+    if (nameEl) nameEl.value = '';
+    document.getElementById('user-surface-add-row')?.classList.add('hidden');
+    _rebuildUserSurfaceSection();
 }
 
-function renderUserMaterialList() {
-    const list = document.getElementById('user-mat-list');
-    if (!list) return;
-    if (userMaterialNodes.length === 0) {
-        list.innerHTML = '';
-        return;
-    }
-    list.innerHTML = userMaterialNodes.map(m => `
-        <div class="flex items-center gap-1 bg-white/5 border border-white/5 rounded px-2 py-1 text-[10px]">
-            <span class="text-white/60 font-medium shrink-0">${m.label}</span>
-            <span class="text-white/20 shrink-0">→</span>
-            <span class="text-white/40 flex-1 min-w-0 truncate">${m.value}</span>
-            <button onclick="removeUserMaterialNode('${m.id}')"
-                class="text-white/20 hover:text-red-400 shrink-0 ml-1 transition-colors">✕</button>
+function removeUserSurfaceNode(id) {
+    userSurfaceNodes = userSurfaceNodes.filter(n => n.id !== id);
+    _saveSurfaceNodes();
+    _rebuildUserSurfaceSection();
+}
+
+function _updateSurfaceNodeValue(id, val) {
+    const node = userSurfaceNodes.find(n => n.id === id);
+    if (!node) return;
+    node.value = val;
+    clearTimeout(window._surfSaveTimer);
+    window._surfSaveTimer = setTimeout(_saveSurfaceNodes, 400);
+}
+
+function _applySurfaceCustomChip(nodeId) {
+    const inp = document.getElementById('uscustom-' + nodeId);
+    if (!inp || !inp.value.trim()) return;
+    const val = inp.value.trim();
+    const hiddenInput = document.getElementById('usni-' + nodeId);
+    const chipsRow = document.getElementById('usnchips-' + nodeId);
+    if (!hiddenInput || !chipsRow) return;
+    // 清除舊的 personal chip
+    chipsRow.querySelectorAll('.node-chip-personal').forEach(c => c.remove());
+    // 取消所有 preset chip active
+    chipsRow.querySelectorAll('.node-chip').forEach(o => o.classList.remove('active'));
+    // 建立新 personal chip
+    const wrap = document.createElement('span');
+    wrap.className = 'node-chip-wrap';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'node-chip node-chip-personal active';
+    btn.dataset.chipValue = val;
+    btn.textContent = val;
+    const del = document.createElement('span');
+    del.className = 'node-chip-del';
+    del.textContent = '✕';
+    del.addEventListener('click', () => {
+        wrap.remove();
+        hiddenInput.value = '';
+        _updateSurfaceNodeValue(nodeId, '');
+    });
+    wrap.appendChild(btn);
+    wrap.appendChild(del);
+    chipsRow.insertBefore(wrap, chipsRow.firstChild);
+    hiddenInput.value = val;
+    _updateSurfaceNodeValue(nodeId, val);
+    inp.value = '';
+}
+
+function _buildSurfaceNodeItem(node) {
+    const item = document.createElement('div');
+    item.className = 'node-item';
+    const chipHtml = _getSurfacePresets().map(p =>
+        `<button type="button" class="node-chip${node.value === p.val ? ' active' : ''}" data-chip-value="${p.val}">${p.label}</button>`
+    ).join('');
+    // 若已存有 custom 值（非 preset），預先渲染 personal chip
+    const isCustomVal = node.value && !_getSurfacePresets().find(p => p.val === node.value);
+    const personalHtml = isCustomVal
+        ? `<span class="node-chip-wrap">
+            <button type="button" class="node-chip node-chip-personal active" data-chip-value="${node.value.replace(/"/g,'&quot;')}">${node.value}</button>
+            <span class="node-chip-del" onclick="this.closest('.node-chip-wrap').remove();document.getElementById('usni-${node.id}').value='';_updateSurfaceNodeValue('${node.id}','')">✕</span>
+           </span>`
+        : '';
+    item.innerHTML = `
+        <div class="flex items-center justify-between mb-0.5">
+            <label class="node-label">${node.name}</label>
+            <button type="button" onclick="removeUserSurfaceNode('${node.id}')"
+                class="text-[10px] text-white/20 hover:text-red-400 transition-colors mb-1">✕</button>
         </div>
-    `).join('');
+        <div class="node-input-wrapper">
+            <input type="hidden" id="usni-${node.id}" value="${(node.value || '').replace(/"/g,'&quot;')}">
+            <div class="node-chips" id="usnchips-${node.id}">${personalHtml}${chipHtml}</div>
+            <div class="node-custom-chip-row">
+                <input type="text" id="uscustom-${node.id}" class="node-custom-chip-input" placeholder="例：高反射鏡面">
+                <button type="button" class="node-custom-chip-btn" onclick="_applySurfaceCustomChip('${node.id}')">＋</button>
+            </div>
+        </div>`;
+    const hiddenInput = item.querySelector('#usni-' + node.id);
+    const chipsRow = item.querySelector('#usnchips-' + node.id);
+    // Preset chip click（replace strategy）
+    chipsRow.querySelectorAll('.node-chip:not(.node-chip-personal)').forEach(btn => {
+        btn.addEventListener('click', () => {
+            chipsRow.querySelectorAll('.node-chip-personal').forEach(c => c.closest('.node-chip-wrap')?.remove() || c.remove());
+            chipsRow.querySelectorAll('.node-chip').forEach(o => o.classList.remove('active'));
+            btn.classList.add('active');
+            hiddenInput.value = btn.dataset.chipValue;
+            _updateSurfaceNodeValue(node.id, btn.dataset.chipValue);
+        });
+    });
+    return item;
+}
+
+function _rebuildUserSurfaceSection() {
+    const container = document.getElementById('user-surface-nodes-container');
+    if (!container) return;
+    container.innerHTML = '';
+    userSurfaceNodes.forEach(node => container.appendChild(_buildSurfaceNodeItem(node)));
 }
 
 function _createUserMaterialsSection() {
@@ -364,24 +565,19 @@ function _createUserMaterialsSection() {
     section.innerHTML = `
         <div class="flex items-center justify-between mb-1">
             <span class="text-[9px] text-white/25 uppercase tracking-widest">${t('custom_materials') || '自訂材質'}</span>
-            <button onclick="document.getElementById('user-mat-add-row').classList.toggle('hidden')"
+            <button onclick="document.getElementById('user-surface-add-row').classList.toggle('hidden')"
                 class="text-[10px] text-[#dc2626]/60 hover:text-[#dc2626] transition-colors">+ 新增</button>
         </div>
-        <div id="user-mat-add-row" class="hidden flex flex-col gap-1 mb-1.5">
-            <input id="user-mat-label-input"
-                class="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-[11px] text-white/80 outline-none focus:border-[#dc2626]/50 placeholder-white/20"
-                placeholder="${t('custom_mat_name_ph') || '材質名稱，例：綠色部分'}">
-            <div class="flex gap-1">
-                <input id="user-mat-value-input"
-                    class="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-[11px] text-white/80 outline-none focus:border-[#dc2626]/50 placeholder-white/20"
-                    placeholder="${t('custom_mat_desc_ph') || '描述，例：鏡面反射，高光澤'}">
-                <button onclick="addUserMaterialNode()"
-                    class="shrink-0 bg-[#dc2626]/15 border border-[#dc2626]/30 text-red-300 hover:bg-[#dc2626]/30 rounded px-2 text-[10px] transition-colors">${t('custom_mat_btn') || '確認'}</button>
-            </div>
+        <div id="user-surface-add-row" class="hidden flex gap-1 mb-1.5">
+            <input id="user-surface-name-input"
+                class="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-[11px] text-white/80 outline-none focus:border-[#dc2626]/50 placeholder-white/20"
+                placeholder="例：綠色部分">
+            <button onclick="addUserSurfaceNode()"
+                class="shrink-0 bg-[#dc2626]/15 border border-[#dc2626]/30 text-red-300 hover:bg-[#dc2626]/30 rounded px-2 text-[10px] transition-colors">${t('custom_mat_btn') || '確認'}</button>
         </div>
-        <div id="user-mat-list" class="flex flex-col gap-1"></div>
+        <div id="user-surface-nodes-container"></div>
     `;
-    setTimeout(() => renderUserMaterialList(), 0);
+    setTimeout(() => _rebuildUserSurfaceSection(), 0);
     return section;
 }
 
@@ -622,6 +818,7 @@ function setActiveTool(n, skipTutorial) {
     var refPicker = document.getElementById('reference-image-picker');
     if (refPicker) refPicker.classList.add('hidden');
     clearReferenceImage();
+    document.getElementById('style-ref-picker')?.classList.add('hidden');
     // 重置：切換工具時恢復 scenes-container，恢復按鈕文字，恢復 picker 樣式
     if (scenesContainer) scenesContainer.classList.remove('hidden');
     if (renderLabel) renderLabel.textContent = t('btn_render');
@@ -648,6 +845,8 @@ function setActiveTool(n, skipTutorial) {
         if (titleEl) titleEl.textContent = (UI_LANG[currentLang] || UI_LANG['en-US'])['title'];
         rebuildMaterialTags();
         if (promptInput) promptInput.placeholder = (UI_LANG[currentLang] || UI_LANG['en-US'])['prompt_ph'];
+        const styleRefPicker = document.getElementById('style-ref-picker');
+        if (styleRefPicker) { styleRefPicker.classList.remove('hidden'); _renderStyleRefThumbs(); }
     } else if (n === 2) {
         const lang2 = UI_LANG[currentLang] || UI_LANG['en-US'];
         if (titleEl) titleEl.textContent = lang2['tool_furniture'];
@@ -797,6 +996,9 @@ function updateCostPreview() {
 function finalizeRenderUI() {
     stopRenderTimer();
     updateProgressUI('Done!', 100);
+    // 所有渲染結果已收到，此時才還原 SketchUp 的強制樣式設定
+    try { sketchup.restore_render_style({}); } catch(_) {}
+
     setTimeout(() => {
         const progressBlock = document.getElementById('progress-wrapper');
         if (progressBlock) progressBlock.classList.add('opacity-0');
@@ -910,6 +1112,10 @@ window.receiveFromRuby = function (data) {
         renderHistoryGrid([...rubyFiles, ...sessionItems]);
         return;
     }
+    if (data.status === 'system_hint') {
+        _showSystemHint(data.hint_id);
+        return;
+    }
     if (data.action === 'scene_screenshot') {
         // 截圖後填入骨架卡片縮略圖
         const _gridEl = document.getElementById('preview-grid');
@@ -978,6 +1184,9 @@ window.receiveFromRuby = function (data) {
         statusText.textContent = `${UI_LANG[currentLang]['status_success']}：v${data.version}`;
         statusText.classList.replace('text-gray-400', 'text-green-500');
         renderScenesList(data.scenes);
+
+        // AO 不支持提示（classic engine 用戶在插件開啟時立即告知，無需等到渲染後）
+        if (data.ao_unsupported) _showSystemHint('new_engine_for_ao');
 
         // Header 顯示版本號，並同步全域版本常數
         const versionLabel = document.getElementById('current-version-label');
@@ -1151,6 +1360,7 @@ window.receiveFromRuby = function (data) {
                 prompt: (promptEl ? promptEl.value : ''),
                 timestamp: new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15).replace(/(\d{8})(\d{6})/, '$1_$2')
             });
+            if (currentActiveTool === 1) _renderStyleRefThumbs();
 
             // AI 渲染結果自動存檔（Ruby 下載圖片 → save_path + 更新 JSON 索引）
             if (window.sketchup) {
@@ -1304,9 +1514,10 @@ function renderScenesList(scenes) {
                     </div>
                     <div class="flex items-start gap-2.5">
                         <span class="text-[10px] font-bold bg-[#dc2626] text-white rounded-full w-4 h-4 flex items-center justify-center shrink-0 mt-0.5">3</span>
-                        <span class="text-[11px] text-white/50 leading-relaxed">${langObj['scene_empty_step3'] || 'Click ↺ Refresh above to load your scenes'}</span>
+                        <span class="text-[11px] text-white/50 leading-relaxed">${langObj['scene_empty_step3'] || 'Reopen the plugin to see your scenes'}</span>
                     </div>
                 </div>
+                <button onclick="if(window.sketchup){try{sketchup.getInitialData({});}catch(_){}}" class="text-[11px] font-semibold text-white/60 hover:text-white border border-white/15 hover:border-white/40 rounded-lg px-4 py-2 transition-all text-center" data-i18n="scene_refresh">↺ Refresh Scenes</button>
             </div>`;
         return;
     }
@@ -1335,6 +1546,7 @@ function renderScenesList(scenes) {
         <div class="flex justify-between items-center mb-0 px-2 pt-2 pb-2 border-b border-white/5 shrink-0">
             <h3 class="text-[11px] font-bold text-white/60 tracking-wider uppercase" data-i18n="scene_select">Select Perspectives</h3>
             <div class="flex items-center gap-2">
+                <button id="btn-refresh-scenes" title="${t('scene_refresh') || 'Refresh Scenes'}" class="text-[11px] text-white/35 hover:text-white/80 transition-colors px-1" onclick="if(window.sketchup){try{sketchup.getInitialData({});}catch(_){}}">↺</button>
                 <button id="btn-select-all-scenes" class="text-[9px] text-white/40 hover:text-white/80 tracking-widest transition-colors">全選</button>
                 <span id="scene-count-label" data-count="${scenes.length}" class="text-[9px] text-white font-bold tracking-widest bg-[#dc2626] px-2.5 py-1 rounded-full shadow-md">Total ${scenes.length} Scenes</span>
             </div>
@@ -1526,6 +1738,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Fetch T1 dynamic nodes + options library
     fetchT1Nodes();
     fetchOptions();
+    captureKolRefFromUrl();
 
     // 解析度切換時更新按鈕點數預覽，並顯示 4K 方案限制提示
     document.querySelectorAll('input[name="resolution"]').forEach(radio => {
@@ -1681,11 +1894,13 @@ document.addEventListener("DOMContentLoaded", () => {
                         advanced_settings[node.id] = finalVals.filter(Boolean).join('"+"');
                     }
                 });
-                if (userMaterialNodes.length > 0) {
-                    advanced_settings.user_material_nodes = userMaterialNodes.map(m => ({ label: m.label, value: m.value }));
-                }
+                userSurfaceNodes.filter(n => n.name && n.value?.trim()).forEach(n => {
+                    advanced_settings['_usr_' + n.name] = n.value;
+                });
             }
 
+            const _forceStyleEntry = (optionsData || []).find(o => o.field_id === '_render_force_style');
+            const _forceStyleVal = _forceStyleEntry ? (_forceStyleEntry.value || {}) : {};
             sketchup.render_scene({
                 scenes: usingBaseImage ? [] : selectedScenes,
                 prompt: finalPrompt,
@@ -1693,12 +1908,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 expected_cost: totalCost,
                 tool: currentActiveTool,
                 advanced_settings,
+                render_force_style: JSON.stringify(_forceStyleVal),
                 ...(usingBaseImage && {
                     base_image_url: _baseImageEntry.file_url || _baseImageEntry.cloud_url || '',
                     base_image_scene: _baseImageEntry.scene || '底圖'
                 }),
                 ...(currentActiveTool === 2 && _referenceImageBase64 && {
                     reference_image_base64: _referenceImageBase64
+                }),
+                ...(_tool1StyleRefUrl && currentActiveTool === 1 && {
+                    style_ref_url: _tool1StyleRefUrl
                 })
             });
         } else {
@@ -2978,7 +3197,7 @@ window.openCheckout = async function (planKey, quantity = 1) {
             const res = await fetch(`${API_BASE}/api/user?action=checkout`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ planKey, email: window.loamlabUserEmail, quantity: qty })
+                body: JSON.stringify({ planKey, email: window.loamlabUserEmail, quantity: qty, referralCode: getStoredKolRef() })
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
@@ -4176,9 +4395,7 @@ function _scCreateAnnotatedComposite() {
         tCtx.globalCompositeOperation = 'source-in';
         tCtx.fillStyle = region.colorHex || '#ff6432';
         tCtx.fillRect(0, 0, w, h);
-        ctx.globalAlpha = 0.5;
         ctx.drawImage(tint, 0, 0);
-        ctx.globalAlpha = 1;
     }
     return c;
 }
@@ -4418,7 +4635,8 @@ function _scRenderRegionList() {
 
 // 自動選取與現有區域顏色差異最大的顏色，並同步 color-picker UI
 function _scPickNextColor() {
-    const palette = ['#ff6432', '#4f7eff', '#22c55e', '#f59e0b', '#a855f7', '#ec4899', '#06b6d4', '#84cc16'];
+    // 使用極端霓虹色，確保 AI 不會誤以為是真實材質顏色
+    const palette = ['#FF00FF', '#00FFFF', '#00FF00', '#FF0000', '#FFFF00', '#FF007F', '#7F00FF', '#00FF7F'];
     const used = new Set(SmartCanvas.regions.map(r => (r.colorHex || '').toLowerCase()));
     const next = palette.find(c => !used.has(c.toLowerCase())) || palette[SmartCanvas.regions.length % palette.length];
     SmartCanvas.brushColor = next;

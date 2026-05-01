@@ -212,3 +212,24 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- ==============================================================================
+-- KOL 分潤帳本 (kol_ledger) — KOL Commission Ledger
+-- 每次付款成功時寫入快照；T+15 天後由管理員腳本推進至 ready_to_pay
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.kol_ledger (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    kol_code TEXT NOT NULL,
+    kol_email TEXT NOT NULL,
+    buyer_email TEXT NOT NULL,
+    transaction_id TEXT NOT NULL UNIQUE,
+    amount_paid INTEGER NOT NULL,
+    commission_rate NUMERIC(4,2) NOT NULL,
+    commission_amount INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_kol_ledger_kol_email ON public.kol_ledger (kol_email);
+CREATE INDEX IF NOT EXISTS idx_kol_ledger_status ON public.kol_ledger (status);
+CREATE INDEX IF NOT EXISTS idx_kol_ledger_created ON public.kol_ledger (created_at);

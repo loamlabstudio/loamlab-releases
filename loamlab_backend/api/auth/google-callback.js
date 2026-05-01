@@ -43,11 +43,12 @@ export default async function handler(req, res) {
     // 1. 驗證 session 存在（CSRF 防護：確認 session_id 是由我們的 plugin 發起的）
     const { data: sessions } = await supabase
         .from('auth_sessions')
-        .select('id')
+        .select('id, kol_ref')
         .eq('id', sessionId)
         .eq('status', 'pending');
 
     const sessionValid = Array.isArray(sessions) && sessions.length > 0;
+    const kolRef = sessions?.[0]?.kol_ref || null;
 
     if (!sessionValid) {
         return res.status(200).send(renderHtml(false,
@@ -114,36 +115,34 @@ export default async function handler(req, res) {
     }
 
     // 5. 確保 users 資料存在（新用戶給 60 點，舊用戶忽略衝突）
+    // KOL 歸因：從 auth_sessions.kol_ref 讀取，查 KOL email → 寫 referred_by（僅首次，舊用戶跳過）
     let referredBy = null;
-    try {
-        if (req.headers.cookie) {
-            const cookies = req.headers.cookie.split(';');
-            for (let c of cookies) {
-                const [k, v] = c.trim().split('=');
-                if (k === 'loamlab_ref') {
-                    const referrerCode = decodeURIComponent(v);
-                    const { data: inviter } = await supabase.from('users')
-                        .select('email')
-                        .eq('referral_code', referrerCode.toUpperCase())
-                        .single();
-                    if (inviter && inviter.email !== email) {
-                        referredBy = inviter.email;
-                    }
-                    break;
-                }
+    if (kolRef) {
+        try {
+            const { data: me } = await supabase.from('users').select('referred_by').eq('email', email).maybeSingle();
+            if (!me || !me.referred_by) {
+                const { data: kol } = await supabase.from('users')
+                    .select('email').eq('referral_code', kolRef).maybeSingle();
+                if (kol && kol.email !== email) referredBy = kol.email;
             }
+        } catch (e) {
+            console.warn('[google-callback] KOL ref lookup failed (non-fatal):', e.message);
         }
-    } catch (e) {
-        console.warn('[google-callback] Failed to parse referral cookie:', e);
     }
 
-    const upsertData = { email, points: 60 };
-    if (referredBy) upsertData.referred_by = referredBy;
-
-    await supabase.from('users').upsert(upsertData, {
+    // 建立新用戶（existing user 的衝突被 ignoreDuplicates 跳過，不影響 points）
+    await supabase.from('users').upsert({ email, points: 60 }, {
         onConflict: 'email',
         ignoreDuplicates: true
     });
+
+    // KOL 歸因：單獨 update 確保 existing user 也能被正確寫入（upsert+ignoreDuplicates 不會更新既有行）
+    if (referredBy) {
+        await supabase.from('users')
+            .update({ referred_by: referredBy })
+            .eq('email', email)
+            .is('referred_by', null);
+    }
 
     return res.status(200).send(renderHtml(
         true,

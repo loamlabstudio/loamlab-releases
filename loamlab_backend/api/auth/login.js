@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-    const { session_id } = req.query;
+    const { session_id, ref } = req.query;
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_ANON_KEY;
     const googleClientId = process.env.GOOGLE_CLIENT_ID;
@@ -13,9 +13,11 @@ export default async function handler(req, res) {
     // 建立 pending auth_session (使用 Service Role 確保繞過 RLS)
     const supabaseKeyToUse = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey;
     const supabase = createClient(supabaseUrl, supabaseKeyToUse);
+    const sessionRecord = { id: session_id, status: 'pending' };
+    if (ref) sessionRecord.kol_ref = ref.toUpperCase();
     const { error: dbError } = await supabase
         .from('auth_sessions')
-        .upsert({ id: session_id, status: 'pending' }, { onConflict: 'id' });
+        .upsert(sessionRecord, { onConflict: 'id' });
 
     if (dbError) {
         console.error('[login] auth_sessions upsert failed:', dbError.message);

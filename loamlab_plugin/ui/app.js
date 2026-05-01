@@ -3300,7 +3300,7 @@ function startOAuthFlow() {
         localStorage.setItem('loamlab_device_id', sessionUuid);
     }
 
-    const loginUrl = `${API_BASE}/api/auth/login?session_id=${sessionUuid}`;
+    const loginUrl = `${API_BASE}/auth-bridge?session_id=${sessionUuid}`;
 
     if (window.sketchup) {
         sketchup.open_browser(loginUrl);

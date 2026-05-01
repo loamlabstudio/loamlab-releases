@@ -122,6 +122,9 @@
     <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body class="relative min-h-screen font-sans selection:bg-w-red selection:text-white">
+<script>
+(function(){var r=new URLSearchParams(location.search).get('ref');if(r){localStorage.setItem('loamlab_kol_ref',JSON.stringify({code:r.toUpperCase(),expiry:Date.now()+30*864e5}));}})();
+</script>
 
     <div class="noise-overlay"></div>
 
@@ -1158,7 +1161,7 @@
                     </div>
                     ` : ''}
 
-                    <button onclick="let q = document.getElementById('qty-${plan.id}'); let qv = q ? q.value : 1; window.open('${_DODO}/' + '${plan.checkoutUrl}' + '?quantity=' + qv,'_blank')" class="w-full py-4 rounded text-[10px] font-bold tracking-[0.2em] uppercase transition-colors cursor-pointer ${plan.isPopular ? 'bg-w-red text-white hover:bg-red-600' : 'bg-white/10 text-white border border-white/5 hover:bg-white hover:text-black'}">
+                    <button onclick="let q = document.getElementById('qty-${plan.id}'); let qv = q ? q.value : 1; window.open('${_DODO}/' + '${plan.checkoutUrl}' + '?quantity=' + qv + '&discount_code=LOAM_BETA_30','_blank')" class="w-full py-4 rounded text-[10px] font-bold tracking-[0.2em] uppercase transition-colors cursor-pointer ${plan.isPopular ? 'bg-w-red text-white hover:bg-red-600' : 'bg-white/10 text-white border border-white/5 hover:bg-white hover:text-black'}">
                         ${plan.btn[currentLang]}
                     </button>
                 </div>

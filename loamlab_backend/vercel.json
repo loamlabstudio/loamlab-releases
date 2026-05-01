@@ -6,6 +6,7 @@
   },
   "rewrites": [
     { "source": "/", "destination": "/public/index.html" },
+    { "source": "/auth-bridge", "destination": "/public/auth-bridge.html" },
     { "source": "/terms.html", "destination": "/public/terms.html" },
     { "source": "/privacy.html", "destination": "/public/privacy.html" },
     { "source": "/sitemap.xml", "destination": "/api/version?_sitemap=1" },

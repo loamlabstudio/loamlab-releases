@@ -97,6 +97,7 @@ Phase 18b: auth_sessions 補全欄位（若表在早期版本創建）
 -- 若 auth_sessions 在 email 欄位加入前已存在，補加欄位
 ALTER TABLE public.auth_sessions ADD COLUMN IF NOT EXISTS email      TEXT;
 ALTER TABLE public.auth_sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '30 days';
+ALTER TABLE public.auth_sessions ADD COLUMN IF NOT EXISTS kol_ref    TEXT DEFAULT NULL; -- KOL 推廣碼（auth-bridge 傳入，callback 時綁定 referred_by）
 
 /*
 ===================================================

@@ -72,7 +72,10 @@ CREATE INDEX IF NOT EXISTS idx_auth_sessions_status ON public.auth_sessions(stat
 
 -- 開放 RLS 存取
 ALTER TABLE public.auth_sessions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "Enable all access for service role" ON public.auth_sessions FOR ALL USING (true);
+DO $$ BEGIN
+  CREATE POLICY "Enable all access for service role" ON public.auth_sessions FOR ALL USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- users 表補欄位
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_beta_tester    BOOLEAN DEFAULT FALSE;
@@ -233,3 +236,6 @@ CREATE TABLE IF NOT EXISTS public.kol_ledger (
 CREATE INDEX IF NOT EXISTS idx_kol_ledger_kol_email ON public.kol_ledger (kol_email);
 CREATE INDEX IF NOT EXISTS idx_kol_ledger_status ON public.kol_ledger (status);
 CREATE INDEX IF NOT EXISTS idx_kol_ledger_created ON public.kol_ledger (created_at);
+
+ALTER TABLE public.kol_ledger ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all access for service role" ON public.kol_ledger FOR ALL USING (true);

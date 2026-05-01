@@ -22,14 +22,20 @@ export default async function handler(req, res) {
 
     if (!kol?.referral_code) return res.status(404).json({ error: 'KOL not found or no referral code' });
 
+    // Tier 1: 1-50人 5%；Tier 2: 51-100人 10%；Tier 3: >100人 15%
     const totalPaid = kol.referral_success_count || 0;
-    let currentTier, currentRate, nextTierAt, nextTierNeeded;
-    if (totalPaid < 50) {
-        currentTier = 1; currentRate = 0.05; nextTierAt = 50; nextTierNeeded = 50 - totalPaid;
-    } else if (totalPaid < 100) {
-        currentTier = 2; currentRate = 0.10; nextTierAt = 100; nextTierNeeded = 100 - totalPaid;
+    let currentTier, currentRate, nextTierNeeded, progressToNextTier;
+    if (totalPaid <= 50) {
+        currentTier = 1; currentRate = '5%';
+        nextTierNeeded = 51 - totalPaid;
+        progressToNextTier = { needed: 51, remaining: nextTierNeeded };
+    } else if (totalPaid <= 100) {
+        currentTier = 2; currentRate = '10%';
+        nextTierNeeded = 101 - totalPaid;
+        progressToNextTier = { needed: 101, remaining: nextTierNeeded };
     } else {
-        currentTier = 3; currentRate = 0.15; nextTierAt = null; nextTierNeeded = 0;
+        currentTier = 3; currentRate = '15%';
+        progressToNextTier = null;
     }
 
     // T+15 冷卻期計算
@@ -39,28 +45,33 @@ export default async function handler(req, res) {
         .select('commission_amount, status, created_at')
         .eq('kol_email', email);
 
-    let pendingCommission = 0;
-    let clearedCommission = 0;
+    let pendingCoolingOff = 0;
+    let readyToWithdraw = 0;
+    let totalWithdrawn = 0;
     for (const row of (ledger || [])) {
         if (row.status === 'pending') {
             if (row.created_at < cutoff) {
-                clearedCommission += row.commission_amount;
+                readyToWithdraw += row.commission_amount;
             } else {
-                pendingCommission += row.commission_amount;
+                pendingCoolingOff += row.commission_amount;
             }
         } else if (row.status === 'ready_to_pay') {
-            clearedCommission += row.commission_amount;
+            readyToWithdraw += row.commission_amount;
+        } else if (row.status === 'paid') {
+            totalWithdrawn += row.commission_amount;
         }
     }
 
     return res.json({
         kol_code: kol.referral_code,
-        total_paid_referrals: totalPaid,
+        total_paid_users: totalPaid,
         current_tier: currentTier,
-        current_rate: currentRate,
-        next_tier_at: nextTierAt,
-        next_tier_needed: nextTierNeeded,
-        pending_commission: pendingCommission,
-        cleared_commission: clearedCommission
+        current_commission_rate: currentRate,
+        progress_to_next_tier: progressToNextTier,
+        earnings: {
+            pending_cooling_off: pendingCoolingOff,
+            ready_to_withdraw: readyToWithdraw,
+            total_withdrawn: totalWithdrawn
+        }
     });
 }

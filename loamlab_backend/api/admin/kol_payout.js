@@ -66,5 +66,19 @@ export default async function handler(req, res) {
         return res.send(csv);
     }
 
-    return res.status(400).json({ error: 'Invalid action. Use: list | settle | export' });
+    // mark_paid: 管理員確認匯款後，將 ready_to_pay 轉為 paid（記入 total_withdrawn）
+    if (action === 'mark_paid') {
+        const { ids } = req.query;
+        if (!ids) return res.status(400).json({ error: 'Missing ids (comma-separated UUIDs)' });
+        const idList = ids.split(',').map(s => s.trim()).filter(Boolean);
+        if (!idList.length) return res.status(400).json({ error: 'Empty id list' });
+        const { error: updateErr } = await supabase.from('kol_ledger')
+            .update({ status: 'paid' })
+            .in('id', idList)
+            .eq('status', 'ready_to_pay');
+        if (updateErr) return res.status(500).json({ error: updateErr.message });
+        return res.json({ marked_paid: idList.length });
+    }
+
+    return res.status(400).json({ error: 'Invalid action. Use: list | settle | export | mark_paid' });
 }

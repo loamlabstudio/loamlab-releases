@@ -44,6 +44,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code text UNIQUE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_rewarded boolean DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS lifetime_points integer DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_success_count integer DEFAULT 0;
 
 -- (可選) 針對 referral_code 建立索引以加速查詢
 CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code);

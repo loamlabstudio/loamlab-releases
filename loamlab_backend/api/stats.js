@@ -414,6 +414,58 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, msg: `Imported ${ops.length} config(s)` });
     }
 
+    // --- KOL Payout admin (merged from admin/kol_payout.js to stay within Vercel 12-fn limit) ---
+    if (action === 'kol_payout') {
+        const sub = req.query.sub || 'list';
+        const cutoff = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
+
+        if (sub === 'list') {
+            const { data, error } = await supabase.from('kol_ledger')
+                .select('*').eq('status', 'pending').lt('created_at', cutoff)
+                .order('kol_email').order('created_at');
+            if (error) return res.status(500).json({ code: -1, msg: error.message });
+            return res.json({ code: 0, count: data.length, records: data });
+        }
+
+        if (sub === 'settle') {
+            const { data: toSettle, error: fetchErr } = await supabase.from('kol_ledger')
+                .select('id').eq('status', 'pending').lt('created_at', cutoff);
+            if (fetchErr) return res.status(500).json({ code: -1, msg: fetchErr.message });
+            if (!toSettle?.length) return res.json({ code: 0, settled: 0 });
+            const ids = toSettle.map(r => r.id);
+            const { error: updateErr } = await supabase.from('kol_ledger').update({ status: 'ready_to_pay' }).in('id', ids);
+            if (updateErr) return res.status(500).json({ code: -1, msg: updateErr.message });
+            return res.json({ code: 0, settled: ids.length });
+        }
+
+        if (sub === 'export') {
+            const { data, error } = await supabase.from('kol_ledger')
+                .select('kol_code,kol_email,buyer_email,transaction_id,amount_paid,commission_rate,commission_amount,status,created_at')
+                .in('status', ['pending', 'ready_to_pay']).order('kol_email').order('created_at');
+            if (error) return res.status(500).json({ code: -1, msg: error.message });
+            const header = 'kol_code,kol_email,buyer_email,transaction_id,amount_paid_cents,commission_rate,commission_amount_cents,status,created_at';
+            const rows = (data || []).map(r =>
+                [r.kol_code, r.kol_email, r.buyer_email, r.transaction_id, r.amount_paid, r.commission_rate, r.commission_amount, r.status, r.created_at].join(',')
+            );
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="kol_payout_${Date.now()}.csv"`);
+            return res.send([header, ...rows].join('\n'));
+        }
+
+        if (sub === 'mark_paid') {
+            const { ids } = req.query;
+            if (!ids) return res.status(400).json({ code: -1, msg: 'Missing ids (comma-separated UUIDs)' });
+            const idList = ids.split(',').map(s => s.trim()).filter(Boolean);
+            if (!idList.length) return res.status(400).json({ code: -1, msg: 'Empty id list' });
+            const { error: updateErr } = await supabase.from('kol_ledger')
+                .update({ status: 'paid' }).in('id', idList).eq('status', 'ready_to_pay');
+            if (updateErr) return res.status(500).json({ code: -1, msg: updateErr.message });
+            return res.json({ code: 0, marked_paid: idList.length });
+        }
+
+        return res.status(400).json({ code: -1, msg: 'Invalid sub. Use: list | settle | export | mark_paid' });
+    }
+
     const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic };
     if (!actions[action]) return res.status(400).json({ code: -1, msg: `Unknown action: ${action}` });
 

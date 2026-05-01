@@ -2647,7 +2647,8 @@ window.updateLoginUI = function (email, points, refCode, referredBy) {
             const boundCode = document.getElementById('bound-referrer-code');
             if (inputArea) inputArea.classList.add('hidden');
             if (statusArea) statusArea.classList.remove('hidden');
-            if (boundCode) boundCode.textContent = referredBy;
+            // 優先顯示用戶輸入的代碼（localStorage），fallback 顯示 email 首段
+            if (boundCode) boundCode.textContent = localStorage.getItem('loamlab_kol_code_used') || referredBy.split('@')[0].toUpperCase();
         }
 
     } else {
@@ -3589,7 +3590,7 @@ const inputReferralCode = document.getElementById('input-referral-code');
 if (btnSubmitReferral && inputReferralCode) {
     btnSubmitReferral.addEventListener('click', async () => {
         const code = inputReferralCode.value.trim().toUpperCase();
-        if (!code) return alert('請輸入推薦人的代碼！\nPlease enter invite code.');
+        if (!code) return alert('請輸入大使折扣碼！\nPlease enter ambassador code.');
         if (!window.loamlabUserEmail) return alert('連線異常，請重新登入。');
 
         const ogText = btnSubmitReferral.textContent;
@@ -3605,11 +3606,19 @@ if (btnSubmitReferral && inputReferralCode) {
             const data = await res.json();
 
             if (data.code === 0) {
-                alert(data.msg);
-                // 成功後，重刷點數與狀態 (這會隱藏輸入框並拉出成功字樣)
+                // 儲存代碼供顯示用（updateLoginUI 只有 email，顯示代碼體驗更好）
+                localStorage.setItem('loamlab_kol_code_used', code);
+                // 立即更新 UI，不等 fetchUserPoints
+                const inputArea = document.getElementById('referral-input-area');
+                const statusArea = document.getElementById('referral-bind-status');
+                const boundCodeEl = document.getElementById('bound-referrer-code');
+                if (inputArea) inputArea.classList.add('hidden');
+                if (statusArea) statusArea.classList.remove('hidden');
+                if (boundCodeEl) boundCodeEl.textContent = code;
+                showUpdateToast('✅ 大使折扣碼套用成功！首次付費後雙方各得點數獎勵。');
                 window.fetchUserPoints(window.loamlabUserEmail);
             } else {
-                alert(data.msg || '綁定失敗，請確認代碼是否輸入正確。');
+                alert(data.msg || '代碼無效，請確認大使折扣碼是否正確。');
             }
         } catch (e) {
             console.error('Referral bind error:', e);

@@ -86,6 +86,52 @@ export default async function handler(req, res) {
     // 先行擷取 email
     const email = req.query.email || req.headers['x-user-email'] || req.body?.email;
 
+    // KOL dashboard (email-only, no IP auth — KOL checks own stats)
+    if (req.method === 'GET' && req.query.action === 'kol_dashboard') {
+        if (!email) return res.status(400).json({ error: 'Missing email' });
+        const { data: kol } = await supabase.from('users')
+            .select('referral_code, referral_success_count')
+            .eq('email', email).maybeSingle();
+        if (!kol?.referral_code) return res.status(404).json({ error: 'KOL not found or no referral code' });
+
+        const totalPaid = kol.referral_success_count || 0;
+        let currentTier, currentRate, progressToNextTier;
+        if (totalPaid <= 50) {
+            currentTier = 1; currentRate = '5%';
+            progressToNextTier = { needed: 51, remaining: 51 - totalPaid };
+        } else if (totalPaid <= 100) {
+            currentTier = 2; currentRate = '10%';
+            progressToNextTier = { needed: 101, remaining: 101 - totalPaid };
+        } else {
+            currentTier = 3; currentRate = '15%'; progressToNextTier = null;
+        }
+
+        const cutoff = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: ledger } = await supabase.from('kol_ledger')
+            .select('commission_amount, status, created_at').eq('kol_email', email);
+
+        let pendingCoolingOff = 0, readyToWithdraw = 0, totalWithdrawn = 0;
+        for (const row of (ledger || [])) {
+            if (row.status === 'pending') {
+                if (row.created_at < cutoff) readyToWithdraw += row.commission_amount;
+                else pendingCoolingOff += row.commission_amount;
+            } else if (row.status === 'ready_to_pay') {
+                readyToWithdraw += row.commission_amount;
+            } else if (row.status === 'paid') {
+                totalWithdrawn += row.commission_amount;
+            }
+        }
+
+        return res.json({
+            kol_code: kol.referral_code,
+            total_paid_users: totalPaid,
+            current_tier: currentTier,
+            current_commission_rate: currentRate,
+            progress_to_next_tier: progressToNextTier,
+            earnings: { pending_cooling_off: pendingCoolingOff, ready_to_withdraw: readyToWithdraw, total_withdrawn: totalWithdrawn }
+        });
+    }
+
     // 若非管理員，必須驗證身分與 IP 指紋
     if (!isAdmin) {
         if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });

@@ -35,7 +35,7 @@ export default async function handler(req, res) {
                     const sb = createClient(sbUrl, sbKey);
                     const { data: me } = await sb.from('users').select('referred_by').eq('email', email).maybeSingle();
                     if (me && !me.referred_by) {
-                        const { data: kol } = await sb.from('users').select('email').eq('referral_code', referralCode.toUpperCase()).maybeSingle();
+                        const { data: kol } = await sb.from('users').select('email').eq('referral_code', referralCode.toUpperCase()).eq('is_kol', true).maybeSingle();
                         if (kol && kol.email !== email) {
                             await sb.from('users').update({ referred_by: kol.email }).eq('email', email);
                             console.log(`[checkout] auto-bound referred_by: ${email} → ${kol.email}`);
@@ -90,8 +90,9 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.action === 'kol_dashboard') {
         if (!email) return res.status(400).json({ error: 'Missing email' });
         const { data: kol } = await supabase.from('users')
-            .select('referral_code, referral_success_count')
+            .select('referral_code, referral_success_count, is_kol')
             .eq('email', email).maybeSingle();
+        if (!kol?.is_kol) return res.status(403).json({ error: 'Not a KOL account' });
         if (!kol?.referral_code) return res.status(404).json({ error: 'KOL not found or no referral code' });
 
         const totalPaid = kol.referral_success_count || 0;
@@ -181,7 +182,7 @@ export default async function handler(req, res) {
         try {
             let { data, error } = await supabase
                 .from('users')
-                .select('points, lifetime_points, referral_code, referred_by, subscription_plan, last_topup_at')
+                .select('points, lifetime_points, referral_code, referred_by, subscription_plan, last_topup_at, is_kol')
                 .eq('email', email)
                 .single();
 
@@ -218,6 +219,7 @@ export default async function handler(req, res) {
                 referral_code: data ? data.referral_code : null,
                 referred_by: data ? data.referred_by : null,
                 referral_success_count: referralSuccessCount || 0,
+                is_kol: data ? (data.is_kol || false) : false,
                 is_new_user: error && error.code === 'PGRST116' ? true : false
             });
         } catch (e) {
@@ -325,9 +327,9 @@ export default async function handler(req, res) {
             if (me.referred_by) return res.status(400).json({ code: -1, msg: '您已經接受過邀請，無法重複領取' });
 
             const { data: inviter, error: inviterErr } = await supabase
-                .from('users').select('id, email').eq('referral_code', code.toUpperCase()).single();
+                .from('users').select('id, email').eq('referral_code', code.toUpperCase()).eq('is_kol', true).single();
 
-            if (inviterErr || !inviter) return res.status(404).json({ code: -1, msg: '無效的邀請碼' });
+            if (inviterErr || !inviter) return res.status(404).json({ code: -1, msg: '無效的大使折扣碼' });
             if (inviter.email === email) return res.status(400).json({ code: -1, msg: '不能輸入自己的邀請碼' });
 
             const { error: updateErr } = await supabase

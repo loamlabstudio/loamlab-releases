@@ -913,19 +913,51 @@
                 <p class="text-white/50 text-[12px] tracking-wide">好友輸入邀請碼，<strong class="text-white/80">首次付費</strong>後雙方立即得獎。<br>您獲得 <span class="text-amber-400 font-bold">+300 點</span>，好友獲得 <span class="text-emerald-400 font-bold">+100 點</span>（永久有效）。</p>
             </div>
 
-            <!-- 分享代碼區塊 -->
-            <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 mb-5 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                <p class="text-white/60 text-[11px] uppercase font-semibold tracking-wider mb-2">您的專屬推薦碼 Your Code:</p>
-                <div class="flex items-center gap-3">
-                    <div id="my-referral-code"
-                        class="flex-1 bg-black border border-white/20 rounded-lg p-3 text-center text-white font-mono text-xl tracking-[0.2em] font-bold cursor-text select-all">
-                        ------</div>
-                    <button id="btn-copy-referral"
-                        class="px-5 py-3 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">COPY</button>
-                    <button id="btn-share-line-referral"
-                        class="px-4 py-3 rounded-lg bg-[#00B900]/15 hover:bg-[#00B900]/30 border border-[#00B900]/40 text-[#4ade4a] text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">LINE</button>
-                    <button id="btn-share-wa-referral"
-                        class="px-4 py-3 rounded-lg bg-[#25D366]/15 hover:bg-[#25D366]/30 border border-[#25D366]/40 text-[#4ade80] text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">WA</button>
+            <!-- KOL 大使專屬區塊（is_kol=true 才顯示）-->
+            <div id="kol-ambassador-section" class="hidden">
+                <!-- 分享代碼區塊 -->
+                <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 mb-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                    <p class="text-white/60 text-[11px] uppercase font-semibold tracking-wider mb-2">您的專屬推薦碼 Your Code:</p>
+                    <div class="flex items-center gap-3">
+                        <div id="my-referral-code"
+                            class="flex-1 bg-black border border-white/20 rounded-lg p-3 text-center text-white font-mono text-xl tracking-[0.2em] font-bold cursor-text select-all">
+                            ------</div>
+                        <button id="btn-copy-referral"
+                            class="px-5 py-3 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">COPY</button>
+                        <button id="btn-share-line-referral"
+                            class="px-4 py-3 rounded-lg bg-[#00B900]/15 hover:bg-[#00B900]/30 border border-[#00B900]/40 text-[#4ade4a] text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">LINE</button>
+                        <button id="btn-share-wa-referral"
+                            class="px-4 py-3 rounded-lg bg-[#25D366]/15 hover:bg-[#25D366]/30 border border-[#25D366]/40 text-[#4ade80] text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">WA</button>
+                    </div>
+                </div>
+
+                <!-- KOL 大使進度面板 -->
+                <div class="bg-[#18181d] border border-purple-500/20 rounded-xl p-5 mb-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                    <p class="text-purple-400/80 text-[11px] uppercase font-semibold tracking-wider mb-3">🏆 大使進度 Ambassador Dashboard</p>
+                    <div class="flex gap-2 mb-4">
+                        <div class="flex-1 bg-black/40 rounded-lg p-3 text-center border border-white/5">
+                            <div id="kol-total-users" class="text-xl font-bold text-white">-</div>
+                            <div class="text-[10px] text-white/40 tracking-wide mt-0.5">付費人數</div>
+                        </div>
+                        <div class="flex-1 bg-black/40 rounded-lg p-3 text-center border border-white/5">
+                            <div id="kol-current-rate" class="text-xl font-bold text-purple-400">-</div>
+                            <div class="text-[10px] text-white/40 tracking-wide mt-0.5">分潤比例</div>
+                        </div>
+                        <div class="flex-1 bg-black/40 rounded-lg p-3 text-center border border-white/5">
+                            <div id="kol-ready-withdraw" class="text-xl font-bold text-emerald-400">-¢</div>
+                            <div class="text-[10px] text-white/40 tracking-wide mt-0.5">可提領</div>
+                        </div>
+                    </div>
+                    <div id="kol-progress-wrap">
+                        <div class="flex justify-between text-[10px] text-white/40 mb-1.5">
+                            <span id="kol-tier-label">Tier 1 · 5%</span>
+                            <span id="kol-progress-label">0 / 51</span>
+                        </div>
+                        <div class="w-full bg-white/5 rounded-full h-2 overflow-hidden">
+                            <div id="kol-progress-bar" class="bg-gradient-to-r from-purple-600 to-purple-400 h-2 rounded-full transition-all duration-700" style="width:0%"></div>
+                        </div>
+                        <p id="kol-next-tier-hint" class="text-[10px] text-purple-300/60 mt-1.5 text-center"></p>
+                    </div>
                 </div>
             </div>
 

@@ -243,3 +243,11 @@ CREATE INDEX IF NOT EXISTS idx_kol_ledger_created ON public.kol_ledger (created_
 ALTER TABLE public.kol_ledger ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Enable all access for service role" ON public.kol_ledger;
 CREATE POLICY "Enable all access for service role" ON public.kol_ledger FOR ALL USING (true);
+
+-- ==============================================================================
+-- Phase 21: KOL 大使權限標記
+-- is_kol = true 才算大使；管理員直接在 Supabase 手動設定
+-- referral_code 同樣由管理員手動改為客製化字串（如 JOHN10）
+-- ==============================================================================
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_kol BOOLEAN DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_users_is_kol ON public.users(is_kol) WHERE is_kol = true;

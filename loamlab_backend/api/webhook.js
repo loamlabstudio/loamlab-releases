@@ -37,9 +37,11 @@ export default async function handler(req, res) {
                 // Dodo 的商品 ID 在 product_cart[0].product_id，或直接在 data.product_id
                 const variantId = data.product_cart?.[0]?.product_id || data.product_id;
                 const orderId = data.payment_id || data.subscription_id;
-                
+                // 從 payload 讀取折扣碼（用於晚期 KOL 歸因）
+                const discountCode = data.discount?.code || data.discount_code || null;
+
                 if (customerEmail && variantId) {
-                    await processTopup(customerEmail, variantId, orderId, 'DODO');
+                    await processTopup(customerEmail, variantId, orderId, 'DODO', discountCode);
                 }
             }
             return res.status(200).json({ status: 'success' });
@@ -75,7 +77,7 @@ export default async function handler(req, res) {
 }
 
 // 核心充值邏輯 (從 LS 邏輯抽離，支援多平台)
-async function processTopup(customerEmail, variantId, orderId, platform) {
+async function processTopup(customerEmail, variantId, orderId, platform, discountCode = null) {
     // 冪等性檢查
     const fullOrderId = `${platform}_${orderId}`;
     const { data: existingTx } = await supabase.from('transactions').select('id').eq('order_id', fullOrderId).maybeSingle();
@@ -106,6 +108,21 @@ async function processTopup(customerEmail, variantId, orderId, platform) {
     if (pointsToAdd <= 0) return console.warn(`[⚠️充值] 未知商品 ID: ${variantId} (${platform})`);
 
     const { data: user } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
+
+    // 晚期 KOL 歸因：買家直接在結帳頁輸入折扣碼但未透過插件綁定時，補寫 referred_by
+    if (discountCode && user && !user.referred_by) {
+        try {
+            const { data: kolByCode } = await supabase.from('users')
+                .select('email').eq('referral_code', discountCode.toUpperCase()).eq('is_kol', true).maybeSingle();
+            if (kolByCode && kolByCode.email !== customerEmail) {
+                await supabase.from('users').update({ referred_by: kolByCode.email }).eq('email', customerEmail);
+                user.referred_by = kolByCode.email;
+                console.log(`[💡KOL晚期綁定] discount_code=${discountCode}: ${customerEmail} → ${kolByCode.email}`);
+            }
+        } catch (e) {
+            console.warn('[KOL] late-bind failed (non-fatal):', e.message);
+        }
+    }
 
     if (user) {
         // 推薦分銷邏輯 (Paid Referral)：B 首次付費 → A +300、B +100（固定）

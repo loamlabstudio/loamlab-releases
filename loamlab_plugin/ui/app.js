@@ -2609,7 +2609,7 @@ function applyBetaDiscountDisplay() {
     });
 }
 
-window.updateLoginUI = function (email, points, refCode, referredBy) {
+window.updateLoginUI = function (email, points, refCode, referredBy, isKol) {
     const btnLogin = document.getElementById('btn-login');
     const pointBalance = document.getElementById('point-balance');
 
@@ -2635,11 +2635,20 @@ window.updateLoginUI = function (email, points, refCode, referredBy) {
         }
 
         if (btnRef) btnRef.classList.remove('hidden');
-        window.loamlabUserReferralCode = refCode || null;
-        if (refCode) {
+        window.loamlabUserIsKol = !!isKol;
+        window.loamlabUserReferralCode = isKol ? (refCode || null) : null;
+
+        // KOL 大使專屬區塊：只有 is_kol=true 才顯示
+        const kolSection = document.getElementById('kol-ambassador-section');
+        if (kolSection) kolSection.classList.toggle('hidden', !isKol);
+
+        if (isKol && refCode) {
             const domMyCode = document.getElementById('my-referral-code');
             if (domMyCode) domMyCode.textContent = refCode;
+            // 非同步載入 KOL dashboard
+            fetchKolDashboard(email);
         }
+
         if (referredBy) {
             // 已綁定，隱藏輸入框顯示成功標籤
             const inputArea = document.getElementById('referral-input-area');
@@ -2661,8 +2670,44 @@ window.updateLoginUI = function (email, points, refCode, referredBy) {
         `;
         newBtnLogin.addEventListener('click', openLoginModal);
         pointBalance.textContent = "--";
+        window.loamlabUserIsKol = false;
+        window.loamlabUserReferralCode = null;
 
         if (btnRef) btnRef.classList.add('hidden');
+        const kolSection = document.getElementById('kol-ambassador-section');
+        if (kolSection) kolSection.classList.add('hidden');
+    }
+}
+
+async function fetchKolDashboard(email) {
+    try {
+        const res = await fetch(`${API_BASE}/api/user?action=kol_dashboard&email=${encodeURIComponent(email)}`);
+        if (!res.ok) return;
+        const d = await res.json();
+
+        const el = (id) => document.getElementById(id);
+        if (el('kol-total-users')) el('kol-total-users').textContent = d.total_paid_users ?? '-';
+        if (el('kol-current-rate')) el('kol-current-rate').textContent = d.current_commission_rate ?? '-';
+        if (el('kol-ready-withdraw')) el('kol-ready-withdraw').textContent = (d.earnings?.ready_to_withdraw ?? 0) + '¢';
+
+        const next = d.progress_to_next_tier;
+        const total = d.total_paid_users || 0;
+        if (next) {
+            const pct = Math.min(100, Math.round((total / next.needed) * 100));
+            if (el('kol-progress-bar')) el('kol-progress-bar').style.width = pct + '%';
+            if (el('kol-progress-label')) el('kol-progress-label').textContent = `${total} / ${next.needed}`;
+            if (el('kol-tier-label')) el('kol-tier-label').textContent = `Tier ${d.current_tier} · ${d.current_commission_rate}`;
+            if (el('kol-next-tier-hint')) el('kol-next-tier-hint').textContent = `距離下一階梯還差 ${next.remaining} 人！`;
+        } else {
+            // Tier 3 最高階
+            if (el('kol-progress-bar')) el('kol-progress-bar').style.width = '100%';
+            if (el('kol-progress-label')) el('kol-progress-label').textContent = `${total} 人`;
+            if (el('kol-tier-label')) el('kol-tier-label').textContent = 'Tier 3 · 15% 最高階梯 🏆';
+            if (el('kol-next-tier-hint')) el('kol-next-tier-hint').textContent = '';
+            if (el('kol-progress-wrap')) el('kol-progress-wrap').querySelector('#kol-next-tier-hint')?.remove();
+        }
+    } catch (e) {
+        console.warn('[KOL] fetchKolDashboard failed:', e.message);
     }
 }
 
@@ -2707,7 +2752,7 @@ function _doFetchUserPoints(email, attempt) {
                 window.loamlabSubscriptionPlan = data.subscription_plan || null;
                 window.loamlabLastTopupAt = data.last_topup_at || null;
                 updatePlanBadge(window.loamlabSubscriptionPlan);
-                window.updateLoginUI(email, data.points, data.referral_code, data.referred_by);
+                window.updateLoginUI(email, data.points, data.referral_code, data.referred_by, data.is_kol);
 
                 // 邀請人到帳 Toast：比對上次快取的成功邀請數，有增加就通知
                 const newRefCount = data.referral_success_count || 0;

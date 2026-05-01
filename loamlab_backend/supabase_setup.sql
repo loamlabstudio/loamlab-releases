@@ -29,7 +29,9 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 
 -- (如果您打算完全只透過 Vercel Service Key 存取，可以建立這條萬用策略)
+DROP POLICY IF EXISTS "Enable all access for service role" ON public.users;
 CREATE POLICY "Enable all access for service role" ON public.users FOR ALL USING (true);
+DROP POLICY IF EXISTS "Enable all access for service role" ON public.transactions;
 CREATE POLICY "Enable all access for service role" ON public.transactions FOR ALL USING (true);
 
 -- 4. 插入一個測試帳號/*
@@ -72,10 +74,8 @@ CREATE INDEX IF NOT EXISTS idx_auth_sessions_status ON public.auth_sessions(stat
 
 -- 開放 RLS 存取
 ALTER TABLE public.auth_sessions ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
-  CREATE POLICY "Enable all access for service role" ON public.auth_sessions FOR ALL USING (true);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+DROP POLICY IF EXISTS "Enable all access for service role" ON public.auth_sessions;
+CREATE POLICY "Enable all access for service role" ON public.auth_sessions FOR ALL USING (true);
 
 -- users 表補欄位
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_beta_tester    BOOLEAN DEFAULT FALSE;
@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS public.feedback (
   created_at     TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Enable all access for service role" ON public.feedback;
 CREATE POLICY "Enable all access for service role" ON public.feedback FOR ALL USING (true);
 
 /*
@@ -238,4 +239,5 @@ CREATE INDEX IF NOT EXISTS idx_kol_ledger_status ON public.kol_ledger (status);
 CREATE INDEX IF NOT EXISTS idx_kol_ledger_created ON public.kol_ledger (created_at);
 
 ALTER TABLE public.kol_ledger ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Enable all access for service role" ON public.kol_ledger;
 CREATE POLICY "Enable all access for service role" ON public.kol_ledger FOR ALL USING (true);

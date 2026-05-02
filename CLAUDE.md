@@ -138,6 +138,7 @@ Commit message 格式：`feat(ui): 說明 [T07][DONE]`（`[T\d+][DONE]` 觸發 `
 
 ## Key Constraints
 
+- **All `api/*.js` files must use CJS (`require`/`module.exports`)** — NEVER use `import`/`export default`. Mixed ESM+CJS causes silent Vercel build failures (entire api/auth/ directory returns 404). Verified fix: 2026-05-02.
 - **Backend uses Node.js 18+ native `fetch`** — do NOT `require('node-fetch')` (CJS/ESM conflict)
 - **`config.rb` in repo** is always `ENV_MODE = "production"` — set to `"development"` manually for local testing
 - **Webhook signature**: HMAC-SHA256 with `X-Signature` header; must disable Vercel's `bodyParser`
@@ -176,5 +177,7 @@ Commit message 格式：`feat(ui): 說明 [T07][DONE]`（`[T\d+][DONE]` 觸發 `
 | `SUPABASE_SERVICE_ROLE_KEY` | `render.js` | **Tool 2 必需**；Supabase Storage 私有 bucket 上傳（render-temp）；缺少時 fallback 到 base64 直傳，但建議設置以減少 payload 大小 |
 | `ATLASCLOUD_API_KEY` | 備援渲染（未實裝）| `docs/api/ATLASCLOUD_API.md` |
 | `GEMINI_API_KEY` | Gemini fallback（未實裝）| Google AI Studio |
+| `GOOGLE_CLIENT_ID` | `auth/login.js` | Google OAuth Client ID — Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client |
+| `GOOGLE_CLIENT_SECRET` | `auth/google-callback.js` | Google OAuth Client Secret（同上）|
 | `GOOGLE_APPLICATION_CREDENTIALS` | Vertex AI Inpainting（未實裝）| Service Account JSON 路徑 |
 | `GOOGLE_CLOUD_PROJECT` | Vertex AI Inpainting（未實裝）| GCP 控制台取得 |

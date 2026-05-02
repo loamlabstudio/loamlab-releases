@@ -2694,6 +2694,9 @@ async function fetchKolDashboard(email) {
             let display;
             if (lang === 'zh-TW') display = `NT$ ${Math.round(usd * 32)}`;
             else if (lang === 'zh-CN') display = `¥ ${(usd * 7.2).toFixed(1)}`;
+            else if (lang === 'es-ES') display = `€ ${(usd * 0.92).toFixed(1)}`;
+            else if (lang === 'pt-BR') display = `R$ ${(usd * 5.0).toFixed(1)}`;
+            else if (lang === 'ja-JP') display = `¥ ${Math.round(usd * 150)}`;
             else display = `$ ${usd}`;
             el('kol-ready-withdraw').textContent = display;
         }
@@ -5013,21 +5016,14 @@ function _scFillBucketDraw(startX, startY) {
         }
     }
 
-    // 找最多邊界像素鄰接的 region（最可能是輪廓來源）
-    let bestRegion = SmartCanvas.regions[SmartCanvas.regions.length - 1];
-    let bestScore = -1;
-    for (const region of SmartCanvas.regions) {
-        const rd = region.maskCanvas.getContext('2d').getImageData(0, 0, w, h).data;
-        let score = 0;
-        for (let i = 0; i < w * h; i++) {
-            if (!gapClosed[i]) continue;
-            const px = i % w, py = Math.floor(i / w);
-            if (px > 0 && rd[(i-1)*4+3] > 10) score++;
-            if (px < w-1 && rd[(i+1)*4+3] > 10) score++;
-            if (py > 0 && rd[(i-w)*4+3] > 10) score++;
-            if (py < h-1 && rd[(i+w)*4+3] > 10) score++;
-        }
-        if (score > bestScore) { bestScore = score; bestRegion = region; }
+    // 使用當前的筆刷顏色來決定填充目標，而不是猜測鄰接邊界
+    let bestRegion = SmartCanvas.regions.find(r => r.colorHex === SmartCanvas.brushColor);
+    if (!bestRegion) {
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        bestRegion = { id: Date.now(), maskCanvas: c, label: '', colorHex: SmartCanvas.brushColor };
+        SmartCanvas.regions.push(bestRegion);
+        setTimeout(() => _scRenderRegionList(), 0);
     }
 
     // 把填充（含補回的 gap 區域）合併進 bestRegion 的 maskCanvas

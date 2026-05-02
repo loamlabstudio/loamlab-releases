@@ -16,8 +16,10 @@ module LoamLab
     API_BASE_URL = "http://localhost:3001"
   end
 
-  VERSION = '1.4.21'
+  VERSION = '1.4.22'
 end
+
+
 
 
 

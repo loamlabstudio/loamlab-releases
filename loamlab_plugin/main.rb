@@ -1047,6 +1047,7 @@ module LoamLab
             closest_ratio = supported_ratios.min_by { |k, v| (v - ratio_val).abs }[0]
 
             view.write_image(temp_img_path, 1280, 720, true, 0.6)
+            dialog.bring_to_front
 
             # 通道圖生成（Smart Canvas 魔術棒用）
             channel_b64 = ""
@@ -1109,7 +1110,9 @@ module LoamLab
               _s0_req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::POST)
               _s0_req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => captured_email, 'x-plugin-version' => captured_version }
               _s0_req.body = captured_body
-              _s0_req.start do |_, response|
+              @@requests << _s0_req
+              _s0_req.start do |req, response|
+                @@requests.delete(req)
                 result = nil
                 begin
                   body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
@@ -1162,7 +1165,7 @@ module LoamLab
       process_chain.call(0)
     end
 
-    # Method B：Scene 0 完成後並行送出所有 deferred scenes
+    # Method B：Scene 0 完成後循序送出所有 deferred scenes
     # style_ref_url 為 Scene 0 的渲染結果 URL（nil 表示 Scene 0 失敗，不帶風格參考）
     def self.fire_deferred_renders(style_ref_url, user_style_ref_url = '')
       sends = @@deferred_sends.dup
@@ -1173,37 +1176,48 @@ module LoamLab
       # 優先使用用戶選擇的風格參考圖，無則沿用 Scene 0 結果 URL
       effective_url = (!user_style_ref_url.to_s.strip.empty?) ? user_style_ref_url : style_ref_url
 
-      sends.each do |item|
-        body_hash = JSON.parse(item[:body])
-        if effective_url
-          body_hash['parameters'] ||= {}
-          body_hash['parameters']['style_ref_url'] = effective_url
-        end
-        final_body = JSON.dump(body_hash)
-        captured   = item
+      self.process_next_deferred(sends, effective_url)
+    end
 
-        _df_scene   = captured[:scene].dup
-        _df_channel = captured[:channel].dup
-        _df_req = Sketchup::Http::Request.new(captured[:url], Sketchup::Http::POST)
-        _df_req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => captured[:email], 'x-plugin-version' => captured[:version] }
-        _df_req.body = final_body
-        _df_req.start do |_, response|
-          result = nil
-          begin
-            body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
-            data = JSON.parse(body_str)
-            result = (data['code'] == 0 && data['url']) ?
-              { status: 'render_success', scene_name: _df_scene, url: data['url'],
-                points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
-                channel_base64: _df_channel } :
-              { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
-                points_refunded: data['points_refunded'], error: data['error'] }
-          rescue => e
-            LoamLab.log "[LoamLab] 渲染失敗"
-            result = { status: 'render_failed', message: self.sanitize_error(e.message) }
-          end
-          @@pending_results << result if result
+    def self.process_next_deferred(sends, effective_url)
+      return if sends.empty?
+
+      item = sends.shift
+      body_hash = JSON.parse(item[:body])
+      if effective_url
+        body_hash['parameters'] ||= {}
+        body_hash['parameters']['style_ref_url'] = effective_url
+      end
+      final_body = JSON.dump(body_hash)
+      captured   = item
+
+      _df_scene   = captured[:scene].dup
+      _df_channel = captured[:channel].dup
+      _df_req = Sketchup::Http::Request.new(captured[:url], Sketchup::Http::POST)
+      _df_req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => captured[:email], 'x-plugin-version' => captured[:version] }
+      _df_req.body = final_body
+      
+      @@requests << _df_req
+      
+      _df_req.start do |req, response|
+        @@requests.delete(req)
+        result = nil
+        begin
+          body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
+          data = JSON.parse(body_str)
+          result = (data['code'] == 0 && data['url']) ?
+            { status: 'render_success', scene_name: _df_scene, url: data['url'],
+              points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
+              channel_base64: _df_channel } :
+            { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
+              points_refunded: data['points_refunded'], error: data['error'] }
+        rescue => e
+          LoamLab.log "[LoamLab] 渲染失敗"
+          result = { status: 'render_failed', message: self.sanitize_error(e.message) }
         end
+        @@pending_results << result if result
+        
+        self.process_next_deferred(sends, effective_url)
       end
     end
     

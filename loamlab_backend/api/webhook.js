@@ -36,12 +36,31 @@ export default async function handler(req, res) {
                 const customerEmail = data.customer?.email;
                 // Dodo 的商品 ID 在 product_cart[0].product_id，或直接在 data.product_id
                 const variantId = data.product_cart?.[0]?.product_id || data.product_id;
-                const orderId = data.payment_id || data.subscription_id;
+                
+                // 【修復雙倍點數 Bug】如果是訂閱的 payment.succeeded，直接忽略，交給 subscription.active 處理
+                if (event.type === 'payment.succeeded' && variantId !== 'pdt_0NbIlveGNSETSOveL7Xmk') {
+                    console.log(`[Dodo] 忽略訂閱的 payment.succeeded，交給 active/renewed 處理`);
+                    return res.status(200).json({ status: 'ignored' });
+                }
+
+                // 【修復續約 0 點 Bug】續約時 subscription_id 相同，必須加上週期時間防止冪等擋下
+                let orderId = data.payment_id || data.subscription_id;
+                if (event.type === 'subscription.renewed' || event.type === 'subscription.active') {
+                    const period = data.current_period_start || new Date().toISOString().substring(0, 7);
+                    orderId = `${data.subscription_id}_${period}`;
+                }
+
                 // 從 payload 讀取折扣碼（用於晚期 KOL 歸因）
                 const discountCode = data.discount?.code || data.discount_code || null;
 
                 if (customerEmail && variantId) {
                     await processTopup(customerEmail, variantId, orderId, 'DODO', discountCode);
+                }
+            } else if (event.type === 'subscription.cancelled' || event.type === 'subscription.canceled' || event.type === 'subscription.expired') {
+                const data = event.data;
+                const customerEmail = data.customer?.email;
+                if (customerEmail) {
+                    await processCancellation(customerEmail, 'DODO');
                 }
             }
             return res.status(200).json({ status: 'success' });
@@ -61,8 +80,20 @@ export default async function handler(req, res) {
                 const variantId = orderData.first_order_item?.variant_id || orderData.variant_id;
                 const orderId = event.data?.id?.toString();
 
+                // 【修復雙倍點數 Bug】如果是訂閱的 order_created，直接忽略，交給 subscription_payment_success 處理
+                if (eventName === 'order_created' && variantId != 1432023) {
+                    console.log(`[LS] 忽略訂閱的 order_created，交給 subscription_payment_success 處理`);
+                    return res.status(200).json({ status: 'ignored' });
+                }
+
                 if (customerEmail && variantId) {
                     await processTopup(customerEmail, variantId, orderId, 'LS');
+                }
+            } else if (eventName === 'subscription_cancelled' || eventName === 'subscription_expired') {
+                const orderData = event.data.attributes;
+                const customerEmail = orderData.user_email;
+                if (customerEmail) {
+                    await processCancellation(customerEmail, 'LS');
                 }
             }
             return res.status(200).json({ status: 'success' });
@@ -74,6 +105,13 @@ export default async function handler(req, res) {
         console.error('Webhook Error:', error);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
+}
+
+async function processCancellation(customerEmail, platform) {
+    console.log(`[🛑取消訂閱] 處理 ${platform} 取消: ${customerEmail}`);
+    await supabase.from('users').update({
+        subscription_plan: null
+    }).eq('email', customerEmail);
 }
 
 // 核心充值邏輯 (從 LS 邏輯抽離，支援多平台)

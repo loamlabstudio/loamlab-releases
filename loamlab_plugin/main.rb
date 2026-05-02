@@ -478,64 +478,61 @@ module LoamLab
         begin
           LoamLab.log "LoamLab: 正在擷取即時預覽故事板..."
           scenes = params["scenes"] || []
-          
           batch_data = []
+
           if scenes.empty?
-            # 當使用者沒有勾選任何場景時，自動擷取他當下的視角
             base64_img = self.get_preview_base64
             batch_data << { scene: "當前即時視角", image_data: base64_img }
+            dialog.execute_script("window.receiveFromRuby(#{{ status: 'preview_updated', batch_data: batch_data }.to_json})")
           else
             model = Sketchup.active_model
-            if model
-              current_page = model.pages.selected_page
-              page_options = model.options['PageOptions']
-              old_transition = page_options['ShowTransition']
-              page_options['ShowTransition'] = false if old_transition
-              
-              # 先隱藏干擾項目 (安全寫法，避免 SketchUp 拋出例外)
-              safe_keys = ['DrawHidden', 'DrawHiddenObjects', 'DisplaySketchAxes', 'DisplayInstanceAxes']
-              original_states = {}
-              safe_keys.each do |k|
-                begin
-                  if model.rendering_options.keys.include?(k)
-                    original_states[k] = model.rendering_options[k]
-                    model.rendering_options[k] = false
-                  end
-                rescue => e
-                  LoamLab.log "[LoamLab] render option #{k}: #{e.message}"
+            next unless model
+
+            current_page  = model.pages.selected_page
+            page_options  = model.options['PageOptions']
+            old_transition = page_options['ShowTransition']
+            page_options['ShowTransition'] = false if old_transition
+
+            safe_keys = ['DrawHidden', 'DrawHiddenObjects', 'DisplaySketchAxes', 'DisplayInstanceAxes']
+            original_states = {}
+            safe_keys.each do |k|
+              begin
+                if model.rendering_options.keys.include?(k)
+                  original_states[k] = model.rendering_options[k]
+                  model.rendering_options[k] = false
                 end
+              rescue => e
+                LoamLab.log "[LoamLab] render option #{k}: #{e.message}"
               end
-              
-              scenes.each do |scene_name|
+            end
+
+            remaining = scenes.dup
+            capture_next = nil
+            capture_next = lambda do
+              if remaining.empty?
+                model.pages.selected_page = current_page if current_page
+                self.safe_set_render_keys(model.rendering_options, RENDER_KEYS)
+                page_options['ShowTransition'] = old_transition if old_transition
+                original_states.each { |k, v| begin; model.rendering_options[k] = v; rescue; end }
+                dialog.execute_script("window.receiveFromRuby(#{{ status: 'preview_updated', batch_data: batch_data }.to_json})")
+              else
+                scene_name = remaining.shift
                 if page = model.pages[scene_name]
                   model.pages.selected_page = page
-                  # 場景切換後 SketchUp 會還原場景儲存的 rendering_options，需重新套用
                   self.safe_set_render_keys(model.rendering_options, RENDER_KEYS)
-                  # 給予 SketchUp 毫秒級的 UI 刷新時間，避免畫面閃爍過快或主視窗卡死
-                  sleep(0.05)
-                  base64_img = self.get_preview_base64
-                  batch_data << { scene: scene_name, image_data: base64_img }
-                end
-              end
-
-              model.pages.selected_page = current_page if current_page
-              # 切回原場景後也重新套用（避免還原到原始樣式）
-              self.safe_set_render_keys(model.rendering_options, RENDER_KEYS)
-              page_options['ShowTransition'] = old_transition if old_transition
-              
-              # 恢復原始顯示設定
-              original_states.each do |k, v|
-                begin
-                  model.rendering_options[k] = v
-                rescue => e
-                  LoamLab.log "[LoamLab] render option restore #{k}: #{e.message}"
+                  # 非阻塞：給 SketchUp 50ms 刷新後再截圖，避免主執行緒凍結
+                  UI.start_timer(0.05, false) do
+                    base64_img = self.get_preview_base64
+                    batch_data << { scene: scene_name, image_data: base64_img }
+                    capture_next.call
+                  end
+                else
+                  capture_next.call
                 end
               end
             end
+            capture_next.call
           end
-          
-          response = { status: 'preview_updated', batch_data: batch_data }
-          dialog.execute_script("window.receiveFromRuby(#{response.to_json})")
         rescue => e
           UI.messagebox("Sync Preview Error: #{e.message}")
         end
@@ -888,6 +885,10 @@ module LoamLab
       if tool == 2 && !base_image_url.empty? && base_image_url.start_with?("file:///")
         begin
           local_path = file_uri_to_path(base_image_url)
+          unless File.exist?(local_path)
+            dialog.execute_script("window.receiveFromRuby(#{JSON.generate({ status: 'render_failed', message: '底圖檔案已移除，請重新選擇底圖' })})")
+            return
+          end
           img_data   = File.read(local_path, mode: 'rb')
           base_data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
           user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
@@ -924,6 +925,10 @@ module LoamLab
       if !base_image_url.empty? && base_image_url.start_with?("file:///")
         begin
           local_path = file_uri_to_path(base_image_url)
+          unless File.exist?(local_path)
+            dialog.execute_script("window.receiveFromRuby(#{JSON.generate({ status: 'render_failed', message: '底圖檔案已移除，請重新選擇底圖' })})")
+            return
+          end
           img_data   = File.read(local_path, mode: 'rb')
           data_uri   = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
           user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
@@ -1049,17 +1054,19 @@ module LoamLab
             view.write_image(temp_img_path, 1280, 720, true, 0.6)
             dialog.bring_to_front
 
-            # 通道圖生成（Smart Canvas 魔術棒用）
+            # 通道圖生成（Smart Canvas 魔術棒用，Tool 1 不需要）
             channel_b64 = ""
-            begin
-              channel_path = File.join(temp_dir, "loamlab_channel_#{index}_#{Time.now.to_i}.jpg")
-              self.export_channel_image(view, 1280, 720, channel_path)
-              if File.exist?(channel_path)
-                channel_b64 = "data:image/jpeg;base64,#{Base64.strict_encode64(File.read(channel_path, mode: 'rb'))}"
-                File.delete(channel_path)
+            if tool == 2
+              begin
+                channel_path = File.join(temp_dir, "loamlab_channel_#{index}_#{Time.now.to_i}.jpg")
+                self.export_channel_image(view, 1280, 720, channel_path)
+                if File.exist?(channel_path)
+                  channel_b64 = "data:image/jpeg;base64,#{Base64.strict_encode64(File.read(channel_path, mode: 'rb'))}"
+                  File.delete(channel_path)
+                end
+              rescue => e
+                LoamLab.log "[LoamLab] channel image failed (non-fatal): #{e.message}"
               end
-            rescue => e
-              LoamLab.log "[LoamLab] channel image failed (non-fatal): #{e.message}"
             end
 
             # 自動備份

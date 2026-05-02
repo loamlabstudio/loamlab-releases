@@ -3357,7 +3357,15 @@ function startOAuthFlow() {
         localStorage.setItem('loamlab_device_id', sessionUuid);
     }
 
-    const loginUrl = `${API_BASE}/auth-bridge?session_id=${sessionUuid}`;
+    // 直接打 /api/auth/login，繞開靜態 auth-bridge 頁面（Vercel 非框架專案不可靠）
+    let loginUrl = `${API_BASE}/api/auth/login?session_id=${encodeURIComponent(sessionUuid)}`;
+    try {
+        const raw = localStorage.getItem('loamlab_kol_ref');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Date.now() <= parsed.expiry) loginUrl += '&ref=' + encodeURIComponent(parsed.code);
+        }
+    } catch(e) {}
 
     if (window.sketchup) {
         sketchup.open_browser(loginUrl);

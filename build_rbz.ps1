@@ -3,26 +3,23 @@ param([switch]$ew)
 $sourceDir = $PSScriptRoot
 $configFile = "$sourceDir\loamlab_plugin\config.rb"
 
-# ─── 顯示自上次 tag 以來的 commit 摘要 ──────────────────────────
-$lastTag = git describe --tags --abbrev=0 2>$null
-if ($lastTag) {
-    $pendingCommits = git log "$lastTag..HEAD" --oneline 2>$null
-    if ($pendingCommits) {
-        Write-Host ""
-        Write-Host "📦 本次 Release 包含以下更新（$lastTag 之後）：" -ForegroundColor Cyan
-        $pendingCommits | ForEach-Object { Write-Host "  · $_" -ForegroundColor White }
-        Write-Host ""
-    } else {
-        Write-Host "（無新 commit，與 $lastTag 相同）" -ForegroundColor DarkGray
+# Show commits since last tag (informational only)
+try {
+    $lastTag = git describe --tags --abbrev=0
+    if ($LASTEXITCODE -eq 0 -and $lastTag) {
+        $pendingCommits = git log "$lastTag..HEAD" --oneline
+        if ($pendingCommits) {
+            Write-Host ""
+            Write-Host "Commits since $lastTag :" -ForegroundColor Cyan
+            $pendingCommits | ForEach-Object { Write-Host "  $_ " -ForegroundColor White }
+            Write-Host ""
+        }
     }
-} else {
-    Write-Host "（找不到上一個 tag，跳過 commit 摘要）" -ForegroundColor DarkGray
-}
+} catch {}
 
-# ─── 決定輸出檔名與排除清單 ───────────────────────────────────
+# Determine output name and exclude list
 if ($ew) {
     $outRbzName = "loamlab_plugin_ew.rbz"
-    # EW 版排除 updater.rb：審核員看不到任何更新相關 Ruby 代碼
     $excludePatterns = @('node_modules', 'test_', 'package-lock.json', 'package.json', '.testsprite', 'test_screenshot', 'updater.rb')
     Write-Host "Packaging LoamLab Plugin (EW Submission Build)..." -ForegroundColor Yellow
 } else {
@@ -37,18 +34,17 @@ $outRbz = "$sourceDir\$outRbzName"
 if (Test-Path $outZip) { Remove-Item $outZip -Force }
 if (Test-Path $outRbz) { Remove-Item $outRbz -Force }
 
-# ★ 環境隔離：打包前強制寫入 release 設定
+# Patch config.rb to release before packaging
 $configContent = Get-Content $configFile -Raw
 $prodContent = $configContent -replace 'BUILD_TYPE = "dev"', 'BUILD_TYPE = "release"'
 if ($ew) {
     $prodContent = $prodContent -replace 'DIST_CHANNEL = "direct"', 'DIST_CHANNEL = "store"'
-    Write-Host "[Deploy] BUILD_TYPE → release, DIST_CHANNEL → store (EW)" -ForegroundColor Cyan
+    Write-Host "[Deploy] BUILD_TYPE -> release, DIST_CHANNEL -> store (EW)" -ForegroundColor Cyan
 } else {
-    Write-Host "[Deploy] BUILD_TYPE → release, DIST_CHANNEL = direct" -ForegroundColor Cyan
+    Write-Host "[Deploy] BUILD_TYPE -> release, DIST_CHANNEL = direct" -ForegroundColor Cyan
 }
 Set-Content -Path $configFile -Value $prodContent -Encoding UTF8
 
-# 手動建 zip，確保路徑分隔符為 /（跨平台相容 Mac）
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 Add-Type -AssemblyName System.IO.Compression
 
@@ -65,10 +61,8 @@ try {
         $entryStream.Dispose()
     }
 
-    # 加入入口檔案
     Add-ToZip $archive "$sourceDir\loamlab_plugin.rb" "loamlab_plugin.rb"
 
-    # 加入 loamlab_plugin/ 目錄
     Get-ChildItem -Path "$sourceDir\loamlab_plugin" -Recurse -File | Where-Object {
         $fullPath = $_.FullName
         $skip = $false
@@ -86,7 +80,7 @@ try {
 
     Rename-Item -Path $outZip -NewName $outRbzName -Force
 } finally {
-    # ★ 打包完畢後明確還原為 dev 模式（try/finally 確保任何錯誤都能還原）
+    # Restore config.rb to dev (always runs even on error)
     $restoredContent = $prodContent -replace 'BUILD_TYPE = "release"', 'BUILD_TYPE = "dev"'
     if ($ew) {
         $restoredContent = $restoredContent -replace 'DIST_CHANNEL = "store"', 'DIST_CHANNEL = "direct"'
@@ -99,7 +93,6 @@ Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host "Done! Output: $outRbz" -ForegroundColor Green
 if ($ew) {
-    Write-Host "⚠ EW build: updater.rb excluded, DIST_CHANNEL=store" -ForegroundColor Yellow
+    Write-Host "EW build: updater.rb excluded, DIST_CHANNEL=store" -ForegroundColor Yellow
 }
 Write-Host "==========================================================" -ForegroundColor Green
-

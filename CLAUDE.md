@@ -138,6 +138,9 @@ Commit message 格式：`feat(ui): 說明 [T07][DONE]`（`[T\d+][DONE]` 觸發 `
 
 ## Key Constraints
 
+- **Plugin UI (`loamlab_plugin/ui/`) runs in SketchUp's embedded WebView (old CEF/Chromium) — forbidden APIs:**
+  - `AbortSignal.timeout()` → use `new AbortController()` + `setTimeout(() => ctrl.abort(), ms)` instead
+  - Any Chrome 100+ static method not available as instance method (verify on MDN "Chrome ≥ ?")
 - **Never mix `require()` and `export default` in the same `api/*.js` file** — pure ESM (`import`/`export default`) or pure CJS (`require`/`module.exports`) are both fine; mixing causes silent Vercel build failure (entire subdirectory returns 404). Run `powershell -ExecutionPolicy Bypass -File scripts/check_cjs.ps1` before deploying to verify.
 - **Vercel Hobby plan: 12 serverless functions maximum** — current count is 12/12 (`api/` = 8 + `api/auth/` = 4). Adding any new `api/*.js` requires removing one first. Run `scripts/check_cjs.ps1` to see current count.
 - **Backend uses Node.js 18+ native `fetch`** — do NOT `require('node-fetch')` (CJS/ESM conflict)

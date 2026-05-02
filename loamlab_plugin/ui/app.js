@@ -5272,6 +5272,8 @@ async function executeSmartSwap(overrideBody = null) {
             showUpdateToast('⏳ AI 仍在處理中，預計還需 1–2 分鐘...');
         }, 60000);
 
+        const _scAbortCtrl = new AbortController();
+        const _scAbortTimer = setTimeout(() => _scAbortCtrl.abort(), 400000);
         let resp;
         try {
             resp = await fetch(`${API_BASE}/api/render`, {
@@ -5282,9 +5284,10 @@ async function executeSmartSwap(overrideBody = null) {
                     'X-Plugin-Version': window.LOAMLAB_VERSION || '0.0.0'
                 },
                 body: JSON.stringify(fetchBody),
-                signal: AbortSignal.timeout(400000)  // 6.7 分鐘安全網（Vercel 300s 504 會先回來，前端拿到正確 JSON 錯誤）
+                signal: _scAbortCtrl.signal
             });
         } finally {
+            clearTimeout(_scAbortTimer);
             clearTimeout(slowToastTimer);
         }
         const result = await resp.json();

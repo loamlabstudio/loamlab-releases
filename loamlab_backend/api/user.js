@@ -35,7 +35,7 @@ export default async function handler(req, res) {
                     const sb = createClient(sbUrl, sbKey);
                     const { data: me } = await sb.from('users').select('referred_by').eq('email', email).maybeSingle();
                     if (me && !me.referred_by) {
-                        const { data: kol } = await sb.from('users').select('email').eq('referral_code', referralCode.toUpperCase()).eq('is_kol', true).maybeSingle();
+                        const { data: kol } = await sb.from('users').select('email').eq('referral_code', referralCode.toUpperCase()).maybeSingle();
                         if (kol && kol.email !== email) {
                             await sb.from('users').update({ referred_by: kol.email }).eq('email', email);
                             console.log(`[checkout] auto-bound referred_by: ${email} → ${kol.email}`);
@@ -326,10 +326,10 @@ export default async function handler(req, res) {
             if (myErr) return res.status(404).json({ code: -1, msg: '找不到您的帳戶，請先算一張圖進行註冊' });
             if (me.referred_by) return res.status(400).json({ code: -1, msg: '您已經接受過邀請，無法重複領取' });
 
-            const { data: inviter, error: inviterErr } = await supabase
-                .from('users').select('id, email').eq('referral_code', code.toUpperCase()).eq('is_kol', true).single();
+            const { data: inviter } = await supabase
+                .from('users').select('id, email').eq('referral_code', code.toUpperCase()).maybeSingle();
 
-            if (inviterErr || !inviter) return res.status(404).json({ code: -1, msg: '無效的大使折扣碼' });
+            if (!inviter) return res.status(404).json({ code: -1, msg: '找不到此推薦碼，請確認後重新輸入' });
             if (inviter.email === email) return res.status(400).json({ code: -1, msg: '不能輸入自己的邀請碼' });
 
             const { error: updateErr } = await supabase

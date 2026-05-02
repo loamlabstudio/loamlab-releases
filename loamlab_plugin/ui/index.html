@@ -917,7 +917,7 @@
             <div id="kol-ambassador-section" class="hidden">
                 <!-- 分享代碼區塊 -->
                 <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 mb-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                    <p class="text-white/60 text-[11px] uppercase font-semibold tracking-wider mb-2">您的專屬推薦碼 Your Code:</p>
+                    <p class="text-white/60 text-[11px] uppercase font-semibold tracking-wider mb-2" data-i18n="kol_your_code_label">您的專屬推薦碼 Your Code:</p>
                     <div class="flex items-center gap-3">
                         <div id="my-referral-code"
                             class="flex-1 bg-black border border-white/20 rounded-lg p-3 text-center text-white font-mono text-xl tracking-[0.2em] font-bold cursor-text select-all">
@@ -933,19 +933,19 @@
 
                 <!-- KOL 大使進度面板 -->
                 <div class="bg-[#18181d] border border-purple-500/20 rounded-xl p-5 mb-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                    <p class="text-purple-400/80 text-[11px] uppercase font-semibold tracking-wider mb-3">🏆 大使進度 Ambassador Dashboard</p>
+                    <p class="text-purple-400/80 text-[11px] uppercase font-semibold tracking-wider mb-3" data-i18n="kol_ambassador_dashboard">🏆 大使進度 Ambassador Dashboard</p>
                     <div class="flex gap-2 mb-4">
                         <div class="flex-1 bg-black/40 rounded-lg p-3 text-center border border-white/5">
                             <div id="kol-total-users" class="text-xl font-bold text-white">-</div>
-                            <div class="text-[10px] text-white/40 tracking-wide mt-0.5">付費人數</div>
+                            <div class="text-[10px] text-white/40 tracking-wide mt-0.5" data-i18n="kol_paid_users_label">付費人數</div>
                         </div>
                         <div class="flex-1 bg-black/40 rounded-lg p-3 text-center border border-white/5">
                             <div id="kol-current-rate" class="text-xl font-bold text-purple-400">-</div>
-                            <div class="text-[10px] text-white/40 tracking-wide mt-0.5">分潤比例</div>
+                            <div class="text-[10px] text-white/40 tracking-wide mt-0.5" data-i18n="kol_commission_rate_label">分潤比例</div>
                         </div>
                         <div class="flex-1 bg-black/40 rounded-lg p-3 text-center border border-white/5">
-                            <div id="kol-ready-withdraw" class="text-xl font-bold text-emerald-400">-¢</div>
-                            <div class="text-[10px] text-white/40 tracking-wide mt-0.5">可提領</div>
+                            <div id="kol-ready-withdraw" class="text-xl font-bold text-emerald-400">-</div>
+                            <div class="text-[10px] text-white/40 tracking-wide mt-0.5" data-i18n="kol_ready_withdraw_label">可提領</div>
                         </div>
                     </div>
                     <div id="kol-progress-wrap">
@@ -963,12 +963,12 @@
 
             <!-- 填碼區塊 -->
             <div class="bg-[#18181d] border border-amber-500/20 rounded-xl p-5 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                <p class="text-amber-400/80 text-[11px] uppercase font-semibold tracking-wider mb-1">大使折扣碼 · Ambassador Code</p>
-                <p class="text-white/35 text-[10px] mb-3">有大使的專屬代碼嗎？輸入後首次付費雙方各得點數獎勵。</p>
+                <p class="text-amber-400/80 text-[11px] uppercase font-semibold tracking-wider mb-1" data-i18n="referral_code_section_title">推薦碼 / 大使代碼 (Referral / Ambassador Code)</p>
+                <p class="text-white/35 text-[10px] mb-3" data-i18n="referral_code_section_desc">輸入好友推薦碼或大使專屬碼，首次付費雙方皆得點數獎勵。</p>
                 <div class="flex items-center gap-3" id="referral-input-area">
                     <input type="text" id="input-referral-code"
                         class="flex-1 bg-black border border-white/10 rounded-lg p-3 text-white font-mono text-center text-lg tracking-widest uppercase focus:outline-none focus:border-amber-500/50 transition-all placeholder-white/20"
-                        placeholder="輸入大使專屬碼">
+                        data-i18n="referral_code_ph" placeholder="輸入推薦碼 / 大使代碼">
                     <button id="btn-submit-referral"
                         class="px-5 py-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/40 text-amber-300 text-[12px] font-bold transition-all shrink-0 border-b-2 border-b-amber-700/40 active:border-b-0 active:translate-y-[2px] tracking-widest">APPLY</button>
                 </div>

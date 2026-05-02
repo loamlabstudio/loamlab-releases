@@ -231,8 +231,8 @@ async function writeKolCommission(buyerEmail, amountPaid, orderId) {
 
         const kolEmail = buyer.referred_by;
         const { data: kol } = await supabase.from('users')
-            .select('referral_code, referral_success_count').eq('email', kolEmail).maybeSingle();
-        if (!kol?.referral_code) return;
+            .select('referral_code, referral_success_count, is_kol').eq('email', kolEmail).maybeSingle();
+        if (!kol?.referral_code || !kol.is_kol) return; // 只有 KOL 帳號才計入現金分潤
 
         // 以 referral_success_count 判斷 Tier（已由首單獎勵邏輯維護）
         // Tier 1: 1-50人 5%；Tier 2: 51-100人 10%；Tier 3: >100人 15%

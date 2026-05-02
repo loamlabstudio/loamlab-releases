@@ -229,7 +229,16 @@ const UI_LANG = {
         "style_ref_clear": "✕ 清除",
         "style_ref_upload_title": "上傳風格參考圖",
         "style_ref_hint": "不選取不影響預設出圖。選取後，所有場景統一參照此圖的光感與色調，批量出圖風格一致性尤為明顯。",
-        "hint_new_engine_for_ao": "啟用環境光遮蔽（AO）可提升截圖品質，但需要新圖形引擎。請至 SketchUp 偏好設定 → 圖形 → 使用新圖形引擎。"
+        "hint_new_engine_for_ao": "啟用環境光遮蔽（AO）可提升截圖品質，但需要新圖形引擎。請至 SketchUp 偏好設定 → 圖形 → 使用新圖形引擎。",
+        "kol_ambassador_dashboard": "🏆 大使進度 Ambassador Dashboard",
+        "kol_paid_users_label": "付費人數",
+        "kol_commission_rate_label": "分潤比例",
+        "kol_ready_withdraw_label": "可提領",
+        "kol_your_code_label": "您的專屬推薦碼 Your Code:",
+        "referral_code_section_title": "推薦碼 / 大使代碼 (Referral / Ambassador Code)",
+        "referral_code_section_desc": "輸入好友推薦碼或大使專屬碼，首次付費雙方皆得點數獎勵。",
+        "referral_code_ph": "輸入推薦碼 / 大使代碼",
+        "kol_next_tier_hint": "距離下一階梯還差 {n} 人！"
     },
     "en-US": {
         "title": "LoamLab Camera",
@@ -458,7 +467,16 @@ const UI_LANG = {
         "style_ref_clear": "✕ Clear",
         "style_ref_upload_title": "Upload Style Reference",
         "style_ref_hint": "Optional. When selected, all scenes will follow the lighting and tone of this image — especially useful for batch rendering consistency.",
-        "hint_new_engine_for_ao": "Enabling Ambient Occlusion (AO) can improve screenshot quality, but requires the new graphics engine. Go to SketchUp Preferences → Graphics → Use new graphics engine."
+        "hint_new_engine_for_ao": "Enabling Ambient Occlusion (AO) can improve screenshot quality, but requires the new graphics engine. Go to SketchUp Preferences → Graphics → Use new graphics engine.",
+        "kol_ambassador_dashboard": "[TBD] 🏆 大使進度 Ambassador Dashboard",
+        "kol_paid_users_label": "[TBD] 付費人數",
+        "kol_commission_rate_label": "[TBD] 分潤比例",
+        "kol_ready_withdraw_label": "[TBD] 可提領",
+        "kol_your_code_label": "[TBD] 您的專屬推薦碼 Your Code:",
+        "referral_code_section_title": "[TBD] 推薦碼 / 大使代碼 (Referral / Ambassador Code)",
+        "referral_code_section_desc": "[TBD] 輸入好友推薦碼或大使專屬碼，首次付費雙方皆得點數獎勵。",
+        "referral_code_ph": "[TBD] 輸入推薦碼 / 大使代碼",
+        "kol_next_tier_hint": "[TBD] 距離下一階梯還差 {n} 人！"
     },
     "zh-CN": {
         "title": "野人相機 (LoamLab Camera)",
@@ -687,7 +705,16 @@ const UI_LANG = {
         "style_ref_clear": "✕ 清除",
         "style_ref_upload_title": "上傳風格參考圖",
         "style_ref_hint": "不選取不影響預設出圖。選取後，所有場景統一參照此圖的光感與色調，批量出圖風格一致性尤為明顯。",
-        "hint_new_engine_for_ao": "啟用環境光遮蔽（AO）可提升截圖品質，但需要新圖形引擎。請至 SketchUp 偏好設定 → 圖形 → 使用新圖形引擎。"
+        "hint_new_engine_for_ao": "啟用環境光遮蔽（AO）可提升截圖品質，但需要新圖形引擎。請至 SketchUp 偏好設定 → 圖形 → 使用新圖形引擎。",
+        "kol_ambassador_dashboard": "🏆 大使進度 Ambassador Dashboard",
+        "kol_paid_users_label": "付費人數",
+        "kol_commission_rate_label": "分潤比例",
+        "kol_ready_withdraw_label": "可提領",
+        "kol_your_code_label": "您的專屬推薦碼 Your Code:",
+        "referral_code_section_title": "推薦碼 / 大使代碼 (Referral / Ambassador Code)",
+        "referral_code_section_desc": "輸入好友推薦碼或大使專屬碼，首次付費雙方皆得點數獎勵。",
+        "referral_code_ph": "輸入推薦碼 / 大使代碼",
+        "kol_next_tier_hint": "距離下一階梯還差 {n} 人！"
     },
     "es-ES": {
         "title": "LoamLab Camera",
@@ -916,7 +943,16 @@ const UI_LANG = {
         "style_ref_clear": "✕ Borrar",
         "style_ref_upload_title": "Subir referencia de estilo",
         "style_ref_hint": "Opcional. Cuando se selecciona, todas las escenas seguirán la iluminación y tono de esta imagen — especialmente útil para renderizados en lote.",
-        "hint_new_engine_for_ao": "Activar Oclusión Ambiental (AO) mejora la calidad de las capturas, pero requiere el nuevo motor gráfico. Ve a Preferencias de SketchUp → Gráficos → Usar nuevo motor gráfico."
+        "hint_new_engine_for_ao": "Activar Oclusión Ambiental (AO) mejora la calidad de las capturas, pero requiere el nuevo motor gráfico. Ve a Preferencias de SketchUp → Gráficos → Usar nuevo motor gráfico.",
+        "kol_ambassador_dashboard": "[TBD] 🏆 大使進度 Ambassador Dashboard",
+        "kol_paid_users_label": "[TBD] 付費人數",
+        "kol_commission_rate_label": "[TBD] 分潤比例",
+        "kol_ready_withdraw_label": "[TBD] 可提領",
+        "kol_your_code_label": "[TBD] 您的專屬推薦碼 Your Code:",
+        "referral_code_section_title": "[TBD] 推薦碼 / 大使代碼 (Referral / Ambassador Code)",
+        "referral_code_section_desc": "[TBD] 輸入好友推薦碼或大使專屬碼，首次付費雙方皆得點數獎勵。",
+        "referral_code_ph": "[TBD] 輸入推薦碼 / 大使代碼",
+        "kol_next_tier_hint": "[TBD] 距離下一階梯還差 {n} 人！"
     },
     "pt-BR": {
         "title": "LoamLab Camera",
@@ -1145,7 +1181,16 @@ const UI_LANG = {
         "style_ref_clear": "✕ Limpar",
         "style_ref_upload_title": "Enviar referência de estilo",
         "style_ref_hint": "Opcional. Quando selecionado, todas as cenas seguirão a iluminação e o tom desta imagem — especialmente útil para consistência em renderizações em lote.",
-        "hint_new_engine_for_ao": "Ativar Oclusão Ambiental (AO) pode melhorar a qualidade das capturas, mas requer o novo motor gráfico. Vá para Preferências do SketchUp → Gráficos → Usar novo motor gráfico."
+        "hint_new_engine_for_ao": "Ativar Oclusão Ambiental (AO) pode melhorar a qualidade das capturas, mas requer o novo motor gráfico. Vá para Preferências do SketchUp → Gráficos → Usar novo motor gráfico.",
+        "kol_ambassador_dashboard": "[TBD] 🏆 大使進度 Ambassador Dashboard",
+        "kol_paid_users_label": "[TBD] 付費人數",
+        "kol_commission_rate_label": "[TBD] 分潤比例",
+        "kol_ready_withdraw_label": "[TBD] 可提領",
+        "kol_your_code_label": "[TBD] 您的專屬推薦碼 Your Code:",
+        "referral_code_section_title": "[TBD] 推薦碼 / 大使代碼 (Referral / Ambassador Code)",
+        "referral_code_section_desc": "[TBD] 輸入好友推薦碼或大使專屬碼，首次付費雙方皆得點數獎勵。",
+        "referral_code_ph": "[TBD] 輸入推薦碼 / 大使代碼",
+        "kol_next_tier_hint": "[TBD] 距離下一階梯還差 {n} 人！"
     },
     "ja-JP": {
         "title": "LoamLab Camera",
@@ -1374,7 +1419,16 @@ const UI_LANG = {
         "style_ref_clear": "✕ クリア",
         "style_ref_upload_title": "スタイル参考をアップロード",
         "style_ref_hint": "オプション。選択すると、すべてのシーンがこの画像の照明とトーンに従います — バッチレンダリングの一貫性に特に有効。",
-        "hint_new_engine_for_ao": "アンビエントオクルージョン（AO）を有効にすると品質が向上しますが、新しいグラフィックエンジンが必要です。SketchUp環境設定 → グラフィックス → 新しいグラフィックエンジンを使用。"
+        "hint_new_engine_for_ao": "アンビエントオクルージョン（AO）を有効にすると品質が向上しますが、新しいグラフィックエンジンが必要です。SketchUp環境設定 → グラフィックス → 新しいグラフィックエンジンを使用。",
+        "kol_ambassador_dashboard": "[TBD] 🏆 大使進度 Ambassador Dashboard",
+        "kol_paid_users_label": "[TBD] 付費人數",
+        "kol_commission_rate_label": "[TBD] 分潤比例",
+        "kol_ready_withdraw_label": "[TBD] 可提領",
+        "kol_your_code_label": "[TBD] 您的專屬推薦碼 Your Code:",
+        "referral_code_section_title": "[TBD] 推薦碼 / 大使代碼 (Referral / Ambassador Code)",
+        "referral_code_section_desc": "[TBD] 輸入好友推薦碼或大使專屬碼，首次付費雙方皆得點數獎勵。",
+        "referral_code_ph": "[TBD] 輸入推薦碼 / 大使代碼",
+        "kol_next_tier_hint": "[TBD] 距離下一階梯還差 {n} 人！"
     }
 };
 

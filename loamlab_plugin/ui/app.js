@@ -2688,7 +2688,15 @@ async function fetchKolDashboard(email) {
         const el = (id) => document.getElementById(id);
         if (el('kol-total-users')) el('kol-total-users').textContent = d.total_paid_users ?? '-';
         if (el('kol-current-rate')) el('kol-current-rate').textContent = d.current_commission_rate ?? '-';
-        if (el('kol-ready-withdraw')) el('kol-ready-withdraw').textContent = (d.earnings?.ready_to_withdraw ?? 0) + '¢';
+        if (el('kol-ready-withdraw')) {
+            const usd = d.earnings?.ready_to_withdraw ?? 0;
+            const lang = currentLang || localStorage.getItem('loamlab_lang') || 'en-US';
+            let display;
+            if (lang === 'zh-TW') display = `NT$ ${Math.round(usd * 32)}`;
+            else if (lang === 'zh-CN') display = `¥ ${(usd * 7.2).toFixed(1)}`;
+            else display = `$ ${usd}`;
+            el('kol-ready-withdraw').textContent = display;
+        }
 
         const next = d.progress_to_next_tier;
         const total = d.total_paid_users || 0;
@@ -2697,7 +2705,7 @@ async function fetchKolDashboard(email) {
             if (el('kol-progress-bar')) el('kol-progress-bar').style.width = pct + '%';
             if (el('kol-progress-label')) el('kol-progress-label').textContent = `${total} / ${next.needed}`;
             if (el('kol-tier-label')) el('kol-tier-label').textContent = `Tier ${d.current_tier} · ${d.current_commission_rate}`;
-            if (el('kol-next-tier-hint')) el('kol-next-tier-hint').textContent = `距離下一階梯還差 ${next.remaining} 人！`;
+            if (el('kol-next-tier-hint')) el('kol-next-tier-hint').textContent = t('kol_next_tier_hint').replace('{n}', next.remaining);
         } else {
             // Tier 3 最高階
             if (el('kol-progress-bar')) el('kol-progress-bar').style.width = '100%';

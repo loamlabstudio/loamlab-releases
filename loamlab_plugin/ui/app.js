@@ -1525,11 +1525,11 @@ function renderScenesList(scenes) {
             }
         </style>
         <div class="flex justify-between items-center mb-0 px-2 pt-2 pb-2 border-b border-white/5 shrink-0">
-            <h3 class="text-[11px] font-bold text-white/60 tracking-wider uppercase" data-i18n="scene_select">Select Perspectives</h3>
+            <h3 class="text-[11px] font-bold text-white/60 tracking-wider uppercase whitespace-nowrap" data-i18n="scene_select">${t('scene_select')}</h3>
             <div class="flex items-center gap-2">
-                <button id="btn-refresh-scenes" title="${t('scene_refresh') || 'Refresh Scenes'}" class="text-[11px] text-white/35 hover:text-white/80 transition-colors px-1" onclick="if(window.sketchup){try{sketchup.getInitialData({});}catch(_){}}">↺</button>
-                <button id="btn-select-all-scenes" class="text-[9px] text-white/40 hover:text-white/80 tracking-widest transition-colors">全選</button>
-                <span id="scene-count-label" data-count="${scenes.length}" class="text-[9px] text-white font-bold tracking-widest bg-[#dc2626] px-2.5 py-1 rounded-full shadow-md">Total ${scenes.length} Scenes</span>
+                <button id="btn-refresh-scenes" title="${t('scene_refresh')}" class="text-[11px] text-white/35 hover:text-white/80 transition-colors px-1" onclick="if(window.sketchup){try{sketchup.getInitialData({});}catch(_){}}">↺</button>
+                <button id="btn-select-all-scenes" class="text-[9px] text-white/40 hover:text-white/80 tracking-widest transition-colors">${t('scene_select_all') || '全選'}</button>
+                <span id="scene-count-label" data-count="${scenes.length}" class="text-[9px] text-white font-bold tracking-widest bg-[#dc2626] px-2.5 py-1 rounded-full shadow-md">${t('total')} ${scenes.length} ${t('unit')}</span>
             </div>
         </div>
         <div class="flex-1 min-h-0 overflow-y-auto px-1 pt-1 custom-scrollbar w-full relative" id="scene-scroll-area">
@@ -1544,7 +1544,7 @@ function renderScenesList(scenes) {
             const allInputs = container.querySelectorAll('input[name="scene"]');
             const allChecked = Array.from(allInputs).every(cb => cb.checked);
             allInputs.forEach(cb => { cb.checked = !allChecked; });
-            btnSelectAll.textContent = allChecked ? '全選' : '全不選';
+            btnSelectAll.textContent = allChecked ? t('scene_select_all') : t('scene_deselect_all');
             updateCostPreview();
         });
     }
@@ -2043,8 +2043,10 @@ function syncPricingModalI18n() {
     if (!modal) return;
     modal.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        const text = t(key);
-        if (text) el.textContent = text;
+        var langSet = UI_LANG[currentLang] || UI_LANG['en-US'];
+        var text = langSet[key];
+        if (text === undefined || text === null) text = (UI_LANG['en-US'] || {})[key];
+        if (text !== undefined && text !== null) el.textContent = text;
     });
 }
 
@@ -2089,7 +2091,43 @@ function refreshPricingModalBadge() {
     }
 }
 
+function switchPricingTab(tab) {
+    const subPanel = document.getElementById('panel-subscription');
+    const topupPanel = document.getElementById('panel-topup');
+    const subBtn = document.getElementById('tab-btn-subscription');
+    const topupBtn = document.getElementById('tab-btn-topup');
+    if (!subPanel || !topupPanel) return;
+    if (tab === 'topup') {
+        subPanel.classList.add('hidden');
+        topupPanel.classList.remove('hidden');
+        topupPanel.classList.add('flex');
+        subBtn.classList.remove('bg-white/10', 'text-white');
+        subBtn.classList.add('text-white/40');
+        topupBtn.classList.add('bg-white/10', 'text-white');
+        topupBtn.classList.remove('text-white/40', 'hover:text-white/60');
+    } else {
+        topupPanel.classList.add('hidden');
+        topupPanel.classList.remove('flex');
+        subPanel.classList.remove('hidden');
+        topupBtn.classList.remove('bg-white/10', 'text-white');
+        topupBtn.classList.add('text-white/40', 'hover:text-white/60');
+        subBtn.classList.add('bg-white/10', 'text-white');
+        subBtn.classList.remove('text-white/40');
+    }
+}
+
+function togglePlanFeatures(btn) {
+    const ul = btn.nextElementSibling;
+    if (!ul) return;
+    const isHidden = ul.classList.contains('hidden');
+    ul.classList.toggle('hidden', !isHidden);
+    btn.textContent = isHidden ? (t('pricing_hide_features') || 'Hide Features ▲') : (t('pricing_view_features') || 'View Features ▼');
+}
+
 function openPricingModal(ctx = null) {
+    if (ctx && ctx.cost !== undefined && ctx.balance !== undefined && ctx.cost > ctx.balance) {
+        submitFeedback({ type: 'paywall_trigger', metadata: { cost: ctx.cost, balance: ctx.balance } });
+    }
     const banner = document.getElementById('paywall-context-banner');
     if (banner) {
         if (ctx && ctx.cost !== undefined && ctx.balance !== undefined && ctx.cost > ctx.balance) {
@@ -2102,9 +2140,10 @@ function openPricingModal(ctx = null) {
     pricingModal.classList.remove('hidden');
     updatePlanCostLabels(currentLang);
     updateRenderHints();
-    refreshPricingModalBadge();
+    switchPricingTab(ctx && ctx.highlight === 'topup' ? 'topup' : 'subscription');
     applyBetaDiscountDisplay();
     syncPricingModalI18n();
+    refreshPricingModalBadge();
     setTimeout(() => {
         pricingModal.classList.remove('opacity-0');
         pricingModalContent.classList.remove('scale-95');

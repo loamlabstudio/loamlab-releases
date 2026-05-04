@@ -109,6 +109,9 @@ Feedback System — 反饋系統
 -- transactions 補 metadata 欄位（記錄 plugin_version, resolution 等）
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
 
+-- transactions 補美金金額欄位（Webhook 付款時記錄，用於收入統計）
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS amount_usd_cents INTEGER;
+
 -- 建立 feedback 表
 CREATE TABLE IF NOT EXISTS public.feedback (
   id             UUID DEFAULT gen_random_uuid() PRIMARY KEY,

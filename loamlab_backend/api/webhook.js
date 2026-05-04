@@ -208,16 +208,17 @@ async function processTopup(customerEmail, variantId, orderId, platform, discoun
     }
 
     // 紀錄交易
+    const PLAN_PRICES_CENTS = { starter: 700, pro: 1500, studio: 3500, topup: 490 };
+    const amountPaid = planName ? (PLAN_PRICES_CENTS[planName] || 490) : 490;
     await supabase.from('transactions').insert([{
         user_email: customerEmail,
         amount: pointsToAdd,
         transaction_type: isSubscription ? 'TOPUP_SUBSCRIPTION' : 'TOPUP_SINGLE',
-        order_id: fullOrderId
+        order_id: fullOrderId,
+        amount_usd_cents: amountPaid
     }]);
 
     // KOL 分潤快照（每次付款均觸發，與首單點數獎勵並行）
-    const PLAN_PRICES_CENTS = { starter: 700, pro: 1500, studio: 3500, topup: 490 };
-    const amountPaid = planName ? (PLAN_PRICES_CENTS[planName] || 490) : 490;
     await writeKolCommission(customerEmail, amountPaid, fullOrderId);
 
     console.log(`[🚀金流] 成功處理 ${platform} 充值: ${customerEmail} (+${pointsToAdd} pts)`);

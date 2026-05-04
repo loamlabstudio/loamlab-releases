@@ -515,13 +515,13 @@ async function dashboard(supabase) {
         noTestRef(supabase.from('transactions').select('user_email', { count: 'exact', head: true }).gte('created_at', d1)),
         noTestRef(supabase.from('transactions').select('user_email', { count: 'exact', head: true }).gte('created_at', d7)),
         noTestRef(supabase.from('transactions').select('*', { count: 'exact', head: true }).in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K']).gte('created_at', d30)),
-        noTestRef(supabase.from('transactions').select('amount, transaction_type').eq('transaction_type', 'TOPUP').gte('created_at', d30)),
+        noTestRef(supabase.from('transactions').select('amount_usd_cents, transaction_type').in('transaction_type', ['TOPUP_SINGLE','TOPUP_SUBSCRIPTION']).gte('created_at', d30)),
         noTestRef(supabase.from('transactions').select('transaction_type, created_at').in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K']).gte('created_at', d30).limit(1000)),
         noTestRef(supabase.from('render_history').select('user_rating, style, tool_id').gte('created_at', d30)),
         noTestRef(supabase.from('feedback').select('*', { count: 'exact', head: true }).eq('type', 'paywall_trigger').gte('created_at', d30)),
     ]);
 
-    const revenue30d = (topups || []).reduce((s, r) => s + (r.amount || 0), 0);
+    const revenue30d = (topups || []).reduce((s, r) => s + ((r.amount_usd_cents || 0) / 100), 0);
     const toolBreakdown = groupBy((ratingRows || []).filter(r => r.tool_id != null), 'tool_id');
     
     // 從 render_history 獲取風格分佈 (30天)
@@ -585,14 +585,14 @@ async function users(supabase) {
 async function revenue(supabase) {
     const { data: txns } = await noTestRef(supabase
         .from('transactions')
-        .select('amount, transaction_type, created_at, user_email')
-        .eq('transaction_type', 'TOPUP')
+        .select('amount_usd_cents, transaction_type, created_at, user_email')
+        .in('transaction_type', ['TOPUP_SINGLE','TOPUP_SUBSCRIPTION'])
         .gte('created_at', daysAgo(90))
         .order('created_at', { ascending: false }));
 
     const rows = (txns || []).filter(t => !isTest(t.user_email));
     const d30 = daysAgo(30);
-    const revenue30d = rows.filter(t => t.created_at >= d30).reduce((s, t) => s + (t.amount || 0), 0);
+    const revenue30d = rows.filter(t => t.created_at >= d30).reduce((s, t) => s + ((t.amount_usd_cents || 0) / 100), 0);
     const daily = groupByDate(rows);
 
     return { revenue_30d: revenue30d, daily_revenue: daily, total_topups_90d: rows.length };
@@ -674,7 +674,7 @@ async function funnel(supabase) {
 
     // Step5: 有過 TOPUP 的獨立用戶（付費）
     const { data: paid } = await noTestRef(
-        supabase.from('transactions').select('user_email').eq('transaction_type', 'TOPUP')
+        supabase.from('transactions').select('user_email').in('transaction_type', ['TOPUP_SINGLE','TOPUP_SUBSCRIPTION'])
     );
     const paidSet = new Set((paid || []).filter(p => p.user_email).map(p => p.user_email)).size;
 
@@ -714,7 +714,7 @@ async function insights(supabase) {
             .eq('type', 'paywall_trigger')),
         noTestRef(supabase.from('transactions')
             .select('user_email')
-            .eq('transaction_type', 'TOPUP')),
+            .in('transaction_type', ['TOPUP_SINGLE','TOPUP_SUBSCRIPTION'])),
     ]);
 
     const users    = (allUsers || []).filter(u => !isTest(u.email));
@@ -791,6 +791,21 @@ async function insights(supabase) {
         message: `${highValue.length} 位重度用戶（累計點數 >100）尚未訂閱`,
         action: '個人化升級推薦，說明訂閱性價比',
         emails: highValue.slice(0, 5).map(u => u.email),
+    });
+
+    // 5. 首次渲染後 >7 天未再渲染（有意願但未形成習慣）
+    const secondMissing = users.filter(u =>
+        renderMap[u.email] === 1 &&
+        !active7d.has(u.email) &&
+        !paidSet.has(u.email)
+    );
+    if (secondMissing.length) result.push({
+        type: 'second_render_missing',
+        severity: 'opportunity',
+        count: secondMissing.length,
+        message: `${secondMissing.length} 位用戶首次渲染後超過 7 天未再渲染（有意願但未養成習慣）`,
+        action: '發送第二次渲染提醒郵件，附上使用技巧或限時優惠',
+        emails: secondMissing.slice(0, 5).map(u => u.email),
     });
 
     return { insights: result, analyzed_users: users.length };

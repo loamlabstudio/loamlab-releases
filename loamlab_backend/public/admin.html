@@ -362,6 +362,30 @@
       </div>
     </div>
 
+    <!-- 自訂材質：預設快選 Chips 管理 -->
+    <div class="mt-4 bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-300">自訂材質 · 預設快選 Chips</h3>
+          <p class="text-[11px] text-gray-600 mt-0.5">插件「自訂材質」版塊：用戶新增區域節點時可看到的快選選項</p>
+        </div>
+        <span class="text-[9px] font-mono text-gray-700 bg-black/40 px-1.5 py-0.5 rounded">field_id: _surf_presets</span>
+      </div>
+      <div id="surf-presets-chips-area"></div>
+    </div>
+
+    <!-- 截圖強制樣式設定 -->
+    <div class="mt-4 bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-300">截圖強制樣式設定</h3>
+          <p class="text-[11px] text-gray-600 mt-0.5">所有用戶截圖時強制套用，截圖後自動還原。AOEnabled 僅新引擎生效，classic engine 靜默忽略。</p>
+        </div>
+        <span class="text-[9px] font-mono text-gray-700 bg-black/40 px-1.5 py-0.5 rounded">field_id: _render_force_style</span>
+      </div>
+      <div id="render-force-style-area"></div>
+    </div>
+
     <div class="flex justify-between mt-5 items-center">
       <div class="flex items-center gap-3">
         <div id="t1-nodes-status" class="text-xs text-green-400 hidden"></div>
@@ -579,7 +603,7 @@
         <button class="tab" onclick="filterUsers('subscriber',this)">訂閱者</button>
         <button class="tab" onclick="filterUsers('whale',this)">鯨魚 🐳</button>
         <button class="tab" onclick="filterUsers('new',this)">新用戶</button>
-        <button class="tab" onclick="filterUsers('churned',this)">流失風險</button>
+        <button class="tab" onclick="filterUsers('churned',this)" title="定義：30天內無渲染記錄，且非鯨魚、非訂閱、非7天內新用戶">流失風險</button>
       </div>
     </div>
     <div class="overflow-x-auto">
@@ -1345,6 +1369,48 @@ function renderT1Nodes() {
   `);
   });
   container.innerHTML = pieces.join('');
+  renderSurfPresetsSection();
+}
+
+function renderSurfPresetsSection() {
+  const area = document.getElementById('surf-presets-chips-area');
+  if (!area) return;
+  const fieldId = '_surf_presets';
+  const nodeOpts = optionsData.map((o, i) => ({...o, _gi: i})).filter(o => o.field_id === fieldId);
+  const editingGi = _chipEditState[fieldId] ?? null;
+  const editingOpt = editingGi != null ? nodeOpts.find(o => o._gi === editingGi) : null;
+
+  const pillsHtml = nodeOpts.map(opt => `
+    <span onclick="editChip(${opt._gi},'${fieldId}')"
+      class="inline-flex items-center gap-1 cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] select-none transition-all
+             ${editingGi === opt._gi
+               ? 'bg-cyan-900/30 ring-1 ring-cyan-400/50 text-cyan-100'
+               : 'bg-white/8 hover:bg-white/14 text-white/80'}">
+      <span>${opt.label || '<span class="italic text-gray-500">未命名</span>'}</span>
+      <button type="button" onclick="event.stopPropagation();removeOptionInNode(${opt._gi},'${fieldId}')"
+        class="text-[9px] text-gray-500 hover:text-red-400 transition-colors leading-none ml-0.5">✕</button>
+    </span>
+  `).join('');
+
+  const editPanelHtml = editingOpt ? `
+    <div class="mt-2 bg-black/50 border border-cyan-500/20 rounded-lg px-2 py-1.5 flex gap-1.5 items-center flex-wrap">
+      <input value="${(editingOpt.label||'').replace(/"/g,'&quot;')}" placeholder="中文標籤（例：大理石）"
+        oninput="updateOptionField(${editingOpt._gi},'label',this.value)"
+        class="w-28 bg-black/40 border border-white/10 rounded px-2 py-0.5 text-[11px] text-white outline-none" autofocus />
+      <input value="${(editingOpt.value||'').replace(/"/g,'&quot;')}" placeholder="英文值（例：marble）"
+        oninput="updateOptionField(${editingOpt._gi},'value',this.value)"
+        class="flex-1 min-w-[160px] bg-black/40 border border-white/10 rounded px-2 py-0.5 text-[11px] text-green-300/80 outline-none" />
+      <button type="button" onclick="removeOptionInNode(${editingOpt._gi},'${fieldId}')" class="text-red-500/80 hover:text-red-400 text-xs transition-colors p-1">🗑</button>
+    </div>` : '';
+
+  area.innerHTML = `
+    <div class="flex flex-wrap gap-1.5 items-center min-h-[28px]">
+      ${pillsHtml}
+      <button type="button" onclick="addOptionToNode('${fieldId}')"
+        class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] text-cyan-700 hover:text-cyan-400 hover:bg-white/5 transition-colors border border-dashed border-cyan-800/40">+ 新增選項</button>
+    </div>
+    ${editPanelHtml}
+  `;
 }
 
 function addT1Node(group) {
@@ -1595,9 +1661,84 @@ async function loadOptions() {
     optionsData = j.options || [];
     optionsDirty = false;
     renderT1Nodes();
+    renderRenderForceStyleSection();
   } catch(e) { console.error('Failed to load options:', e); }
 }
 
+
+// ── 截圖強制樣式設定 ──────────────────────────────────────────────────────────
+function _getForceStyleEntry() {
+  let e = optionsData.find(o => o.field_id === '_render_force_style');
+  if (!e) {
+    e = { id: '_render_force_style', field_id: '_render_force_style', value: {} };
+    optionsData.push(e);
+  }
+  return e;
+}
+function _updateForceStyleField(key, rawVal) {
+  const e = _getForceStyleEntry();
+  if (!e.value) e.value = {};
+  // EdgeDisplayMode 用整數 0/1；DisplayShadows 用 boolean；其餘 boolean 或 number
+  if (key === 'EdgeDisplayMode') {
+    e.value[key] = (rawVal === true || rawVal === 'true') ? 1 : 0;
+  } else if (key === 'DisplayShadows') {
+    e.value[key] = (rawVal === true || rawVal === 'true');
+  } else {
+    const boolVal = (rawVal === 'true' || rawVal === true) ? true
+                  : (rawVal === 'false' || rawVal === false) ? false
+                  : parseInt(rawVal, 10);
+    e.value[key] = boolVal;
+  }
+  // 座標軸兩個 key 保持同步
+  if (key === 'DisplayInstanceAxes') e.value['DisplaySketchAxes'] = e.value[key];
+  optionsDirty = true;
+}
+function renderRenderForceStyleSection() {
+  const area = document.getElementById('render-force-style-area');
+  if (!area) return;
+  const e = _getForceStyleEntry();
+  const v = e.value || {};
+  const numRow = (label, key, def) => `<div class="flex items-center justify-between py-2 border-b border-white/[0.04]">
+    <span class="text-xs text-gray-400">${label}</span>
+    <input type="number" min="0" max="100" value="${v[key] !== undefined ? v[key] : def}"
+           oninput="_updateForceStyleField('${key}', this.value)"
+           class="w-16 bg-black/40 text-gray-200 text-xs text-right px-2 py-1 rounded border border-white/10 focus:border-cyan-500/50 outline-none">
+  </div>`;
+  const toggleRow = (label, key, def) => {
+    const on = v[key] !== undefined ? v[key] : def;
+    return `<div class="flex items-center justify-between py-2 border-b border-white/[0.04]">
+    <span class="text-xs text-gray-400">${label}</span>
+    <button onclick="_updateForceStyleField('${key}', ${!on}); renderRenderForceStyleSection();"
+            class="w-10 h-5 rounded-full transition-colors ${on ? 'bg-cyan-600' : 'bg-white/10'} relative flex-shrink-0">
+      <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-5' : 'translate-x-0.5'}"></span>
+    </button>
+  </div>`;
+  };
+  const sectionLabel = (t) => `<p class="text-[10px] text-white/25 uppercase tracking-widest pt-2 pb-0.5">${t}</p>`;
+  // EdgeDisplayMode toggle: 視覺上用 boolean（on=1, off=0），Ruby 端存 integer
+  const edgeToggleOn = v['EdgeDisplayMode'] !== undefined ? (v['EdgeDisplayMode'] === 1 || v['EdgeDisplayMode'] === true) : false;
+  const edgeToggleHtml = `<div class="flex items-center justify-between py-2 border-b border-white/[0.04]">
+    <span class="text-xs text-gray-400">EdgeDisplayMode（邊線主開關 0=關 1=開）</span>
+    <button onclick="_updateForceStyleField('EdgeDisplayMode', ${!edgeToggleOn}); renderRenderForceStyleSection();"
+            class="w-10 h-5 rounded-full transition-colors ${edgeToggleOn ? 'bg-cyan-600' : 'bg-white/10'} relative flex-shrink-0">
+      <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${edgeToggleOn ? 'translate-x-5' : 'translate-x-0.5'}"></span>
+    </button>
+  </div>`;
+  area.innerHTML = sectionLabel('Shadows')
+    + toggleRow('DisplayShadows（陰影顯示）', 'DisplayShadows', false)
+    + numRow('Light（0–100）', 'Light', 17)
+    + numRow('Dark（0–100）', 'Dark', 81)
+    + sectionLabel('Edge Style')
+    + edgeToggleHtml
+    + toggleRow('DrawBackEdges（後側邊線）', 'DrawBackEdges', false)
+    + toggleRow('DrawSilhouettes（Profiles 輪廓線）', 'DrawSilhouettes', true)
+    + numRow('SilhouetteWidth（Profile 粗細）', 'SilhouetteWidth', 1)
+    + toggleRow('DrawDepthQue（Depth Cue）', 'DrawDepthQue', false)
+    + sectionLabel('Face / AO')
+    + toggleRow('AmbientOcclusion（環境光遮蔽，僅新引擎）', 'AmbientOcclusion', true)
+    + sectionLabel('Modeling')
+    + toggleRow('DisplayInstanceAxes / DisplaySketchAxes（模型座標軸）', 'DisplayInstanceAxes', false);
+}
 
 function addOptionToNode(fieldId) {
   optionsData.push({
@@ -2013,8 +2154,9 @@ function renderDashboard(data) {
     errEl.className = `kpi-trend ${errRate > 10 ? 'trend-down' : 'text-gray-500'}`;
   }
 
-  setText('kpi-revenue', '$' + fmt(data.revenue_30d || 0));
-  const arpu = data.active_7d && data.revenue_30d ? 'ARPU $' + (data.revenue_30d / data.active_7d).toFixed(1) : 'ARPU --';
+  const rev = (data.revenue_30d || 0);
+  setText('kpi-revenue', '$' + rev.toFixed(2));
+  const arpu = data.active_7d && rev ? 'ARPU $' + (rev / data.active_7d).toFixed(2) : 'ARPU --';
   setText('kpi-arpu', arpu);
   
   setText('kpi-rating', data.avg_rating ? data.avg_rating + ' ★' : '--');
@@ -2185,8 +2327,8 @@ function renderDonut(chartId, legendId, raw, labels, colors) {
   if (chartId === 'chart-tools') chartTools = chart;
   else chartRes = chart;
 
-  // 自訂 legend
-  document.getElementById(legendId).innerHTML = entries.map(([k,v], i) => `
+  // 自訂 legend（有數據工具）
+  const activeRows = entries.map(([k,v], i) => `
     <div class="flex items-center justify-between text-xs">
       <div class="flex items-center gap-2">
         <div style="width:8px;height:8px;border-radius:2px;background:${colors[i]};flex-shrink:0"></div>
@@ -2194,6 +2336,18 @@ function renderDonut(chartId, legendId, raw, labels, colors) {
       </div>
       <span class="text-gray-500">${Math.round(v/total*100)}%</span>
     </div>`).join('');
+  // 工具圖：補顯 count=0 的開放工具（T1/T2/T3）
+  const zeroRows = chartId === 'chart-tools'
+    ? [1,2,3].filter(id => !entries.find(([k]) => k == id)).map(id => `
+    <div class="flex items-center justify-between text-xs opacity-40">
+      <div class="flex items-center gap-2">
+        <div style="width:8px;height:8px;border-radius:2px;background:${colors[id-1]||'#4b5577'};flex-shrink:0"></div>
+        <span class="text-gray-500">${labels[id]||'T'+id}</span>
+      </div>
+      <span class="text-gray-600 text-[10px]">尚無記錄</span>
+    </div>`).join('')
+    : '';
+  document.getElementById(legendId).innerHTML = activeRows + zeroRows;
 }
 
 // ── 用戶列表 ──────────────────────────────────────────────────────────────────

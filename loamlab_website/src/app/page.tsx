@@ -121,6 +121,7 @@ export default function Home() {
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   };
+  const [pricingTab, setPricingTab] = useState<'subscription' | 'topup'>('subscription');
 
   return (
     <main className="min-h-screen bg-[var(--color-loam-dark)] relative overflow-hidden text-[var(--color-loam-bone)]">
@@ -177,7 +178,7 @@ export default function Home() {
             Download Free Plugin
           </a>
 
-          <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NblmafncbUuGNrMRvJp4" target="_blank" className="px-10 py-5 rounded-full border border-white/20 text-white font-bold text-xs tracking-[0.2em] uppercase hover:bg-white/10 transition-all flex items-center justify-center gap-2">
+          <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NblmafncbUuGNrMRvJp4&discount_code=LOAM_BETA_30" target="_blank" className="px-10 py-5 rounded-full border border-white/20 text-white font-bold text-xs tracking-[0.2em] uppercase hover:bg-white/10 transition-all flex items-center justify-center gap-2">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
             升級 Pro 方案
           </a>
@@ -223,7 +224,7 @@ export default function Home() {
 
       {/* 4. Pricing Section (定價方案 - Synchronized with POINTS_SYSTEM.md) */}
       <section id="pricing" className="w-full py-32 px-6 max-w-6xl mx-auto z-10 relative">
-        <div className="text-center mb-20">
+        <div className="text-center mb-12">
           <h2 className="text-4xl md:text-5xl font-light mb-6">靈活方案，支撐創意野心</h2>
           <p className="text-zinc-400 font-light">
             目前開放 Beta 測試期專屬 <span className="text-[var(--color-loam-primary)] font-bold">7折 (30% OFF)</span> 永久優惠。<br/>
@@ -231,51 +232,80 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
-          {/* Starter */}
-          <div className="glass-panel p-10 rounded-[40px] flex flex-col border border-white/5 hover:border-white/20 transition-all">
-            <div className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 font-bold mb-6">Starter / 基礎</div>
-            <div className="text-5xl font-light mb-2">$17 <span className="text-sm text-zinc-500">/mo</span></div>
-            <div className="text-xs text-zinc-500 line-through mb-8">原價 $24</div>
-
-            <ul className="space-y-4 mb-12 flex-grow text-sm text-zinc-400 font-light">
-              <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 每月發放 300 Credits</li>
-              <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 15 張 2K 渲染</li>
-              <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> SketchUp 全版本支援</li>
-            </ul>
-            <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NblmUvFrwJe36ymTELWV" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Subscribe</a>
-          </div>
-
-          {/* Pro (Hot) */}
-          <div className="glass-panel p-10 rounded-[40px] flex flex-col border border-[var(--color-loam-primary)]/50 bg-[var(--color-loam-primary)]/5 relative scale-105 shadow-[0_20px_50px_rgba(218,30,31,0.15)] z-20">
-            <div className="absolute top-0 right-0 bg-[var(--color-loam-primary)] text-white text-[9px] px-4 py-2 font-bold tracking-[0.2em] uppercase rounded-bl-2xl">Most Popular</div>
-            <div className="text-[10px] tracking-[0.3em] uppercase text-[var(--color-loam-primary)] font-bold mb-6">Pro / 專業</div>
-            <div className="text-5xl font-light mb-2 text-white">$36 <span className="text-sm text-zinc-500">/mo</span></div>
-            <div className="text-xs text-[var(--color-loam-primary)]/60 line-through mb-8">原價 $52</div>
-
-            <ul className="space-y-4 mb-12 flex-grow text-sm text-zinc-300 font-light">
-              <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 每月高達 2,000 Credits</li>
-              <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 100 張 2K 渲染</li>
-              <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 支援 4K 影院級畫質擴展</li>
-              <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 優先 AI 計算通道</li>
-            </ul>
-            <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NblmafncbUuGNrMRvJp4" target="_blank" className="w-full py-5 rounded-full bg-[var(--color-loam-primary)] text-white text-[10px] font-bold tracking-widest uppercase hover:scale-105 transition-transform text-center">Subscribe</a>
-          </div>
-
-          {/* Studio */}
-          <div className="glass-panel p-10 rounded-[40px] flex flex-col border border-white/5 hover:border-white/20 transition-all">
-            <div className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 font-bold mb-6">Studio / 工作室</div>
-            <div className="text-5xl font-light mb-2">$97 <span className="text-sm text-zinc-500">/mo</span></div>
-            <div className="text-xs text-zinc-500 line-through mb-8">原價 $139</div>
-
-            <ul className="space-y-4 mb-12 flex-grow text-sm text-zinc-400 font-light">
-              <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 每月爆發 9,000 Credits</li>
-              <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 450 張 2K 渲染</li>
-              <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 團隊商用授權許可</li>
-            </ul>
-            <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0Nblmhwbr5WXfNyDHpaA2" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Subscribe</a>
-          </div>
+        {/* Tab Switcher */}
+        <div className="flex gap-2 mb-10 p-1 bg-white/5 rounded-2xl border border-white/5 max-w-sm mx-auto">
+          <button
+            onClick={() => setPricingTab('subscription')}
+            className={`flex-1 py-2.5 rounded-xl text-[10px] font-bold tracking-widest uppercase transition-all ${pricingTab === 'subscription' ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >訂閱方案</button>
+          <button
+            onClick={() => setPricingTab('topup')}
+            className={`flex-1 py-2.5 rounded-xl text-[10px] font-bold tracking-widest uppercase transition-all ${pricingTab === 'topup' ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >單次充值</button>
         </div>
+
+        {/* Subscription Panel */}
+        {pricingTab === 'subscription' && (
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Starter */}
+            <div className="glass-panel p-10 rounded-[40px] flex flex-col border border-white/5 hover:border-white/20 transition-all">
+              <div className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 font-bold mb-6">Starter / 基礎</div>
+              <div className="text-5xl font-light mb-2">$17 <span className="text-sm text-zinc-500">/mo</span></div>
+              <div className="text-xs text-zinc-500 line-through mb-8">原價 $24</div>
+              <ul className="space-y-4 mb-12 flex-grow text-sm text-zinc-400 font-light">
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 每月發放 300 Credits</li>
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 15 張 2K 渲染</li>
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> SketchUp 全版本支援</li>
+              </ul>
+              <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NblmUvFrwJe36ymTELWV&discount_code=LOAM_BETA_30" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Subscribe</a>
+            </div>
+
+            {/* Pro (Hot) */}
+            <div className="glass-panel p-10 rounded-[40px] flex flex-col border border-[var(--color-loam-primary)]/50 bg-[var(--color-loam-primary)]/5 relative scale-105 shadow-[0_20px_50px_rgba(218,30,31,0.15)] z-20">
+              <div className="absolute top-0 right-0 bg-[var(--color-loam-primary)] text-white text-[9px] px-4 py-2 font-bold tracking-[0.2em] uppercase rounded-bl-2xl">Most Popular</div>
+              <div className="text-[10px] tracking-[0.3em] uppercase text-[var(--color-loam-primary)] font-bold mb-6">Pro / 專業</div>
+              <div className="text-5xl font-light mb-2 text-white">$36 <span className="text-sm text-zinc-500">/mo</span></div>
+              <div className="text-xs text-[var(--color-loam-primary)]/60 line-through mb-8">原價 $52</div>
+              <ul className="space-y-4 mb-12 flex-grow text-sm text-zinc-300 font-light">
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 每月高達 2,000 Credits</li>
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 100 張 2K 渲染</li>
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 支援 4K 影院級畫質擴展</li>
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 優先 AI 計算通道</li>
+              </ul>
+              <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NblmafncbUuGNrMRvJp4&discount_code=LOAM_BETA_30" target="_blank" className="w-full py-5 rounded-full bg-[var(--color-loam-primary)] text-white text-[10px] font-bold tracking-widest uppercase hover:scale-105 transition-transform text-center">Subscribe</a>
+            </div>
+
+            {/* Studio */}
+            <div className="glass-panel p-10 rounded-[40px] flex flex-col border border-white/5 hover:border-white/20 transition-all">
+              <div className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 font-bold mb-6">Studio / 工作室</div>
+              <div className="text-5xl font-light mb-2">$97 <span className="text-sm text-zinc-500">/mo</span></div>
+              <div className="text-xs text-zinc-500 line-through mb-8">原價 $139</div>
+              <ul className="space-y-4 mb-12 flex-grow text-sm text-zinc-400 font-light">
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 每月爆發 9,000 Credits</li>
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 450 張 2K 渲染</li>
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 團隊商用授權許可</li>
+              </ul>
+              <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0Nblmhwbr5WXfNyDHpaA2&discount_code=LOAM_BETA_30" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Subscribe</a>
+            </div>
+          </div>
+        )}
+
+        {/* Top-up Panel */}
+        {pricingTab === 'topup' && (
+          <div className="flex justify-center">
+            <div className="glass-panel p-10 rounded-[40px] flex flex-col border border-white/10 hover:border-white/20 transition-all w-full max-w-sm">
+              <div className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 font-bold mb-6">Top-up / 單次充值</div>
+              <div className="text-5xl font-light mb-2">$13 <span className="text-sm text-zinc-500">/次</span></div>
+              <div className="text-xs text-zinc-500 line-through mb-8">原價 $18</div>
+              <ul className="space-y-4 mb-12 flex-grow text-sm text-zinc-400 font-light">
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 200 點永久有效</li>
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 10 張 2K 渲染</li>
+                <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 無訂閱綁定，用多少買多少</li>
+              </ul>
+              <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NbIlveGNSETSOveL7Xmk&discount_code=LOAM_BETA_30" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Buy Now</a>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* 5. Referral System (永久能量) */}

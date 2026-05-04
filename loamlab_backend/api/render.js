@@ -22,26 +22,42 @@ function sanitizeError(msg) {
         .replace(/https?:\/\/api\.[^\s"']+/g, '[API_ENDPOINT]');
 }
 
+// 全域快取：存放 Promise 避免同一瞬間併發的多個相同翻譯請求重複扣除 API 額度
+const translationPromises = new Map();
+
 // ── Gemini 翻譯 helper（有 CJK 字元 + API Key 才翻，否則原值回傳）──
 async function translateValues(valuesObj) {
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) return valuesObj;
     const hasCJK = Object.values(valuesObj).some(v => /[\u4e00-\u9fff\u3040-\u30ff]/.test(String(v)));
     if (!hasCJK) return valuesObj;
-    try {
-        const resp = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ contents: [{ parts: [{ text:
-                `Translate these interior design/photography descriptions to professional English. Output ONLY a valid JSON object with identical keys and English values. No explanations.\n\n${JSON.stringify(valuesObj)}`
-              }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 1024 } }) }
-        );
-        const data = await resp.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const m = text.match(/\{[\s\S]*\}/);
-        if (m) return JSON.parse(m[0]);
-    } catch(e) { /* fallback: 回傳原值 */ }
-    return valuesObj;
+
+    const cacheKey = 'obj_' + JSON.stringify(valuesObj);
+    if (translationPromises.has(cacheKey)) {
+        return await translationPromises.get(cacheKey);
+    }
+
+    const promise = (async () => {
+        try {
+            const resp = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ contents: [{ parts: [{ text:
+                    `Translate these interior design/photography descriptions to professional English. Output ONLY a valid JSON object with identical keys and English values. No explanations.\n\n${JSON.stringify(valuesObj)}`
+                  }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 1024 } }) }
+            );
+            const data = await resp.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            const m = text.match(/\{[\s\S]*\}/);
+            if (m) return JSON.parse(m[0]);
+        } catch(e) { /* fallback: 回傳原值 */ }
+        return valuesObj;
+    })();
+
+    translationPromises.set(cacheKey, promise);
+    if (translationPromises.size > 100) translationPromises.delete(translationPromises.keys().next().value);
+    
+    return await promise;
 }
 
 // ── 單字串翻譯（有 CJK 才翻；失敗靜默降級返回原文）──
@@ -50,19 +66,32 @@ async function translateToEnglish(text) {
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) return text;
     if (!/[\u4e00-\u9fff\u3040-\u30ff]/.test(text)) return text;
-    try {
-        const resp = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ contents: [{ parts: [{ text:
-                `Translate the following interior design description to professional English. Output ONLY the translated text, no explanations.\n\n${text}`
-              }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 512 } }) }
-        );
-        const data = await resp.json();
-        const translated = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (translated) return translated;
-    } catch(e) { /* 靜默降級 */ }
-    return text;
+
+    const cacheKey = 'str_' + text;
+    if (translationPromises.has(cacheKey)) {
+        return await translationPromises.get(cacheKey);
+    }
+
+    const promise = (async () => {
+        try {
+            const resp = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ contents: [{ parts: [{ text:
+                    `Translate the following interior design description to professional English. Output ONLY the translated text, no explanations.\n\n${text}`
+                  }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 512 } }) }
+            );
+            const data = await resp.json();
+            const translated = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (translated) return translated;
+        } catch(e) { /* 靜默降級 */ }
+        return text;
+    })();
+
+    translationPromises.set(cacheKey, promise);
+    if (translationPromises.size > 100) translationPromises.delete(translationPromises.keys().next().value);
+    
+    return await promise;
 }
 
 export default async function handler(req, res) {

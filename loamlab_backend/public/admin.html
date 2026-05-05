@@ -24,6 +24,9 @@
   .tab.on { background: #1e2440; color: #c9d1e0; }
   .tab:hover:not(.on) { color: #8899bb; }
   .pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e; animation: pulse 2s infinite; }
+  .atab-btn { padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; color: #4b5577; transition: all .15s; border: 1px solid transparent; }
+  .atab-btn.active { background: #1e2440; color: #c9d1e0; border-color: #2a3560; }
+  .atab-btn:hover:not(.active) { color: #8899bb; }
   @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
   ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #1e2440; border-radius: 2px; }
   .kpi-card { background: #0f1320; border: 1px solid #1e2440; border-radius: 12px; padding: 16px 20px; }
@@ -71,6 +74,19 @@
       <button onclick="logout()" class="text-xs text-gray-600 hover:text-red-400 transition-colors">登出</button>
     </div>
   </div>
+
+  <!-- Tab 導航 -->
+  <div class="sticky top-0 z-20 bg-[#080b12]/95 backdrop-blur border-b border-white/8 -mx-5 px-5 mb-5">
+    <div class="flex gap-1 py-2">
+      <button data-atab="data" onclick="switchAdminTab('data')" class="atab-btn">📊 數據</button>
+      <button data-atab="prompt" onclick="switchAdminTab('prompt')" class="atab-btn">🤖 Prompt</button>
+      <button data-atab="users" onclick="switchAdminTab('users')" class="atab-btn">👥 用戶</button>
+      <button data-atab="content" onclick="switchAdminTab('content')" class="atab-btn">📢 內容</button>
+    </div>
+  </div>
+
+  <!-- ── Tab: 內容管理 ── -->
+  <div id="atab-content" class="admin-tab hidden">
 
   <!-- 公告系統控制台 -->
   <div class="card mb-5 border border-yellow-600/30 bg-[#1e1a0b]/40">
@@ -225,6 +241,11 @@
     </div>
   </div>
 
+  </div><!-- /atab-content -->
+
+  <!-- ── Tab: Prompt 管理 ── -->
+  <div id="atab-prompt" class="admin-tab hidden">
+
   <!-- Prompt Engine Mode 切換 -->
   <div class="card mb-4 border border-amber-600/30 bg-[#1a120a]/40">
     <div class="flex items-center justify-between mb-3">
@@ -274,7 +295,7 @@
       </div>
     </div>
 
-    <!-- Tool 1 批量圖片角色 -->
+    <!-- Tool 1 批量節點（Batch Layer） -->
     <div class="mb-3">
   <!-- 架構說明 -->
   <div class="mb-3 bg-black/40 border border-white/8 rounded-xl px-4 py-3 text-[11px] leading-relaxed">
@@ -282,18 +303,69 @@
     <div class="flex flex-col gap-1.5">
       <div class="flex items-start gap-2"><span class="shrink-0 text-amber-400 font-mono text-[10px] w-20">🔒 System</span><span class="text-gray-400">核心約束（Geometric Fidelity、Object Integrity…）— 每次渲染都自動加入，管理員設定</span></div>
       <div class="flex items-start gap-2"><span class="shrink-0 text-cyan-400 font-mono text-[10px] w-20">🎛 Nodes</span><span class="text-gray-400">用戶控制項（Scene Type、Lighting、Materials…）— 插件 UI 顯示，用戶選擇 chips</span></div>
-      <div class="flex items-start gap-2"><span class="shrink-0 text-purple-400 font-mono text-[10px] w-20">📦 Batch</span><span class="text-gray-400">批量出圖補充（Image Roles、Style Consistency）— 有風格參考圖時 render.js 自動附加</span></div>
+      <div class="flex items-start gap-2"><span class="shrink-0 text-purple-400 font-mono text-[10px] w-20">📦 Batch</span><span class="text-gray-400">批量出圖補充（Image Roles、Style Consistency）— 有風格參考圖時 render.js 自動附加為巢狀 JSON</span></div>
       <div class="flex items-start gap-2"><span class="shrink-0 text-gray-500 font-mono text-[10px] w-20">📝 Legacy</span><span class="text-gray-400">舊版文字提示詞（TOOL_1/2/3 字串）— prompt_engine_mode = legacy 時使用</span></div>
     </div>
   </div>
-  <label class="block text-xs font-semibold text-purple-300 mb-1">批量出圖 — 圖片角色說明 <span class="text-white/25 font-normal">（Image 1 = 來源場景、Image 2 = 光線參考）</span></label>
-      <textarea id="prompt-t1-batch-image-roles" class="w-full bg-black/40 border border-purple-500/20 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-14 leading-relaxed"></textarea>
+  <!-- Image Roles 節點組 -->
+  <div class="flex items-center gap-2 mb-2">
+    <div class="h-px flex-1 bg-purple-600/20"></div>
+    <span class="text-[9px] uppercase tracking-widest text-purple-600/80 font-bold shrink-0 px-2">📸 Image Roles — 有參考圖時附加</span>
+    <div class="h-px flex-1 bg-purple-600/20"></div>
+  </div>
+  <div class="space-y-2 mb-4">
+    <div class="bg-purple-950/20 border border-purple-600/20 rounded-xl p-3">
+      <div class="flex items-center gap-2 mb-1.5">
+        <input type="text" id="batch-img1-key" class="flex-1 bg-black/20 border border-purple-600/20 rounded px-2 py-0.5 text-[9px] text-purple-400 font-mono tracking-wider outline-none focus:border-purple-500/50">
+        <span class="text-[8px] text-purple-800 shrink-0">JSON KEY</span>
+      </div>
+      <textarea id="batch-img1" class="w-full bg-black/40 border border-purple-500/20 rounded px-2 py-2 text-xs text-purple-200 resize-y h-14 leading-relaxed outline-none focus:border-purple-500/50 transition-colors"></textarea>
     </div>
-    <!-- Tool 1 批量風格一致性 -->
-    <div class="mb-4">
-      <label class="block text-xs font-semibold text-purple-300 mb-1">Tool 1 — 批量出圖風格鎖定 <span class="text-white/25 font-normal">（第二張起附加，鎖定第一張的光線色調）</span></label>
-      <textarea id="prompt-t1-batch-style" class="w-full bg-black/40 border border-purple-500/20 rounded-lg px-3 py-2 text-[13px] text-purple-200 outline-none focus:border-purple-500/50 transition-colors resize-y h-14 leading-relaxed"></textarea>
+    <div class="bg-purple-950/20 border border-purple-600/20 rounded-xl p-3">
+      <div class="flex items-center gap-2 mb-1.5">
+        <input type="text" id="batch-img2-key" class="flex-1 bg-black/20 border border-purple-600/20 rounded px-2 py-0.5 text-[9px] text-purple-400 font-mono tracking-wider outline-none focus:border-purple-500/50">
+        <span class="text-[8px] text-purple-800 shrink-0">JSON KEY</span>
+      </div>
+      <textarea id="batch-img2" class="w-full bg-black/40 border border-purple-500/20 rounded px-2 py-2 text-xs text-purple-200 resize-y h-14 leading-relaxed outline-none focus:border-purple-500/50 transition-colors"></textarea>
     </div>
+    <div class="bg-purple-950/20 border border-purple-600/20 rounded-xl p-3">
+      <div class="flex items-center gap-2 mb-1.5">
+        <input type="text" id="batch-forbidden-key" class="flex-1 bg-black/20 border border-purple-600/20 rounded px-2 py-0.5 text-[9px] text-purple-400 font-mono tracking-wider outline-none focus:border-purple-500/50">
+        <span class="text-[8px] text-purple-800 shrink-0">JSON KEY</span>
+      </div>
+      <textarea id="batch-forbidden" class="w-full bg-black/40 border border-purple-500/20 rounded px-2 py-2 text-xs text-purple-200 resize-y h-14 leading-relaxed outline-none focus:border-purple-500/50 transition-colors"></textarea>
+    </div>
+  </div>
+  <!-- Style Consistency 節點組 -->
+  <div class="flex items-center gap-2 mb-2">
+    <div class="h-px flex-1 bg-purple-600/20"></div>
+    <span class="text-[9px] uppercase tracking-widest text-purple-600/80 font-bold shrink-0 px-2">🎨 Style Consistency — 批量鎖定光線色調</span>
+    <div class="h-px flex-1 bg-purple-600/20"></div>
+  </div>
+  <div class="space-y-2 mb-4">
+    <div class="bg-purple-950/20 border border-purple-600/20 rounded-xl p-3">
+      <div class="flex items-center gap-2 mb-1.5">
+        <input type="text" id="batch-apply-key" class="flex-1 bg-black/20 border border-purple-600/20 rounded px-2 py-0.5 text-[9px] text-purple-400 font-mono tracking-wider outline-none focus:border-purple-500/50">
+        <span class="text-[8px] text-purple-800 shrink-0">JSON KEY</span>
+      </div>
+      <textarea id="batch-apply" class="w-full bg-black/40 border border-purple-500/20 rounded px-2 py-2 text-xs text-purple-200 resize-y h-10 leading-relaxed outline-none focus:border-purple-500/50 transition-colors"></textarea>
+    </div>
+    <div class="bg-purple-950/20 border border-purple-600/20 rounded-xl p-3">
+      <div class="flex items-center gap-2 mb-1.5">
+        <input type="text" id="batch-output-must-be-key" class="flex-1 bg-black/20 border border-purple-600/20 rounded px-2 py-0.5 text-[9px] text-purple-400 font-mono tracking-wider outline-none focus:border-purple-500/50">
+        <span class="text-[8px] text-purple-800 shrink-0">JSON KEY</span>
+      </div>
+      <textarea id="batch-output-must-be" class="w-full bg-black/40 border border-purple-500/20 rounded px-2 py-2 text-xs text-purple-200 resize-y h-10 leading-relaxed outline-none focus:border-purple-500/50 transition-colors"></textarea>
+    </div>
+    <div class="bg-purple-950/20 border border-purple-600/20 rounded-xl p-3">
+      <div class="flex items-center gap-2 mb-1.5">
+        <input type="text" id="batch-never-key" class="flex-1 bg-black/20 border border-purple-600/20 rounded px-2 py-0.5 text-[9px] text-purple-400 font-mono tracking-wider outline-none focus:border-purple-500/50">
+        <span class="text-[8px] text-purple-800 shrink-0">JSON KEY</span>
+      </div>
+      <textarea id="batch-never" class="w-full bg-black/40 border border-purple-500/20 rounded px-2 py-2 text-xs text-purple-200 resize-y h-10 leading-relaxed outline-none focus:border-purple-500/50 transition-colors"></textarea>
+    </div>
+  </div>
+</div>
 
     <div class="border-t border-white/5 pt-4 space-y-4">
       <!-- Tool 2 -->
@@ -436,7 +508,10 @@
     </div>
   </div>
 
-  <!-- KPI 區域已載入至下方新版面板 (Line 200+) -->
+  </div><!-- /atab-prompt -->
+
+  <!-- ── Tab: 數據 Dashboard ── -->
+  <div id="atab-data" class="admin-tab hidden">
 
   <!-- 核心 KPI -->
   <section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
@@ -594,6 +669,11 @@
     </div>
   </div>
 
+  </div><!-- /atab-data -->
+
+  <!-- ── Tab: 用戶管理 ── -->
+  <div id="atab-users" class="admin-tab hidden">
+
   <!-- 用戶列表 -->
   <div class="card mb-5">
     <div class="flex items-center justify-between mb-4">
@@ -635,9 +715,23 @@
     <div id="feedback-list" class="space-y-0"></div>
   </div>
 
+  </div><!-- /atab-users -->
+
 </div>
 
 <script>
+// ── Tab 導航 ──────────────────────────────────────────────────────────────────
+function switchAdminTab(tab) {
+  document.querySelectorAll('.admin-tab').forEach(el => el.classList.add('hidden'));
+  const el = document.getElementById('atab-' + tab);
+  if (el) el.classList.remove('hidden');
+  document.querySelectorAll('.atab-btn').forEach(btn => {
+    const active = btn.dataset.atab === tab;
+    btn.classList.toggle('active', active);
+  });
+  localStorage.setItem('admin_active_tab', tab);
+}
+
 // ── 常數 ──────────────────────────────────────────────────────────────────────
 const API_BASE = window.location.origin;
 const TOOL_NAMES = { 1: 'T1 真實渲染', 2: 'T2 SpaceReform', 3: 'T3 九宮格', 4: 'T4 SmartCanvas' };
@@ -656,6 +750,7 @@ function login() {
   sessionStorage.setItem('admin_key', key);
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('dashboard').classList.remove('hidden');
+  switchAdminTab(localStorage.getItem('admin_active_tab') || 'data');
   loadAll();
 }
 function logout() {
@@ -967,8 +1062,20 @@ async function translateShareTemplate() {
 // ── 渲染工作流預設咒語管理 ─────────────────────────────────────────────────
 async function loadPrompts() {
   const defaultP1 = "這是sketchup室內建模的模型（圖1），最後的目的是要轉換成iPhone拍的照片：先在後端生成一張鎖死空間感的深度圖（圖2）和一張所有元素鎖死並且轉換成色彩分明的通道圖（圖三），使用圖1參考圖2和圖3，在不改變模型材質和結構的情況下，99%還原圖片的空間感、相機位置、材質紋理方向，轉換成iPhone拍攝室內空間寫實照片，自然的光感，補充其他區域的漫反射光線，避免局部死黑或過曝，根據室內空間合理化極小不合理的元素，專業攝影級色彩，照片整體有自然的明暗過渡的層次,ultra-detailed";
-  const defaultP1BatchStyle = ". Ensure this image's overall lighting (direction, warmth, intensity) and color tone (temperature, saturation, luminance) match the second reference image so both appear from the same photography session. Spatial content and materials follow Image 1 only — do not reference the second image for those.";
-  const defaultP1BatchImageRoles = 'Image 1: current SketchUp scene screenshot — primary source for spatial structure, camera angle, geometry and materials. Image 2: style reference only — match its lighting direction, color temperature and overall tone; do NOT copy its camera position, spatial layout or composition.';
+  const defaultBatchNodes = {
+    img1_key: "Image 1 [PRIMARY OUTPUT BASIS]",
+    img1: "SketchUp scene — every spatial element in the output (room layout, all furniture, all objects, all surfaces, camera viewpoint, geometry, proportions) must originate exclusively from Image 1.",
+    img2_key: "Image 2 [STYLE EXTRACTION ONLY]",
+    img2: "Lighting reference photo — extract ONLY: light direction, color temperature (Kelvin), warmth/coolness ratio, shadow softness, and highlight quality.",
+    forbidden_key: "FORBIDDEN from Image 2",
+    forbidden: "Any furniture, object, surface, wall, floor, architecture, or spatial arrangement from Image 2 must NOT appear in the output.",
+    apply_key: "Apply",
+    apply: "Image 2's photographic lighting quality and color tone onto Image 1's existing scene.",
+    output_must_be_key: "Output must be",
+    output_must_be: "A realistic photo of Image 1's exact spatial layout and objects — lit and color-graded to match Image 2's atmosphere.",
+    never_key: "Never",
+    never: "Blend, composite, or merge spatial content from both images."
+  };
   const defaultP2 = "Edit IMAGE 1 (the original scene photo) by replacing objects as specified below.\nThe colored areas in IMAGE 2 are only location markers — do not use these marker colors in the final result.\n{{REF_TEXT}}\nChanges:\n{{CHANGES}}\n\nStrict Guidelines:\n① Final result must be based on IMAGE 1, appearing as a natural, original photograph — not based on IMAGE 2\n② Perspective & Proportion: Render all objects from IMAGE 1's camera angle, adjust orientation to match scene perspective; do not keep the reference photo's original angle\n③ Lighting & Color Temperature: Strictly follow IMAGE 1's light direction, intensity, shadows and color temperature; remove all color casts, glows and artificial lighting from references\n④ Boundary Control: Stay mainly within marked zones; minor edge feathering is allowed for seamless blending, but do not affect unrelated objects or surfaces\n⑤ Realism & Aesthetics: Replaced objects must have realistic materials, correct scale, elegant composition, and blend harmoniously into the original space with consistent style";
   const defaultP3 = "Based on the uploaded reference image, generate a single high-quality 3x3 interior visualization collage in exact 1:1 square aspect ratio. Output only the clean collage - no text, no titles, no watermarks, no borders, no labels.\nHighest priority: Faithfully extract and reproduce all details from the reference image, including material textures, light and shadow characteristics, color tones, object qualities, and unique atmosphere. All 9 panels must maintain the exact same spatial structure, furniture layout, and lighting direction. Accurate perspective with zero distortion or shifting.\n3x3 Mixed Grid Layout:\nTop Row Left: Left 45 wide long shot showing the full spatial layout and depth\nTop Row Center: Exact same viewpoint and framing as the uploaded reference image (visual anchor)\nTop Row Right: Close-up detail 1 - highly faithful reproduction of material textures and craftsmanship from the reference image\nMiddle Row Left: Medium shot focusing on main furniture arrangement and functional area, preserving the original light and shadow atmosphere\nMiddle Row Center: Close-up detail 2 - emphasizing light and shadow interaction and surface qualities from the reference image\nMiddle Row Right: Right 45 wide long shot showing the other side of the space\nBottom Row Left: Close-up detail 3 - faithfully presenting another dimension of details from the reference image (e.g., decorative elements, corner craftsmanship, or material contrast)\nBottom Row Center: Medium shot from an alternative angle showing spatial transparency and overall atmosphere, faithful to the original tone\nBottom Row Right: Balanced medium shot concluding with overall harmony and high-end quality\n\nTechnical Requirements:\nStrictly faithful to the reference image's materials, lighting, colors, and fine details; 8K ultra-high resolution with extreme detail; photorealistic material rendering with accurate reflections, refractions, and micro-surface details; professional multi-layer lighting; cinematic color grading with sophisticated, soft, and luxurious tones; extremely sharp, clean, noise-free, and distortion-free.\nGenerate a single cohesive 3x3 collage with strong visual rhythm and dramatic scale contrast, while perfectly capturing the unique details and atmosphere of the reference image.";
   
@@ -976,8 +1083,20 @@ async function loadPrompts() {
     const r = await fetch(`${API_BASE}/api/stats?action=get_prompts`);
     const j = await r.json();
     document.getElementById('prompt-t1').value = (j.prompts && j.prompts.TOOL_1) ? j.prompts.TOOL_1 : defaultP1;
-    document.getElementById('prompt-t1-batch-image-roles').value = (j.prompts && j.prompts.TOOL_1_BATCH_IMAGE_ROLES) ? j.prompts.TOOL_1_BATCH_IMAGE_ROLES : defaultP1BatchImageRoles;
-    document.getElementById('prompt-t1-batch-style').value = (j.prompts && j.prompts.TOOL_1_BATCH_STYLE) ? j.prompts.TOOL_1_BATCH_STYLE : defaultP1BatchStyle;
+    const bn = (j.prompts && j.prompts.TOOL_1_BATCH_NODES) ? JSON.parse(j.prompts.TOOL_1_BATCH_NODES) : defaultBatchNodes;
+    const d = defaultBatchNodes;
+    document.getElementById('batch-img1-key').value = bn.img1_key || d.img1_key;
+    document.getElementById('batch-img1').value = bn.img1 || d.img1;
+    document.getElementById('batch-img2-key').value = bn.img2_key || d.img2_key;
+    document.getElementById('batch-img2').value = bn.img2 || d.img2;
+    document.getElementById('batch-forbidden-key').value = bn.forbidden_key || d.forbidden_key;
+    document.getElementById('batch-forbidden').value = bn.forbidden || d.forbidden;
+    document.getElementById('batch-apply-key').value = bn.apply_key || d.apply_key;
+    document.getElementById('batch-apply').value = bn.apply || d.apply;
+    document.getElementById('batch-output-must-be-key').value = bn.output_must_be_key || d.output_must_be_key;
+    document.getElementById('batch-output-must-be').value = bn.output_must_be || d.output_must_be;
+    document.getElementById('batch-never-key').value = bn.never_key || d.never_key;
+    document.getElementById('batch-never').value = bn.never || d.never;
     document.getElementById('prompt-t2').value = (j.prompts && j.prompts.TOOL_2) ? j.prompts.TOOL_2 : defaultP2;
     document.getElementById('prompt-t3').value = (j.prompts && j.prompts.TOOL_3) ? j.prompts.TOOL_3 : defaultP3;
   } catch(e) { console.error('Failed to load prompts:', e); }
@@ -989,8 +1108,20 @@ async function savePrompts() {
   
   const prompts = {
     TOOL_1: document.getElementById('prompt-t1').value.trim(),
-    TOOL_1_BATCH_IMAGE_ROLES: document.getElementById('prompt-t1-batch-image-roles').value.trim(),
-    TOOL_1_BATCH_STYLE: document.getElementById('prompt-t1-batch-style').value.trim(),
+    TOOL_1_BATCH_NODES: JSON.stringify({
+      img1_key: document.getElementById('batch-img1-key').value.trim(),
+      img1: document.getElementById('batch-img1').value.trim(),
+      img2_key: document.getElementById('batch-img2-key').value.trim(),
+      img2: document.getElementById('batch-img2').value.trim(),
+      forbidden_key: document.getElementById('batch-forbidden-key').value.trim(),
+      forbidden: document.getElementById('batch-forbidden').value.trim(),
+      apply_key: document.getElementById('batch-apply-key').value.trim(),
+      apply: document.getElementById('batch-apply').value.trim(),
+      output_must_be_key: document.getElementById('batch-output-must-be-key').value.trim(),
+      output_must_be: document.getElementById('batch-output-must-be').value.trim(),
+      never_key: document.getElementById('batch-never-key').value.trim(),
+      never: document.getElementById('batch-never').value.trim()
+    }),
     TOOL_2: document.getElementById('prompt-t2').value.trim(),
     TOOL_3: document.getElementById('prompt-t3').value.trim()
   };
@@ -2127,11 +2258,29 @@ function previewPrompt() {
     if (Object.keys(section).length > 0) jsonPrompt[title] = section;
   });
 
-  // 批量出圖額外字段：從管理介面的 textarea 讀取（render.js 有風格參考圖時自動加入）
-  const _batchRoles = document.getElementById('prompt-t1-batch-image-roles')?.value?.trim();
-  const _batchStyle = document.getElementById('prompt-t1-batch-style')?.value?.trim();
-  if (_batchRoles) jsonPrompt['Image Roles'] = _batchRoles;
-  if (_batchStyle) jsonPrompt['Style Consistency'] = _batchStyle;
+  // 批量出圖 Batch 節點：有風格參考圖時 render.js 自動附加，此處預覽固定展示
+  const _img1k = document.getElementById('batch-img1-key')?.value?.trim() || 'Image 1 [PRIMARY OUTPUT BASIS]';
+  const _img1 = document.getElementById('batch-img1')?.value?.trim();
+  const _img2k = document.getElementById('batch-img2-key')?.value?.trim() || 'Image 2 [STYLE EXTRACTION ONLY]';
+  const _img2 = document.getElementById('batch-img2')?.value?.trim();
+  const _forbk = document.getElementById('batch-forbidden-key')?.value?.trim() || 'FORBIDDEN from Image 2';
+  const _forbidden = document.getElementById('batch-forbidden')?.value?.trim();
+  const _applyk = document.getElementById('batch-apply-key')?.value?.trim() || 'Apply';
+  const _apply = document.getElementById('batch-apply')?.value?.trim();
+  const _outk = document.getElementById('batch-output-must-be-key')?.value?.trim() || 'Output must be';
+  const _outputMustBe = document.getElementById('batch-output-must-be')?.value?.trim();
+  const _nevk = document.getElementById('batch-never-key')?.value?.trim() || 'Never';
+  const _never = document.getElementById('batch-never')?.value?.trim();
+  const _imageRoles = {};
+  if (_img1) _imageRoles[_img1k] = _img1;
+  if (_img2) _imageRoles[_img2k] = _img2;
+  if (_forbidden) _imageRoles[_forbk] = _forbidden;
+  if (Object.keys(_imageRoles).length) jsonPrompt['Image Roles'] = _imageRoles;
+  const _styleConsistency = {};
+  if (_apply) _styleConsistency[_applyk] = _apply;
+  if (_outputMustBe) _styleConsistency[_outk] = _outputMustBe;
+  if (_never) _styleConsistency[_nevk] = _never;
+  if (Object.keys(_styleConsistency).length) jsonPrompt['Style Consistency'] = _styleConsistency;
 
   output.textContent = JSON.stringify(jsonPrompt, null, 2);
 }

@@ -921,6 +921,37 @@ module LoamLab
         return
       end
 
+      # 非 T2 工具（T3 等）底圖模式：雲端 URL 直接透傳，跳過 SketchUp 截圖
+      if tool != 2 && !base_image_url.empty? && base_image_url.start_with?("http")
+        begin
+          user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+          request_body = JSON.dump({
+            tool: tool,
+            parameters: { "image" => [base_image_url], "user_prompt" => user_prompt, "resolution" => resolution, "aspect_ratio" => "16:9" },
+            "advanced_settings" => advanced_settings
+          })
+          req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
+          req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
+          req.body = request_body
+          captured_scene = base_image_scene
+          req.start do |_, response|
+            begin
+              data   = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
+              result = (data['code'] == 0 && data['url']) ?
+                { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
+                { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}") }
+            rescue => e
+              result = { status: 'render_failed', message: self.sanitize_error("解析失敗: #{e.message}") }
+            end
+            UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
+          end
+          UI.start_timer(0.1, false) { dialog.execute_script("window.receiveFromRuby({status: 'export_done'})") }
+        rescue => e
+          dialog.execute_script("window.receiveFromRuby(#{JSON.generate({ status: 'render_failed', message: self.sanitize_error("底圖讀取失敗: #{e.message}") })})")
+        end
+        return
+      end
+
       # 工具 3 底圖模式：直接讀本地圖檔送 Coze，跳過 SketchUp 截圖
       if !base_image_url.empty? && base_image_url.start_with?("file:///")
         begin

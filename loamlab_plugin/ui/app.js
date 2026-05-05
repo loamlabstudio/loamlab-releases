@@ -596,6 +596,7 @@ function saveCurrentPreset(name) {
     userPresets = userPresets.slice(0, 20);
     localStorage.setItem('loamlab_presets', JSON.stringify(userPresets));
     renderPresets();
+    _pushPresetsToServer();
 }
 
 function applyPreset(idx) {
@@ -617,14 +618,7 @@ function applyPreset(idx) {
             const el = document.getElementById('t1-node-' + id);
             if (!el) return;
             el.value = val;
-            // 同步 chip active 狀態
-            const wrapper = el.closest('.node-item');
-            if (wrapper) {
-                wrapper.querySelectorAll('.node-chip').forEach(btn => {
-                    const isMatch = val.split(',').map(s => s.trim()).includes(btn.dataset.chipValue);
-                    btn.classList.toggle('active', isMatch);
-                });
-            }
+            _syncNodeDisplay(id);
         });
     }, 0);
 }
@@ -633,6 +627,37 @@ function deletePreset(idx) {
     userPresets.splice(idx, 1);
     localStorage.setItem('loamlab_presets', JSON.stringify(userPresets));
     renderPresets();
+    _pushPresetsToServer();
+}
+
+async function _pushPresetsToServer() {
+    if (!window.loamlabUserEmail) return;
+    try {
+        await fetch(`${API_BASE}/api/stats?action=save_presets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-User-Email': window.loamlabUserEmail },
+            body: JSON.stringify({ presets: userPresets })
+        });
+    } catch(e) {}
+}
+
+async function syncPresetsFromServer() {
+    if (!window.loamlabUserEmail) return;
+    try {
+        const r = await fetch(`${API_BASE}/api/stats?action=get_presets`, {
+            headers: { 'X-User-Email': window.loamlabUserEmail }
+        });
+        const d = await r.json();
+        if (d.code === 0 && Array.isArray(d.presets)) {
+            if (d.presets.length > 0) {
+                userPresets = d.presets;
+                localStorage.setItem('loamlab_presets', JSON.stringify(userPresets));
+                renderPresets();
+            } else if (userPresets.length > 0) {
+                _pushPresetsToServer();
+            }
+        }
+    } catch(e) {}
 }
 
 function exportPresetCode(idx) {
@@ -666,6 +691,7 @@ function importPresetCode() {
         input.value = '';
         document.getElementById('t1-import-row')?.classList.add('hidden');
         renderPresets();
+        _pushPresetsToServer();
     } catch(e) { alert('分享碼格式錯誤'); }
 }
 
@@ -746,7 +772,24 @@ function copyPresetCode(idx) {
 }
 
 function setActiveTool(n, skipTutorial) {
+    const _prevTool = currentActiveTool;
     currentActiveTool = n;
+
+    // 切換工具時清除前工具的結果卡（data-source-tool 不符即移除）
+    if (_prevTool !== n) {
+        const _gridSwitch = document.getElementById('preview-grid');
+        if (_gridSwitch) {
+            [..._gridSwitch.children].forEach(el => {
+                const src = el.dataset.sourceTool;
+                if (src && src !== String(n)) el.remove();
+            });
+            if (!_gridSwitch.children.length) {
+                _gridSwitch.classList.add('hidden');
+                const _ph = document.getElementById('preview-placeholder');
+                if (_ph) _ph.classList.remove('hidden');
+            }
+        }
+    }
 
     // Smart Canvas pending indicator：只在 Tool 2/4 時顯示
     const ind = document.getElementById('sc-pending-indicator');
@@ -1160,6 +1203,7 @@ window.receiveFromRuby = function (data) {
             window.loamlabUserEmail = data.user_email;
             window.updateLoginUI(data.user_email, "...");
             window.fetchUserPoints(data.user_email);
+            syncPresetsFromServer();
         }
 
         statusText.textContent = `${UI_LANG[currentLang]['status_success']}：v${data.version}`;
@@ -1363,7 +1407,7 @@ window.receiveFromRuby = function (data) {
                     const baseThumbSrc = (thumbEl ? thumbEl.src : '') || '';
                     gridEl2.className = 'w-full h-full px-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar pb-6 pt-4';
                     gridEl2.innerHTML = `
-                        <div data-tool2-result="true" class="relative w-full rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
+                        <div data-tool2-result="true" data-source-tool="2" class="relative w-full rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
                             <div class="absolute top-3 left-3 bg-blue-600 text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest">FURNITURE SWAP · AI</div>
                             ${baseThumbSrc ? `<div class="w-full flex flex-col">
                                 <div class="relative w-full overflow-hidden bg-black aspect-video">
@@ -1409,7 +1453,7 @@ window.receiveFromRuby = function (data) {
                     const promptText3 = (document.getElementById('user-prompt-input') || document.createElement('div')).value || '';
                     gridEl3.className = 'w-full h-full px-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar pb-6 pt-4';
                     gridEl3.innerHTML = `
-                        <div data-ninegrid-result="true" class="relative w-full rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
+                        <div data-ninegrid-result="true" data-source-tool="3" class="relative w-full rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
                             <div class="absolute top-3 left-3 bg-[#dc2626] text-white text-[9px] px-2.5 py-1 rounded shadow-lg z-10 font-bold tracking-widest">9-GRID · AI RENDERED</div>
                             <img src="${targetUrl}" class="w-full object-contain animate-blur-clear" title="點擊檢視大圖" onclick="openImagePreview('${targetUrl}')">
                             <div class="px-4 py-3 flex items-center justify-between border-t border-white/[0.05] bg-black/40">
@@ -1750,6 +1794,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const card = document.createElement('div');
             card.className = 'flex flex-col bg-white/[0.02] rounded-2xl border border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.3)] hover:border-white/20 transition-all duration-300 overflow-hidden relative pointer-events-auto group/card';
             card.dataset.cardScene = sceneName;
+            card.dataset.sourceTool = '1';
             card.innerHTML = `
                 <div class="relative w-full overflow-hidden bg-black aspect-video flex-shrink-0">
                     <div class="absolute inset-0 animate-pulse bg-gradient-to-br from-white/[0.03] to-transparent"></div>
@@ -3445,6 +3490,7 @@ function startOAuthFlow() {
                     sketchup.save_email(data.email);
                 }
                 window.fetchUserPoints(data.email);
+                syncPresetsFromServer();
                 closeLoginModal();
             } else if (data.status === 'device_limit') {
                 clearInterval(authPollTimer);
@@ -3567,6 +3613,7 @@ function startOAuthFlow() {
                     sketchup.save_email(data.email);
                 }
                 window.fetchUserPoints(data.email);
+                syncPresetsFromServer();
                 closeLoginModal();
                 
                 // 恢復按鈕狀態以備下次使用
@@ -4035,9 +4082,16 @@ function appendInpaintResultCard(url, promptText = 'Inpaint Result') {
     const placeholder = document.getElementById('preview-placeholder');
     if (placeholder) placeholder.classList.add('hidden');
 
+    // 清除其他工具的結果卡（避免 Tool 1 / Tool 3 卡片混入 Tool 2 視圖）
+    [...gridEl.children].forEach(el => {
+        const src = el.dataset.sourceTool;
+        if (src && src !== '2') el.remove();
+    });
+
     const btnClass = "text-[9px] px-2.5 py-1 rounded border border-white/20 text-white/90 hover:bg-white hover:text-black transition-all font-medium uppercase tracking-widest flex items-center gap-1 active:scale-90 cursor-pointer";
     const card = document.createElement('div');
     card.className = 'relative flex flex-col rounded-xl overflow-hidden border border-sky-500/20 bg-black/60 group/card';
+    card.dataset.sourceTool = '2';
 
     const imgWrap = document.createElement('div');
     imgWrap.className = 'relative overflow-hidden';

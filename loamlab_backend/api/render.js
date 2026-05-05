@@ -393,11 +393,23 @@ async function _handleRender(req, res) {
         const p1 = systemPrompts.TOOL_1 || defaultP1;
         const p2 = systemPrompts.TOOL_2 || defaultP2;
         const p3 = systemPrompts.TOOL_3 || defaultP3;
-        const defaultStyleNote = ". Ensure this image's overall lighting (direction, warmth, intensity) and color tone (temperature, saturation, luminance) match the second reference image so both appear from the same photography session. Spatial content and materials follow Image 1 only — do not reference the second image for those.";
-        const p1StyleNote = systemPrompts.TOOL_1_BATCH_STYLE || defaultStyleNote;
-
-        const defaultImageRoles = 'Image 1: current SketchUp scene screenshot — primary source for spatial structure, camera angle, geometry and materials. Image 2: style reference only — match its lighting direction, color temperature and overall tone; do NOT copy its camera position, spatial layout or composition.';
-        const p1ImageRoles = systemPrompts.TOOL_1_BATCH_IMAGE_ROLES || defaultImageRoles;
+        const defaultBatchNodes = {
+            img1_key: "Image 1 [PRIMARY OUTPUT BASIS]",
+            img1: "SketchUp scene — every spatial element in the output (room layout, all furniture, all objects, all surfaces, camera viewpoint, geometry, proportions) must originate exclusively from Image 1.",
+            img2_key: "Image 2 [STYLE EXTRACTION ONLY]",
+            img2: "Lighting reference photo — extract ONLY: light direction, color temperature (Kelvin), warmth/coolness ratio, shadow softness, and highlight quality.",
+            forbidden_key: "FORBIDDEN from Image 2",
+            forbidden: "Any furniture, object, surface, wall, floor, architecture, or spatial arrangement from Image 2 must NOT appear in the output.",
+            apply_key: "Apply",
+            apply: "Image 2's photographic lighting quality and color tone onto Image 1's existing scene.",
+            output_must_be_key: "Output must be",
+            output_must_be: "A realistic photo of Image 1's exact spatial layout and objects — lit and color-graded to match Image 2's atmosphere.",
+            never_key: "Never",
+            never: "Blend, composite, or merge spatial content from both images."
+        };
+        const batchNodes = systemPrompts.TOOL_1_BATCH_NODES
+            ? (() => { try { return JSON.parse(systemPrompts.TOOL_1_BATCH_NODES); } catch(e) { return {}; } })()
+            : {};
 
         // ── 進階節點配置 (T1 Nodes) ──
         let t1Nodes = [];
@@ -438,7 +450,10 @@ async function _handleRender(req, res) {
         } else {
             // Tool 1: 嚴格 JSON 結構組裝（legacy mode 跳過節點直接拼接）
             const adv = userPayload.advanced_settings || {};
-            const styleRefNote = styleRefUrl ? p1StyleNote : "";
+            const d = defaultBatchNodes;
+            const bn = batchNodes;
+            const legacyImageRoles = `${bn.img1_key || d.img1_key}: ${bn.img1 || d.img1} ${bn.img2_key || d.img2_key}: ${bn.img2 || d.img2} ${bn.forbidden_key || d.forbidden_key}: ${bn.forbidden || d.forbidden}`;
+            const legacyStyleNote = styleRefUrl ? ` Apply ${bn.apply || d.apply} Output must be: ${bn.output_must_be || d.output_must_be} Never: ${bn.never || d.never}` : "";
 
             if (promptEngineMode !== 'legacy' && t1Nodes.length > 0) {
                 // Nodes 模式：JSON 結構化提示詞
@@ -491,17 +506,27 @@ async function _handleRender(req, res) {
                     if (Object.keys(section).length > 0) jsonPrompt[title] = section;
                 });
 
-                // 4. 批量出圖風格一致性附加
-                if (styleRefUrl && styleRefNote) {
-                    jsonPrompt['Image Roles'] = p1ImageRoles;
-                    jsonPrompt['Style Consistency'] = styleRefNote.replace(/^\.\s*/, '').trim();
+                // 4. 批量出圖風格一致性附加（巢狀 JSON 物件，避免字串化）
+                if (styleRefUrl) {
+                    const bn = batchNodes;
+                    const d = defaultBatchNodes;
+                    jsonPrompt['Image Roles'] = {
+                        [bn.img1_key || d.img1_key]: bn.img1 || d.img1,
+                        [bn.img2_key || d.img2_key]: bn.img2 || d.img2,
+                        [bn.forbidden_key || d.forbidden_key]: bn.forbidden || d.forbidden
+                    };
+                    jsonPrompt['Style Consistency'] = {
+                        [bn.apply_key || d.apply_key]: bn.apply || d.apply,
+                        [bn.output_must_be_key || d.output_must_be_key]: bn.output_must_be || d.output_must_be,
+                        [bn.never_key || d.never_key]: bn.never || d.never
+                    };
                 }
 
                 finalPrompt = JSON.stringify(jsonPrompt, null, 2);
             } else {
                 // Legacy 模式 或 無節點 fallback：傳統拼接（翻譯後拼接）
                 const translatedPrompt1 = await translateToEnglish(userPrompt);
-                const legacyBatchPrefix = styleRefUrl ? " " + p1ImageRoles + styleRefNote : "";
+                const legacyBatchPrefix = styleRefUrl ? " " + legacyImageRoles + legacyStyleNote : "";
                 finalPrompt = translatedPrompt1.trim() ? p1 + legacyBatchPrefix + ", " + translatedPrompt1 : p1 + legacyBatchPrefix;
             }
         }

@@ -35,20 +35,6 @@ async function _handleFeedback(req, res) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    if (userEmail) {
-        // IP Pinning 驗證（fail-open：DB 異常時放行，不阻斷回報）
-        const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
-        if (clientIp !== 'unknown') {
-            try {
-                const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
-                if (!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp) {
-                    return res.status(401).json({ code: -1, msg: '登入憑證已過期或網路變更，請重新登入' });
-                }
-            } catch (ipErr) {
-                console.warn('[feedback] IP check DB error, proceeding:', ipErr?.message);
-            }
-        }
-    }
 
     const { error } = await supabase.from('feedback').insert([{
         user_email: userEmail,

@@ -155,6 +155,7 @@ CREATE TABLE IF NOT EXISTS public.user_presets (
   tool_id     INT DEFAULT 1,          -- 1=真實渲染 2=SpaceReform 3=九宮格
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE public.user_presets ADD COLUMN IF NOT EXISTS preset_data JSONB DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS idx_user_presets_email ON public.user_presets(user_email);
 ALTER TABLE public.user_presets ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Enable all access for service role" ON public.user_presets;

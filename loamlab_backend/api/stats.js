@@ -257,6 +257,38 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, bundles: data?.metadata?.bundles || [] });
     }
 
+    // --- 用戶預設同步（需要 X-User-Email，不需要 ADMIN_KEY）---
+    if (action === 'get_presets' && req.method === 'GET') {
+        const ue = req.headers['x-user-email'];
+        if (!ue) return res.status(401).json({ code: -1, msg: 'Unauthorized' });
+        const { data, error } = await supabase.from('user_presets')
+            .select('name, preset_data, created_at')
+            .eq('user_email', ue)
+            .order('created_at', { ascending: false })
+            .limit(20);
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0, presets: (data || []).map(r => ({ name: r.name, created_at: r.created_at, data: r.preset_data || {} })) });
+    }
+
+    if (action === 'save_presets' && req.method === 'POST') {
+        const ue = req.headers['x-user-email'];
+        if (!ue) return res.status(401).json({ code: -1, msg: 'Unauthorized' });
+        const { presets } = req.body || {};
+        if (!Array.isArray(presets)) return res.status(400).json({ code: -1, msg: 'presets must be array' });
+        await supabase.from('user_presets').delete().eq('user_email', ue);
+        if (presets.length > 0) {
+            const rows = presets.slice(0, 20).map(p => ({
+                user_email: ue,
+                name: (p.name || '未命名').slice(0, 100),
+                preset_data: p.data || {},
+                created_at: p.created_at || new Date().toISOString()
+            }));
+            const { error } = await supabase.from('user_presets').insert(rows);
+            if (error) return res.status(500).json({ code: -1, msg: error.message });
+        }
+        return res.status(200).json({ code: 0, msg: 'Saved' });
+    }
+
     // --- Admin 端點（需要 ADMIN_KEY）---
     const adminKeyHeader = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     if (!adminKeyHeader || adminKeyHeader !== process.env.ADMIN_KEY) {
@@ -517,7 +549,7 @@ async function dashboard(supabase) {
         noTestRef(supabase.from('transactions').select('*', { count: 'exact', head: true }).in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K']).gte('created_at', d30)),
         noTestRef(supabase.from('transactions').select('amount_usd_cents, transaction_type').in('transaction_type', ['TOPUP_SINGLE','TOPUP_SUBSCRIPTION']).gte('created_at', d30)),
         noTestRef(supabase.from('transactions').select('transaction_type, created_at').in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K']).gte('created_at', d30).limit(1000)),
-        noTestRef(supabase.from('render_history').select('user_rating, style, tool_id').gte('created_at', d30)),
+        noTestRef(supabase.from('render_history').select('user_rating, style, tool_id').gte('created_at', d30).limit(5000)),
         noTestRef(supabase.from('feedback').select('*', { count: 'exact', head: true }).eq('type', 'paywall_trigger').gte('created_at', d30)),
     ]);
 

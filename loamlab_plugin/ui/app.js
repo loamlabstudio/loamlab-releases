@@ -649,7 +649,10 @@ async function syncPresetsFromServer() {
         });
         const d = await r.json();
         if (d.code === 0 && Array.isArray(d.presets)) {
-            if (d.presets.length > 0) {
+            // 只有 server 預設含有實際 data 時才覆蓋 local；
+            // 空 data ({}) 來自舊 schema 殘留，不可覆蓋用戶有效的 local 預設。
+            const serverHasContent = d.presets.some(p => p.data && Object.keys(p.data).length > 0);
+            if (d.presets.length > 0 && serverHasContent) {
                 userPresets = d.presets;
                 localStorage.setItem('loamlab_presets', JSON.stringify(userPresets));
                 renderPresets();

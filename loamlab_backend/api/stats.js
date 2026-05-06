@@ -275,17 +275,20 @@ export default async function handler(req, res) {
         if (!ue) return res.status(401).json({ code: -1, msg: 'Unauthorized' });
         const { presets } = req.body || {};
         if (!Array.isArray(presets)) return res.status(400).json({ code: -1, msg: 'presets must be array' });
-        await supabase.from('user_presets').delete().eq('user_email', ue);
+        // INSERT first，成功後才 DELETE 舊資料，避免 DELETE 成功但 INSERT 失敗導致資料歸零。
+        const cutoff = new Date().toISOString();
         if (presets.length > 0) {
             const rows = presets.slice(0, 20).map(p => ({
                 user_email: ue,
                 name: (p.name || '未命名').slice(0, 100),
                 preset_data: p.data || {},
-                created_at: p.created_at || new Date().toISOString()
+                created_at: new Date().toISOString()  // 新時間戳確保 > cutoff
             }));
             const { error } = await supabase.from('user_presets').insert(rows);
             if (error) return res.status(500).json({ code: -1, msg: error.message });
         }
+        // INSERT 成功（或明確清空）後才刪除 cutoff 之前的舊記錄
+        await supabase.from('user_presets').delete().eq('user_email', ue).lt('created_at', cutoff);
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 

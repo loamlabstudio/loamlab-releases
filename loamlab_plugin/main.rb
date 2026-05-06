@@ -117,9 +117,8 @@ module LoamLab
         begin; model.set_attribute('LoamLabRenderOverride', "si:#{k}", si[k]); rescue => e; end
       end
       SHADOW_KEYS_DEFAULT.each { |k, v| begin; si[k] = v; rescue => e; end }
-      model.pages.each do |p|
-        begin; p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS | Sketchup::Page::PAGE_USE_SHADOW_INFO); rescue => e; LoamLab.log "[LoamLab] page update: #{e.message}"; end
-      end
+      # 不在此處做全頁 p.update — SU2023 批量 page update 可能在 C++ 層崩潰；
+      # 截圖前的每場景 safe_set_render_keys 已確保截圖樣式正確，還原時由 restore_render_keys 統一 p.update。
       model.set_attribute('LoamLabRenderOverride', 'applied', true)
     end
 
@@ -1056,15 +1055,7 @@ module LoamLab
           # 1. 切換場景
           model.pages.selected_page = page
 
-          # 2. 強制相機同步（確保 camera 使用 page 的角度）
-          begin
-            cam = page.camera
-            model.active_view.camera = cam if cam
-          rescue => e
-            LoamLab.log "[LoamLab] camera sync: #{e.message}"
-          end
-
-          # 3. 每場景重新套用強制樣式（p.update 不保證所有 key 被 selected_page= 還原，AmbientOcclusion 等需明確重設）
+          # 2. 每場景重新套用強制樣式（selected_page= 已同步相機；p.update 不保證所有 key 被 selected_page= 還原，AmbientOcclusion 等需明確重設）
           begin
             self.safe_set_render_keys(model.rendering_options, RENDER_KEYS)
             si = model.shadow_info
@@ -1083,7 +1074,6 @@ module LoamLab
             closest_ratio = supported_ratios.min_by { |k, v| (v - ratio_val).abs }[0]
 
             view.write_image(temp_img_path, 1280, 720, true, 0.6)
-            dialog.bring_to_front
 
             # 通道圖生成（Smart Canvas 魔術棒用，Tool 1 不需要）
             channel_b64 = ""

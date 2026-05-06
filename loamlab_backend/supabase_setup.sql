@@ -255,3 +255,10 @@ CREATE POLICY "Enable all access for service role" ON public.kol_ledger FOR ALL 
 -- ==============================================================================
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_kol BOOLEAN DEFAULT false;
 CREATE INDEX IF NOT EXISTS idx_users_is_kol ON public.users(is_kol) WHERE is_kol = true;
+
+-- ==============================================================================
+-- Partner 合夥人角色（內部，不對外公開）
+-- is_partner = true 由管理員手動設定；階梯分潤 15%/20%/25%
+-- ==============================================================================
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_partner BOOLEAN DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_users_is_partner ON public.users(is_partner) WHERE is_partner = true;

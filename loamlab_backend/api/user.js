@@ -90,21 +90,27 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && req.query.action === 'kol_dashboard') {
         if (!email) return res.status(400).json({ error: 'Missing email' });
         const { data: kol } = await supabase.from('users')
-            .select('referral_code, referral_success_count, is_kol')
+            .select('referral_code, referral_success_count, is_kol, is_partner')
             .eq('email', email).maybeSingle();
-        if (!kol?.is_kol) return res.status(403).json({ error: 'Not a KOL account' });
+        if (!kol?.is_kol && !kol?.is_partner) return res.status(403).json({ error: 'Not a KOL account' });
         if (!kol?.referral_code) return res.status(404).json({ error: 'KOL not found or no referral code' });
 
+        const isPartner = !!kol.is_partner;
+        const roleType = isPartner ? 'partner' : 'kol';
         const totalPaid = kol.referral_success_count || 0;
         let currentTier, currentRate, progressToNextTier;
+        // KOL: 5%/10%/15%；Partner（內部）: 15%/20%/25%
+        const TIERS = isPartner
+            ? ['15%', '20%', '25%']
+            : ['5%', '10%', '15%'];
         if (totalPaid <= 50) {
-            currentTier = 1; currentRate = '5%';
+            currentTier = 1; currentRate = TIERS[0];
             progressToNextTier = { needed: 51, remaining: 51 - totalPaid };
         } else if (totalPaid <= 100) {
-            currentTier = 2; currentRate = '10%';
+            currentTier = 2; currentRate = TIERS[1];
             progressToNextTier = { needed: 101, remaining: 101 - totalPaid };
         } else {
-            currentTier = 3; currentRate = '15%'; progressToNextTier = null;
+            currentTier = 3; currentRate = TIERS[2]; progressToNextTier = null;
         }
 
         const cutoff = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
@@ -124,6 +130,7 @@ export default async function handler(req, res) {
         }
 
         return res.json({
+            role_type: roleType,
             kol_code: kol.referral_code,
             total_paid_users: totalPaid,
             current_tier: currentTier,
@@ -182,7 +189,7 @@ export default async function handler(req, res) {
         try {
             let { data, error } = await supabase
                 .from('users')
-                .select('points, lifetime_points, referral_code, referred_by, subscription_plan, last_topup_at, is_kol')
+                .select('points, lifetime_points, referral_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner')
                 .eq('email', email)
                 .single();
 
@@ -220,6 +227,7 @@ export default async function handler(req, res) {
                 referred_by: data ? data.referred_by : null,
                 referral_success_count: referralSuccessCount || 0,
                 is_kol: data ? (data.is_kol || false) : false,
+                is_partner: data ? (data.is_partner || false) : false,
                 is_new_user: error && error.code === 'PGRST116' ? true : false
             });
         } catch (e) {

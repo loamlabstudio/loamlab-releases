@@ -2707,7 +2707,7 @@ function applyBetaDiscountDisplay() {
     });
 }
 
-window.updateLoginUI = function (email, points, refCode, referredBy, isKol) {
+window.updateLoginUI = function (email, points, refCode, referredBy, isKol, isPartner) {
     const btnLogin = document.getElementById('btn-login');
     const pointBalance = document.getElementById('point-balance');
 
@@ -2733,17 +2733,17 @@ window.updateLoginUI = function (email, points, refCode, referredBy, isKol) {
         }
 
         if (btnRef) btnRef.classList.remove('hidden');
-        window.loamlabUserIsKol = !!isKol;
-        window.loamlabUserReferralCode = isKol ? (refCode || null) : null;
+        const isDashboardUser = !!(isKol || isPartner);
+        window.loamlabUserIsKol = isDashboardUser;
+        window.loamlabUserReferralCode = isDashboardUser ? (refCode || null) : null;
 
-        // KOL 大使專屬區塊：只有 is_kol=true 才顯示
+        // 大使／合夥人專屬區塊（is_kol 或 is_partner 擇一即顯示）
         const kolSection = document.getElementById('kol-ambassador-section');
-        if (kolSection) kolSection.classList.toggle('hidden', !isKol);
+        if (kolSection) kolSection.classList.toggle('hidden', !isDashboardUser);
 
-        if (isKol && refCode) {
+        if (isDashboardUser && refCode) {
             const domMyCode = document.getElementById('my-referral-code');
             if (domMyCode) domMyCode.textContent = refCode;
-            // 非同步載入 KOL dashboard
             fetchKolDashboard(email);
         }
 
@@ -2811,7 +2811,7 @@ async function fetchKolDashboard(email) {
             // Tier 3 最高階
             if (el('kol-progress-bar')) el('kol-progress-bar').style.width = '100%';
             if (el('kol-progress-label')) el('kol-progress-label').textContent = `${total} 人`;
-            if (el('kol-tier-label')) el('kol-tier-label').textContent = 'Tier 3 · 15% 最高階梯 🏆';
+            if (el('kol-tier-label')) el('kol-tier-label').textContent = `Tier 3 · ${d.current_commission_rate} 最高階梯 🏆`;
             if (el('kol-next-tier-hint')) el('kol-next-tier-hint').textContent = '';
             if (el('kol-progress-wrap')) el('kol-progress-wrap').querySelector('#kol-next-tier-hint')?.remove();
         }
@@ -2861,7 +2861,7 @@ function _doFetchUserPoints(email, attempt) {
                 window.loamlabSubscriptionPlan = data.subscription_plan || null;
                 window.loamlabLastTopupAt = data.last_topup_at || null;
                 updatePlanBadge(window.loamlabSubscriptionPlan);
-                window.updateLoginUI(email, data.points, data.referral_code, data.referred_by, data.is_kol);
+                window.updateLoginUI(email, data.points, data.referral_code, data.referred_by, data.is_kol, data.is_partner);
 
                 // 邀請人到帳 Toast：比對上次快取的成功邀請數，有增加就通知
                 const newRefCount = data.referral_success_count || 0;

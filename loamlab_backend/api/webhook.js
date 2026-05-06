@@ -232,13 +232,15 @@ async function writeKolCommission(buyerEmail, amountPaid, orderId) {
 
         const kolEmail = buyer.referred_by;
         const { data: kol } = await supabase.from('users')
-            .select('referral_code, referral_success_count, is_kol').eq('email', kolEmail).maybeSingle();
-        if (!kol?.referral_code || !kol.is_kol) return; // 只有 KOL 帳號才計入現金分潤
+            .select('referral_code, referral_success_count, is_kol, is_partner').eq('email', kolEmail).maybeSingle();
+        if (!kol?.referral_code || (!kol.is_kol && !kol.is_partner)) return;
 
-        // 以 referral_success_count 判斷 Tier（已由首單獎勵邏輯維護）
-        // Tier 1: 1-50人 5%；Tier 2: 51-100人 10%；Tier 3: >100人 15%
         const paidCount = kol.referral_success_count || 0;
-        const rate = paidCount <= 50 ? 0.05 : paidCount <= 100 ? 0.10 : 0.15;
+        const tier = paidCount <= 50 ? 1 : paidCount <= 100 ? 2 : 3;
+        // KOL: 5%/10%/15%；Partner（內部）: 15%/20%/25%
+        const rate = kol.is_partner
+            ? [0.15, 0.20, 0.25][tier - 1]
+            : [0.05, 0.10, 0.15][tier - 1];
         const commission = Math.round(amountPaid * rate);
 
         await supabase.from('kol_ledger').insert([{
@@ -251,7 +253,8 @@ async function writeKolCommission(buyerEmail, amountPaid, orderId) {
             commission_amount: commission,
             status: 'pending'
         }]);
-        console.log(`[💰KOL] ${kolEmail} Tier${paidCount <= 50 ? 1 : paidCount <= 100 ? 2 : 3} +${commission}¢ (rate=${rate})`);
+        const role = kol.is_partner ? 'partner' : 'kol';
+        console.log(`[💰${role.toUpperCase()}] ${kolEmail} Tier${tier} +${commission}¢ (rate=${rate})`);
     } catch (e) {
         console.warn('[KOL] writeKolCommission failed (non-fatal):', e.message);
     }

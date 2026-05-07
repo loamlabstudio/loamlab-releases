@@ -3328,11 +3328,16 @@ window.openCheckout = async function (planKey, quantity = 1) {
     if (CURRENT_PAYMENT_PLATFORM === 'DODO') {
         // 後端代理：取得帶折扣的 checkout session URL
         showUpdateToast('🔄 取得結帳頁面中...');
+        let kolRef = null;
+        try {
+            const raw = localStorage.getItem('loamlab_kol_ref');
+            if (raw) { const p = JSON.parse(raw); if (Date.now() <= p.expiry) kolRef = p.code; }
+        } catch (_) {}
         try {
             const res = await fetch(`${API_BASE}/api/user?action=checkout`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ planKey, email: window.loamlabUserEmail, quantity: qty })
+                body: JSON.stringify({ planKey, email: window.loamlabUserEmail, quantity: qty, referralCode: kolRef })
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();

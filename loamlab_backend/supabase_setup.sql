@@ -255,6 +255,7 @@ CREATE POLICY "Enable all access for service role" ON public.kol_ledger FOR ALL 
 -- ==============================================================================
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_kol BOOLEAN DEFAULT false;
 CREATE INDEX IF NOT EXISTS idx_users_is_kol ON public.users(is_kol) WHERE is_kol = true;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS dodo_discount_code TEXT DEFAULT NULL;
 
 -- ==============================================================================
 -- Partner 合夥人角色（內部，不對外公開）

@@ -26,19 +26,27 @@ export default async function handler(req, res) {
         const DODO_DISCOUNT_CODE = process.env.DODO_DISCOUNT_CODE || '';
         const fallbackUrl = `https://checkout.dodopayments.com/buy/${productId}?quantity=${qty}&customer_email=${encodeURIComponent(email)}`;
 
-        // 歸因綁定：若前端帶來 referralCode 且用戶尚未綁定，自動寫入 referred_by
+        // 歸因綁定 + KOL 折扣查詢（單次 DB 查詢合併）
+        let kolDiscountCode = null;
         if (referralCode) {
             try {
                 const sbUrl = process.env.SUPABASE_URL;
                 const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
                 if (sbUrl && sbKey) {
                     const sb = createClient(sbUrl, sbKey);
-                    const { data: me } = await sb.from('users').select('referred_by').eq('email', email).maybeSingle();
-                    if (me && !me.referred_by) {
-                        const { data: kol } = await sb.from('users').select('email').eq('referral_code', referralCode.toUpperCase()).maybeSingle();
-                        if (kol && kol.email !== email) {
-                            await sb.from('users').update({ referred_by: kol.email }).eq('email', email);
-                            console.log(`[checkout] auto-bound referred_by: ${email} → ${kol.email}`);
+                    const { data: kol } = await sb.from('users').select('email, is_kol, dodo_discount_code').eq('referral_code', referralCode.toUpperCase()).maybeSingle();
+                    if (kol) {
+                        // KOL 折扣（優先於全局 BETA 折扣）
+                        if (kol.is_kol && kol.dodo_discount_code) {
+                            kolDiscountCode = kol.dodo_discount_code;
+                        }
+                        // 歸因綁定（只在尚未綁定時寫入）
+                        if (kol.email !== email) {
+                            const { data: me } = await sb.from('users').select('referred_by').eq('email', email).maybeSingle();
+                            if (me && !me.referred_by) {
+                                await sb.from('users').update({ referred_by: kol.email }).eq('email', email);
+                                console.log(`[checkout] auto-bound referred_by: ${email} → ${kol.email}`);
+                            }
                         }
                     }
                 }
@@ -52,7 +60,8 @@ export default async function handler(req, res) {
             return res.json({ checkoutUrl: fallbackUrl, discountApplied: false });
         }
         const body = { product_cart: [{ product_id: productId, quantity: qty }], customer: { email } };
-        if (DODO_DISCOUNT_CODE) body.discount_code = DODO_DISCOUNT_CODE;
+        const finalDiscount = kolDiscountCode || DODO_DISCOUNT_CODE;
+        if (finalDiscount) body.discount_code = finalDiscount;
         try {
             const apiRes = await fetch('https://live.dodopayments.com/checkouts', {
                 method: 'POST',
@@ -64,7 +73,7 @@ export default async function handler(req, res) {
                 return res.json({ checkoutUrl: fallbackUrl, discountApplied: false });
             }
             const data = await apiRes.json();
-            return res.json({ checkoutUrl: data.checkout_url || fallbackUrl, discountApplied: !!DODO_DISCOUNT_CODE });
+            return res.json({ checkoutUrl: data.checkout_url || fallbackUrl, discountApplied: !!finalDiscount });
         } catch (e) {
             console.error('[checkout] fetch error:', e.message);
             return res.json({ checkoutUrl: fallbackUrl, discountApplied: false });

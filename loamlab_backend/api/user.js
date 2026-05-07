@@ -34,10 +34,10 @@ export default async function handler(req, res) {
                 const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
                 if (sbUrl && sbKey) {
                     const sb = createClient(sbUrl, sbKey);
-                    const { data: kol } = await sb.from('users').select('email, is_kol, dodo_discount_code').eq('referral_code', referralCode.toUpperCase()).maybeSingle();
+                    const { data: kol } = await sb.from('users').select('email, is_kol, is_partner, dodo_discount_code').eq('referral_code', referralCode.toUpperCase()).maybeSingle();
                     if (kol) {
-                        // KOL 折扣（優先於全局 BETA 折扣）
-                        if (kol.is_kol && kol.dodo_discount_code) {
+                        // KOL / 合夥人折扣（優先於全局 BETA 折扣）
+                        if ((kol.is_kol || kol.is_partner) && kol.dodo_discount_code) {
                             kolDiscountCode = kol.dodo_discount_code;
                         }
                         // 歸因綁定（只在尚未綁定時寫入）

@@ -151,7 +151,7 @@ async function processTopup(customerEmail, variantId, orderId, platform, discoun
     if (discountCode && user && !user.referred_by) {
         try {
             const { data: kolByCode } = await supabase.from('users')
-                .select('email').eq('referral_code', discountCode.toUpperCase()).eq('is_kol', true).maybeSingle();
+                .select('email').eq('referral_code', discountCode.toUpperCase()).or('is_kol.eq.true,is_partner.eq.true').maybeSingle();
             if (kolByCode && kolByCode.email !== customerEmail) {
                 await supabase.from('users').update({ referred_by: kolByCode.email }).eq('email', customerEmail);
                 user.referred_by = kolByCode.email;

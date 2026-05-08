@@ -21,7 +21,9 @@
     // 若 URL 本身帶有 ref（直接分享的連結），先存起來
     var urlRef = params.get('ref');
     if (urlRef) {
-        localStorage.setItem('loamlab_kol_ref', JSON.stringify({ code: urlRef.toUpperCase(), expiry: Date.now() + 30 * 864e5 }));
+        var urlRefCode = urlRef.toUpperCase();
+        localStorage.setItem('loamlab_kol_ref', JSON.stringify({ code: urlRefCode, expiry: Date.now() + 30 * 864e5 }));
+        document.cookie = 'loamlab_kol_ref=' + encodeURIComponent(urlRefCode) + '; max-age=2592000; path=/; SameSite=Lax';
     }
 
     // 讀取已存的 KOL ref（30天有效期）

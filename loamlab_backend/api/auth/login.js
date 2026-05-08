@@ -1,7 +1,14 @@
 const { createClient } = require('@supabase/supabase-js');
 
 module.exports = async function handler(req, res) {
-    const { session_id, ref } = req.query;
+    const { session_id, ref: queryRef } = req.query;
+    // Cookie fallback：當 SketchUp 直接開啟 /api/auth/login 時，從 Cookie 讀取 KOL ref
+    let ref = queryRef;
+    if (!ref) {
+        const cookieHeader = req.headers.cookie || '';
+        const match = cookieHeader.match(/(?:^|;\s*)loamlab_kol_ref=([^;]+)/);
+        if (match) ref = decodeURIComponent(match[1]);
+    }
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_ANON_KEY;
     const googleClientId = process.env.GOOGLE_CLIENT_ID;

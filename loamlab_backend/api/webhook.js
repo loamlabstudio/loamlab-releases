@@ -31,6 +31,12 @@ export default async function handler(req, res) {
             const event = JSON.parse(rawBody.toString());
             console.log('[Dodo] Event received:', event.type);
 
+            if (event.type === 'payment.refunded') {
+                const paymentId = event.data?.payment_id;
+                if (paymentId) await cancelKolCommission(`DODO_${paymentId}`);
+                return res.status(200).json({ status: 'success' });
+            }
+
             if (event.type === 'payment.succeeded' || event.type === 'subscription.active' || event.type === 'subscription.renewed') {
                 const data = event.data;
                 const customerEmail = data.customer?.email;
@@ -73,6 +79,12 @@ export default async function handler(req, res) {
             const event = JSON.parse(rawBody.toString());
             const eventName = event.meta.event_name;
             console.log('[LS] Event received:', eventName);
+
+            if (eventName === 'order_refunded') {
+                const orderId = event.data?.id?.toString();
+                if (orderId) await cancelKolCommission(`LS_${orderId}`);
+                return res.status(200).json({ status: 'success' });
+            }
 
             if (eventName === 'order_created' || eventName === 'subscription_payment_success') {
                 const orderData = event.data.attributes;
@@ -121,8 +133,6 @@ async function processTopup(customerEmail, variantId, orderId, platform, discoun
     const { data: existingTx } = await supabase.from('transactions').select('id').eq('order_id', fullOrderId).maybeSingle();
     if (existingTx) return console.log(`[🔁冪等] ${fullOrderId} 已處理過`);
 
-    // 平台 ID 對應表 (支援 LS 與 Dodo)
-    // 這裡建議未來將 ID 移入環境變數或資料庫，目前保留寫死以匹配原有邏輯
     const IDS = {
         LS: { TOPUP: 1432023, STARTER: 1432194, PRO: 1432198, STUDIO: 1432205 },
         DODO: {
@@ -145,67 +155,73 @@ async function processTopup(customerEmail, variantId, orderId, platform, discoun
 
     if (pointsToAdd <= 0) return console.warn(`[⚠️充值] 未知商品 ID: ${variantId} (${platform})`);
 
-    const { data: user } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
-
-    // 晚期 KOL 歸因：買家直接在結帳頁輸入折扣碼但未透過插件綁定時，補寫 referred_by
-    if (discountCode && user && !user.referred_by) {
+    // 【T1修復】先查 KOL 碼對應的邀請人，再取/建用戶，確保新用戶也能完成歸因
+    let kolEmailFromCode = null;
+    if (discountCode) {
         try {
             const { data: kolByCode } = await supabase.from('users')
                 .select('email').eq('referral_code', discountCode.toUpperCase()).or('is_kol.eq.true,is_partner.eq.true').maybeSingle();
-            if (kolByCode && kolByCode.email !== customerEmail) {
-                await supabase.from('users').update({ referred_by: kolByCode.email }).eq('email', customerEmail);
-                user.referred_by = kolByCode.email;
-                console.log(`[💡KOL晚期綁定] discount_code=${discountCode}: ${customerEmail} → ${kolByCode.email}`);
-            }
+            if (kolByCode && kolByCode.email !== customerEmail) kolEmailFromCode = kolByCode.email;
         } catch (e) {
-            console.warn('[KOL] late-bind failed (non-fatal):', e.message);
+            console.warn('[KOL] early-lookup failed (non-fatal):', e.message);
         }
     }
 
-    if (user) {
-        // 推薦分銷邏輯 (Paid Referral)：B 首次付費 → A +300、B +100（固定）
-        let bonusB = 0;
-        if (user.referred_by) {
-            const { data: txPaid } = await supabase.from('transactions').select('id').eq('user_email', customerEmail).eq('transaction_type', 'REFERRAL_PAID_B').maybeSingle();
-            if (!txPaid) {
-                const REWARD_A = PRICING_CONFIG.referral.paid_reward_a;
-                const REWARD_B = PRICING_CONFIG.referral.paid_reward_b;
-                bonusB = REWARD_B;
-                const { data: inviter } = await supabase.from('users').select('lifetime_points, referral_success_count').eq('email', user.referred_by).single();
-                if (inviter) {
-                    await supabase.from('users').update({
-                        lifetime_points: (inviter.lifetime_points || 0) + REWARD_A,
-                        referral_success_count: (inviter.referral_success_count || 0) + 1
-                    }).eq('email', user.referred_by);
-                    await supabase.from('transactions').insert([
-                        { user_email: user.referred_by, amount: REWARD_A, transaction_type: 'REFERRAL_PAID_A', order_id: `refA_${fullOrderId}` },
-                        { user_email: customerEmail, amount: REWARD_B, transaction_type: 'REFERRAL_PAID_B', order_id: `refB_${fullOrderId}` }
-                    ]);
-                }
-            }
-        }
+    let { data: user } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
 
-        // 點數結轉與更新
-        const carryOver = isSubscription ? (user.points || 0) : 0;
-        const updatePayload = {
-            points: isSubscription ? pointsToAdd : user.points,
-            lifetime_points: (user.lifetime_points || 0) + carryOver + (isSubscription ? 0 : pointsToAdd) + bonusB,
-            is_beta_tester: true,
-            last_topup_at: new Date().toISOString(),
-        };
-        if (planName) updatePayload.subscription_plan = planName;
-        await supabase.from('users').update(updatePayload).eq('email', customerEmail);
-    } else {
-        // 新用戶直接建立
+    if (!user) {
+        // 新用戶：建立時帶入 referred_by（若有折扣碼歸因）
         await supabase.from('users').insert([{
             email: customerEmail,
-            points: isSubscription ? pointsToAdd : 0,
-            lifetime_points: isSubscription ? 0 : pointsToAdd,
+            points: 0,
+            lifetime_points: 0,
             is_beta_tester: true,
             subscription_plan: planName,
             last_topup_at: new Date().toISOString(),
+            referred_by: kolEmailFromCode || null,
         }]);
+        const { data: fetchedUser } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
+        user = fetchedUser;
+        if (kolEmailFromCode) console.log(`[💡KOL新用戶歸因] discount_code=${discountCode}: ${customerEmail} → ${kolEmailFromCode}`);
+    } else if (kolEmailFromCode && !user.referred_by) {
+        // 舊用戶晚期歸因：帶折扣碼但未透過插件綁定
+        await supabase.from('users').update({ referred_by: kolEmailFromCode }).eq('email', customerEmail);
+        user.referred_by = kolEmailFromCode;
+        console.log(`[💡KOL晚期綁定] discount_code=${discountCode}: ${customerEmail} → ${kolEmailFromCode}`);
     }
+
+    // 推薦分銷邏輯（新舊用戶均適用）：B 首次付費 → A +300、B +100
+    let bonusB = 0;
+    if (user?.referred_by) {
+        const { data: txPaid } = await supabase.from('transactions').select('id').eq('user_email', customerEmail).eq('transaction_type', 'REFERRAL_PAID_B').maybeSingle();
+        if (!txPaid) {
+            const REWARD_A = PRICING_CONFIG.referral.paid_reward_a;
+            const REWARD_B = PRICING_CONFIG.referral.paid_reward_b;
+            bonusB = REWARD_B;
+            const { data: inviter } = await supabase.from('users').select('lifetime_points, referral_success_count').eq('email', user.referred_by).single();
+            if (inviter) {
+                await supabase.from('users').update({
+                    lifetime_points: (inviter.lifetime_points || 0) + REWARD_A,
+                    referral_success_count: (inviter.referral_success_count || 0) + 1
+                }).eq('email', user.referred_by);
+                await supabase.from('transactions').insert([
+                    { user_email: user.referred_by, amount: REWARD_A, transaction_type: 'REFERRAL_PAID_A', order_id: `refA_${fullOrderId}` },
+                    { user_email: customerEmail, amount: REWARD_B, transaction_type: 'REFERRAL_PAID_B', order_id: `refB_${fullOrderId}` }
+                ]);
+            }
+        }
+    }
+
+    // 點數結轉與更新（無論新舊用戶統一走此路徑）
+    const carryOver = isSubscription ? (user?.points || 0) : 0;
+    const updatePayload = {
+        points: isSubscription ? pointsToAdd : (user?.points || 0),
+        lifetime_points: (user?.lifetime_points || 0) + carryOver + (isSubscription ? 0 : pointsToAdd) + bonusB,
+        is_beta_tester: true,
+        last_topup_at: new Date().toISOString(),
+    };
+    if (planName) updatePayload.subscription_plan = planName;
+    await supabase.from('users').update(updatePayload).eq('email', customerEmail);
 
     // 紀錄交易
     const PLAN_PRICES_CENTS = { starter: 700, pro: 1500, studio: 3500, topup: 490 };
@@ -257,6 +273,19 @@ async function writeKolCommission(buyerEmail, amountPaid, orderId) {
         console.log(`[💰${role.toUpperCase()}] ${kolEmail} Tier${tier} +${commission}¢ (rate=${rate})`);
     } catch (e) {
         console.warn('[KOL] writeKolCommission failed (non-fatal):', e.message);
+    }
+}
+
+async function cancelKolCommission(fullOrderId) {
+    try {
+        const { error } = await supabase.from('kol_ledger')
+            .update({ status: 'cancelled' })
+            .eq('transaction_id', fullOrderId)
+            .eq('status', 'pending');
+        if (error) throw error;
+        console.log(`[🔴退款] kol_ledger 已標記 cancelled: ${fullOrderId}`);
+    } catch (e) {
+        console.warn('[KOL] cancelKolCommission failed (non-fatal):', e.message);
     }
 }
 

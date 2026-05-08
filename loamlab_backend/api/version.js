@@ -1,8 +1,8 @@
 ﻿// /api/version - 濞撴碍绋掕ぐ鍐╃閹澘娈伴柛鏇熸礃濞插潡寮悧鍫唫闁告帟鍩栭悡锛勬噹閵忊剝浠橀柡鍌涘婢ф寮?
 // 闁绘鐗婂﹢鎵尙閸ヮ亖鏋欓柣鈺佺摠鐢挳宕楄缁佺敻鏁嶅畝鈧弫?release.ps1 闁谎呭帶缁旂兘寮查崒娑欑函闁哄倻澧楅婵嗩瀶閺冣偓椤?
 const LATEST = {
-    latest_version: "1.4.27",
-    download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.4.27/loamlab_plugin.rbz",
+    latest_version: "1.4.28",
+    download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.4.28/loamlab_plugin.rbz",
     manual_url: "https://github.com/loamlabstudio/loamlab-releases/releases/latest"
 };
 

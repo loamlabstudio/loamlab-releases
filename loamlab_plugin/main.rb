@@ -1018,10 +1018,8 @@ module LoamLab
       end
       # 套用 admin 覆蓋值（在 RENDER_KEYS 基礎上再覆蓋）
       self.apply_force_style_override(model, render_force_style) unless render_force_style.empty?
-      # 將最終強制樣式存入所有頁面（p.update 只需一次，之後 selected_page= 自動還原正確值）
-      model.pages.each do |p|
-        begin; p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS | Sketchup::Page::PAGE_USE_SHADOW_INFO); rescue => _e; end
-      end
+      # 不做批量 p.update：SU2023 批量 page update 可能在 C++ 層崩潰（致少部分用戶閃退）
+      # 每場景的 safe_set_render_keys 已在 selected_page= 後重新套用，批量 update 為冗餘操作
 
       temp_dir     = Dir.tmpdir
       project_name = (model.title.empty? ? "未命名專案" : model.title).to_s.dup.force_encoding("UTF-8")
@@ -1065,122 +1063,164 @@ module LoamLab
             LoamLab.log "[LoamLab] style re-apply: #{e.message}"
           end
 
-          # 4. 同步截圖
-          temp_img_path = File.join(temp_dir, "loamlab_render_#{index}_#{Time.now.to_i}.jpg")
-          begin
-            view = model.active_view
-            ratio_val = view.vpheight > 0 ? (view.vpwidth.to_f / view.vpheight) : (16.0 / 9.0)
-            supported_ratios = { "16:9"=>1.77, "9:16"=>0.56, "4:3"=>1.33, "3:4"=>0.75, "3:2"=>1.5, "2:3"=>0.66, "1:1"=>1.0, "21:9"=>2.33 }
-            closest_ratio = supported_ratios.min_by { |k, v| (v - ratio_val).abs }[0]
-
-            view.write_image(temp_img_path, 1280, 720, true, 0.6)
-
-            # 通道圖生成（Smart Canvas 魔術棒用，Tool 1 不需要）
-            channel_b64 = ""
-            if tool == 2
-              begin
-                channel_path = File.join(temp_dir, "loamlab_channel_#{index}_#{Time.now.to_i}.jpg")
-                self.export_channel_image(view, 1280, 720, channel_path)
-                if File.exist?(channel_path)
-                  channel_b64 = "data:image/jpeg;base64,#{Base64.strict_encode64(File.read(channel_path, mode: 'rb'))}"
-                  File.delete(channel_path)
-                end
-              rescue => e
-                LoamLab.log "[LoamLab] channel image failed (non-fatal): #{e.message}"
-              end
-            end
-
-            # 自動備份
-            if File.directory?(save_path)
-              safe_project_name = project_name.gsub(/[:*?"<>|\/\\]/, "_")
-              safe_scene_name = scene_name.gsub(/[:*?"<>|\/\\]/, "_")
-              before_name = "#{timestamp}_#{safe_project_name}_#{safe_scene_name}_original.jpg"
-              require 'fileutils'
-              FileUtils.cp(temp_img_path, File.join(save_path, before_name)) rescue nil
-            end
-
-            # 5. Base64 編碼 + 組裝請求
-            img_data = File.read(temp_img_path, mode: 'rb')
-            data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
-
-            user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
-            scene_params = {
-              "image" => [data_uri], "user_prompt" => user_prompt,
-              "resolution" => resolution, "aspect_ratio" => closest_ratio
-            }
-            scene_params["style_ref_url"] = user_style_ref_url unless user_style_ref_url.to_s.strip.empty?
-            request_body = JSON.dump({
-              tool: tool,
-              parameters: scene_params,
-              "advanced_settings" => advanced_settings
-            })
-
-            captured_scene       = scene_name
-            captured_channel_b64 = channel_b64
-
-            # 截圖縮略圖立即回傳 JS
+          # 加入 0.1s 延遲等待畫面更新，防止 SketchUp 渲染引擎崩潰 (防閃退核心)
+          UI.start_timer(0.1, false) do
+            temp_img_path = File.join(temp_dir, "loamlab_render_#{index}_#{Time.now.to_i}.jpg")
+            channel_path = File.join(temp_dir, "loamlab_channel_#{index}_#{Time.now.to_i}.jpg")
+            
             begin
-              preview_payload = { action: 'scene_screenshot', scene: captured_scene, image_data: data_uri }.to_json
-              dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(preview_payload)}')")
-            rescue => e
-              LoamLab.log "[LoamLab] 縮略圖發送失敗（非致命）: #{e.message}"
-            end
-            captured_body    = request_body.dup
-            captured_email   = user_email.dup
-            captured_version = ::LoamLab::VERSION.dup
-            captured_url     = "#{::LoamLab::API_BASE_URL}/api/render"
-            LoamLab.log "[LoamLab] 截圖完成: #{scene_name}"
+              view = model.active_view
+              ratio_val = view.vpheight > 0 ? (view.vpwidth.to_f / view.vpheight) : (16.0 / 9.0)
+              supported_ratios = { "16:9"=>1.77, "9:16"=>0.56, "4:3"=>1.33, "3:4"=>0.75, "3:2"=>1.5, "2:3"=>0.66, "1:1"=>1.0, "21:9"=>2.33 }
+              closest_ratio = supported_ratios.min_by { |k, v| (v - ratio_val).abs }[0]
 
-            if index == 0 || total_count == 1
-              _s0_scene   = captured_scene.dup
-              _s0_channel = captured_channel_b64.dup
-              _s0_sref    = user_style_ref_url.dup
-              _s0_req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::POST)
-              _s0_req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => captured_email, 'x-plugin-version' => captured_version }
-              _s0_req.body = captured_body
-              @@requests << _s0_req
-              _s0_req.start do |req, response|
-                @@requests.delete(req)
-                result = nil
+              view.write_image(temp_img_path, 1280, 720, true, 0.6)
+
+              # 定義發送請求的 Proc，避免代碼重複
+              send_request = proc do |channel_b64|
                 begin
-                  body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
-                  data   = JSON.parse(body_str)
-                  result = (data['code'] == 0 && data['url']) ?
-                    { status: 'render_success', scene_name: _s0_scene, url: data['url'],
-                      points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
-                      channel_base64: _s0_channel } :
-                    { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
-                      points_refunded: data['points_refunded'], error: data['error'] }
+                  # 自動備份
+                  if File.directory?(save_path)
+                    safe_project_name = project_name.gsub(/[:*?"<>|\/\\]/, "_")
+                    safe_scene_name = scene_name.gsub(/[:*?"<>|\/\\]/, "_")
+                    before_name = "#{timestamp}_#{safe_project_name}_#{safe_scene_name}_original.jpg"
+                    require 'fileutils'
+                    FileUtils.cp(temp_img_path, File.join(save_path, before_name)) rescue nil
+                  end
+
+                  # 5. Base64 編碼 + 組裝請求
+                  img_data = File.read(temp_img_path, mode: 'rb')
+                  data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
+
+                  user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+                  scene_params = {
+                    "image" => [data_uri], "user_prompt" => user_prompt,
+                    "resolution" => resolution, "aspect_ratio" => closest_ratio
+                  }
+                  scene_params["style_ref_url"] = user_style_ref_url unless user_style_ref_url.to_s.strip.empty?
+                  request_body = JSON.dump({
+                    tool: tool,
+                    parameters: scene_params,
+                    "advanced_settings" => advanced_settings
+                  })
+
+                  captured_scene       = scene_name
+                  captured_channel_b64 = channel_b64
+
+                  # 截圖縮略圖立即回傳 JS
+                  begin
+                    preview_payload = { action: 'scene_screenshot', scene: captured_scene, image_data: data_uri }.to_json
+                    dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(preview_payload)}')")
+                  rescue => e
+                    LoamLab.log "[LoamLab] 縮略圖發送失敗（非致命）: #{e.message}"
+                  end
+                  captured_body    = request_body.dup
+                  captured_email   = user_email.dup
+                  captured_version = ::LoamLab::VERSION.dup
+                  captured_url     = "#{::LoamLab::API_BASE_URL}/api/render"
+                  LoamLab.log "[LoamLab] 截圖完成: #{scene_name}"
+
+                  if index == 0 || total_count == 1
+                    _s0_scene   = captured_scene.dup
+                    _s0_channel = captured_channel_b64.dup
+                    _s0_sref    = user_style_ref_url.dup
+                    _s0_req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::POST)
+                    _s0_req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => captured_email, 'x-plugin-version' => captured_version }
+                    _s0_req.body = captured_body
+                    @@requests << _s0_req
+                    _s0_req.start do |req, response|
+                      @@requests.delete(req)
+                      result = nil
+                      begin
+                        body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
+                        data   = JSON.parse(body_str)
+                        result = (data['code'] == 0 && data['url']) ?
+                          { status: 'render_success', scene_name: _s0_scene, url: data['url'],
+                            points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
+                            channel_base64: _s0_channel } :
+                          { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
+                            points_refunded: data['points_refunded'], error: data['error'] }
+                      rescue => e
+                        LoamLab.log "[LoamLab] 渲染失敗: #{_s0_scene}"
+                        result = { status: 'render_failed', message: self.sanitize_error(e.message) }
+                      end
+                      @@pending_results << result if result
+                      style_url = (result && result[:status] == 'render_success') ? result[:url] : nil
+                      self.fire_deferred_renders(style_url, _s0_sref)
+                    end
+                  else
+                    @@deferred_sends << {
+                      body:    captured_body,
+                      email:   captured_email,
+                      version: captured_version,
+                      url:     captured_url,
+                      scene:   captured_scene,
+                      channel: captured_channel_b64
+                    }
+                  end
+
+                  LoamLab.log "[LoamLab] 第 #{index+1}/#{total_count} 個場景請求中: #{scene_name}"
+
                 rescue => e
-                  LoamLab.log "[LoamLab] 渲染失敗: #{_s0_scene}"
-                  result = { status: 'render_failed', message: self.sanitize_error(e.message) }
+                  LoamLab.log "[LoamLab] 導出 #{scene_name} 發生錯誤: #{e.message}"
+                ensure
+                  File.delete(temp_img_path) if File.exist?(temp_img_path)
+                  File.delete(channel_path) if File.exist?(channel_path)
+                  # 6. 給 SketchUp UI 短暫呼吸後繼續下一場景
+                  UI.start_timer(0.3, false) { process_chain.call(index + 1) }
                 end
-                @@pending_results << result if result
-                style_url = (result && result[:status] == 'render_success') ? result[:url] : nil
-                self.fire_deferred_renders(style_url, _s0_sref)
+              end # end of send_request proc
+
+              # 處理通道圖生成
+              if tool == 2
+                # 先套用通道圖樣式
+                saved_ro = {
+                  'FaceColorMode'   => model.rendering_options['FaceColorMode'],
+                  'DrawHorizon'     => model.rendering_options['DrawHorizon'],
+                  'DrawGround'      => model.rendering_options['DrawGround'],
+                  'DrawSky'         => model.rendering_options['DrawSky'],
+                  'EdgeDisplayMode' => model.rendering_options['EdgeDisplayMode']
+                }
+                saved_display_shadows = begin; model.shadow_info['DisplayShadows']; rescue; nil; end
+
+                model.rendering_options['FaceColorMode']   = 3
+                model.rendering_options['DrawHorizon']     = false
+                model.rendering_options['DrawGround']      = false
+                model.rendering_options['DrawSky']         = false
+                model.rendering_options['EdgeDisplayMode'] = 0
+                begin; model.shadow_info['DisplayShadows'] = false; rescue => _e; end
+
+                # 再延遲 0.1s 等待通道圖樣式套用
+                UI.start_timer(0.1, false) do
+                  channel_b64 = ""
+                  begin
+                    view.write_image(channel_path, 1280, 720, false)
+                    if File.exist?(channel_path)
+                      channel_b64 = "data:image/jpeg;base64,#{Base64.strict_encode64(File.read(channel_path, mode: 'rb'))}"
+                    end
+                  rescue => e
+                    LoamLab.log "[LoamLab] channel write failed: #{e.message}"
+                  ensure
+                    # 還原樣式（即使截圖失敗也必須還原）
+                    saved_ro.each { |k, v| begin; model.rendering_options[k] = v; rescue => e; end }
+                    begin; model.shadow_info['DisplayShadows'] = saved_display_shadows unless saved_display_shadows.nil?; rescue => _e; end
+                  end
+                  # ensure 後保證執行：channel 失敗時以空字串繼續，不卡死鏈條
+                  send_request.call(channel_b64)
+                end
+              else
+                send_request.call("")
               end
-            else
-              @@deferred_sends << {
-                body:    captured_body,
-                email:   captured_email,
-                version: captured_version,
-                url:     captured_url,
-                scene:   captured_scene,
-                channel: captured_channel_b64
-              }
+
+            rescue => e
+              LoamLab.log "[LoamLab] 導出 #{scene_name} 最外層錯誤: #{e.message}"
+              File.delete(temp_img_path) if File.exist?(temp_img_path)
+              File.delete(channel_path) if File.exist?(channel_path)
+              UI.start_timer(0.3, false) { process_chain.call(index + 1) }
             end
-
-            LoamLab.log "[LoamLab] 第 #{index+1}/#{total_count} 個場景請求中: #{scene_name}"
-
-          rescue => e
-            LoamLab.log "[LoamLab] 導出 #{scene_name} 發生錯誤: #{e.message}"
-          ensure
-            File.delete(temp_img_path) if File.exist?(temp_img_path)
           end
-
-          # 6. 給 SketchUp UI 短暫呼吸後繼續下一場景
-          UI.start_timer(0.3, false) { process_chain.call(index + 1) }
         else
+          # 場景名不存在（已刪除或改名），跳過繼續
           UI.start_timer(0.1, false) { process_chain.call(index + 1) }
         end
       end

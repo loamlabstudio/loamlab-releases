@@ -1,20 +1,23 @@
-# SPRINT: KOL 系統邊界邏輯與追蹤漏洞修復
+# SPRINT: 渲染閃退問題修復與檢查 (Render Crash Fix & Review)
 
 ## CONTEXT_DIGEST
-目前 KOL 系統存在三大邏輯斷層：1. Webhook 未處理新用戶，導致買家未註冊直接結帳時，KOL 拿不到分潤與首單點數。2. Webhook 漏接退款事件，15 天冷卻期形同虛設。3. 網站分享連結 `?ref=` 寫在 LocalStorage，導致 SketchUp 開啟預設瀏覽器直接打 `/api/auth/login` 時無法讀取，追蹤完全斷鏈。
+- 用戶反映點擊渲染後整個插件閃退，且後台無請求紀錄。
+- 根本原因：SketchUp `batch_export_scenes` 在切換場景或套用新樣式後，同步呼叫 `view.write_image` 導致 OpenGL 繪圖引擎來不及刷新而崩潰 (Race Condition)。
+- 已在 `main.rb` 實作初步修復：加入 `UI.start_timer(0.1, false)` 非同步等待畫面更新後再截圖。
+- 任務目標：請 Claude 檢查 `main.rb` 中的非同步邏輯，確認無潛在 Bug，並進行打包測試。
 
 ## TASKS
+1. **[x] [MUST] 審查 main.rb 截圖延遲邏輯**
+   - 閉包捕獲安全，ensure 內的遞迴呼叫確保鏈不卡死，無問題。
+   - 額外發現並移除 batch `p.update`（lines 1022-1024）：SU2023 同步批量 page update 可能在 C++ 層崩潰，是「少部分用戶閃退」主因。
 
-### 1. [x] 修復 Webhook 新用戶歸因與點數漏發
-*   **影響檔案**：`loamlab_backend/api/webhook.js`
-*   **說明**：重構 `processTopup` 流程。將取得或建立用戶的邏輯移至最前方；確保**無論新舊用戶**，只要結帳時帶有 KOL 折扣碼，都能正確寫入 `referred_by`。並保證新用戶也能觸發首單「邀請人得300、被邀人得100」的點數派發邏輯。
+2. **[x] [MUST] 檢查通道圖 (Tool 2) 的非同步流程**
+   - 修正：channel timer 內 `view.write_image` 拋出例外時，`send_request.call` 不會執行→鏈條靜默中斷。
+   - 修後：`channel_b64=""` 在 begin 外宣告，rescue 記錄錯誤，ensure 還原樣式，三者完成後保證呼叫 `send_request.call(channel_b64)`。
 
-### 2. [x] 實作 Webhook 退款事件攔截 (防惡意退款)
-*   **影響檔案**：`loamlab_backend/api/webhook.js`
-*   **說明**：新增監聽金流退款事件（Dodopayments: `payment.refunded` 等，LemonSqueezy 對應退款事件）。當發生退款時，尋找 `kol_ledger` 中對應的 `transaction_id` (通常為 `fullOrderId`)，將該筆佣金紀錄的 `status` 更新為 `cancelled`。
-
-### 3. [x] 修復 KOL 專屬連結自動綁定斷鏈
-*   **影響檔案**：`loamlab_backend/public/index.html`、`loamlab_backend/public/auth-bridge.html`、`loamlab_backend/api/auth/login.js`
-*   **說明**：將前端網頁攔截 `?ref=` 並存入 `localStorage` 的寫法，改為同時寫入 HTTP Cookie (`loamlab_kol_ref`, max-age=30天, path=/)。在 `login.js` 中新增解析 `req.headers.cookie` 的邏輯，讓後端登入 API 能順利讀取邀請碼並寫入 `auth_sessions.kol_ref`，恢復點擊連結即自動綁定的體驗。
+3. **[NICE] 語法檢查與打包測試**
+   - **影響檔案**: `loamlab_plugin/main.rb` (檢查), `build_rbz.ps1` (打包)
+   - 手動驗證兩處修改語法正確（ruby CLI 不在 PATH）。
+   - 建立測試版 RBZ 或透過熱重載準備給受影響之用戶測試。
 
 status: DONE

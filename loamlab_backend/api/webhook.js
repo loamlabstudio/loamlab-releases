@@ -159,8 +159,12 @@ async function processTopup(customerEmail, variantId, orderId, platform, discoun
     let kolEmailFromCode = null;
     if (discountCode) {
         try {
+            const upperDiscountCode = discountCode.toUpperCase();
             const { data: kolByCode } = await supabase.from('users')
-                .select('email').eq('referral_code', discountCode.toUpperCase()).or('is_kol.eq.true,is_partner.eq.true').maybeSingle();
+                .select('email')
+                .or(`referral_code.eq.${upperDiscountCode},dodo_discount_code.eq.${upperDiscountCode}`)
+                .or('is_kol.eq.true,is_partner.eq.true')
+                .maybeSingle();
             if (kolByCode && kolByCode.email !== customerEmail) kolEmailFromCode = kolByCode.email;
         } catch (e) {
             console.warn('[KOL] early-lookup failed (non-fatal):', e.message);

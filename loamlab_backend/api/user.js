@@ -198,7 +198,7 @@ export default async function handler(req, res) {
         try {
             let { data, error } = await supabase
                 .from('users')
-                .select('points, lifetime_points, referral_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner')
+                .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner')
                 .eq('email', email)
                 .single();
 
@@ -225,6 +225,9 @@ export default async function handler(req, res) {
                 return res.status(500).json({ code: -1, msg: error.message });
             }
 
+            const displayCode = data && (data.is_kol || data.is_partner) && data.dodo_discount_code
+                ? data.dodo_discount_code
+                : (data ? data.referral_code : null);
             return res.status(200).json({
                 code: 0,
                 email,
@@ -233,6 +236,7 @@ export default async function handler(req, res) {
                 subscription_plan: data ? (data.subscription_plan || null) : null,
                 last_topup_at: data ? (data.last_topup_at || null) : null,
                 referral_code: data ? data.referral_code : null,
+                display_code: displayCode,
                 referred_by: data ? data.referred_by : null,
                 referral_success_count: referralSuccessCount || 0,
                 is_kol: data ? (data.is_kol || false) : false,
@@ -343,8 +347,11 @@ export default async function handler(req, res) {
             if (myErr) return res.status(404).json({ code: -1, msg: '找不到您的帳戶，請先算一張圖進行註冊' });
             if (me.referred_by) return res.status(400).json({ code: -1, msg: '您已經接受過邀請，無法重複領取' });
 
+            const upperCode = code.toUpperCase();
             const { data: inviter } = await supabase
-                .from('users').select('id, email').eq('referral_code', code.toUpperCase()).maybeSingle();
+                .from('users').select('id, email')
+                .or(`referral_code.eq.${upperCode},dodo_discount_code.eq.${upperCode}`)
+                .maybeSingle();
 
             if (!inviter) return res.status(404).json({ code: -1, msg: '找不到此推薦碼，請確認後重新輸入' });
             if (inviter.email === email) return res.status(400).json({ code: -1, msg: '不能輸入自己的邀請碼' });

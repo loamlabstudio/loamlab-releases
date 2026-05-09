@@ -2735,15 +2735,17 @@ window.updateLoginUI = function (email, points, refCode, referredBy, isKol, isPa
         if (btnRef) btnRef.classList.remove('hidden');
         const isDashboardUser = !!(isKol || isPartner);
         window.loamlabUserIsKol = isDashboardUser;
-        window.loamlabUserReferralCode = isDashboardUser ? (refCode || null) : null;
+        window.loamlabUserReferralCode = refCode || null;
 
         // 大使／合夥人專屬區塊（is_kol 或 is_partner 擇一即顯示）
         const kolSection = document.getElementById('kol-ambassador-section');
         if (kolSection) kolSection.classList.toggle('hidden', !isDashboardUser);
 
+        // 將分享碼顯示給所有登入使用者
+        const domMyCode = document.getElementById('my-referral-code');
+        if (domMyCode) domMyCode.textContent = refCode || '------';
+
         if (isDashboardUser && refCode) {
-            const domMyCode = document.getElementById('my-referral-code');
-            if (domMyCode) domMyCode.textContent = refCode;
             fetchKolDashboard(email);
         }
 
@@ -2861,7 +2863,7 @@ function _doFetchUserPoints(email, attempt) {
                 window.loamlabSubscriptionPlan = data.subscription_plan || null;
                 window.loamlabLastTopupAt = data.last_topup_at || null;
                 updatePlanBadge(window.loamlabSubscriptionPlan);
-                window.updateLoginUI(email, data.points, data.referral_code, data.referred_by, data.is_kol, data.is_partner);
+                window.updateLoginUI(email, data.points, data.display_code || data.referral_code, data.referred_by, data.is_kol, data.is_partner);
 
                 // 邀請人到帳 Toast：比對上次快取的成功邀請數，有增加就通知
                 const newRefCount = data.referral_success_count || 0;

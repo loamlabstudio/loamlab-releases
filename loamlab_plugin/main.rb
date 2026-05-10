@@ -136,9 +136,6 @@ module LoamLab
         val = model.get_attribute('LoamLabRenderOverride', "si:#{k}")
         begin; si[k] = val unless val.nil?; rescue => e; end
       end
-      model.pages.each do |p|
-        begin; p.update(Sketchup::Page::PAGE_USE_RENDERING_OPTIONS | Sketchup::Page::PAGE_USE_SHADOW_INFO); rescue => e; LoamLab.log "[LoamLab] page update: #{e.message}"; end
-      end
       model.set_attribute('LoamLabRenderOverride', 'applied', false)
     end
 
@@ -462,12 +459,17 @@ module LoamLab
         save_path = self.get_effective_save_path(Sketchup.active_model)
         file_path = UI.savepanel("保存渲染圖", save_path, default_name)
         if file_path
-          begin
-            require 'open-uri'
-            File.open(file_path, "wb") { |f| URI.open(url) { |img| f.write(img.read) } }
-            UI.messagebox("圖片已成功保存至:\n#{file_path}")
-          rescue => e
-            UI.messagebox("儲存圖片失敗:\n#{e.message}")
+          captured_path = file_path.dup
+          req = Sketchup::Http::Request.new(url, Sketchup::Http::GET)
+          req.set_download_path(captured_path)
+          @@requests << req
+          req.start do |r, res|
+            @@requests.delete(r)
+            if res.status_code == 200
+              UI.messagebox("圖片已成功保存至:\n#{captured_path}")
+            else
+              UI.messagebox("儲存圖片失敗：HTTP #{res.status_code}")
+            end
           end
         end
       end
@@ -550,22 +552,31 @@ module LoamLab
         save_path    = self.get_effective_save_path(model)
         next if !File.directory?(save_path)
 
-        begin
-          require 'open-uri'
-          timestamp         = Time.now.strftime("%Y%m%d_%H%M%S")
-          safe_project_name = project_name.gsub(/[:*?"<>|\\\/]/, "_")
-          safe_scene        = scene.gsub(/[:*?"<>|\\\/]/, "_")[0, 30]
-          # 檔名範例：20231027_120000_專案名稱_場景名稱_render.jpg
-          filename          = "#{timestamp}_#{safe_project_name}_#{safe_scene}_render.jpg"
-          full_path         = File.join(save_path, filename)
-          File.open(full_path, "wb") { |f| URI.open(url) { |img| f.write(img.read) } }
-          # 將 cloud URL 寫入全局索引（AppData/LoamLab/cloud_index.json），不污染用戶資料夾
-          index = LoamLab.read_cloud_index
-          index[full_path] = url
-          LoamLab.write_cloud_index(index)
-          LoamLab.log "[LoamLab] auto_save_render: #{filename}"
-        rescue => e
-          LoamLab.log "[LoamLab] auto_save_render failed: #{e.message}"
+        timestamp         = Time.now.strftime("%Y%m%d_%H%M%S")
+        safe_project_name = project_name.gsub(/[:*?"<>|\\\/]/, "_")
+        safe_scene        = scene.gsub(/[:*?"<>|\\\/]/, "_")[0, 30]
+        # 檔名範例：20231027_120000_專案名稱_場景名稱_render.jpg
+        filename          = "#{timestamp}_#{safe_project_name}_#{safe_scene}_render.jpg"
+        full_path         = File.join(save_path, filename)
+        captured_url      = url.dup
+        captured_path     = full_path.dup
+        captured_filename = filename.dup
+
+        req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::GET)
+        req.set_download_path(captured_path)
+        @@requests << req
+        req.start do |r, res|
+          @@requests.delete(r)
+          next unless res.status_code == 200
+          begin
+            # 將 cloud URL 寫入全局索引（AppData/LoamLab/cloud_index.json），不污染用戶資料夾
+            index = LoamLab.read_cloud_index
+            index[captured_path] = captured_url
+            LoamLab.write_cloud_index(index)
+            LoamLab.log "[LoamLab] auto_save_render: #{captured_filename}"
+          rescue => e
+            LoamLab.log "[LoamLab] auto_save_render failed: #{e.message}"
+          end
         end
       end
 

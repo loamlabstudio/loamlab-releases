@@ -1,34 +1,16 @@
-# Sprint Plan: 大使邀請碼顯示與比對邏輯優化
+# Implementation Plan
 
 ## CONTEXT_DIGEST
-用戶希望大使在前端看見的專屬邀請碼，優先以 `dodo_discount_code` 為主。
-為了確保一般用戶輸入大使分享的 `dodo_discount_code` 時能成功綁定，後端的綁定 API 與 Webhook 歸因邏輯必須一併擴充，支援查詢與比對 `dodo_discount_code` 欄位，確保前後端邏輯一致。
+經過嚴格檢查與第一性原理分析，確認點擊渲染後「點數有扣、後台出圖但視窗閃退」的根源在於 SketchUp Ruby API 的兩個致命雷區：
+1. **C++ 層崩潰 (Flash Crash)**：`main.rb` 的 `restore_render_keys` 方法中，殘留了對 `model.pages.each { p.update(...) }` 的迴圈操作。這個操作在渲染完成後瞬間執行，會觸發 SU2023 已知的批量場景更新崩潰。
+2. **主執行緒阻塞 (UI Freeze/Crash)**：`auto_save_render` 和 `save_image` 中使用了同步的 `URI.open(url).read` 來下載圖片，這會徹底卡死 SketchUp 主執行緒，在網路稍慢或多次請求時，容易被系統判定為無回應而閃退。
 
 ## TASKS
-
-### 1. [MUST] 後端資訊回傳擴充：優先傳遞 dodo_discount_code
-**影響檔案**: `loamlab_backend/api/user.js`
-- 在 GET 路由查詢 `users` 時，於 `select` 中加入 `dodo_discount_code` 欄位。
-- 檢查用戶若為 `is_kol` 或 `is_partner` 且 `dodo_discount_code` 有值，則該值即為 `display_code`；否則 `display_code` 為 `referral_code`。
-- 回傳 JSON 中新增或直接取代 `referral_code` 欄位，將值傳遞給前端。
-
-### 2. [MUST] 後端綁定 API：支援雙代碼比對
-**影響檔案**: `loamlab_backend/api/user.js`
-- 在處理 POST 綁定邀請碼時，尋找 `inviter` 的邏輯需改為：匹配傳入的代碼等於 `referral_code` **或者**等於 `dodo_discount_code`。
-- 保持英文字母不分大小寫（全轉大寫）的比對一致性。
-
-### 3. [MUST] Webhook 歸因 API：支援雙代碼比對
-**影響檔案**: `loamlab_backend/api/webhook.js`
-- 在 `processTopup` 中尋找 `kolByCode` 時，將查詢條件擴充為支援匹配 `referral_code` **或者** `dodo_discount_code`。
-
-### 4. [MUST] 前端接收顯示調整
-**影響檔案**: `loamlab_plugin/ui/app.js`
-- 修改 `_doFetchUserPoints` 處理後端回傳資料的邏輯，確保將優先取得的代碼（`dodo_discount_code` 或 `referral_code`）正確傳遞給 `updateLoginUI`。
-- 確保 `domMyCode.textContent` 正確顯示該代碼。
-
-### 5. [MUST] 測試與發佈新版
-**影響檔案**: `loamlab_plugin/version.json` (或相關打包腳本)
-- 更新版本號。
-- 執行發佈流程（包含後端部署指令與插件打包）。
+- [MUST] 移除危險的批量場景更新迴圈
+  - **影響檔案**: `loamlab_plugin/main.rb`
+  - **描述**: 在 `restore_render_keys` 方法中，徹底移除 `model.pages.each` 與 `p.update` 的相關程式碼。樣式的還原只需針對全域的 `RenderingOptions` 和 `ShadowInfo` 進行即可，不需要也不應該強制覆寫所有場景的設定檔。
+- [MUST] 將圖片下載重構為非阻塞異步架構 (Async Download)
+  - **影響檔案**: `loamlab_plugin/main.rb`
+  - **描述**: 在 `auto_save_render` 與 `save_image` 兩個 callback 中，移除所有 `require 'open-uri'` 和 `URI.open(url)` 的同步下載代碼。全面改寫為 `Sketchup::Http::Request.new(url, Sketchup::Http::GET)` 搭配 `set_download_path(full_path)` 來處理非同步下載，並將成功後的邏輯（如寫入 `cloud_index` 或彈出提示）移至 request block 內。
 
 status: DONE

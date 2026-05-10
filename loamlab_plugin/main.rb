@@ -64,6 +64,9 @@ module LoamLab
     @@polling_dialog    = nil
     @@deferred_sends    = []   # Method B：Scene 1+ 的延遲 HTTP 佇列
     @@scene0_style_url  = nil  # Method B：Scene 0 成功後的結果 URL
+    @@pending_sref      = nil  # Anti-Collage：保留 user_style_ref_url 供 returnStyleReference callback 使用
+    @@save_dir_360    ||= nil  # Tool 4 (360) 獨立存檔目錄
+    @@pano_task         = nil  # 非同步全景拍攝任務狀態
     @@ao_unsupported    = false # 偵測：用戶是否在 classic engine（AO 不支持）
 
     # [v1.4.2 Hotfix] 如果正在重載代碼（更新或熱重載），且舊視窗還在，強制清除它
@@ -149,12 +152,13 @@ module LoamLab
       ro_keys.each do |k|
         begin; ro[k] = force_style[k] if force_style.key?(k) && ro.keys.include?(k); rescue => e; end
       end
-      # shadow_info 的 key（DisplayShadows, Light, Dark）
+      # shadow_info 的 key（DisplayShadows, Light, Dark, UseSunForAllShading）
       si = model.shadow_info
-      ['DisplayShadows', 'Light', 'Dark'].each do |k|
+      bool_si_keys = ['DisplayShadows', 'UseSunForAllShading']
+      ['DisplayShadows', 'Light', 'Dark', 'UseSunForAllShading'].each do |k|
         next unless force_style.key?(k)
         begin
-          si[k] = k == 'DisplayShadows' ? !!force_style[k] : force_style[k].to_i
+          si[k] = bool_si_keys.include?(k) ? !!force_style[k] : force_style[k].to_i
         rescue => e; end
       end
     end
@@ -305,6 +309,22 @@ module LoamLab
       dialog.add_action_callback("save_ui_lang") do |action_context, params|
         lang = params.is_a?(Hash) ? params["lang"] : params.to_s
         Sketchup.write_default("LoamLabAI", "ui_lang", lang) unless lang.nil? || lang.empty?
+      end
+
+      # 1.5a. Tool 4 (360) 獨立存檔目錄
+      dialog.add_action_callback("choose_save_dir_360") do |action_context, params|
+        chosen_dir = UI.select_directory(title: "選擇 360 全景輸出資料夾",
+                                         directory: (@@save_dir_360 || '').empty? ? nil : @@save_dir_360)
+        if chosen_dir && !chosen_dir.empty?
+          @@save_dir_360 = chosen_dir
+          dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64({action: 'updateSaveDir360', path: chosen_dir}.to_json)}')")
+        end
+      end
+
+      dialog.add_action_callback("open_save_dir_360") do |action_context, params|
+        if @@save_dir_360 && File.directory?(@@save_dir_360)
+          UI.openURL(path_to_file_uri(@@save_dir_360))
+        end
       end
 
       # 1.5. 讓使用者指定專案存檔目錄
@@ -492,7 +512,9 @@ module LoamLab
             current_page  = model.pages.selected_page
             page_options  = model.options['PageOptions']
             old_transition = page_options['ShowTransition']
+            old_transition_time = begin; page_options['TransitionTime']; rescue; 0.5; end
             page_options['ShowTransition'] = false if old_transition
+            begin; page_options['TransitionTime'] = 0.0; rescue; end
 
             safe_keys = ['DrawHidden', 'DrawHiddenObjects', 'DisplaySketchAxes', 'DisplayInstanceAxes']
             original_states = {}
@@ -514,6 +536,7 @@ module LoamLab
                 model.pages.selected_page = current_page if current_page
                 self.safe_set_render_keys(model.rendering_options, RENDER_KEYS)
                 page_options['ShowTransition'] = old_transition if old_transition
+                begin; page_options['TransitionTime'] = old_transition_time; rescue; end
                 original_states.each { |k, v| begin; model.rendering_options[k] = v; rescue; end }
                 dialog.execute_script("window.receiveFromRuby(#{{ status: 'preview_updated', batch_data: batch_data }.to_json})")
               else
@@ -521,8 +544,8 @@ module LoamLab
                 if page = model.pages[scene_name]
                   model.pages.selected_page = page
                   self.safe_set_render_keys(model.rendering_options, RENDER_KEYS)
-                  # 非阻塞：給 SketchUp 50ms 刷新後再截圖，避免主執行緒凍結
-                  UI.start_timer(0.05, false) do
+                  # 延長至 200ms 給引擎充足緩衝，防閃退
+                  UI.start_timer(0.2, false) do
                     base64_img = self.get_preview_base64
                     batch_data << { scene: scene_name, image_data: base64_img }
                     capture_next.call
@@ -537,6 +560,12 @@ module LoamLab
         rescue => e
           UI.messagebox("Sync Preview Error: #{e.message}")
         end
+      end
+
+      # 5a. Anti-Collage callback：JS 降採樣完成後觸發後續場景渲染
+      dialog.add_action_callback("returnStyleReference") do |action_context, params|
+        style_ref = (params["style_ref"] || '').to_s
+        self.fire_deferred_renders(style_ref.empty? ? nil : style_ref, @@pending_sref || '')
       end
 
       # 5. AI 渲染結果自動存檔 → 下載圖片到 save_path
@@ -806,6 +835,104 @@ module LoamLab
           LoamLab.log "[LoamLab] generate_seg_map error: #{e.message}\n#{e.backtrace.first(3).join("\n")}"
         end
       end
+
+      # 工具 4 — 360 本機匯出（非同步批次）
+      dialog.add_action_callback("export_360_local") do |action_context, params|
+        UI.start_timer(0.1, false) do
+          begin
+            scenes_to_capture = (params["scenes"] || []).map(&:to_s).reject(&:empty?)
+
+            out_dir = @@save_dir_360 && File.directory?(@@save_dir_360) ? @@save_dir_360 : nil
+            unless out_dir
+              out_dir = UI.select_directory(title: '選擇 360 全景存放資料夾')
+              unless out_dir
+                dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status:'360_cancelled'})})")
+                next
+              end
+              @@save_dir_360 = out_dir
+              dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64({action: 'updateSaveDir360', path: out_dir}.to_json)}')")
+            end
+
+            timestamp = Time.now.strftime('%Y%m%d_%H%M%S')
+            pano_dir  = File.join(out_dir, "LoamLab_360_#{timestamp}")
+            Dir.mkdir(pano_dir) unless File.directory?(pano_dir)
+
+            three_src = File.join(File.dirname(__FILE__), 'assets', 'three.min.js')
+            File.write(File.join(pano_dir, 'three.min.js'), File.read(three_src, mode: 'rb'), mode: 'wb') if File.exist?(three_src)
+
+            model = Sketchup.active_model
+            old_transition = nil
+            begin
+              old_transition = model.options['PageOptions']['TransitionTime']
+              model.options['PageOptions']['TransitionTime'] = 0.0
+            rescue; end
+
+            force_style = begin; JSON.parse(params["t4_force_style"] || '{}'); rescue; {}; end
+
+            @@pano_task = {
+              type: :local,
+              running: true,
+              model: model,
+              original_page: model.pages.selected_page,
+              old_transition: old_transition,
+              scenes_queue: scenes_to_capture.dup,
+              scenes_total: scenes_to_capture.length,
+              face_queue: [],
+              scene_entries: [],
+              cur_scene_name: nil,
+              cur_faces: {},
+              scene_state: nil,
+              pano_dir: pano_dir,
+              force_style: force_style
+            }
+
+            dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status:'rendering', message:"全景圖擷取中 (0/#{scenes_to_capture.length})..."})})")
+            UI.start_timer(0.05, false) { self.pano_task_run(dialog) }
+          rescue => e
+            dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status:'render_failed', message:"360 本機匯出失敗: #{e.message}"})})")
+          end
+        end
+      end
+
+      # 工具 4 — 360 雲端分享（非同步 + 直傳 Supabase）
+      dialog.add_action_callback("export_360_cloud") do |action_context, params|
+        UI.start_timer(0.1, false) do
+          begin
+            model = Sketchup.active_model
+            old_transition = nil
+            begin
+              old_transition = model.options['PageOptions']['TransitionTime']
+              model.options['PageOptions']['TransitionTime'] = 0.0
+            rescue; end
+
+            force_style = begin; JSON.parse(params["t4_force_style"] || '{}'); rescue; {}; end
+            scene_name = (Sketchup.active_model.pages.selected_page&.name || '全景分享').to_s
+
+            @@pano_task = {
+              type: :cloud,
+              running: true,
+              model: model,
+              original_page: model.pages.selected_page,
+              old_transition: old_transition,
+              scenes_queue: [scene_name],
+              scenes_total: 1,
+              face_queue: [],
+              scene_entries: [],
+              cur_scene_name: nil,
+              cur_faces: {},
+              scene_state: nil,
+              pano_dir: nil,
+              force_style: force_style,
+              user_email: Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+            }
+
+            dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status:'rendering', message:'全景圖擷取中 (1/1)...'})})")
+            UI.start_timer(0.05, false) { self.pano_task_run(dialog) }
+          rescue => e
+            dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status:'render_failed', message:"360 雲端分享失敗: #{e.message}"})})")
+          end
+        end
+      end
     end
 
     # 獲取當前模型所有的場景名稱
@@ -840,7 +967,7 @@ module LoamLab
       
       begin
         # 採用最通用的參數寫法確保相容性
-        model.active_view.write_image(temp_img_path, 1280, 720, true, 0.8)
+        model.active_view.write_image(temp_img_path, 1280, 720, false, 0.8)
         require 'base64'
         img_data = File.read(temp_img_path, mode: 'rb')
         base64_img = Base64.strict_encode64(img_data).force_encoding('UTF-8')
@@ -849,6 +976,323 @@ module LoamLab
       rescue => e
         UI.messagebox("LoamLab 預覽截圖出錯:\n#{e.message}\n請檢查是否有寫入權限。")
         return ""
+      end
+    end
+
+    PANO_FACE_CONFIGS = [
+      { name: 'back',   dir: Geom::Vector3d.new( 1,  0,  0), up: Geom::Vector3d.new(0, 0,  1) },
+      { name: 'front',  dir: Geom::Vector3d.new(-1,  0,  0), up: Geom::Vector3d.new(0, 0,  1) },
+      { name: 'top',    dir: Geom::Vector3d.new( 0,  0,  1), up: Geom::Vector3d.new(0, -1, 0) },
+      { name: 'bottom', dir: Geom::Vector3d.new( 0,  0, -1), up: Geom::Vector3d.new(0,  1, 0) },
+      { name: 'right',  dir: Geom::Vector3d.new( 0,  1,  0), up: Geom::Vector3d.new(0, 0,  1) },
+      { name: 'left',   dir: Geom::Vector3d.new( 0, -1,  0), up: Geom::Vector3d.new(0, 0,  1) },
+    ].freeze
+
+    def self.pano_save_state(model)
+      cam = model.active_view.camera
+      ro = model.rendering_options
+      si = model.shadow_info
+      saved_ro = {}
+      %w[EdgeDisplayMode DrawHorizon DrawGround DrawSky DisplaySketchAxes DisplayInstanceAxes].each { |k| saved_ro[k] = ro[k] rescue nil }
+      saved_si = {}
+      %w[Light Dark UseSunForAllShading DisplayShadows].each { |k| saved_si[k] = si[k] rescue nil }
+      { eye: cam.eye.clone, target: cam.target.clone, up: cam.up.clone, fov: cam.fov, ro: saved_ro, si: saved_si }
+    end
+
+    def self.pano_restore_state(model, saved)
+      return unless saved
+      begin
+        cam = Sketchup::Camera.new(saved[:eye], saved[:target], saved[:up])
+        cam.fov = saved[:fov]
+        model.active_view.camera = cam
+      rescue => e; LoamLab.log "[pano_restore_state] camera: #{e.message}"; end
+      saved[:ro].each { |k, v| begin; model.rendering_options[k] = v; rescue; end }
+      saved[:si].each { |k, v| begin; model.shadow_info[k] = v; rescue; end }
+    end
+
+    def self.pano_apply_render_settings(model, force_style = {})
+      self.apply_force_style_override(model, force_style) unless force_style.empty?
+    end
+
+    def self.pano_task_run(dialog)
+      t = @@pano_task
+      return unless t && t[:running]
+
+      begin
+        if t[:face_queue] && !t[:face_queue].empty?
+          fc   = t[:face_queue].shift
+          eye  = t[:scene_state][:eye]
+          tgt  = Geom::Point3d.new(eye.x + fc[:dir].x, eye.y + fc[:dir].y, eye.z + fc[:dir].z)
+          cam  = Sketchup::Camera.new(eye, tgt, fc[:up])
+          cam.fov = 90.0; cam.aspect_ratio = 1.0
+          t[:model].active_view.camera = cam
+
+          tmp = File.join(Dir.tmpdir, "ll360_#{fc[:name]}_#{Time.now.to_i}.jpg")
+          t[:model].active_view.write_image(tmp, 2048, 2048, false)
+          img_data = File.read(tmp, mode: 'rb')
+          t[:cur_faces][fc[:name]] = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
+          File.delete(tmp) rescue nil
+
+          done = 6 - t[:face_queue].length
+          total_s = t[:scenes_total]
+          done_s  = t[:scene_entries].length
+          dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status:'rendering', message:"全景圖擷取中 (#{done_s+1}/#{total_s}) 面 #{done}/6..."})})")
+          UI.start_timer(0.05, false) { self.pano_task_run(dialog) }
+
+        elsif !t[:scenes_queue].empty?
+          pano_restore_state(t[:model], t[:scene_state]) if t[:scene_state]
+
+          if t[:cur_scene_name] && !t[:cur_faces].empty?
+            safe = t[:cur_scene_name].gsub(/[\\\/\:\*\?\"\<\>\|]/, '_')
+            t[:scene_entries] << { name: t[:cur_scene_name], safe: safe, faces: t[:cur_faces].dup }
+          end
+
+          scene_name = t[:scenes_queue].shift
+          t[:cur_scene_name] = scene_name
+          t[:cur_faces] = {}
+          page = t[:model].pages.find { |p| p.name == scene_name }
+          if page
+            t[:model].pages.selected_page = page
+            t[:model].active_view.refresh
+          end
+          t[:scene_state] = pano_save_state(t[:model])
+          pano_apply_render_settings(t[:model], t[:force_style] || {})
+          t[:face_queue] = PANO_FACE_CONFIGS.map { |fc| fc.dup }
+          UI.start_timer(0.3, false) { self.pano_task_run(dialog) }
+
+        else
+          pano_restore_state(t[:model], t[:scene_state]) if t[:scene_state]
+
+          if t[:cur_scene_name] && !t[:cur_faces].empty?
+            safe = t[:cur_scene_name].gsub(/[\\\/\:\*\?\"\<\>\|]/, '_')
+            t[:scene_entries] << { name: t[:cur_scene_name], safe: safe, faces: t[:cur_faces].dup }
+          end
+
+          begin
+            t[:model].pages.selected_page = t[:original_page] if t[:original_page]
+            t[:model].active_view.refresh
+            t[:model].options['PageOptions']['TransitionTime'] = t[:old_transition] if t[:old_transition]
+          rescue; end
+
+          t[:running] = false
+          @@pano_task = nil
+
+          if t[:type] == :local
+            pano_finalize_local(dialog, t)
+          else
+            pano_finalize_cloud(dialog, t)
+          end
+        end
+      rescue => e
+        @@pano_task = nil
+        dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status:'render_failed', message:"360 出圖失敗: #{e.message}"})})")
+      end
+    end
+
+    def self.pano_finalize_local(dialog, t)
+      scene_entries = t[:scene_entries]
+      pano_dir = t[:pano_dir]
+
+      nav_links = scene_entries.map { |s| "<a href=\"#{s[:safe]}.html\">#{s[:name]}</a>" }.join(' | ')
+      nav_block = scene_entries.length > 1 ? "<div id=\"nav\">#{nav_links}</div>" : ''
+
+      scene_entries.each do |s|
+        s[:faces].each do |face_name, data_uri|
+          jpg_b64 = data_uri.sub('data:image/jpeg;base64,', '')
+          File.write(File.join(pano_dir, "#{s[:safe]}_#{face_name}.jpg"), Base64.decode64(jpg_b64), mode: 'wb')
+        end
+        File.write(File.join(pano_dir, "#{s[:safe]}.html"), self.gen_360_viewer_html(s[:safe], nav_block))
+      end
+
+      safe_path = pano_dir.gsub("'", "\\'")
+      dialog.execute_script("window.receiveFromRuby({status:'360_local_done', path:'#{safe_path}'})")
+    end
+
+    def self.pano_finalize_cloud(dialog, t)
+      require 'net/http'
+      require 'openssl'
+      require 'uri'
+
+      user_email = t[:user_email]
+      version    = ::LoamLab::VERSION.to_s
+      api_base   = ::LoamLab::API_BASE_URL
+
+      begin
+        init_uri = URI("#{api_base}/api/render?action=init_360_upload")
+        http = Net::HTTP.new(init_uri.host, init_uri.port)
+        http.use_ssl = init_uri.scheme == 'https'
+        http.read_timeout = 15
+        init_req = Net::HTTP::Get.new(init_uri)
+        init_req['x-user-email']   = user_email
+        init_req['x-plugin-version'] = version
+        init_resp = http.request(init_req)
+        init_data = JSON.parse(init_resp.body.force_encoding('UTF-8'))
+        unless init_data['code'] == 0
+          dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status:'render_failed', message: init_data['msg'] || '初始化失敗'})})")
+          return
+        end
+        share_id   = init_data['share_id']
+        upload_urls = init_data['upload_urls'] || {}
+      rescue => e
+        dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status:'render_failed', message:"初始化請求失敗: #{e.message}"})})")
+        return
+      end
+
+      t[:scene_entries].each do |s|
+        s[:faces].each do |face_name, data_uri|
+          signed_url = upload_urls[face_name]
+          next unless signed_url
+          begin
+            u = URI(signed_url)
+            h = Net::HTTP.new(u.host, u.port)
+            h.use_ssl = u.scheme == 'https'
+            h.read_timeout = 30
+            req = Net::HTTP::Put.new(u)
+            req['Content-Type'] = 'image/jpeg'
+            req.body = Base64.decode64(data_uri.sub('data:image/jpeg;base64,', ''))
+            h.request(req)
+          rescue => e
+            LoamLab.log "[pano_finalize_cloud] upload #{face_name}: #{e.message}"
+          end
+        end
+      end
+
+      finalize_uri = URI("#{api_base}/api/render")
+      http2 = Net::HTTP.new(finalize_uri.host, finalize_uri.port)
+      http2.use_ssl = finalize_uri.scheme == 'https'
+      http2.read_timeout = 15
+      fin_req = Net::HTTP::Post.new(finalize_uri)
+      fin_req['Content-Type']    = 'application/json'
+      fin_req['x-user-email']    = user_email
+      fin_req['x-plugin-version'] = version
+      fin_req.body = JSON.dump({ action: 'finalize_360_upload', share_id: share_id })
+      begin
+        fin_resp = http2.request(fin_req)
+        fin_data = JSON.parse(fin_resp.body.force_encoding('UTF-8'))
+        if fin_data['code'] == 0
+          result = { status: 'render_success', url: fin_data['share_url'],
+                     points_remaining: fin_data['points_remaining'], scene_name: '360°全景分享' }
+        else
+          result = { status: 'render_failed', message: self.sanitize_error(fin_data['msg'] || '上傳失敗') }
+        end
+      rescue => e
+        result = { status: 'render_failed', message: "完成請求失敗: #{e.message}" }
+      end
+      @@pending_results << result
+    end
+
+    def self.gen_360_viewer_html(scene_prefix, nav_block = '')
+      nav_css = nav_block.empty? ? '' : '#nav{position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.55);border-radius:8px;padding:6px 14px;color:rgba(255,255,255,.75);font:12px sans-serif;z-index:10;white-space:nowrap}#nav a{color:#93c5fd;text-decoration:none;margin:0 4px}#nav a:hover{color:#fff}'
+      <<~HTML
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><title>LoamLab 360</title>
+        <style>*{margin:0;padding:0}body{background:#000;overflow:hidden}
+        #info{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.4);font:12px/1.5 sans-serif;pointer-events:none}
+        #{nav_css}</style>
+        </head>
+        <body>#{nav_block}<div id="container"></div><div id="info">拖曳旋轉 · 滾輪縮放</div>
+        <script src="three.min.js"></script>
+        <script>
+        var cam,scene,renderer,cFOV=70,lon=0,lat=0,isDown=false,pX=0,pY=0,pLon=0,pLat=0;
+        scene=new THREE.Scene();cam=new THREE.PerspectiveCamera(cFOV,innerWidth/innerHeight,1,1100);
+        renderer=new THREE.CanvasRenderer();renderer.setSize(innerWidth,innerHeight);
+        document.getElementById('container').appendChild(renderer.domElement);
+        var p='#{scene_prefix}_';
+        var mats=[loadT(p+'back.jpg'),loadT(p+'front.jpg'),loadT(p+'top.jpg'),loadT(p+'bottom.jpg'),loadT(p+'right.jpg'),loadT(p+'left.jpg')];
+        var mesh=new THREE.Mesh(new THREE.BoxGeometry(300,300,300,15,15,15),new THREE.MeshFaceMaterial(mats));
+        mesh.scale.x=-1;scene.add(mesh);cam.target=new THREE.Vector3(0,0,0);
+        document.addEventListener('mousedown',function(e){isDown=true;pX=e.clientX;pY=e.clientY;pLon=lon;pLat=lat;});
+        document.addEventListener('mousemove',function(e){if(isDown){lon=(pX-e.clientX)*0.1+pLon;lat=(e.clientY-pY)*0.1+pLat;}});
+        document.addEventListener('mouseup',function(){isDown=false;});
+        document.addEventListener('mousewheel',zoom);document.addEventListener('DOMMouseScroll',zoom);
+        window.addEventListener('resize',function(){cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+        function loadT(p){var t=THREE.ImageUtils.loadTexture(p);return new THREE.MeshBasicMaterial({map:t,overdraw:0.5});}
+        function zoom(e){var d=Math.max(-1,Math.min(1,e.wheelDelta||-e.detail));cFOV-=d*5;cFOV=Math.max(10,Math.min(90,cFOV));cam.fov=cFOV;cam.updateProjectionMatrix();}
+        function animate(){requestAnimationFrame(animate);lat=Math.max(-85,Math.min(85,lat));
+        var phi=THREE.Math.degToRad(90-lat),theta=THREE.Math.degToRad(lon);
+        cam.target.x=500*Math.sin(phi)*Math.cos(theta);cam.target.y=500*Math.cos(phi);cam.target.z=500*Math.sin(phi)*Math.sin(theta);
+        cam.lookAt(cam.target);renderer.render(scene,cam);}
+        animate();
+        </script></body></html>
+      HTML
+    end
+
+    # 360 全景：從當前鏡頭位置向 6 個正交方向截圖，回傳 { face_name => "data:image/jpeg;base64,..." }
+    def self.export_cubemap_360
+      model = Sketchup.active_model
+      return {} unless model
+      view = model.active_view
+      cam  = view.camera
+
+      orig_eye    = cam.eye.clone
+      orig_target = cam.target.clone
+      orig_up     = cam.up.clone
+      orig_fov    = cam.fov
+
+      ro = model.rendering_options
+      si = model.shadow_info
+      saved_ro = {}
+      %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes DrawDepthQue
+         DrawHorizon DrawGround DrawSky DisplaySketchAxes DisplayInstanceAxes].each do |k|
+        saved_ro[k] = ro[k] rescue nil
+      end
+      saved_si = {}
+      %w[Light Dark UseSunForAllShading DisplayShadows].each do |k|
+        saved_si[k] = si[k] rescue nil
+      end
+
+      begin
+        # 復刻原版「秘密參數」：開啟陽光分面 + 統一 Light/Dark，消除拼接縫
+        begin; si['UseSunForAllShading'] = true;  rescue; end
+        begin; si['Light'] = 80;                  rescue; end
+        begin; si['Dark']  = 70;                  rescue; end
+        begin; si['DisplayShadows'] = false;       rescue; end
+        begin; ro['EdgeDisplayMode'] = 0;          rescue; end
+        begin; ro['DrawHorizon'] = false;          rescue; end
+        begin; ro['DrawGround']  = false;          rescue; end
+        begin; ro['DrawSky']     = false;          rescue; end
+        begin; ro['DisplaySketchAxes']   = false;  rescue; end
+        begin; ro['DisplayInstanceAxes'] = false;  rescue; end
+
+        temp_dir = Dir.tmpdir
+        eye = orig_eye
+
+        # 六個面（名稱對應 template2.js material 順序）
+        face_configs = [
+          { name: 'back',   dir: Geom::Vector3d.new( 1,  0,  0), up: Geom::Vector3d.new(0, 0,  1) },
+          { name: 'front',  dir: Geom::Vector3d.new(-1,  0,  0), up: Geom::Vector3d.new(0, 0,  1) },
+          { name: 'top',    dir: Geom::Vector3d.new( 0,  0,  1), up: Geom::Vector3d.new(0, -1, 0) },
+          { name: 'bottom', dir: Geom::Vector3d.new( 0,  0, -1), up: Geom::Vector3d.new(0,  1, 0) },
+          { name: 'right',  dir: Geom::Vector3d.new( 0,  1,  0), up: Geom::Vector3d.new(0, 0,  1) },
+          { name: 'left',   dir: Geom::Vector3d.new( 0, -1,  0), up: Geom::Vector3d.new(0, 0,  1) },
+        ]
+
+        results = {}
+        face_configs.each do |fc|
+          target_pt = Geom::Point3d.new(eye.x + fc[:dir].x, eye.y + fc[:dir].y, eye.z + fc[:dir].z)
+          new_cam   = Sketchup::Camera.new(eye, target_pt, fc[:up])
+          new_cam.fov = 90.0
+          new_cam.aspect_ratio = 1.0
+          view.camera = new_cam
+
+          path = File.join(temp_dir, "loamlab_360_#{fc[:name]}_#{Time.now.to_i}.jpg")
+          view.write_image(path, 2048, 2048, false)
+
+          img_data = File.read(path, mode: 'rb')
+          results[fc[:name]] = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
+          File.delete(path) rescue nil
+        end
+
+        results
+      ensure
+        begin
+          restored = Sketchup::Camera.new(orig_eye, orig_target, orig_up)
+          restored.fov = orig_fov
+          view.camera = restored
+        rescue => e; LoamLab.log "[LoamLab] 360 camera restore: #{e.message}"; end
+        saved_ro.each { |k, v| begin; ro[k] = v; rescue; end }
+        saved_si.each { |k, v| begin; si[k] = v; rescue; end }
       end
     end
 
@@ -1135,6 +1579,7 @@ module LoamLab
                     _s0_scene   = captured_scene.dup
                     _s0_channel = captured_channel_b64.dup
                     _s0_sref    = user_style_ref_url.dup
+                    @@pending_sref = _s0_sref  # Anti-Collage：供 returnStyleReference callback 使用
                     _s0_req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::POST)
                     _s0_req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => captured_email, 'x-plugin-version' => captured_version }
                     _s0_req.body = captured_body
@@ -1157,7 +1602,12 @@ module LoamLab
                       end
                       @@pending_results << result if result
                       style_url = (result && result[:status] == 'render_success') ? result[:url] : nil
-                      self.fire_deferred_renders(style_url, _s0_sref)
+                      if style_url && !@@deferred_sends.empty?
+                        safe_url = style_url.gsub("'", "\\'")
+                        dialog.execute_script("window.generateStyleReference('#{safe_url}')")
+                      else
+                        self.fire_deferred_renders(style_url, _s0_sref)
+                      end
                     end
                   else
                     @@deferred_sends << {

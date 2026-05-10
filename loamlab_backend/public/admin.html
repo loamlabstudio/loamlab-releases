@@ -458,6 +458,18 @@
       <div id="render-force-style-area"></div>
     </div>
 
+    <!-- T4 360 專屬樣式設定 -->
+    <div class="mt-4 bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-300">T4 360 專屬樣式設定</h3>
+          <p class="text-[11px] text-gray-600 mt-0.5">控制 360 全景拍攝時的所有 SketchUp 畫面樣式。可設定 <code class="text-gray-500">Light</code>、<code class="text-gray-500">Dark</code>、<code class="text-gray-500">UseSunForAllShading</code>、<code class="text-gray-500">DrawEdges</code>、<code class="text-gray-500">EdgeDisplayMode</code>、<code class="text-gray-500">DrawHorizon</code>、<code class="text-gray-500">DrawSky</code> 等任意 shadow_info 或 rendering_options 屬性。</p>
+        </div>
+        <span class="text-[9px] font-mono text-gray-700 bg-black/40 px-1.5 py-0.5 rounded">field_id: _t4_force_style</span>
+      </div>
+      <div id="t4-force-style-area"></div>
+    </div>
+
     <div class="flex justify-between mt-5 items-center">
       <div class="flex items-center gap-3">
         <div id="t1-nodes-status" class="text-xs text-green-400 hidden"></div>
@@ -1793,6 +1805,7 @@ async function loadOptions() {
     optionsDirty = false;
     renderT1Nodes();
     renderRenderForceStyleSection();
+    renderT4ForceStyleSection();
   } catch(e) { console.error('Failed to load options:', e); }
 }
 
@@ -1869,6 +1882,57 @@ function renderRenderForceStyleSection() {
     + toggleRow('AmbientOcclusion（環境光遮蔽，僅新引擎）', 'AmbientOcclusion', true)
     + sectionLabel('Modeling')
     + toggleRow('DisplayInstanceAxes / DisplaySketchAxes（模型座標軸）', 'DisplayInstanceAxes', false);
+}
+
+// ── T4 360 專屬樣式設定 ──────────────────────────────────────────────────────
+function _getT4ForceStyleEntry() {
+  const DEFAULTS = { Light: 80, Dark: 70, UseSunForAllShading: true, DisplayShadows: false };
+  let e = optionsData.find(o => o.field_id === '_t4_force_style');
+  if (!e) {
+    e = { id: '_t4_force_style', field_id: '_t4_force_style', value: { ...DEFAULTS } };
+    optionsData.push(e);
+  }
+  return e;
+}
+function _updateT4ForceStyleField(key, rawVal) {
+  const e = _getT4ForceStyleEntry();
+  if (!e.value) e.value = {};
+  if (key === 'EdgeDisplayMode') {
+    e.value[key] = (rawVal === true || rawVal === 'true') ? 1 : 0;
+  } else if (['UseSunForAllShading','DisplayShadows'].includes(key)) {
+    e.value[key] = (rawVal === true || rawVal === 'true');
+  } else {
+    e.value[key] = parseInt(rawVal, 10);
+  }
+  optionsDirty = true;
+}
+function renderT4ForceStyleSection() {
+  const area = document.getElementById('t4-force-style-area');
+  if (!area) return;
+  const e = _getT4ForceStyleEntry();
+  const v = e.value || {};
+  const numRow = (label, key, def) => `<div class="flex items-center justify-between py-2 border-b border-white/[0.04]">
+    <span class="text-xs text-gray-400">${label}</span>
+    <input type="number" min="0" max="100" value="${v[key] !== undefined ? v[key] : def}"
+           oninput="_updateT4ForceStyleField('${key}', this.value)"
+           class="w-16 bg-black/40 text-gray-200 text-xs text-right px-2 py-1 rounded border border-white/10 focus:border-cyan-500/50 outline-none">
+  </div>`;
+  const toggleRow = (label, key, def) => {
+    const on = v[key] !== undefined ? v[key] : def;
+    return `<div class="flex items-center justify-between py-2 border-b border-white/[0.04]">
+    <span class="text-xs text-gray-400">${label}</span>
+    <button onclick="_updateT4ForceStyleField('${key}', ${!on}); renderT4ForceStyleSection();"
+            class="w-10 h-5 rounded-full transition-colors ${on ? 'bg-cyan-600' : 'bg-white/10'} relative flex-shrink-0">
+      <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-5' : 'translate-x-0.5'}"></span>
+    </button>
+  </div>`;
+  };
+  const sectionLabel = (t) => `<p class="text-[10px] text-white/25 uppercase tracking-widest pt-2 pb-0.5">${t}</p>`;
+  area.innerHTML = sectionLabel('陰影設定')
+    + numRow('Light（亮面明度 0–100）', 'Light', 80)
+    + numRow('Dark（暗面明度 0–100）', 'Dark', 70)
+    + toggleRow('UseSunForAllShading（陽光統一分面，消除拼接縫）', 'UseSunForAllShading', true)
+    + toggleRow('DisplayShadows（投影顯示）', 'DisplayShadows', false);
 }
 
 function addOptionToNode(fieldId) {

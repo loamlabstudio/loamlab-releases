@@ -110,6 +110,8 @@ async function fetchOptions() {
         const data = await resp.json();
         if (data.code === 0) {
             optionsData = data.options || [];
+            const _t4e = optionsData.find(o => o.field_id === '_t4_force_style');
+            window._t4ForceStyle = _t4e ? (_t4e.value || {}) : {};
             renderT1Nodes(); // 重新渲染各節點 chips
         }
     } catch (e) { /* 靜默降級 */ }
@@ -794,10 +796,10 @@ function setActiveTool(n, skipTutorial) {
         }
     }
 
-    // Smart Canvas pending indicator：只在 Tool 2/4 時顯示
+    // Smart Canvas pending indicator：只在 Tool 2 時顯示
     const ind = document.getElementById('sc-pending-indicator');
     if (ind && SmartCanvas.pendingSwap) {
-        if (n === 2 || n === 4) {
+        if (n === 2) {
             ind.classList.remove('hidden'); ind.classList.add('flex');
         } else {
             ind.classList.add('hidden'); ind.classList.remove('flex');
@@ -868,6 +870,15 @@ function setActiveTool(n, skipTutorial) {
     const filled0 = document.getElementById('base-image-filled');
     if (filled0) filled0.style.minHeight = '';
 
+    // 重置 Tool 4 面板與渲染按鈕（切換工具時統一還原）
+    document.getElementById('tool4-panel')?.classList.add('hidden');
+    document.getElementById('btn-render')?.classList.remove('hidden');
+    // 離開 Tool 4 時還原一般存檔路徑
+    window.updateSaveDir(window._lastNormalSaveDir);
+    // 還原 IG 分享按鈕與進階設定可見性
+    document.getElementById('btn-show-share')?.classList.remove('hidden');
+    if (advancedDetails) advancedDetails.classList.remove('hidden');
+
     if (n === 1) {
         if (titleEl) titleEl.textContent = (UI_LANG[currentLang] || UI_LANG['en-US'])['title'];
         rebuildMaterialTags();
@@ -888,7 +899,8 @@ function setActiveTool(n, skipTutorial) {
         if (materialTagsDiv) materialTagsDiv.classList.add('hidden');
         // 參考圖已移至 Smart Canvas 每個區域的 🖼 切換，主面板不顯示
         if (promptInput) promptInput.placeholder = lang2['tool_furniture_ph'];
-        if (pickerLabel) { pickerLabel.className = 'text-[11px] font-semibold tracking-wider text-blue-400/80 uppercase'; pickerLabel.textContent = (lang2['base_image_label'] || '底圖 Base Image') + '  ★ ' + (lang2['required'] || 'Required'); }
+        const baseTxt2 = currentLang.startsWith('zh') ? '底圖 BASE IMAGE' : 'BASE IMAGE';
+        if (pickerLabel) { pickerLabel.className = 'text-[11px] font-semibold tracking-wider text-blue-400/80 uppercase'; pickerLabel.innerHTML = baseTxt2 + ' <span class="text-white/30 font-normal"> ★ ' + (lang2['required'] || 'Required') + '</span>'; }
         if (pickBtn) pickBtn.className = 'w-full rounded-xl border-2 border-dashed border-blue-500/30 bg-black/20 cursor-pointer hover:border-blue-500/60 hover:bg-blue-500/5 transition-all group overflow-hidden relative';
         if (pickEmpty) pickEmpty.className = 'flex flex-col items-center justify-center gap-2 text-white/30 group-hover:text-blue-400/50 transition-colors py-5';
     } else if (n === 3) {
@@ -904,27 +916,29 @@ function setActiveTool(n, skipTutorial) {
         if (advancedDetails) advancedDetails.open = false;
         if (materialTagsDiv) materialTagsDiv.classList.add('hidden');
         if (promptInput) promptInput.placeholder = lang3['tool_ninegrid_ph'];
-        if (pickerLabel) { pickerLabel.className = 'text-[11px] font-semibold tracking-wider text-blue-400/80 uppercase'; pickerLabel.textContent = (lang3['base_image_label'] || '底圖 Base Image') + '  ★ ' + (lang3['required'] || 'Required'); }
+        const baseTxt3 = currentLang.startsWith('zh') ? '底圖 BASE IMAGE' : 'BASE IMAGE';
+        if (pickerLabel) { pickerLabel.className = 'text-[11px] font-semibold tracking-wider text-blue-400/80 uppercase'; pickerLabel.innerHTML = baseTxt3 + ' <span class="text-white/30 font-normal"> ★ ' + (lang3['required'] || 'Required') + '</span>'; }
         if (pickBtn) pickBtn.className = 'w-full rounded-xl border-2 border-dashed border-blue-500/30 bg-black/20 cursor-pointer hover:border-blue-500/60 hover:bg-blue-500/5 transition-all group overflow-hidden relative';
         if (pickEmpty) pickEmpty.className = 'flex flex-col items-center justify-center gap-2 text-white/30 group-hover:text-blue-400/50 transition-colors py-5';
     } else if (n === 4) {
         const lang4 = UI_LANG[currentLang] || UI_LANG['en-US'];
-        if (titleEl) titleEl.textContent = lang4['tool_swap'] || 'Material SWAP';
-        if (hintBanner) {
-            hintBanner.className = 'w-full rounded-lg px-3 py-2.5 text-[11px] leading-relaxed bg-blue-500/10 border border-blue-500/20 text-blue-200/70';
-            hintBanner.textContent = lang4['tool_swap_hint'] || '';
-            hintBanner.classList.remove('hidden');
-        }
-        // Tool 4: 隱藏場景列表、tags，Advanced Settings 預設收起（同步工具 3）
-        if (scenesContainer) scenesContainer.classList.add('hidden');
-        if (advancedDetails) advancedDetails.open = false;
+        if (titleEl) titleEl.textContent = lang4['tool_360'] || '360° 全景分享';
         if (materialTagsDiv) materialTagsDiv.classList.add('hidden');
-        if (promptInput) promptInput.placeholder = 'e.g. marble texture, oak wood floor...';
-        if (renderLabel) renderLabel.textContent = lang4['btn_mask_editor'] || 'Paint Mask →';
-        // Tool 4 底圖必填，blue 色系（同步工具 3）
-        if (pickerLabel) { pickerLabel.className = 'text-[11px] font-semibold tracking-wider text-blue-400/80 uppercase'; pickerLabel.textContent = (lang4['base_image_required_label'] || '底圖 Base Image') + '  ★ ' + (lang4['required'] || 'Required'); }
-        if (pickBtn) pickBtn.className = 'w-full rounded-xl border-2 border-dashed border-blue-500/30 bg-black/20 cursor-pointer hover:border-blue-500/60 hover:bg-blue-500/5 transition-all group overflow-hidden relative';
-        if (pickEmpty) pickEmpty.className = 'flex flex-col items-center justify-center gap-2 text-white/30 group-hover:text-blue-400/50 transition-colors py-5';
+        if (advancedDetails) advancedDetails.open = false;
+        // 保留 scenes-container：360 批次匯出需勾選場景
+        if (scenesContainer) scenesContainer.classList.remove('hidden');
+        // 隱藏 IG 分享按鈕與進階渲染設定
+        document.getElementById('btn-show-share')?.classList.add('hidden');
+        if (advancedDetails) { advancedDetails.open = false; advancedDetails.classList.add('hidden'); }
+        const tool4Panel = document.getElementById('tool4-panel');
+        if (tool4Panel) { tool4Panel.classList.remove('hidden'); }
+        var basePicker = document.getElementById('base-image-picker');
+        if (basePicker) basePicker.classList.add('hidden');
+        document.getElementById('style-ref-picker')?.classList.add('hidden');
+        const btnRender = document.getElementById('btn-render');
+        if (btnRender) btnRender.classList.add('hidden');
+        // 顯示 360 專屬存檔路徑
+        window.updateSaveDir(window._saveDir360);
     }
 
     // 遮罩預覽：切換工具時先隱藏，再依 pending 狀態決定是否恢復
@@ -933,14 +947,14 @@ function setActiveTool(n, skipTutorial) {
     const pendingPreviewEl = document.getElementById('sc-pending-preview');
     if (pendingPreviewEl) pendingPreviewEl.classList.add('hidden');
 
-    // 底圖選擇器：工具 2/3/4 顯示，工具 1 隱藏
+    // 底圖選擇器：工具 2/3 顯示，工具 1/4 隱藏
     const picker = document.getElementById('base-image-picker');
-    if (SmartCanvas.pendingSwap && (n === 2 || n === 4)) {
+    if (SmartCanvas.pendingSwap && n === 2) {
         // 切回有待確認遮罩的工具 → 恢復遮罩預覽面板
         if (picker) picker.classList.add('hidden');
         _scRenderPendingPanel();
     } else {
-        if (picker) picker.classList.toggle('hidden', n === 1);
+        if (picker) picker.classList.toggle('hidden', n === 1 || n === 4);
     }
     clearBaseImageSelection();
 
@@ -948,7 +962,7 @@ function setActiveTool(n, skipTutorial) {
 
     // Tutorial: fire checkFirstUse on tool switch (skip when called from language change)
     if (!skipTutorial) {
-        const TOOL_IDS = { 1: 'ai-render', 2: 'spacereform', 3: 'multiangle', 4: 'smartcanvas' };
+        const TOOL_IDS = { 1: 'ai-render', 2: 'spacereform', 3: 'multiangle', 4: '360-panorama' };
         document.dispatchEvent(new CustomEvent('loamlab:tool-switch', { detail: { toolId: TOOL_IDS[n] } }));
     }
 }
@@ -1128,7 +1142,11 @@ window.receiveFromRuby = function (data) {
 
     // 如果是單純的動作指令，直接處理並返回
     if (data.action === 'updateSaveDir') {
-        window.updateSaveDir(data.path);
+        window.setNormalSaveDir(data.path);
+        return;
+    }
+    if (data.action === 'updateSaveDir360') {
+        window.updateSaveDir360(data.path);
         return;
     }
     if (data.action === 'historyList') {
@@ -1200,7 +1218,7 @@ window.receiveFromRuby = function (data) {
         const langStr = data.lang || localStorage.getItem('loamlab_lang') || 'en-US';
         (document.getElementById('lang-select') || document.createElement('div')).value = langStr;
         window.setLanguage(langStr);
-        if (data.save_path) window.updateSaveDir(data.save_path);
+        if (data.save_path) window.setNormalSaveDir(data.save_path);
 
         if (data.user_email && data.user_email !== "") {
             window.loamlabUserEmail = data.user_email;
@@ -1324,6 +1342,23 @@ window.receiveFromRuby = function (data) {
                 if (textSpan) textSpan.textContent = (UI_LANG[currentLang] || UI_LANG['en-US'])['preview_select_hint'];
             }
         }
+    } else if (data.status === '360_local_done') {
+        finalizeRenderUI();
+        document.getElementById('tool4-status')?.classList.remove('hidden');
+        const t4s = document.getElementById('tool4-status');
+        if (t4s) t4s.textContent = '已儲存：' + (data.path || '');
+    } else if (data.status === '360_cancelled') {
+        stopRenderTimer();
+        updateProgressUI('已取消', 0);
+        setTimeout(() => {
+            const pb = document.getElementById('progress-wrapper');
+            if (pb) { pb.classList.add('opacity-0'); setTimeout(() => pb.classList.add('hidden'), 700); }
+            const btnRender = document.getElementById('btn-render');
+            if (btnRender) { btnRender.disabled = false; btnRender.classList.remove('rendering-pulse'); }
+            const previewArea = document.getElementById('main-preview-area');
+            if (previewArea) previewArea.classList.remove('is-rendering');
+        }, 800);
+        statusText.textContent = '已取消';
     } else if (data.status === 'export_done') {
         const langObj3 = UI_LANG[currentLang];
         statusText.textContent = langObj3['export_done'] || 'All scenes sent. Rendering in cloud...';
@@ -1842,15 +1877,6 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // 工具 4 (Material SWAP): 直接開 SWAP modal，不走 Coze 渲染
-        if (currentActiveTool === 4) {
-            if (!_baseImageEntry) {
-                showUpdateToast('⚠️ ' + (langObj['base_image_required'] || '請先從歷史選擇一張底圖'));
-                return;
-            }
-            openSmartCanvas('', _baseImageEntry.file_url || _baseImageEntry.cloud_url || '', _baseImageEntry.scene || '');
-            return;
-        }
 
         // 工具 2/3：必須先選擇底圖
         if ((currentActiveTool === 2 || currentActiveTool === 3) && !_baseImageEntry) {
@@ -1940,6 +1966,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const _forceStyleEntry = (optionsData || []).find(o => o.field_id === '_render_force_style');
             const _forceStyleVal = _forceStyleEntry ? (_forceStyleEntry.value || {}) : {};
+            const _t4StyleEntry = (optionsData || []).find(o => o.field_id === '_t4_force_style');
+            window._t4ForceStyle = _t4StyleEntry ? (_t4StyleEntry.value || {}) : {};
             sketchup.render_scene({
                 scenes: usingBaseImage ? [] : selectedScenes,
                 prompt: finalPrompt,
@@ -2049,6 +2077,9 @@ if (btnSync) {
 });
 
 // 更新存檔目錄路徑顯示
+window._lastNormalSaveDir = '';
+window._saveDir360 = '';
+
 window.updateSaveDir = function (path) {
     const display = document.getElementById('save-dir-display');
     if (display) {
@@ -2062,6 +2093,28 @@ window.updateSaveDir = function (path) {
         }
     }
 };
+
+window.setNormalSaveDir = function (path) {
+    window._lastNormalSaveDir = path || '';
+    if (currentActiveTool !== 4) window.updateSaveDir(path);
+};
+
+window.updateSaveDir360 = function (path) {
+    window._saveDir360 = path || '';
+    if (currentActiveTool === 4) window.updateSaveDir(path);
+};
+
+function chooseSaveDirForTool() {
+    if (!window.sketchup) return;
+    if (currentActiveTool === 4) sketchup.choose_save_dir_360({});
+    else sketchup.choose_save_dir({});
+}
+
+function openSaveDirForTool() {
+    if (!window.sketchup) return;
+    if (currentActiveTool === 4) sketchup.open_save_dir_360({});
+    else sketchup.open_save_dir({});
+}
 
 // 付費牆 / 登入彈窗控制邏輯
 const loginModal = document.getElementById('login-modal');
@@ -3115,8 +3168,8 @@ function pickBaseImage(entry) {
         meta.textContent = [entry.scene, (entry.resolution || '').toUpperCase(), date].filter(Boolean).join('  ·  ');
     }
     closeHistoryModal();
-    // 副工具 (2/3/4)：依 Advanced Settings 開合決定縮圖模式
-    if (currentActiveTool === 2 || currentActiveTool === 3 || currentActiveTool === 4) {
+    // 副工具 (2/3)：依 Advanced Settings 開合決定縮圖模式
+    if (currentActiveTool === 2 || currentActiveTool === 3) {
         const advDet = document.querySelector('details.group');
         const thumb3 = document.getElementById('base-image-thumb');
         const filled3 = document.getElementById('base-image-filled');
@@ -3129,8 +3182,8 @@ function pickBaseImage(entry) {
         }
     }
 
-    // 副工具 (2/3/4)：選底圖後，若左側 grid 無 AI 渲染結果，顯示底圖預覽
-    if (currentActiveTool === 2 || currentActiveTool === 3 || currentActiveTool === 4) {
+    // 副工具 (2/3)：選底圖後，若左側 grid 無 AI 渲染結果，顯示底圖預覽
+    if (currentActiveTool === 2 || currentActiveTool === 3) {
         const gridEl = document.getElementById('preview-grid');
         const hasRendered = gridEl && gridEl.querySelector('.btn-container, [data-ninegrid-result]');
         if (!hasRendered) {
@@ -3147,8 +3200,8 @@ function pickBaseImage(entry) {
         }
     }
 
-    // 工具 2/4：選完底圖直接開 Smart Canvas
-    if (currentActiveTool === 2 || currentActiveTool === 4) {
+    // 工具 2：選完底圖直接開 Smart Canvas
+    if (currentActiveTool === 2) {
         openSmartCanvas('', entry.file_url || entry.cloud_url || '', entry.scene || '');
     }
 }
@@ -4676,6 +4729,41 @@ function _scShowLabelPopup(clientX, clientY, onConfirm) {
     };
 }
 
+function _scUpdateCardRefUI(card, idx) {
+    const region = SmartCanvas.regions[idx];
+    if (!region) return;
+    const hasRef = !!region.refImageBase64;
+    const label = card.querySelector('label');
+    if (!label) return;
+    label.className = 'mt-2 flex items-center gap-2 w-full rounded-lg border border-dashed cursor-pointer transition-all ' +
+        (hasRef ? 'border-blue-500/30 bg-blue-500/5 px-2 py-1.5' : 'border-white/10 hover:border-blue-500/40 hover:bg-blue-500/5 justify-center py-2');
+    label.innerHTML = '<input type="file" accept="image/*" class="hidden sc-ref-file-input" />' +
+        (hasRef
+            ? `<img src="${region.refImageBase64}" class="h-10 w-10 object-cover rounded flex-shrink-0 border border-blue-500/30" /><span class="text-[9px] text-blue-300/60 flex-1 truncate">風格參考圖已附加</span><button class="text-[10px] text-white/30 hover:text-rose-400 sc-ref-clear px-1 leading-none" title="移除">✕</button>`
+            : `<svg class="w-3 h-3 text-white/25 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg><span class="text-[9px] text-white/25">附加風格參考圖 <span class="text-blue-400/40">（可選）</span></span>`
+        );
+    label.querySelector('.sc-ref-file-input').addEventListener('change', (e) => {
+        var fileArr = e.target.files;
+        const file = (fileArr && fileArr.length > 0) ? fileArr[0] : null;
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            SmartCanvas.regions[idx].refImageBase64 = ev.target.result;
+            _scUpdateCardRefUI(card, idx);
+        };
+        reader.readAsDataURL(file);
+    });
+    var clearBtn = label.querySelector('.sc-ref-clear');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            SmartCanvas.regions[idx].refImageBase64 = null;
+            _scUpdateCardRefUI(card, idx);
+        });
+    }
+}
+
 function _scRenderRegionList() {
     const list = document.getElementById('sc-region-list');
     const empty = document.getElementById('sc-region-empty');
@@ -4703,8 +4791,7 @@ function _scRenderRegionList() {
                 <button class="sc-erase-target-btn text-[11px] leading-none ${isEraserTarget ? 'text-rose-400' : 'text-white/20 hover:text-rose-400'}" title="${isEraserTarget ? '取消鎖定（目前只擦此圖層）' : '只擦此圖層'}">⊖</button>
                 <button class="text-white/20 hover:text-rose-400 text-[11px] leading-none sc-del-btn">✕</button>
             </div>
-            <input type="text" class="sc-region-label-input w-full bg-transparent border-b border-white/10 text-[11px] text-white/80 outline-none placeholder-white/25 pb-0.5 mt-1.5"
-                value="${region.label || ''}" placeholder="描述替換內容（可選）..." />
+            <textarea rows="1" class="sc-region-label-input w-full bg-transparent border-b border-white/10 text-[11px] text-white/80 outline-none placeholder-white/25 pb-0.5 mt-1.5" style="resize:none; overflow:hidden;" placeholder="描述替換內容（可選）...">${region.label || ''}</textarea>
             <label class="mt-2 flex items-center gap-2 w-full rounded-lg border border-dashed cursor-pointer transition-all ${hasRef ? 'border-blue-500/30 bg-blue-500/5 px-2 py-1.5' : 'border-white/10 hover:border-blue-500/40 hover:bg-blue-500/5 justify-center py-2'}">
                 <input type="file" accept="image/*" class="hidden sc-ref-file-input" />
                 ${hasRef
@@ -4753,7 +4840,7 @@ function _scRenderRegionList() {
             const reader = new FileReader();
             reader.onload = (ev) => {
                 SmartCanvas.regions[idx].refImageBase64 = ev.target.result;
-                _scRenderRegionList();
+                _scUpdateCardRefUI(card, idx);
             };
             reader.readAsDataURL(file);
         });
@@ -4763,7 +4850,7 @@ function _scRenderRegionList() {
                 e.preventDefault();
                 e.stopPropagation();
                 SmartCanvas.regions[idx].refImageBase64 = null;
-                _scRenderRegionList();
+                _scUpdateCardRefUI(card, idx);
             });
         }
         list.appendChild(card);
@@ -5547,3 +5634,42 @@ document.addEventListener('DOMContentLoaded', () => {
         _scRenderOverlays();
     });
 });
+
+// 工具 4 — 360 本機匯出（批次）
+function handle360LocalExport() {
+    if (typeof sketchup === 'undefined') { showUpdateToast('需要在 SketchUp 中執行'); return; }
+    document.getElementById('tool4-status')?.classList.add('hidden');
+    const checked = Array.from(document.querySelectorAll('input[name="scene"]:checked')).map(cb => cb.value);
+    if (checked.length === 0) { showUpdateToast('⚠️ 請先勾選至少一個場景'); return; }
+    const t4Style = JSON.stringify(window._t4ForceStyle || {});
+    sketchup.export_360_local({ scenes: checked, t4_force_style: t4Style });
+}
+
+// 工具 4 — 360 雲端分享
+function handle360CloudExport() {
+    if (typeof sketchup === 'undefined') { showUpdateToast('需要在 SketchUp 中執行'); return; }
+    document.getElementById('tool4-status')?.classList.add('hidden');
+    const t4Style = JSON.stringify(window._t4ForceStyle || {});
+    sketchup.export_360_cloud({ t4_force_style: t4Style });
+}
+
+// Phase 2 Anti-Collage: 將渲染結果降採樣為 16×16，僅保留光影色調，再傳回 Ruby
+window.generateStyleReference = function(url) {
+    var img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = function() {
+        try {
+            var canvas = document.createElement('canvas');
+            canvas.width = 16; canvas.height = 16;
+            canvas.getContext('2d').drawImage(img, 0, 0, 16, 16);
+            var base64 = canvas.toDataURL('image/jpeg', 0.8);
+            sketchup.returnStyleReference({ style_ref: base64 });
+        } catch(e) {
+            sketchup.returnStyleReference({ style_ref: url });
+        }
+    };
+    img.onerror = function() {
+        sketchup.returnStyleReference({ style_ref: url });
+    };
+    img.src = url;
+};

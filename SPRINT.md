@@ -1,16 +1,35 @@
 # Implementation Plan
 
 ## CONTEXT_DIGEST
-經過嚴格檢查與第一性原理分析，確認點擊渲染後「點數有扣、後台出圖但視窗閃退」的根源在於 SketchUp Ruby API 的兩個致命雷區：
-1. **C++ 層崩潰 (Flash Crash)**：`main.rb` 的 `restore_render_keys` 方法中，殘留了對 `model.pages.each { p.update(...) }` 的迴圈操作。這個操作在渲染完成後瞬間執行，會觸發 SU2023 已知的批量場景更新崩潰。
-2. **主執行緒阻塞 (UI Freeze/Crash)**：`auto_save_render` 和 `save_image` 中使用了同步的 `URI.open(url).read` 來下載圖片，這會徹底卡死 SketchUp 主執行緒，在網路稍慢或多次請求時，容易被系統判定為無回應而閃退。
+- **Issue 1**: 工具 4 批量出圖時 SketchUp 畫面與介面會白屏凍結，直到出圖結束才恢復。原因為 Ruby 在主執行緒使用同步的 `each` 迴圈連續拍攝高解析度切片，導致 UI 無法重繪。
+- **Issue 2**: 工具 4 介面仍殘留「上傳 IG」與「進階渲染設定」區塊，干擾極簡體驗。
+- **Issue 3**: 工具 4「雲端連結」上傳報錯 `FUNCTION_PAYLOAD_TOO_LARGE`。原因是將 6 張高畫質 Base64 塞入同一個 JSON 傳送至 Edge Function，超過了 2MB/4MB 的 Payload 上限。
+- **Issue 4 (New)**: T4 目前的 360 出圖畫面太過灰暗，缺乏 Admin 後台的統一管控機制。
 
 ## TASKS
-- [MUST] 移除危險的批量場景更新迴圈
-  - **影響檔案**: `loamlab_plugin/main.rb`
-  - **描述**: 在 `restore_render_keys` 方法中，徹底移除 `model.pages.each` 與 `p.update` 的相關程式碼。樣式的還原只需針對全域的 `RenderingOptions` 和 `ShadowInfo` 進行即可，不需要也不應該強制覆寫所有場景的設定檔。
-- [MUST] 將圖片下載重構為非阻塞異步架構 (Async Download)
-  - **影響檔案**: `loamlab_plugin/main.rb`
-  - **描述**: 在 `auto_save_render` 與 `save_image` 兩個 callback 中，移除所有 `require 'open-uri'` 和 `URI.open(url)` 的同步下載代碼。全面改寫為 `Sketchup::Http::Request.new(url, Sketchup::Http::GET)` 搭配 `set_download_path(full_path)` 來處理非同步下載，並將成功後的邏輯（如寫入 `cloud_index` 或彈出提示）移至 request block 內。
+
+### Phase 6: 工具 4 性能與邊界錯誤修復
+- **影響檔案**: `loamlab_plugin/main.rb`, `loamlab_plugin/ui/app.js`
+- **優先級**: [MUST]
+- **任務描述**:
+  1. **修復出圖白屏凍結 (非同步拍攝)**: 在 `main.rb` 的 `export_360_local` 與 `export_360_cloud` 中，將原本同步的場景與視角切換迴圈 (`scenes.each`, `face_configs.each`)，改寫為基於 `UI.start_timer(0.05, false)` 的遞迴列隊 (Queue) 處理模式。這樣能讓 SketchUp 引擎在每張截圖之間喘息並重繪畫面，徹底解決白屏與凍結問題。
+  2. **隱藏多餘 UI 區塊**: 在 `app.js` 的 `_switchTool(toolId)` 中，針對 Tool 4 確保隱藏「上傳 IG / 社群」區塊以及「進階渲染設定」的 `<details>` 區塊，維持畫面極簡。
+  3. **繞過 Payload 限制 (直接上傳 Storage)**: 
+     - 改變「雲端連結」的上傳策略：不要再將 Base64 塞入 JSON 打給 Edge Function (`process-tool-action`)。
+     - 改由 `main.rb` 在擷取單張圖片後，**直接使用 `Net::HTTP::Put` (或 Post) 將檔案二進制 (Binary) 上傳至 Supabase Storage 的 Bucket** (`/storage/v1/object/panoramas/{folder}/{file}`)。
+     - 當該場景的所有切片圖與 `index.html` 都分別上傳完成後，最後再打一個非常輕量的 JSON (只包含已上傳的路徑或 ID) 給 Edge Function 進行「扣除 5 點」與「寫入資料庫記錄」的動作。這樣就能完美避開 Function 的 Payload 限制。
+
+### Phase 7: 新增 T4 出圖樣式 Admin 統一管控功能
+- **影響檔案**: `loamlab_backend/public/admin.html`, `loamlab_plugin/ui/app.js`, `loamlab_plugin/main.rb`
+- **優先級**: [MUST]
+- **任務描述**:
+  1. **優化後台 Admin 介面**: 修改 `admin.html` 中的「T4 360 專屬樣式設定」。
+     - **移除**「天空 / 地面」(DrawHorizon, DrawGround, DrawSky) 等不必要的設定。
+     - 僅保留陰影相關設定（Light, Dark, UseSunForAllShading, DisplayShadows）。
+  2. **前端接收設定並傳遞**: 在 `app.js` 啟動時取得 API 回傳的 `_t4_force_style`。觸發 Tool 4 匯出時，將這組設定傳給 Ruby。
+  3. **Ruby 端實作「附加覆蓋 (Patch Override)」**: 在 `main.rb` 的 `export_cubemap_360` 中，**絕對不要全部重置或覆蓋**使用者的樣式。
+     - 取得目前的 `shadow_info` 與 `rendering_options`。
+     - **只針對**前端傳入的 `t4_force_style` 字典裡的 Key 進行修改（例如只改 Light 和 Dark）。
+     - 其餘所有沒有在字典裡的屬性（如天空、邊線等），全部**保持使用者當前畫面的原樣**。截圖完成後，再將修改過的那幾個屬性還原。這樣就能完美實現「把我們的樣式附加在用戶現用的樣式上面」。
 
 status: DONE

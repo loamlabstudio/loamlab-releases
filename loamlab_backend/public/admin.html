@@ -489,27 +489,33 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div>
         <label class="block text-xs text-gray-400 mb-1">T1 真實渲染</label>
-        <select id="model-t1" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-purple-200 outline-none focus:border-purple-500/50 transition-colors">
+        <select id="model-t1" onchange="updateModelBadge('t1', this.value)" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-purple-200 outline-none focus:border-purple-500/50 transition-colors">
           <option value="google/nano-banana-2/edit">Banana 2（預設）</option>
           <option value="google/nano-banana-pro/edit">Pro</option>
           <option value="google/nano-banana-pro/edit-ultra">Pro Ultra</option>
+          <option value="openai/gpt-image-2/edit">GPT Image 2（OpenAI）</option>
         </select>
+        <div id="model-badge-t1" class="text-xs mt-1 text-purple-400">✦ Nano 格式：resolution + aspect_ratio</div>
       </div>
       <div>
         <label class="block text-xs text-gray-400 mb-1">T2 SpaceReform</label>
-        <select id="model-t2" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-purple-200 outline-none focus:border-purple-500/50 transition-colors">
+        <select id="model-t2" onchange="updateModelBadge('t2', this.value)" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-purple-200 outline-none focus:border-purple-500/50 transition-colors">
           <option value="google/nano-banana-2/edit">Banana 2（預設）</option>
           <option value="google/nano-banana-pro/edit">Pro</option>
           <option value="google/nano-banana-pro/edit-ultra">Pro Ultra</option>
+          <option value="openai/gpt-image-2/edit">GPT Image 2（OpenAI）</option>
         </select>
+        <div id="model-badge-t2" class="text-xs mt-1 text-purple-400">✦ Nano 格式：resolution + aspect_ratio</div>
       </div>
       <div>
         <label class="block text-xs text-gray-400 mb-1">T3 九宮格</label>
-        <select id="model-t3" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-purple-200 outline-none focus:border-purple-500/50 transition-colors">
+        <select id="model-t3" onchange="updateModelBadge('t3', this.value)" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-purple-200 outline-none focus:border-purple-500/50 transition-colors">
           <option value="google/nano-banana-2/edit">Banana 2（預設）</option>
           <option value="google/nano-banana-pro/edit">Pro</option>
           <option value="google/nano-banana-pro/edit-ultra">Pro Ultra</option>
+          <option value="openai/gpt-image-2/edit">GPT Image 2（OpenAI）</option>
         </select>
+        <div id="model-badge-t3" class="text-xs mt-1 text-purple-400">✦ Nano 格式：resolution + aspect_ratio</div>
       </div>
     </div>
     <div class="flex justify-between mt-3 items-center">
@@ -1159,14 +1165,27 @@ async function savePrompts() {
 }
 
 // ── 模型選擇 ──────────────────────────────────────────────────────────────
+function updateModelBadge(tool, modelValue) {
+  const badge = document.getElementById(`model-badge-${tool}`);
+  if (!badge) return;
+  if (modelValue.startsWith('openai/gpt-image-2')) {
+    badge.textContent = '✦ GPT 格式：quality + size';
+    badge.className = 'text-xs mt-1 text-blue-400';
+  } else {
+    badge.textContent = '✦ Nano 格式：resolution + aspect_ratio';
+    badge.className = 'text-xs mt-1 text-purple-400';
+  }
+}
+
 async function loadModels() {
   try {
     const r = await fetch(`${API_BASE}/api/stats?action=get_model_config`);
     const j = await r.json();
     if (j.models) {
-      if (j.models.tool1) document.getElementById('model-t1').value = j.models.tool1;
-      if (j.models.tool2) document.getElementById('model-t2').value = j.models.tool2;
-      if (j.models.tool3) document.getElementById('model-t3').value = j.models.tool3;
+      ['t1', 't2', 't3'].forEach((t, i) => {
+        const val = j.models[`tool${i + 1}`];
+        if (val) { document.getElementById(`model-${t}`).value = val; updateModelBadge(t, val); }
+      });
     }
   } catch(e) { console.error('Failed to load model config:', e); }
 }
@@ -1927,12 +1946,28 @@ function renderT4ForceStyleSection() {
     </button>
   </div>`;
   };
+  const sliderRow = (label, key, min, max, step, def) => {
+    const val = v[key] !== undefined ? v[key] : def;
+    return `<div class="py-2 border-b border-white/[0.04]">
+    <div class="flex items-center justify-between mb-1">
+      <span class="text-xs text-gray-400">${label}</span>
+      <span class="text-xs text-gray-300 font-mono" id="t4-ao-val-${key}">${Number(val).toFixed(2)}</span>
+    </div>
+    <input type="range" min="${min}" max="${max}" step="${step}" value="${val}"
+           oninput="_updateT4ForceStyleField('${key}', parseFloat(this.value)); document.getElementById('t4-ao-val-${key}').textContent = parseFloat(this.value).toFixed(2);"
+           class="w-full accent-cyan-500 h-1.5 cursor-pointer">
+  </div>`;
+  };
   const sectionLabel = (t) => `<p class="text-[10px] text-white/25 uppercase tracking-widest pt-2 pb-0.5">${t}</p>`;
   area.innerHTML = sectionLabel('陰影設定')
     + numRow('Light（亮面明度 0–100）', 'Light', 80)
     + numRow('Dark（暗面明度 0–100）', 'Dark', 70)
     + toggleRow('UseSunForAllShading（陽光統一分面，消除拼接縫）', 'UseSunForAllShading', true)
-    + toggleRow('DisplayShadows（投影顯示）', 'DisplayShadows', false);
+    + toggleRow('DisplayShadows（投影顯示）', 'DisplayShadows', false)
+    + sectionLabel('環境光遮蔽（AO）')
+    + toggleRow('AmbientOcclusion（開關，僅新圖形引擎）', 'AmbientOcclusion', true)
+    + sliderRow('距離 AmbientOcclusionDistance（0–10）', 'AmbientOcclusionDistance', 0, 10, 0.5, 2)
+    + sliderRow('強度 AmbientOcclusionIntensity（0–1）', 'AmbientOcclusionIntensity', 0, 1, 0.05, 0.8);
 }
 
 function addOptionToNode(fieldId) {

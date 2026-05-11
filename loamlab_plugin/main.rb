@@ -148,7 +148,8 @@ module LoamLab
       ro = model.rendering_options
       # rendering_options 的有效 key（EdgeDisplayMode 是主開關，DrawEdges 不存在）
       ro_keys = ['EdgeDisplayMode', 'DrawBackEdges', 'DrawSilhouettes', 'SilhouetteWidth',
-                 'DrawDepthQue', 'AmbientOcclusion', 'DisplayInstanceAxes', 'DisplaySketchAxes']
+                 'DrawDepthQue', 'AmbientOcclusion', 'AmbientOcclusionDistance', 'AmbientOcclusionIntensity',
+                 'DisplayInstanceAxes', 'DisplaySketchAxes']
       ro_keys.each do |k|
         begin; ro[k] = force_style[k] if force_style.key?(k) && ro.keys.include?(k); rescue => e; end
       end

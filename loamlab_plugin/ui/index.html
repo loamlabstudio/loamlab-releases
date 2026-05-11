@@ -466,21 +466,22 @@
                         </path>
                     </svg>
                 </div>
-                <!-- 4. 指定材質替換 (Dev only) -->
-                <div id="sidebar-tool-4" class="dev-only-tool hidden sidebar-tool-btn w-full aspect-square rounded-xl bg-transparent transition-colors cursor-pointer flex flex-col items-center justify-center text-white/50 group relative overflow-hidden hover:bg-white/10 hover:text-white"
-                    title="指定材質替換" data-i18n-title="tooltip_material" onclick="setActiveTool(4)">
+                <!-- 4. 360 全景分享 -->
+                <div id="sidebar-tool-4" class="sidebar-tool-btn w-full aspect-square rounded-xl bg-transparent transition-colors cursor-pointer flex flex-col items-center justify-center text-white/50 group relative overflow-hidden hover:bg-white/10 hover:text-white"
+                    title="360 全景分享" data-i18n-title="tooltip_360" onclick="setActiveTool(4)">
                     <div class="absolute inset-x-0 top-0 h-1 bg-[var(--accent-red)] sidebar-active-bar hidden"></div>
                     <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01">
+                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3.6 9h16.8M3.6 15h16.8M12 3a15.3 15.3 0 010 18M12 3a15.3 15.3 0 000 18">
                         </path>
                     </svg>
+                    <span class="text-[8px] font-semibold tracking-wide mt-0.5 opacity-70">360°</span>
                 </div>
             </div>
             <!-- Help Button (opt-in tutorial) -->
             <div class="mt-auto pt-6 pb-2 flex justify-center">
                 <button
-                    onclick="(function(){var ids={1:'ai-render',2:'spacereform',3:'multiangle',4:'smartcanvas'};if(window.TutorialSystem)TutorialSystem.openHelp(ids[currentActiveTool]||'ai-render');})()"
+                    onclick="(function(){var ids={1:'ai-render',2:'spacereform',3:'multiangle',4:'360-panorama'};if(window.TutorialSystem)TutorialSystem.openHelp(ids[currentActiveTool]||'ai-render');})()"
                     class="w-8 h-8 rounded-full flex items-center justify-center text-white/20 hover:text-white/60 hover:bg-white/8 transition-colors cursor-pointer"
                     title="使用說明" data-i18n-title="tooltip_help">
                     <span class="text-[13px] font-light select-none">?</span>
@@ -552,6 +553,31 @@
                         Ruby 核心連線...</p>
                 </div>
 
+                <!-- 工具 4：360 全景分享面板 -->
+                <div id="tool4-panel" class="hidden w-full flex flex-col gap-4">
+                    <div class="w-full rounded-xl border border-white/10 bg-black/30 p-4 flex flex-col gap-2 text-center">
+                        <div class="text-white/80 text-[13px] font-semibold" data-i18n="tool_360">360° 全景分享</div>
+                        <div class="text-white/40 text-[11px] leading-relaxed" data-i18n="tool_360_desc">從當前鏡頭位置自動拍攝 6 面全景，生成可互動的 360° 分享頁面</div>
+                    </div>
+                    <button id="btn-360-local" onclick="handle360LocalExport()"
+                        class="w-full rounded-[14px] border border-white/15 bg-white/5 text-white/80 py-3.5 text-[13px] font-semibold hover:bg-white/10 hover:border-white/25 transition-all">
+                        <div class="flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                            <span><span data-i18n="t4_local_btn">單機匯出</span> <span class="text-white/40 font-normal text-[11px]" data-i18n="t4_local_free">（免費）</span></span>
+                        </div>
+                        <div class="text-[10px] text-white/30 mt-1" data-i18n="t4_local_desc">儲存全景圖與 WebGL 引擎到本機資料夾</div>
+                    </button>
+                    <button id="btn-360-cloud" onclick="handle360CloudExport()"
+                        class="dev-only-tool hidden w-full rounded-[14px] bg-gradient-to-r from-blue-600/80 to-blue-500/80 text-white py-3.5 text-[13px] font-semibold hover:from-blue-600 hover:to-blue-500 transition-all shadow-lg border border-blue-400/20">
+                        <div class="flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                            <span id="btn-360-cloud-label"><span data-i18n="t4_cloud_btn">產生雲端連結</span> <span class="text-blue-200/70 font-normal text-[11px]" data-i18n="t4_cloud_cost">（扣除 5 點）</span></span>
+                        </div>
+                        <div class="text-[10px] text-blue-200/50 mt-1" data-i18n="t4_cloud_expiry">連結 7 天後自動失效</div>
+                    </button>
+                    <div id="tool4-status" class="hidden w-full text-center text-[11px] text-white/50 py-2"></div>
+                </div>
+
                 <div id="scenes-container"
                     class="w-full flex-1 flex flex-col min-h-0 bg-black/30 border border-white/[0.04] rounded-xl shadow-[inset_0_2px_15px_rgba(0,0,0,0.5)] mb-4 p-1.5 transition-all overflow-hidden relative">
                     <!-- JS 動態寫入場景清單 -->
@@ -571,12 +597,12 @@
                             class="w-full rounded-xl border-2 border-dashed border-white/15 bg-black/20 cursor-pointer hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group overflow-hidden relative">
                             <div id="base-image-empty" class="flex flex-col items-center justify-center gap-2 text-white/30 group-hover:text-amber-400/50 transition-colors p-4">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                <span id="base-image-pick-label" class="text-[10px] uppercase tracking-wider font-semibold">點擊從歷史選擇底圖</span>
+                                <span id="base-image-pick-label" class="text-[10px] uppercase tracking-wider font-semibold" data-i18n="base_image_pick">點擊從歷史選擇底圖</span>
                             </div>
                             <div id="base-image-filled" class="hidden relative">
                                 <img id="base-image-thumb" src="" class="w-full object-cover rounded-xl" style="max-height:96px;">
                                 <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded-xl">
-                                    <span id="base-image-change-label" class="text-[10px] text-white/90 font-semibold uppercase tracking-widest">更換底圖</span>
+                                    <span id="base-image-change-label" class="text-[10px] text-white/90 font-semibold uppercase tracking-widest" data-i18n="base_image_change">更換底圖</span>
                                 </div>
                                 <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 px-2 py-1.5 rounded-b-xl">
                                     <span id="base-image-meta" class="text-[10px] text-white/70 block truncate"></span>
@@ -747,7 +773,7 @@
                             <div id="save-dir-display"
                                 class="text-[11px] text-white/50 font-mono truncate cursor-pointer group-hover/dir:text-white/80 transition-colors bg-transparent border-none appearance-none outline-none"
                                 title="尚未設定 (點擊選擇資料夾)" data-i18n-title="tooltip_save_path"
-                                onclick="if(window.sketchup) sketchup.choose_save_dir({})">
+                                onclick="chooseSaveDirForTool()">
                                 D:/專案/預設輸出/
                             </div>
                         </div>
@@ -756,7 +782,7 @@
                             <button id="btn-choose-dir"
                                 class="bg-white/5 hover:bg-white/20 border border-white/10 text-white rounded p-1.5 transition-colors active:scale-95"
                                 title="選擇資料夾"
-                                onclick="if(window.sketchup) sketchup.open_save_dir({})">
+                                onclick="openSaveDirForTool()">
                                 <svg class="w-3.5 h-3.5 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z">
@@ -913,24 +939,24 @@
                 <p class="text-white/50 text-[12px] tracking-wide" data-i18n="referral_modal_desc"></p>
             </div>
 
+            <!-- 分享代碼區塊 (所有登入用戶可見) -->
+            <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 mb-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                <p class="text-white/60 text-[11px] uppercase font-semibold tracking-wider mb-2" data-i18n="kol_your_code_label">您的專屬推薦碼 Your Code:</p>
+                <div class="flex items-center gap-3">
+                    <div id="my-referral-code"
+                        class="flex-1 bg-black border border-white/20 rounded-lg p-3 text-center text-white font-mono text-xl tracking-[0.2em] font-bold cursor-text select-all">
+                        ------</div>
+                    <button id="btn-copy-referral"
+                        class="px-5 py-3 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">COPY</button>
+                    <button id="btn-share-line-referral"
+                        class="px-4 py-3 rounded-lg bg-[#00B900]/15 hover:bg-[#00B900]/30 border border-[#00B900]/40 text-[#4ade4a] text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">LINE</button>
+                    <button id="btn-share-wa-referral"
+                        class="px-4 py-3 rounded-lg bg-[#25D366]/15 hover:bg-[#25D366]/30 border border-[#25D366]/40 text-[#4ade80] text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">WA</button>
+                </div>
+            </div>
+
             <!-- KOL 大使專屬區塊（is_kol=true 才顯示）-->
             <div id="kol-ambassador-section" class="hidden">
-                <!-- 分享代碼區塊 -->
-                <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 mb-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                    <p class="text-white/60 text-[11px] uppercase font-semibold tracking-wider mb-2" data-i18n="kol_your_code_label">您的專屬推薦碼 Your Code:</p>
-                    <div class="flex items-center gap-3">
-                        <div id="my-referral-code"
-                            class="flex-1 bg-black border border-white/20 rounded-lg p-3 text-center text-white font-mono text-xl tracking-[0.2em] font-bold cursor-text select-all">
-                            ------</div>
-                        <button id="btn-copy-referral"
-                            class="px-5 py-3 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">COPY</button>
-                        <button id="btn-share-line-referral"
-                            class="px-4 py-3 rounded-lg bg-[#00B900]/15 hover:bg-[#00B900]/30 border border-[#00B900]/40 text-[#4ade4a] text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">LINE</button>
-                        <button id="btn-share-wa-referral"
-                            class="px-4 py-3 rounded-lg bg-[#25D366]/15 hover:bg-[#25D366]/30 border border-[#25D366]/40 text-[#4ade80] text-[12px] font-bold transition-all shrink-0 border-b-2 active:border-b-0 active:translate-y-[2px]">WA</button>
-                    </div>
-                </div>
-
                 <!-- KOL 大使進度面板 -->
                 <div class="bg-[#18181d] border border-purple-500/20 rounded-xl p-5 mb-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
                     <p class="text-purple-400/80 text-[11px] uppercase font-semibold tracking-wider mb-3" data-i18n="kol_ambassador_dashboard">🏆 大使進度 Ambassador Dashboard</p>

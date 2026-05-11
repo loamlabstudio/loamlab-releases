@@ -1905,7 +1905,8 @@ function renderRenderForceStyleSection() {
 
 // ── T4 360 專屬樣式設定 ──────────────────────────────────────────────────────
 function _getT4ForceStyleEntry() {
-  const DEFAULTS = { Light: 80, Dark: 70, UseSunForAllShading: true, DisplayShadows: false };
+  const DEFAULTS = { Light: 80, Dark: 70, UseSunForAllShading: true, DisplayShadows: false,
+                     AmbientOcclusion: true, AmbientOcclusionDistance: 2, AmbientOcclusionIntensity: 0.8 };
   let e = optionsData.find(o => o.field_id === '_t4_force_style');
   if (!e) {
     e = { id: '_t4_force_style', field_id: '_t4_force_style', value: { ...DEFAULTS } };
@@ -1918,8 +1919,10 @@ function _updateT4ForceStyleField(key, rawVal) {
   if (!e.value) e.value = {};
   if (key === 'EdgeDisplayMode') {
     e.value[key] = (rawVal === true || rawVal === 'true') ? 1 : 0;
-  } else if (['UseSunForAllShading','DisplayShadows'].includes(key)) {
+  } else if (['UseSunForAllShading', 'DisplayShadows', 'AmbientOcclusion'].includes(key)) {
     e.value[key] = (rawVal === true || rawVal === 'true');
+  } else if (['AmbientOcclusionDistance', 'AmbientOcclusionIntensity'].includes(key)) {
+    e.value[key] = parseFloat(rawVal) || 0;
   } else {
     e.value[key] = parseInt(rawVal, 10);
   }

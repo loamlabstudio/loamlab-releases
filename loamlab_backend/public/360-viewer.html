@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LoamLab 360° 全景</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: sans-serif; }
+    #container { width: 100vw; height: 100vh; }
+    #ui { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 12px; align-items: center; pointer-events: none; }
+    #msg { color: rgba(255,255,255,.45); font-size: 12px; }
+    #loading { position: fixed; inset: 0; background: #000; display: flex;
+      flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #fff; }
+    #loading svg { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #error { position: fixed; inset: 0; background: #111; display: none;
+      flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #fff; text-align: center; }
+    #error h2 { font-size: 18px; } #error p { color: rgba(255,255,255,.5); font-size: 13px; }
+    #brand { position: fixed; top: 12px; left: 14px; color: rgba(255,255,255,.3); font-size: 11px; }
+    #nav { position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      display: none; gap: 6px; align-items: center; z-index: 10; }
+    #nav button { background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.2);
+      border-radius: 6px; color: rgba(255,255,255,.75); font-size: 12px; padding: 5px 12px;
+      cursor: pointer; white-space: nowrap; }
+    #nav button:hover { background: rgba(255,255,255,.15); color: #fff; }
+    #nav button.active { background: rgba(255,255,255,.2); color: #fff; border-color: rgba(255,255,255,.5); }
+    #scene-label { position: fixed; top: 52px; left: 50%; transform: translateX(-50%);
+      color: rgba(255,255,255,.5); font-size: 12px; display: none; }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+    </svg>
+    <span>載入全景中…</span>
+  </div>
+  <div id="error">
+    <h2>⚠️ 全景已過期</h2>
+    <p>此分享連結已失效（7 天有效期）<br>請重新從 LoamLab 插件產生</p>
+  </div>
+  <div id="container"></div>
+  <div id="brand">LoamLab AI Renderer</div>
+  <div id="nav"></div>
+  <div id="scene-label"></div>
+  <div id="ui"><span id="msg">拖曳旋轉 · 滾輪縮放</span></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+  <script>
+    const _params = new URLSearchParams(location.search);
+    const shareId = _params.get('id');
+    const _sc = _params.get('sc') || '';
+    const _sn = _params.get('sn') || '';
+    if (!shareId) { showError(); } else { loadPano(shareId); }
+
+    function showError() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'flex';
+    }
+
+    async function loadPano(id) {
+      try {
+        // Pass sc/sn so server can skip meta.json lookup for multi-scene shares
+        let apiUrl = `/api/render?action=get_360&id=${encodeURIComponent(id)}`;
+        if (_sc) apiUrl += `&sc=${encodeURIComponent(_sc)}&sn=${encodeURIComponent(_sn)}`;
+        const res = await fetch(apiUrl);
+        const data = await res.json();
+        if (!data || data.code !== 0) { showError(); return; }
+        // Support both legacy {faces} and new {scenes:[{name,faces}]}
+        const scenes = data.scenes
+          ? data.scenes
+          : [{ name: '全景分享', faces: data.faces }];
+        if (!scenes.length || !scenes[0].faces) { showError(); return; }
+        initViewer(scenes);
+      } catch(e) { showError(); }
+    }
+
+    let currentMesh = null;
+    let renderer, camera, scene3;
+
+    function buildCubeMesh(faces) {
+      const faceOrder = ['back', 'front', 'top', 'bottom', 'right', 'left'];
+      const materials = faceOrder.map(name => new THREE.MeshBasicMaterial({
+        map: new THREE.TextureLoader().load(faces[name]),
+        side: THREE.BackSide
+      }));
+      return new THREE.Mesh(new THREE.BoxGeometry(500, 500, 500), materials);
+    }
+
+    function initViewer(scenes) {
+      document.getElementById('loading').style.display = 'none';
+
+      scene3   = new THREE.Scene();
+      camera   = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 1100);
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(devicePixelRatio);
+      renderer.setSize(innerWidth, innerHeight);
+      document.getElementById('container').appendChild(renderer.domElement);
+
+      // Build scene navigation if multi-scene
+      if (scenes.length > 1) {
+        const navEl = document.getElementById('nav');
+        navEl.style.display = 'flex';
+        document.getElementById('scene-label').style.display = 'block';
+        scenes.forEach((s, i) => {
+          const btn = document.createElement('button');
+          btn.textContent = s.name || `場景 ${i + 1}`;
+          btn.dataset.idx = i;
+          if (i === 0) btn.classList.add('active');
+          btn.addEventListener('click', () => switchScene(i, scenes, btn));
+          navEl.appendChild(btn);
+        });
+      }
+
+      // Load first scene
+      currentMesh = buildCubeMesh(scenes[0].faces);
+      scene3.add(currentMesh);
+      if (scenes.length > 1) {
+        document.getElementById('scene-label').textContent = scenes[0].name || '場景 1';
+      }
+
+      let lon = 0, lat = 0, cFOV = 70;
+      let isDown = false, pX = 0, pY = 0, pLon = 0, pLat = 0;
+
+      renderer.domElement.addEventListener('mousedown', e => {
+        isDown = true; pX = e.clientX; pY = e.clientY; pLon = lon; pLat = lat;
+      });
+      window.addEventListener('mousemove', e => {
+        if (!isDown) return;
+        lon = (pX - e.clientX) * 0.15 + pLon;
+        lat = (e.clientY - pY) * 0.15 + pLat;
+      });
+      window.addEventListener('mouseup', () => isDown = false);
+      renderer.domElement.addEventListener('wheel', e => {
+        cFOV = Math.max(10, Math.min(90, cFOV + e.deltaY * 0.05));
+        camera.fov = cFOV; camera.updateProjectionMatrix();
+      }, { passive: true });
+
+      // Touch support
+      let tPrev = null;
+      renderer.domElement.addEventListener('touchstart', e => {
+        tPrev = e.touches[0]; pLon = lon; pLat = lat;
+      });
+      renderer.domElement.addEventListener('touchmove', e => {
+        if (!tPrev) return;
+        lon = (tPrev.clientX - e.touches[0].clientX) * 0.2 + pLon;
+        lat = (e.touches[0].clientY - tPrev.clientY) * 0.2 + pLat;
+        pLon = lon; pLat = lat; tPrev = e.touches[0];
+      });
+
+      window.addEventListener('resize', () => {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+      });
+
+      function animate() {
+        requestAnimationFrame(animate);
+        lat = Math.max(-85, Math.min(85, lat));
+        const phi   = THREE.MathUtils.degToRad(90 - lat);
+        const theta = THREE.MathUtils.degToRad(lon);
+        camera.lookAt(
+          500 * Math.sin(phi) * Math.cos(theta),
+          500 * Math.cos(phi),
+          500 * Math.sin(phi) * Math.sin(theta)
+        );
+        renderer.render(scene3, camera);
+      }
+      animate();
+
+      function switchScene(idx, scenes, clickedBtn) {
+        if (currentMesh) { scene3.remove(currentMesh); currentMesh = null; }
+        currentMesh = buildCubeMesh(scenes[idx].faces);
+        scene3.add(currentMesh);
+        document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
+        clickedBtn.classList.add('active');
+        const label = document.getElementById('scene-label');
+        if (label) label.textContent = scenes[idx].name || `場景 ${idx + 1}`;
+      }
+    }
+  </script>
+</body>
+</html>

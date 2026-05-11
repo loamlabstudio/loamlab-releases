@@ -14,12 +14,33 @@ function sanitizeError(msg) {
         .replace(/atlascloud\.ai/gi, 'ai-render-gateway')
         .replace(/AtlasCloud/gi, 'AI 渲染引擎')
         .replace(/ATLASCLOUD_API_KEY/g, '渲染引擎金鑰')
+        .replace(/openai\/gpt-image-2\/edit/gi, 'AI-Renderer-Vision')
+        .replace(/gpt-image-2/gi, 'AI-Renderer-Vision')
+        .replace(/openai/gi, 'AI')
         .replace(/nano-banana-2\/edit/gi, 'AI-Renderer-Pro')
         .replace(/nano-banana/gi, 'AI-Engine')
         .replace(/google\/nano-banana-2\/edit/gi, 'AI-Renderer-Pro')
         .replace(/google/gi, 'AI')
         .replace(/Bearer\s+[A-Za-z0-9\-._~+/]+=*/g, '[TOKEN]')
         .replace(/https?:\/\/api\.[^\s"']+/g, '[API_ENDPOINT]');
+}
+
+// ── 模型適配器登錄表：新增模型只需加一條 entry ──
+// key = AtlasCloud model ID 前綴；value = (images, prompt, res) => 參數物件
+const MODEL_ADAPTERS = {
+    'openai/gpt-image-2': (images, prompt, res) => {
+        const qualityMap = { '1k': 'low', '2k': 'medium', '4k': 'high' };
+        return { images, prompt, quality: qualityMap[res] || 'medium', size: '1536x1024' };
+    },
+    'google/nano-banana': (images, prompt, res) => ({
+        images, prompt, resolution: res, aspect_ratio: '16:9', output_format: 'jpeg'
+    })
+};
+
+function buildAtlasReqBody(model, images, prompt, resolution) {
+    const adapterKey = Object.keys(MODEL_ADAPTERS).find(k => model.startsWith(k));
+    const adapter = MODEL_ADAPTERS[adapterKey] || MODEL_ADAPTERS['google/nano-banana'];
+    return { model, ...adapter(images, prompt, resolution) };
 }
 
 // 全域快取：存放 Promise 避免同一瞬間併發的多個相同翻譯請求重複扣除 API 額度
@@ -112,6 +133,195 @@ async function _handleRender(req, res) {
         return res.status(200).end();
     }
 
+    // GET /api/render?action=get_360&id=<uuid>  — 360 viewer 取得圖片 URL
+    // GET /api/render?action=cleanup_360&key=<ADMIN_KEY> — 刪除 7 天前的全景圖（供 cron 呼叫）
+    if (req.method === 'GET') {
+        const qs = new URLSearchParams((req.url || '').split('?')[1] || '');
+        const action = qs.get('action');
+
+        if (action === 'get_360') {
+            const shareId = qs.get('id') || '';
+            if (!/^[0-9a-f-]{36}$/i.test(shareId)) {
+                return res.status(400).json({ code: -1, msg: 'Invalid share ID' });
+            }
+            const base = `${process.env.SUPABASE_URL}/storage/v1/object/public/pano-360/${shareId}`;
+            const faceNames = ['back', 'front', 'top', 'bottom', 'right', 'left'];
+            // Priority: URL params sc/sn (embedded at share time) → meta.json → flat-path fallback (old shares)
+            let nScenes = 1;
+            let sceneNames = ['全景分享'];
+            const scParam = parseInt(qs.get('sc') || '0');
+            const snParam = qs.get('sn') || '';
+            if (scParam >= 1 && snParam) {
+                nScenes = Math.min(scParam, 20);
+                sceneNames = decodeURIComponent(snParam).split('|').filter(Boolean);
+                const scenes = [];
+                for (let i = 0; i < nScenes; i++) {
+                    const faces = Object.fromEntries(faceNames.map(f => [f, `${base}/${i}/${f}.jpg`]));
+                    scenes.push({ name: sceneNames[i] || `場景 ${i + 1}`, faces });
+                }
+                return res.status(200).json({ code: 0, scenes });
+            }
+            // Detect storage layout: new indexed (${shareId}/0/back.jpg) vs old flat (${shareId}/back.jpg)
+            let useFlatPath = false;
+            try {
+                const checkResp = await fetch(`${base}/0/back.jpg`, { method: 'HEAD' });
+                if (!checkResp.ok) useFlatPath = true;
+            } catch(e) { /* network error — assume indexed */ }
+            if (useFlatPath) {
+                // Legacy single-scene flat-path upload
+                const faces = Object.fromEntries(faceNames.map(f => [f, `${base}/${f}.jpg`]));
+                return res.status(200).json({ code: 0, scenes: [{ name: '全景分享', faces }] });
+            }
+            // New indexed layout: try meta.json for scene count/names
+            try {
+                const metaResp = await fetch(`${base}/meta.json`);
+                if (metaResp.ok) {
+                    const meta = await metaResp.json();
+                    nScenes = Math.max(1, meta.scene_count || 1);
+                    sceneNames = meta.scene_names || sceneNames;
+                }
+            } catch(e) { /* fallback to single scene */ }
+            const scenes = [];
+            for (let i = 0; i < nScenes; i++) {
+                const faces = Object.fromEntries(faceNames.map(f => [f, `${base}/${i}/${f}.jpg`]));
+                scenes.push({ name: sceneNames[i] || `場景 ${i + 1}`, faces });
+            }
+            return res.status(200).json({ code: 0, scenes });
+        }
+
+        if (action === 'init_360_upload') {
+            const userEmail = (req.headers['x-user-email'] || '').trim();
+            if (!userEmail) return res.status(200).json({ code: -1, msg: '未登入' });
+            // Parse scene names (URL-encoded, comma-separated)
+            const sceneNamesHeader = (req.headers['x-scene-names'] || '').trim();
+            const sceneNames = sceneNamesHeader
+                ? sceneNamesHeader.split(',').map(s => { try { return decodeURIComponent(s); } catch(e) { return s; } }).filter(Boolean)
+                : ['全景分享'];
+            const nScenes = Math.min(sceneNames.length, 10);
+            const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+            const { data: user } = await supa.from('users').select('points, lifetime_points').eq('email', userEmail).single();
+            const totalPoints = (user?.points || 0) + (user?.lifetime_points || 0);
+            if (!user || totalPoints < 5) {
+                return res.status(200).json({ code: -1, msg: `點數不足（需要 5 點，目前 ${totalPoints} 點）` });
+            }
+            // 原子扣款（在建 URL 前扣，避免 finalize 多一次 RTT）
+            const { data: deductResult, error: deductErr } = await supa.rpc('deduct_render_points', { p_email: userEmail, p_cost: 5 });
+            if (deductErr || !deductResult?.success) {
+                const msg = deductResult?.error === 'insufficient_points'
+                    ? `點數不足，餘額 ${deductResult.balance} 點`
+                    : (deductErr?.message || '點數扣除失敗，請稍後再試');
+                return res.status(200).json({ code: -1, msg });
+            }
+            const supaAdmin = createClient(
+                process.env.SUPABASE_URL,
+                process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+            );
+            const { randomUUID } = await import('node:crypto');
+            const shareId = randomUUID();
+            const faceNames = ['back', 'front', 'top', 'bottom', 'right', 'left'];
+            // 並行產生 nScenes×6 個簽名 URL + 1 個 meta.json URL
+            const uploadTasks = [];
+            for (let si = 0; si < nScenes; si++) {
+                for (const face of faceNames) {
+                    uploadTasks.push({ si, face, path: `${shareId}/${si}/${face}.jpg` });
+                }
+            }
+            const [faceUrlResults, metaUrlResult] = await Promise.all([
+                Promise.all(uploadTasks.map(t => supaAdmin.storage.from('pano-360').createSignedUploadUrl(t.path))),
+                supaAdmin.storage.from('pano-360').createSignedUploadUrl(`${shareId}/meta.json`)
+            ]);
+            const failedFace = faceUrlResults.find(r => r.error);
+            if (failedFace) return res.status(200).json({ code: -1, msg: `簽名失敗: ${failedFace.error.message}` });
+            if (metaUrlResult.error) return res.status(200).json({ code: -1, msg: `meta 簽名失敗: ${metaUrlResult.error.message}` });
+            // Build upload_urls: { "0": { "back": url, ... }, "1": {...}, ... }
+            const uploadUrls = {};
+            for (let i = 0; i < uploadTasks.length; i++) {
+                const { si, face } = uploadTasks[i];
+                if (!uploadUrls[si]) uploadUrls[si] = {};
+                uploadUrls[si][face] = faceUrlResults[i].data.signedUrl;
+            }
+            // Embed scene metadata in URL so viewer doesn't depend on meta.json availability
+            const snEncoded = encodeURIComponent(sceneNames.slice(0, nScenes).join('|'));
+            const shareUrl = `https://loamlab-camera-backend.vercel.app/360-viewer.html?id=${shareId}&sc=${nScenes}&sn=${snEncoded}`;
+            return res.status(200).json({
+                code: 0, share_id: shareId, upload_urls: uploadUrls,
+                meta_url: metaUrlResult.data.signedUrl,
+                scene_names: sceneNames.slice(0, nScenes),
+                share_url: shareUrl, points_remaining: deductResult.balance
+            });
+        }
+
+        // All-in-One HTML 單文件上傳：扣款 + 返回 1 個簽名 URL
+        if (action === 'init_360_single_upload') {
+            const userEmail = (req.headers['x-user-email'] || '').trim();
+            if (!userEmail) return res.status(200).json({ code: -1, msg: '未登入' });
+            const COST_360 = 5;
+            const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+            const { data: user360s } = await supa.from('users').select('points, lifetime_points').eq('email', userEmail).single();
+            const totalPts = (user360s?.points || 0) + (user360s?.lifetime_points || 0);
+            if (!user360s || totalPts < COST_360) {
+                return res.status(200).json({ code: -1, msg: `點數不足（需要 ${COST_360} 點，目前 ${totalPts} 點）` });
+            }
+            const { data: deductS, error: deductSErr } = await supa.rpc('deduct_render_points', { p_email: userEmail, p_cost: COST_360 });
+            if (deductSErr || !deductS?.success) {
+                const msg = deductS?.error === 'insufficient_points'
+                    ? `點數不足，餘額 ${deductS.balance} 點`
+                    : (deductSErr?.message || '點數扣除失敗，請稍後再試');
+                return res.status(200).json({ code: -1, msg });
+            }
+            const supaAdmin = createClient(
+                process.env.SUPABASE_URL,
+                process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+            );
+            const { randomUUID } = await import('node:crypto');
+            const shareId = randomUUID();
+            const htmlPath = `${shareId}/viewer.html`;
+            const { data: urlData, error: urlErr } = await supaAdmin.storage
+                .from('pano-360').createSignedUploadUrl(htmlPath);
+            if (urlErr) {
+                // 退款
+                try { await supa.rpc('deduct_render_points', { p_email: userEmail, p_cost: -COST_360 }); } catch(e) {}
+                return res.status(200).json({ code: -1, msg: `簽名失敗: ${urlErr.message}` });
+            }
+            // 公開 URL 直接作為 share URL（pano-360 bucket 為 public）
+            const shareUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/pano-360/${htmlPath}`;
+            return res.status(200).json({
+                code: 0, share_id: shareId,
+                upload_url: urlData.signedUrl,
+                share_url: shareUrl,
+                points_remaining: deductS.balance
+            });
+        }
+
+        if (action === 'cleanup_360') {
+            if (qs.get('key') !== process.env.ADMIN_KEY) {
+                return res.status(401).json({ code: -1, msg: 'Unauthorized' });
+            }
+            const supa = createClient(
+                process.env.SUPABASE_URL,
+                process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+            );
+            const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            const { data: folders } = await supa.storage.from('pano-360').list('', { limit: 1000 });
+            if (!folders) return res.status(200).json({ code: 0, deleted: 0 });
+
+            let deleted = 0;
+            for (const folder of folders) {
+                if (new Date(folder.created_at) < cutoff) {
+                    const { data: files } = await supa.storage.from('pano-360').list(folder.name, { limit: 10 });
+                    if (files && files.length) {
+                        await supa.storage.from('pano-360').remove(files.map(f => `${folder.name}/${f.name}`));
+                    }
+                    deleted++;
+                }
+            }
+            console.log(`[cleanup_360] deleted ${deleted} expired panoramas`);
+            return res.status(200).json({ code: 0, deleted });
+        }
+
+        return res.status(405).json({ code: -1, msg: 'Method Not Allowed' });
+    }
+
     if (req.method !== 'POST') {
         return res.status(405).json({ code: -1, msg: 'Method Not Allowed' });
     }
@@ -165,7 +375,64 @@ async function _handleRender(req, res) {
     const userPayload = req.body || {};
     const activeTool = userPayload.tool || 1;
 
-// 記錄原始輸入 URL（僅保存穩定的外部 URL，不保存 base64 或臨時簽名 URL）
+    // 360 全景雲端上傳（early return，不走渲染流程）
+    if (userPayload.action === 'upload_360') {
+        const COST_360 = 5;
+        const faces = userPayload.faces || {};
+        const faceNames = ['back', 'front', 'top', 'bottom', 'right', 'left'];
+        if (!faceNames.every(n => faces[n])) {
+            return res.status(200).json({ code: -1, msg: '全景圖不完整，請重新截圖' });
+        }
+        let { data: user } = await supabase.from('users').select('points, lifetime_points').eq('email', userEmail).single();
+        if (!user || user.points < COST_360) {
+            return res.status(200).json({ code: -1, msg: `點數不足（需要 ${COST_360} 點，目前 ${user?.points ?? 0} 點）` });
+        }
+        const { error: deductErr } = await supabase.from('users').update({
+            points: user.points - COST_360,
+            lifetime_points: (user.lifetime_points || 0) + COST_360
+        }).eq('email', userEmail);
+        if (deductErr) return res.status(200).json({ code: -1, msg: '點數扣除失敗，請稍後再試' });
+        try {
+            const { randomUUID } = await import('node:crypto');
+            const shareId = randomUUID();
+            for (const name of faceNames) {
+                const b64 = faces[name].replace(/^data:image\/\w+;base64,/, '');
+                const buf = Buffer.from(b64, 'base64');
+                const { error: upErr } = await supabaseAdmin.storage
+                    .from('pano-360').upload(`${shareId}/${name}.jpg`, buf, { contentType: 'image/jpeg' });
+                if (upErr) throw new Error(`${name}: ${upErr.message}`);
+            }
+            const shareUrl = `https://loamlab-camera-backend.vercel.app/360-viewer.html?id=${shareId}`;
+            return res.status(200).json({ code: 0, share_url: shareUrl, points_remaining: user.points - COST_360 });
+        } catch (e) {
+            await supabase.from('users').update({ points: user.points }).eq('email', userEmail).catch(() => {});
+            return res.status(200).json({ code: -1, msg: `上傳失敗：${e.message}` });
+        }
+    }
+
+    if (userPayload.action === 'finalize_360_upload') {
+        const shareId = (userPayload.share_id || '').trim();
+        if (!/^[0-9a-f-]{36}$/i.test(shareId)) {
+            return res.status(200).json({ code: -1, msg: 'Invalid share ID' });
+        }
+        const COST_360 = 5;
+        let { data: user360 } = await supabase.from('users').select('points, lifetime_points').eq('email', userEmail).single();
+        const totalPoints360 = (user360?.points || 0) + (user360?.lifetime_points || 0);
+        if (!user360 || totalPoints360 < COST_360) {
+            return res.status(200).json({ code: -1, msg: `點數不足（需要 ${COST_360} 點，目前 ${totalPoints360} 點）` });
+        }
+        const { data: deductResult360, error: deductErr360 } = await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: COST_360 });
+        if (deductErr360 || !deductResult360?.success) {
+            const errMsg = deductResult360?.error === 'insufficient_points'
+                ? `點數不足，餘額 ${deductResult360.balance} 點`
+                : (deductErr360?.message || '點數扣除失敗，請稍後再試');
+            return res.status(200).json({ code: -1, msg: errMsg });
+        }
+        const shareUrl = `https://loamlab-camera-backend.vercel.app/360-viewer.html?id=${shareId}`;
+        return res.status(200).json({ code: 0, share_url: shareUrl, points_remaining: deductResult360.balance });
+    }
+
+    // 記錄原始輸入 URL（僅保存穩定的外部 URL，不保存 base64 或臨時簽名 URL）
     let inputUrlForHistory = null;
     const _firstInputImg = userPayload.parameters?.image?.[0];
     if (_firstInputImg && _firstInputImg.startsWith('http') && !_firstInputImg.includes('supabase.co')) {
@@ -559,14 +826,8 @@ async function _handleRender(req, res) {
             return `data:image/jpeg;base64,${img}`;
         });
 
-        const reqBody = {
-            model: finalModel,
-            images: atlasImages,
-            prompt: finalPrompt,
-            resolution: resolutionMap[resVal] || '2k',
-            aspect_ratio: '16:9',
-            output_format: 'jpeg'
-        };
+        const normalizedRes = resolutionMap[resVal] || '2k';
+        const reqBody = buildAtlasReqBody(finalModel, atlasImages, finalPrompt, normalizedRes);
 
         const response = await fetch('https://api.atlascloud.ai/api/v1/model/generateImage', {
             method: 'POST',

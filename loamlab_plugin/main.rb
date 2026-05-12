@@ -324,7 +324,7 @@ module LoamLab
 
       dialog.add_action_callback("open_save_dir_360") do |action_context, params|
         if @@save_dir_360 && File.directory?(@@save_dir_360)
-          UI.openURL(path_to_file_uri(@@save_dir_360))
+          UI.openURL(path_to_file_uri(@@save_dir_360, encode: false))
         end
       end
 
@@ -673,24 +673,29 @@ module LoamLab
       # 6. 列出已儲存的渲染歷史
       dialog.add_action_callback("list_saved_renders") do |action_context, params|
         begin
-          model     = Sketchup.active_model
-          save_path = self.get_effective_save_path(model)
+          model = Sketchup.active_model
+          # 收集所有曾用過的存檔目錄：model 專屬 + global + Downloads
+          scan_dirs = [
+            model.get_attribute("LoamLabAI", "save_path", ""),
+            Sketchup.read_default("LoamLabAI", "global_save_path", ""),
+            self.get_downloads_folder
+          ].uniq.select { |p| !p.empty? && File.directory?(p) }
 
           history = []
-          if !save_path.empty? && File.directory?(save_path)
-            # 掃描渲染圖（新版 ASCII + 舊版繁/簡體向後相容）
-            files = Dir.glob(File.join(save_path, "*_render.jpg"))
-            files += Dir.glob(File.join(save_path, "*_original.jpg"))
-            files += Dir.glob(File.join(save_path, "*_渲染圖.jpg"))
-            files += Dir.glob(File.join(save_path, "*_渲染图.jpg"))
-            files += Dir.glob(File.join(save_path, "*_原圖.jpg"))
-            files += Dir.glob(File.join(save_path, "*_原图.jpg"))
-            # 向後相容舊版的命名 (loamlab_camera.jpg)
-            files += Dir.glob(File.join(save_path, "*_loamlab_camera.jpg"))
+          if scan_dirs.any?
+            suffixes = %w[_render.jpg _original.jpg _渲染圖.jpg _渲染图.jpg _原圖.jpg _原图.jpg _loamlab_camera.jpg]
+            files = scan_dirs.flat_map do |dir|
+              suffixes.flat_map { |s| Dir.glob(File.join(dir, "*#{s}")) }
+            end
             files = files.uniq.sort_by { |f| -File.mtime(f).to_i }
+            # render 最多 120 張、original 最多 30 張（share 用），避免 original 佔掉 render 的 quota
+            is_orig = ->(f) { File.basename(f).match?(/original|原圖|原图/i) }
+            renders   = files.reject { |f| is_orig.(f) }
+            originals = files.select { |f| is_orig.(f) }.first(30)
+            files = (renders + originals).sort_by { |f| -File.mtime(f).to_i }
             # 載入全局 cloud URL 索引（key = 絕對路徑）
             index = LoamLab.read_cloud_index
-            history = files.first(60).map do |f|
+            history = files.map do |f|
               fname = File.basename(f)
               # 格式：YYYYMMDD_HHMMSS_SCENE_RES_loamlab_camera.jpg (舊版)
               m = fname.match(/^(\d{8})_(\d{6})_(.+)_(1k|2k|4k)_loamlab_camera\.jpg$/i)
@@ -715,7 +720,7 @@ module LoamLab
               # 優先從全局索引讀取（key = 絕對路徑），向後相容舊版 sidecar
               cloud_url = index[f]
               unless cloud_url
-                cache_cloudurl = File.join(save_path, '.loamlab_cache', fname.sub(/\.jpg$/i, '.cloudurl'))
+                cache_cloudurl = File.join(File.dirname(f), '.loamlab_cache', fname.sub(/\.jpg$/i, '.cloudurl'))
                 old_cloudurl   = f.sub(/\.jpg$/i, '.cloudurl')
                 cloudurl_path  = File.exist?(cache_cloudurl) ? cache_cloudurl : old_cloudurl
                 cloud_url = File.exist?(cloudurl_path) ? File.read(cloudurl_path).strip : nil
@@ -779,7 +784,7 @@ module LoamLab
         model = Sketchup.active_model
         save_path = self.get_effective_save_path(model)
         if File.directory?(save_path)
-          UI.openURL(path_to_file_uri(save_path))
+          UI.openURL(path_to_file_uri(save_path, encode: false))
         end
       end
 
@@ -931,6 +936,7 @@ module LoamLab
             force_style = begin; JSON.parse(params["t4_force_style"] || '{}'); rescue; {}; end
             lang = params["lang"].to_s.strip
             lang = 'zh-TW' if lang.empty?
+            cubemap_size = params["quality"] == "high" ? 2048 : 1024
 
             @@pano_task = {
               type: :local,
@@ -948,7 +954,8 @@ module LoamLab
               pano_dir: out_dir,
               html_name: html_name,
               force_style: force_style,
-              lang: lang
+              lang: lang,
+              cubemap_size: cubemap_size
             }
 
             dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status:'rendering', message:"全景圖擷取中 (0/#{scenes_to_capture.length})..."})})")
@@ -978,6 +985,7 @@ module LoamLab
             force_style = begin; JSON.parse(params["t4_force_style"] || '{}'); rescue; {}; end
             lang = params["lang"].to_s.strip
             lang = 'zh-TW' if lang.empty?
+            cubemap_size = params["quality"] == "high" ? 2048 : 1024
 
             @@pano_task = {
               type: :cloud,
@@ -995,6 +1003,7 @@ module LoamLab
               pano_dir: nil,
               force_style: force_style,
               lang: lang,
+              cubemap_size: cubemap_size,
               user_email: Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
             }
 
@@ -1016,10 +1025,18 @@ module LoamLab
 
     # ─── 跨平台路徑工具 ──────────────────────────────────────────────
     # 本地路徑 → file:/// URL（Windows: C:/... → file:///C:/..., Mac: /Users/... → file:///Users/...）
-    def self.path_to_file_uri(path)
+    # encode: true  → 給 <img src> 用，中文字需要 percent-encode
+    # encode: false → 給 UI.openURL 用，Windows ShellExecute 吃 raw 路徑
+    def self.path_to_file_uri(path, encode: true)
       normalized = path.gsub('\\', '/')
       normalized = "/#{normalized}" unless normalized.start_with?('/')
-      "file://#{normalized}"
+      return "file://#{normalized}" unless encode
+      encoded = normalized.split('/').map { |seg|
+        seg.empty? ? seg : seg.gsub(/[^\x20-\x7E]|[ <>"\{\}\|\\\^\`]/) { |c|
+          c.encode('UTF-8').bytes.map { |b| '%%%02X' % b }.join
+        }
+      }.join('/')
+      "file://#{encoded}"
     end
 
     # file:/// URL → 本地路徑（反向轉換，跨平台正確）
@@ -1056,8 +1073,8 @@ module LoamLab
       { name: 'front',  dir: Geom::Vector3d.new(-1,  0,  0), up: Geom::Vector3d.new(0, 0,  1) },
       { name: 'top',    dir: Geom::Vector3d.new( 0,  0,  1), up: Geom::Vector3d.new(0, -1, 0) },
       { name: 'bottom', dir: Geom::Vector3d.new( 0,  0, -1), up: Geom::Vector3d.new(0,  1, 0) },
-      { name: 'right',  dir: Geom::Vector3d.new( 0,  1,  0), up: Geom::Vector3d.new(0, 0,  1) },
       { name: 'left',   dir: Geom::Vector3d.new( 0, -1,  0), up: Geom::Vector3d.new(0, 0,  1) },
+      { name: 'right',  dir: Geom::Vector3d.new( 0,  1,  0), up: Geom::Vector3d.new(0, 0,  1) },
     ].freeze
 
     def self.pano_save_state(model)
@@ -1086,6 +1103,27 @@ module LoamLab
       self.apply_force_style_override(model, force_style) unless force_style.empty?
     end
 
+    # 水平翻轉圖像並輸出到 dst_path（使用 Sketchup::ImageRep）
+    def self.pano_flip_h(src_path, dst_path)
+      ir = Sketchup::ImageRep.new
+      ir.load_file(src_path)
+      w   = ir.width
+      h   = ir.height
+      bpp = ir.bits_per_pixel / 8
+      raw = ir.data
+      bpr = raw.bytesize / h   # bytes per row (pixel data + padding)
+      pbr = w * bpp             # pure pixel bytes per row
+      pad = bpr - pbr           # row padding bytes (passed to set_data)
+      flipped = ''.b
+      h.times do |r|
+        row = raw.byteslice(r * bpr, bpr)
+        flipped << row.byteslice(0, pbr).bytes.each_slice(bpp).to_a.reverse.flatten.pack('C*')
+        flipped << row.byteslice(pbr, pad) if pad > 0
+      end
+      ir.set_data(w, h, bpp * 8, pad, flipped)
+      ir.save_file(dst_path)
+    end
+
     def self.pano_task_run(dialog)
       t = @@pano_task
       return unless t && t[:running]
@@ -1099,12 +1137,15 @@ module LoamLab
           cam.fov = 90.0
           t[:model].active_view.camera = cam
 
-          tmp = File.join(Dir.tmpdir, "ll360_#{fc[:name]}_#{Time.now.to_i}.jpg")
-          face_res = t[:type] == :cloud ? 1024 : 2048
-          t[:model].active_view.write_image(tmp, face_res, face_res, false)
-          img_data = File.read(tmp, mode: 'rb')
-          t[:cur_faces][fc[:name]] = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
-          File.delete(tmp) rescue nil
+          face_res = t[:cubemap_size] || (t[:type] == :cloud ? 1024 : 2048)
+          tmp_src  = File.join(Dir.tmpdir, "ll360_#{fc[:name]}_#{Time.now.to_i}.png")
+          tmp_out  = tmp_src.sub('.png', '_f.png')
+          t[:model].active_view.write_image(tmp_src, face_res, face_res, false)
+          pano_flip_h(tmp_src, tmp_out)
+          img_data = File.read(tmp_out, mode: 'rb')
+          t[:cur_faces][fc[:name]] = "data:image/png;base64,#{Base64.strict_encode64(img_data)}"
+          File.delete(tmp_src) rescue nil
+          File.delete(tmp_out)  rescue nil
 
           done = 6 - t[:face_queue].length
           total_s = t[:scenes_total]
@@ -1305,7 +1346,7 @@ module LoamLab
         <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
         <script>
         var SCENES=[#{scenes_js}];
-        var FACE_ORDER=['back','front','top','bottom','right','left'];
+        var FACE_ORDER=['front','back','top','bottom','right','left'];
         var scene3=new THREE.Scene(),camera,renderer,curMesh=null;
         camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.1,1100);
         renderer=new THREE.WebGLRenderer({antialias:true});
@@ -1400,8 +1441,8 @@ module LoamLab
           { name: 'front',  dir: Geom::Vector3d.new(-1,  0,  0), up: Geom::Vector3d.new(0, 0,  1) },
           { name: 'top',    dir: Geom::Vector3d.new( 0,  0,  1), up: Geom::Vector3d.new(0, -1, 0) },
           { name: 'bottom', dir: Geom::Vector3d.new( 0,  0, -1), up: Geom::Vector3d.new(0,  1, 0) },
-          { name: 'right',  dir: Geom::Vector3d.new( 0,  1,  0), up: Geom::Vector3d.new(0, 0,  1) },
           { name: 'left',   dir: Geom::Vector3d.new( 0, -1,  0), up: Geom::Vector3d.new(0, 0,  1) },
+          { name: 'right',  dir: Geom::Vector3d.new( 0,  1,  0), up: Geom::Vector3d.new(0, 0,  1) },
         ]
 
         results = {}
@@ -1411,12 +1452,14 @@ module LoamLab
           new_cam.fov = 90.0
           view.camera = new_cam
 
-          path = File.join(temp_dir, "loamlab_360_#{fc[:name]}_#{Time.now.to_i}.jpg")
-          view.write_image(path, 2048, 2048, false)
-
-          img_data = File.read(path, mode: 'rb')
-          results[fc[:name]] = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
-          File.delete(path) rescue nil
+          tmp_src = File.join(temp_dir, "loamlab_360_#{fc[:name]}_#{Time.now.to_i}.png")
+          tmp_out = tmp_src.sub('.png', '_f.png')
+          view.write_image(tmp_src, 2048, 2048, false)
+          pano_flip_h(tmp_src, tmp_out)
+          img_data = File.read(tmp_out, mode: 'rb')
+          results[fc[:name]] = "data:image/png;base64,#{Base64.strict_encode64(img_data)}"
+          File.delete(tmp_src) rescue nil
+          File.delete(tmp_out)  rescue nil
         end
 
         results

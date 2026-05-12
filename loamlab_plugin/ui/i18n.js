@@ -276,7 +276,25 @@ const UI_LANG = {
         "kol_next_tier_hint": "距離下一階梯還差 {n} 人！",
         "referral_modal_desc": "好友輸入邀請碼，<strong class=\"text-white/80\">首次付費</strong>後雙方立即得獎。<br>您獲得 <span class=\"text-amber-400 font-bold\">+300 點</span>，好友獲得 <span class=\"text-emerald-400 font-bold\">+100 點</span>（永久有效）。",
         "referral_bound_msg1": "✅ 大使折扣碼已套用！代碼：",
-        "referral_bound_msg2": "首次付費後，您獲得 <span class=\"text-emerald-400 font-bold\">+100 點</span>，大使同時獲得 <span class=\"text-amber-400 font-bold\">+300 點</span>！"
+        "referral_bound_msg2": "首次付費後，您獲得 <span class=\"text-emerald-400 font-bold\">+100 點</span>，大使同時獲得 <span class=\"text-amber-400 font-bold\">+300 點</span>！",
+        "tool_360": "360° 全景分享",
+        "tool_360_desc": "從當前鏡頭位置自動拍攝 6 面全景，生成可互動的 360° 分享頁面",
+        "tooltip_360": "360 全景分享",
+        "t4_saved": "已儲存：",
+        "t4_cancelled": "已取消",
+        "t4_no_scene": "請先勾選至少一個場景",
+        "t4_viewer_hint": "拖曳旋轉 · 滾輪縮放",
+        "t4_local_btn": "單機匯出",
+        "t4_local_free": "（免費）",
+        "t4_local_desc": "儲存全景圖與 WebGL 引擎到本機資料夾",
+        "t4_cloud_btn": "產生雲端連結",
+        "t4_cloud_cost": "（扣除 5 點）",
+        "t4_cloud_expiry": "連結 7 天後自動失效",
+        "t4_quality_label": "畫質",
+        "t4_quality_low": "標準",
+        "t4_quality_low_hint": "速度快、容量小",
+        "t4_quality_high": "高清",
+        "t4_quality_high_hint": "品質好，清晰"
     },
     "en-US": {
         "title": "LoamLab Camera",
@@ -552,7 +570,25 @@ const UI_LANG = {
         "kol_next_tier_hint": "{n} more users to reach the next tier!",
         "referral_modal_desc": "When friends use your code and make their <strong class=\"text-white/80\">first payment</strong>, both get rewarded instantly.<br>You get <span class=\"text-amber-400 font-bold\">+300 pts</span>, friend gets <span class=\"text-emerald-400 font-bold\">+100 pts</span> (Permanent).",
         "referral_bound_msg1": "✅ Ambassador code applied! Code: ",
-        "referral_bound_msg2": "After your first payment, you will receive <span class=\"text-emerald-400 font-bold\">+100 pts</span>, and the ambassador will receive <span class=\"text-amber-400 font-bold\">+300 pts</span>!"
+        "referral_bound_msg2": "After your first payment, you will receive <span class=\"text-emerald-400 font-bold\">+100 pts</span>, and the ambassador will receive <span class=\"text-amber-400 font-bold\">+300 pts</span>!",
+        "tool_360": "360° Panorama",
+        "tool_360_desc": "Capture 6 cubemap faces from the current camera and generate an interactive 360° panorama viewer.",
+        "tooltip_360": "360° Panorama Share",
+        "t4_saved": "Saved to: ",
+        "t4_cancelled": "Cancelled",
+        "t4_no_scene": "Please select at least one scene",
+        "t4_viewer_hint": "Drag to rotate · Scroll to zoom",
+        "t4_local_btn": "Local Export",
+        "t4_local_free": "(Free)",
+        "t4_local_desc": "Saves panorama images and WebGL viewer to local folder",
+        "t4_cloud_btn": "Generate Cloud Link",
+        "t4_cloud_cost": "(5 pts)",
+        "t4_cloud_expiry": "Link expires in 7 days",
+        "t4_quality_label": "Quality",
+        "t4_quality_low": "Standard",
+        "t4_quality_low_hint": "Fast, small file",
+        "t4_quality_high": "HD",
+        "t4_quality_high_hint": "Sharp, high quality"
     },
     "zh-CN": {
         "title": "野人相機 (LoamLab Camera)",
@@ -828,7 +864,25 @@ const UI_LANG = {
         "kol_next_tier_hint": "距离下一阶梯还差 {n} 人！",
         "referral_modal_desc": "好友输入邀请码，<strong class=\"text-white/80\">首次付费</strong>后双方立即得奖。<br>您获得 <span class=\"text-amber-400 font-bold\">+300 点</span>，好友获得 <span class=\"text-emerald-400 font-bold\">+100 点</span>（永久有效）。",
         "referral_bound_msg1": "✅ 大使折扣码已套用！代码：",
-        "referral_bound_msg2": "首次付费后，您获得 <span class=\"text-emerald-400 font-bold\">+100 点</span>，大使同时获得 <span class=\"text-amber-400 font-bold\">+300 点</span>！"
+        "referral_bound_msg2": "首次付费后，您获得 <span class=\"text-emerald-400 font-bold\">+100 点</span>，大使同时获得 <span class=\"text-amber-400 font-bold\">+300 点</span>！",
+        "tool_360": "360° 全景分享",
+        "tool_360_desc": "从当前镜头位置自动拍摄 6 面全景，生成可互动的 360° 分享页面",
+        "tooltip_360": "360 全景分享",
+        "t4_saved": "已保存：",
+        "t4_cancelled": "已取消",
+        "t4_no_scene": "请先勾选至少一个场景",
+        "t4_viewer_hint": "拖曳旋转 · 滚轮缩放",
+        "t4_local_btn": "单机导出",
+        "t4_local_free": "（免费）",
+        "t4_local_desc": "保存全景图与 WebGL 引擎到本地文件夹",
+        "t4_cloud_btn": "生成云端链接",
+        "t4_cloud_cost": "（扣除 5 点）",
+        "t4_cloud_expiry": "链接 7 天后自动失效",
+        "t4_quality_label": "画质",
+        "t4_quality_low": "标准",
+        "t4_quality_low_hint": "速度快、容量小",
+        "t4_quality_high": "高清",
+        "t4_quality_high_hint": "品质好，清晰"
     },
     "es-ES": {
         "title": "LoamLab Camera",
@@ -1104,7 +1158,25 @@ const UI_LANG = {
         "kol_next_tier_hint": "¡Faltan {n} personas para el próximo nivel!",
         "referral_modal_desc": "Cuando tus amigos usan tu código y realizan su <strong class=\"text-white/80\">primer pago</strong>, ambos reciben recompensas instantáneas.<br>Tú obtienes <span class=\"text-amber-400 font-bold\">+300 pts</span>, tu amigo obtiene <span class=\"text-emerald-400 font-bold\">+100 pts</span> (Permanente).",
         "referral_bound_msg1": "✅ ¡Código de embajador aplicado! Código: ",
-        "referral_bound_msg2": "Después de tu primer pago, recibirás <span class=\"text-emerald-400 font-bold\">+100 pts</span>, ¡y el embajador recibirá <span class=\"text-amber-400 font-bold\">+300 pts</span>!"
+        "referral_bound_msg2": "Después de tu primer pago, recibirás <span class=\"text-emerald-400 font-bold\">+100 pts</span>, ¡y el embajador recibirá <span class=\"text-amber-400 font-bold\">+300 pts</span>!",
+        "tool_360": "Panorama 360°",
+        "tool_360_desc": "Captura 6 caras desde la cámara actual y genera un visor 360° interactivo.",
+        "tooltip_360": "Compartir Panorama 360°",
+        "t4_saved": "Guardado en: ",
+        "t4_cancelled": "Cancelado",
+        "t4_no_scene": "Selecciona al menos una escena",
+        "t4_viewer_hint": "Arrastrar para rotar · Desplazar para zoom",
+        "t4_local_btn": "Exportar local",
+        "t4_local_free": "(Gratis)",
+        "t4_local_desc": "Guarda imágenes panorámicas y visor WebGL en carpeta local",
+        "t4_cloud_btn": "Generar enlace",
+        "t4_cloud_cost": "(5 pts)",
+        "t4_cloud_expiry": "El enlace caduca en 7 días",
+        "t4_quality_label": "Calidad",
+        "t4_quality_low": "Estándar",
+        "t4_quality_low_hint": "Rápido, archivo pequeño",
+        "t4_quality_high": "HD",
+        "t4_quality_high_hint": "Nítido, alta calidad"
     },
     "pt-BR": {
         "title": "LoamLab Camera",
@@ -1380,7 +1452,25 @@ const UI_LANG = {
         "kol_next_tier_hint": "Faltam {n} pessoas para o próximo nível!",
         "referral_modal_desc": "Quando os amigos usam seu código e fazem o <strong class=\"text-white/80\">primeiro pagamento</strong>, ambos recebem recompensas instantâneas.<br>Você ganha <span class=\"text-amber-400 font-bold\">+300 pts</span>, o amigo ganha <span class=\"text-emerald-400 font-bold\">+100 pts</span> (Permanente).",
         "referral_bound_msg1": "✅ Código de embaixador aplicado! Código: ",
-        "referral_bound_msg2": "Após o primeiro pagamento, você receberá <span class=\"text-emerald-400 font-bold\">+100 pts</span>, e o embaixador receberá <span class=\"text-amber-400 font-bold\">+300 pts</span>!"
+        "referral_bound_msg2": "Após o primeiro pagamento, você receberá <span class=\"text-emerald-400 font-bold\">+100 pts</span>, e o embaixador receberá <span class=\"text-amber-400 font-bold\">+300 pts</span>!",
+        "tool_360": "Panorama 360°",
+        "tool_360_desc": "Capture 6 faces da câmera atual e gere um visualizador 360° interativo.",
+        "tooltip_360": "Compartilhar Panorama 360°",
+        "t4_saved": "Salvo em: ",
+        "t4_cancelled": "Cancelado",
+        "t4_no_scene": "Selecione pelo menos uma cena",
+        "t4_viewer_hint": "Arraste para girar · Role para ampliar",
+        "t4_local_btn": "Exportar local",
+        "t4_local_free": "(Grátis)",
+        "t4_local_desc": "Salva imagens panorâmicas e visualizador WebGL na pasta local",
+        "t4_cloud_btn": "Gerar link na nuvem",
+        "t4_cloud_cost": "(5 pts)",
+        "t4_cloud_expiry": "Link expira em 7 dias",
+        "t4_quality_label": "Qualidade",
+        "t4_quality_low": "Padrão",
+        "t4_quality_low_hint": "Rápido, arquivo pequeno",
+        "t4_quality_high": "HD",
+        "t4_quality_high_hint": "Nítido, alta qualidade"
     },
     "ja-JP": {
         "title": "LoamLab Camera",
@@ -1656,7 +1746,25 @@ const UI_LANG = {
         "kol_next_tier_hint": "次のティアまであと {n} 人！",
         "referral_modal_desc": "友達があなたのコードを使用して<strong class=\"text-white/80\">初めて支払う</strong>と、双方が即座に報酬を受け取ります。<br>あなたは <span class=\"text-amber-400 font-bold\">+300 ポイント</span>、友達は <span class=\"text-emerald-400 font-bold\">+100 ポイント</span> を獲得します（永続的）。",
         "referral_bound_msg1": "✅ アンバサダーコードが適用されました！コード：",
-        "referral_bound_msg2": "初回支払い後、あなたは <span class=\"text-emerald-400 font-bold\">+100 ポイント</span> を受け取り、アンバサダーは <span class=\"text-amber-400 font-bold\">+300 ポイント</span> を受け取ります！"
+        "referral_bound_msg2": "初回支払い後、あなたは <span class=\"text-emerald-400 font-bold\">+100 ポイント</span> を受け取り、アンバサダーは <span class=\"text-amber-400 font-bold\">+300 ポイント</span> を受け取ります！",
+        "tool_360": "360°パノラマ",
+        "tool_360_desc": "現在のカメラ位置から6方向を撮影し、インタラクティブな360°パノラマを生成します。",
+        "tooltip_360": "360°パノラマ共有",
+        "t4_saved": "保存先: ",
+        "t4_cancelled": "キャンセル",
+        "t4_no_scene": "少なくとも1つのシーンを選択してください",
+        "t4_viewer_hint": "ドラッグで回転 · スクロールでズーム",
+        "t4_local_btn": "ローカル保存",
+        "t4_local_free": "（無料）",
+        "t4_local_desc": "パノラマ画像と WebGL ビューアをローカルフォルダに保存",
+        "t4_cloud_btn": "クラウドリンク生成",
+        "t4_cloud_cost": "（5pt）",
+        "t4_cloud_expiry": "リンクは7日後に自動失効",
+        "t4_quality_label": "画質",
+        "t4_quality_low": "標準",
+        "t4_quality_low_hint": "速い・ファイル小",
+        "t4_quality_high": "HD",
+        "t4_quality_high_hint": "鮮明・高品質"
     }
 };
 
@@ -1682,7 +1790,7 @@ window.setLanguage = function (lang) {
     const scenesSpan = document.getElementById('scene-count-label');
     if (scenesSpan) {
         const count = scenesSpan.getAttribute('data-count') || 0;
-        scenesSpan.textContent = UI_LANG[lang]['total'] + ' ' + count + ' ' + UI_LANG[lang]['unit'];
+        scenesSpan.textContent = count;
     }
 
     const btnSelectAll = document.getElementById('btn-select-all-scenes');

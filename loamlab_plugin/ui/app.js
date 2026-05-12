@@ -875,9 +875,12 @@ function setActiveTool(n, skipTutorial) {
     document.getElementById('btn-render')?.classList.remove('hidden');
     // 離開 Tool 4 時還原一般存檔路徑
     window.updateSaveDir(window._lastNormalSaveDir);
-    // 還原 IG 分享按鈕與進階設定可見性
+    // 還原 IG 分享按鈕與進階設定可見性，還原 wow shot CTA
     document.getElementById('btn-show-share')?.classList.remove('hidden');
+    document.querySelector('[data-wow-shot-cta]')?.classList.remove('hidden');
     if (advancedDetails) advancedDetails.classList.remove('hidden');
+    document.getElementById('t4-quality-section')?.classList.add('hidden');
+    document.getElementById('resolution-selector')?.closest('.w-full.flex.flex-col.pt-2')?.classList.remove('hidden');
 
     if (n === 1) {
         if (titleEl) titleEl.textContent = (UI_LANG[currentLang] || UI_LANG['en-US'])['title'];
@@ -927,9 +930,11 @@ function setActiveTool(n, skipTutorial) {
         if (advancedDetails) advancedDetails.open = false;
         // 保留 scenes-container：360 批次匯出需勾選場景
         if (scenesContainer) scenesContainer.classList.remove('hidden');
-        // 隱藏 IG 分享按鈕與進階渲染設定
-        document.getElementById('btn-show-share')?.classList.add('hidden');
-        if (advancedDetails) { advancedDetails.open = false; advancedDetails.classList.add('hidden'); }
+        // T4 隱藏 wow shot CTA；顯示進階設定（僅畫質，不自動展開）
+        document.querySelector('[data-wow-shot-cta]')?.classList.add('hidden');
+        if (advancedDetails) { advancedDetails.classList.remove('hidden'); advancedDetails.open = false; }
+        document.getElementById('resolution-selector')?.closest('.w-full.flex.flex-col.pt-2')?.classList.add('hidden');
+        document.getElementById('t4-quality-section')?.classList.remove('hidden');
         const tool4Panel = document.getElementById('tool4-panel');
         if (tool4Panel) { tool4Panel.classList.remove('hidden'); }
         var basePicker = document.getElementById('base-image-picker');
@@ -937,8 +942,22 @@ function setActiveTool(n, skipTutorial) {
         document.getElementById('style-ref-picker')?.classList.add('hidden');
         const btnRender = document.getElementById('btn-render');
         if (btnRender) btnRender.classList.add('hidden');
-        // 顯示 360 專屬存檔路徑
+        // 顯示 360 專屬存檔路徑（從 localStorage 還原）
+        if (!window._saveDir360) window._saveDir360 = localStorage.getItem('loamlab_t4_dir') || '';
         window.updateSaveDir(window._saveDir360);
+        // 進入 T4：持久套用 admin 樣式到 SketchUp 視角，回傳截圖
+        if (window.sketchup) {
+            setTimeout(() => {
+                const forceStyle = (window._t4ForceStyle && Object.keys(window._t4ForceStyle).length > 0)
+                    ? JSON.stringify(window._t4ForceStyle) : '{}';
+                sketchup.apply_t4_style({ force_style: forceStyle });
+            }, 300);
+        }
+    }
+
+    // 從 T4 切回其他工具時，還原 SketchUp 樣式並刷新預覽
+    if (_prevTool === 4 && n !== 4 && window.sketchup) {
+        setTimeout(() => { sketchup.restore_t4_style({}); }, 300);
     }
 
     // 遮罩預覽：切換工具時先隱藏，再依 pending 狀態決定是否恢復
@@ -1076,6 +1095,8 @@ function finalizeRenderUI() {
                 const gridEl = document.getElementById('preview-grid');
                 if (!gridEl) return;
                 if (gridEl.querySelector('[data-wow-shot-cta]')) return;
+                // T4 模式下插入但隱藏，切回 T1/2/3 時由 _switchTool 還原
+                const isT4 = currentActiveTool === 4;
                 const lastRender = window._sessionRenders && window._sessionRenders[0];
                 const banner = document.createElement('div');
                 banner.setAttribute('data-wow-shot-cta', '1');
@@ -1095,6 +1116,7 @@ function finalizeRenderUI() {
                     if (window.openShareModal) window.openShareModal();
                 };
                 gridEl.appendChild(banner);
+                if (isT4) banner.classList.add('hidden');
             }, 2200);
         }
     }, 1000);
@@ -1346,10 +1368,10 @@ window.receiveFromRuby = function (data) {
         finalizeRenderUI();
         document.getElementById('tool4-status')?.classList.remove('hidden');
         const t4s = document.getElementById('tool4-status');
-        if (t4s) t4s.textContent = '已儲存：' + (data.path || '');
+        if (t4s) t4s.textContent = (t('t4_saved') || '已儲存：') + (data.path || '');
     } else if (data.status === '360_cancelled') {
         stopRenderTimer();
-        updateProgressUI('已取消', 0);
+        updateProgressUI(t('t4_cancelled') || '已取消', 0);
         setTimeout(() => {
             const pb = document.getElementById('progress-wrapper');
             if (pb) { pb.classList.add('opacity-0'); setTimeout(() => pb.classList.add('hidden'), 700); }
@@ -1358,7 +1380,7 @@ window.receiveFromRuby = function (data) {
             const previewArea = document.getElementById('main-preview-area');
             if (previewArea) previewArea.classList.remove('is-rendering');
         }, 800);
-        statusText.textContent = '已取消';
+        statusText.textContent = t('t4_cancelled') || '已取消';
     } else if (data.status === 'export_done') {
         const langObj3 = UI_LANG[currentLang];
         statusText.textContent = langObj3['export_done'] || 'All scenes sent. Rendering in cloud...';
@@ -1412,6 +1434,24 @@ window.receiveFromRuby = function (data) {
         const channelB64 = data.channel_base64 || '';
 
         if (targetScene && targetUrl) {
+            // T4 雲端連結：顯示可複製連結卡，跳過 session cache 與 auto_save（非圖片 URL）
+            if (currentActiveTool === 4) {
+                const t4Status = document.getElementById('tool4-status');
+                if (t4Status) {
+                    t4Status.classList.remove('hidden');
+                    t4Status.innerHTML = `
+                        <div class="flex items-center gap-2 w-full">
+                            <span class="text-[10px] text-white/50 shrink-0">🔗 360°</span>
+                            <input id="t4-cloud-url-input" readonly value="${targetUrl}"
+                                class="flex-1 min-w-0 text-[10px] bg-white/5 border border-white/10 rounded px-2 py-1 text-blue-300 truncate cursor-pointer"
+                                onclick="this.select()" title="${targetUrl}"/>
+                            <button onclick="navigator.clipboard?.writeText('${targetUrl}').then(()=>{this.textContent='✓';setTimeout(()=>{this.textContent='複製'},1200)})"
+                                class="shrink-0 text-[9px] px-2 py-1 rounded border border-white/15 text-white/60 hover:bg-white/10 transition-colors">複製</button>
+                        </div>`;
+                }
+                return;
+            }
+
             // Session 快取：記錄本次 session 的渲染結果，確保歷史面板即使未設定存檔資料夾也能顯示
             window._sessionRenders = window._sessionRenders || [];
             var resEl = document.querySelector('input[name="resolution"]:checked');
@@ -1606,13 +1646,11 @@ function renderScenesList(scenes) {
                 transform: rotate(45deg);
             }
         </style>
-        <div class="flex justify-between items-center mb-0 px-2 pt-2 pb-2 border-b border-white/5 shrink-0">
-            <h3 class="text-[11px] font-bold text-white/60 tracking-wider uppercase whitespace-nowrap" data-i18n="scene_select">${t('scene_select')}</h3>
-            <div class="flex items-center gap-2">
-                <button id="btn-refresh-scenes" title="${t('scene_refresh')}" class="text-[11px] text-white/35 hover:text-white/80 transition-colors px-1" onclick="if(window.sketchup){try{sketchup.getInitialData({});}catch(_){}}">↺</button>
-                <button id="btn-select-all-scenes" class="text-[9px] text-white/40 hover:text-white/80 tracking-widest transition-colors">${t('scene_select_all') || '全選'}</button>
-                <span id="scene-count-label" data-count="${scenes.length}" class="text-[9px] text-white font-bold tracking-widest bg-[#dc2626] px-2.5 py-1 rounded-full shadow-md">${t('total')} ${scenes.length} ${t('unit')}</span>
-            </div>
+        <div class="flex items-center gap-1.5 px-2 py-1.5 border-b border-white/5 shrink-0">
+            <button id="btn-refresh-scenes" title="${t('scene_refresh')}" class="text-[11px] text-white/30 hover:text-white/70 transition-colors leading-none" onclick="if(window.sketchup){try{sketchup.getInitialData({});}catch(_){}}">↺</button>
+            <span class="text-[10px] font-bold text-white/40 tracking-wider uppercase flex-1 whitespace-nowrap" data-i18n="scene_select">${t('scene_select')}</span>
+            <button id="btn-select-all-scenes" class="text-[9px] text-white/35 hover:text-white/70 tracking-widest transition-colors whitespace-nowrap">${t('scene_select_all') || '全選'}</button>
+            <span id="scene-count-label" data-count="${scenes.length}" class="text-[9px] text-white/80 font-bold tracking-wide bg-[#dc2626]/80 px-2 py-0.5 rounded-full">${scenes.length}</span>
         </div>
         <div class="flex-1 min-h-0 overflow-y-auto px-1 pt-1 custom-scrollbar w-full relative" id="scene-scroll-area">
             ${html}
@@ -2058,7 +2096,9 @@ if (btnSync) {
             }
 
             setTimeout(() => {
-                sketchup.sync_preview({ scenes: selectedScenes });
+                // T4：只拍當前視角（樣式已持久套用），不切換場景
+                const syncParams = currentActiveTool === 4 ? {} : { scenes: selectedScenes };
+                sketchup.sync_preview(syncParams);
             }, 50);
         } else {
             console.log('Simulation: sync_preview requested', selectedScenes);
@@ -2101,6 +2141,7 @@ window.setNormalSaveDir = function (path) {
 
 window.updateSaveDir360 = function (path) {
     window._saveDir360 = path || '';
+    if (path) localStorage.setItem('loamlab_t4_dir', path);
     if (currentActiveTool === 4) window.updateSaveDir(path);
 };
 
@@ -3045,13 +3086,17 @@ function renderHistoryGrid(files) {
     grid.innerHTML = filteredFiles.map((e, i) => {
         const date = (e.timestamp || '').replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, '$1/$2/$3 $4:$5');
         const promptSnippet = (e.prompt || '').slice(0, 40) + ((e.prompt || '').length > 40 ? '…' : '');
-        const imgSrc = e.file_url || e.cloud_url || '';
+        const fileUrl = e.file_url || '';
+        const cloudUrl = e.cloud_url || '';
+        const imgSrc = fileUrl || cloudUrl;
+        const previewUrl = cloudUrl || fileUrl;
+        const fallback = (fileUrl && cloudUrl) ? cloudUrl : '';
         return `
         <div class="relative group rounded-xl overflow-hidden border border-white/8 hover:border-white/20 transition-colors bg-black/40 flex flex-col">
-            <div class="relative aspect-video bg-white/5 overflow-hidden cursor-pointer" onclick="if('${imgSrc}') { openImagePreview('${imgSrc}'); }">
+            <div class="relative aspect-video bg-white/5 overflow-hidden cursor-pointer" onclick="if('${previewUrl}') { openImagePreview('${previewUrl}'); }">
                 ${imgSrc
-                    ? `<img src="${imgSrc}" class="w-full h-full object-cover block" draggable="false"
-                            onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-white/20 text-[10px]\\'>No Preview</div>'">`
+                    ? `<img src="${imgSrc}" ${fallback ? `data-fb="${fallback}"` : ''} class="w-full h-full object-cover block" draggable="false"
+                            onerror="var f=this.getAttribute('data-fb');if(f){this.removeAttribute('data-fb');this.src=f;}else{this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-white/20 text-[10px]\\'>No Preview</div>'}">`
                     : `<div class="w-full h-full flex items-center justify-center text-white/20 text-[10px]">No Preview</div>`
                 }
                 <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3" onclick="event.stopPropagation()">
@@ -5640,17 +5685,24 @@ function handle360LocalExport() {
     if (typeof sketchup === 'undefined') { showUpdateToast('需要在 SketchUp 中執行'); return; }
     document.getElementById('tool4-status')?.classList.add('hidden');
     const checked = Array.from(document.querySelectorAll('input[name="scene"]:checked')).map(cb => cb.value);
-    if (checked.length === 0) { showUpdateToast('⚠️ 請先勾選至少一個場景'); return; }
+    if (checked.length === 0) { showUpdateToast('⚠️ ' + (t('t4_no_scene') || '請先勾選至少一個場景')); return; }
     const t4Style = JSON.stringify(window._t4ForceStyle || {});
-    sketchup.export_360_local({ scenes: checked, t4_force_style: t4Style });
+    const savedDir = window._saveDir360 || localStorage.getItem('loamlab_t4_dir') || '';
+    const quality = document.querySelector('input[name="t4_quality"]:checked')?.value || 'high';
+    sketchup.export_360_local({ scenes: checked, t4_force_style: t4Style, save_dir: savedDir, lang: currentLang, quality });
 }
 
 // 工具 4 — 360 雲端分享
 function handle360CloudExport() {
     if (typeof sketchup === 'undefined') { showUpdateToast('需要在 SketchUp 中執行'); return; }
+    const checked = Array.from(document.querySelectorAll('input[name="scene"]:checked')).map(cb => cb.value);
+    if (checked.length === 0) { showUpdateToast('⚠️ ' + (t('t4_no_scene') || '請先勾選至少一個場景')); return; }
     document.getElementById('tool4-status')?.classList.add('hidden');
+    totalScenesToRender = 1;
+    finishedScenesCount = 0;
     const t4Style = JSON.stringify(window._t4ForceStyle || {});
-    sketchup.export_360_cloud({ t4_force_style: t4Style });
+    const quality = document.querySelector('input[name="t4_quality"]:checked')?.value || 'high';
+    sketchup.export_360_cloud({ scenes: checked, t4_force_style: t4Style, lang: currentLang, quality });
 }
 
 // Phase 2 Anti-Collage: 將渲染結果降採樣為 16×16，僅保留光影色調，再傳回 Ruby

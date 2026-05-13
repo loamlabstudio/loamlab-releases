@@ -1247,6 +1247,8 @@ window.receiveFromRuby = function (data) {
             window.updateLoginUI(data.user_email, "...");
             window.fetchUserPoints(data.user_email);
             syncPresetsFromServer();
+        } else {
+            setTimeout(() => { if (!window.loamlabUserEmail) openLoginModal(); }, 1000);
         }
 
         statusText.textContent = `${UI_LANG[currentLang]['status_success']}：v${data.version}`;

@@ -653,17 +653,17 @@ module LoamLab
         captured_filename = filename.dup
 
         req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::GET)
-        req.set_download_path(captured_path)
         @@requests << req
         req.start do |r, res|
           @@requests.delete(r)
+          LoamLab.log "[LoamLab] auto_save_render status=#{res.status_code}"
           next unless res.status_code == 200
           begin
-            # 將 cloud URL 寫入全局索引（AppData/LoamLab/cloud_index.json），不污染用戶資料夾
+            File.binwrite(captured_path, res.body)
             index = LoamLab.read_cloud_index
             index[captured_path] = captured_url
             LoamLab.write_cloud_index(index)
-            LoamLab.log "[LoamLab] auto_save_render: #{captured_filename}"
+            LoamLab.log "[LoamLab] auto_save_render OK: #{captured_filename}"
           rescue => e
             LoamLab.log "[LoamLab] auto_save_render failed: #{e.message}"
           end
@@ -1667,13 +1667,19 @@ module LoamLab
       # 定義內部的逐一處理邏輯
       process_chain = proc do |index|
         if queue.empty?
-          # 佇列結束：只恢復場景位置與 TransitionTime，不還原 RENDER_KEYS
-          # RENDER_KEYS 的還原由 JS 在最後一張結果收到後透過 restore_render_style callback 觸發
           UI.start_timer(0.5, false) do
             model.pages.selected_page = current_page if current_page
             begin; model.options['PageOptions']['TransitionTime'] = original_transition_time; rescue => _e; end
             dialog.execute_script("window.receiveFromRuby({status: 'export_done'})")
             LoamLab.log "[LoamLab] 批量導出排程已全部送出。"
+            # 有 style ref 時：全部截圖完成後立即 stagger 並行發送，不等 scene 0 回傳
+            if !user_style_ref_url.to_s.strip.empty? && !@@deferred_sends.empty?
+              sends_copy = @@deferred_sends.dup
+              @@deferred_sends.clear
+              sends_copy.each_with_index do |item, i|
+                UI.start_timer(i * 2.0, false) { self.fire_single_deferred(item, user_style_ref_url) }
+              end
+            end
           end
           next
         end
@@ -1779,12 +1785,15 @@ module LoamLab
                         result = { status: 'render_failed', message: self.sanitize_error(e.message) }
                       end
                       @@pending_results << result if result
-                      style_url = (result && result[:status] == 'render_success') ? result[:url] : nil
-                      if style_url && !@@deferred_sends.empty?
-                        safe_url = style_url.gsub("'", "\\'")
-                        dialog.execute_script("window.generateStyleReference('#{safe_url}')")
-                      else
-                        self.fire_deferred_renders(style_url, _s0_sref)
+                      # 若 deferred_sends 已被 style ref 並行模式提前清空，不重複 fire
+                      unless @@deferred_sends.empty? && !_s0_sref.to_s.strip.empty?
+                        style_url = (result && result[:status] == 'render_success') ? result[:url] : nil
+                        if style_url && !@@deferred_sends.empty?
+                          safe_url = style_url.gsub("'", "\\'")
+                          dialog.execute_script("window.generateStyleReference('#{safe_url}')")
+                        elsif !@@deferred_sends.empty?
+                          self.fire_deferred_renders(style_url, _s0_sref)
+                        end
                       end
                     end
                   else
@@ -1874,6 +1883,34 @@ module LoamLab
 
     # Method B：Scene 0 完成後循序送出所有 deferred scenes
     # style_ref_url 為 Scene 0 的渲染結果 URL（nil 表示 Scene 0 失敗，不帶風格參考）
+    def self.fire_single_deferred(item, effective_url)
+      body_hash = JSON.parse(item[:body])
+      body_hash['parameters'] ||= {}
+      body_hash['parameters']['style_ref_url'] = effective_url if effective_url
+      req = Sketchup::Http::Request.new(item[:url], Sketchup::Http::POST)
+      req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => item[:email], 'x-plugin-version' => item[:version] }
+      req.body = JSON.dump(body_hash)
+      captured_scene   = item[:scene].dup
+      captured_channel = item[:channel].dup
+      @@requests << req
+      req.start do |r, response|
+        @@requests.delete(r)
+        result = nil
+        begin
+          data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
+          result = (data['code'] == 0 && data['url']) ?
+            { status: 'render_success', scene_name: captured_scene, url: data['url'],
+              points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
+              channel_base64: captured_channel } :
+            { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
+              points_refunded: data['points_refunded'], error: data['error'] }
+        rescue => e
+          result = { status: 'render_failed', message: self.sanitize_error(e.message) }
+        end
+        @@pending_results << result if result
+      end
+    end
+
     def self.fire_deferred_renders(style_ref_url, user_style_ref_url = '')
       sends = @@deferred_sends.dup
       @@deferred_sends.clear

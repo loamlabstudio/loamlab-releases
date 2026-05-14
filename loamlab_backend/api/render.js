@@ -43,6 +43,12 @@ function buildAtlasReqBody(model, images, prompt, resolution) {
     return { model, ...adapter(images, prompt, resolution) };
 }
 
+// sceneImages 為索引 0，styleRefUrl（參考圖）緊接在後，確保引擎以場景為空間主體
+function buildImagePayload(sceneImages, styleRefUrl) {
+    if (!styleRefUrl) return sceneImages;
+    return [...sceneImages, styleRefUrl];
+}
+
 // 全域快取：存放 Promise 避免同一瞬間併發的多個相同翻譯請求重複扣除 API 額度
 const translationPromises = new Map();
 
@@ -812,11 +818,7 @@ async function _handleRender(req, res) {
         if (activeTool === 2) {
             allImagesStrArray = [originalImageUrl, baseForCoze, ...refImageUrls];
         } else {
-            allImagesStrArray = userPayload.parameters?.image || [];
-            // Method B：若有風格參考 URL，附加在截圖之後作為第二張圖
-            if (styleRefUrl) {
-                allImagesStrArray = [...allImagesStrArray, styleRefUrl];
-            }
+            allImagesStrArray = buildImagePayload(userPayload.parameters?.image || [], styleRefUrl);
         }
 
         // 將所有參考圖片確保為 URL 或 base64 data URL 容錯機制

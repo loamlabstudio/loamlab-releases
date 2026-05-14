@@ -23,6 +23,13 @@ function sanitizeMsg(msg) {
         .replace(/Failed to open TCP connection/gi, '伺服器連線失敗');
 }
 
+function withAuth(fn) {
+    return function(...args) {
+        if (!window.loamlabUserEmail) { openLoginModal(); return; }
+        return fn.apply(this, args);
+    };
+}
+
 
 // 實時進度條計時器與背景列隊計數器
 let renderTimer = null;
@@ -1054,6 +1061,7 @@ function updateCostPreview() {
 }
 
 function finalizeRenderUI() {
+    window._isRendering = false;
     stopRenderTimer();
     updateProgressUI('Done!', 100);
     // 所有渲染結果已收到，此時才還原 SketchUp 的強制樣式設定
@@ -1279,6 +1287,7 @@ window.receiveFromRuby = function (data) {
         const btnRender = document.getElementById('btn-render');
         btnRender.disabled = true;
         btnRender.classList.add('rendering-pulse');
+        window._isRendering = true;
 
         const previewArea = document.getElementById('main-preview-area');
         if (previewArea) previewArea.classList.add('is-rendering');
@@ -1593,6 +1602,10 @@ window.receiveFromRuby = function (data) {
         if (finishedScenesCount >= totalScenesToRender) {
             finalizeRenderUI();
         }
+        // 底圖檔案不存在：清除無效的底圖選取，強制用戶重新選擇
+        if (data.message && data.message.includes('底圖檔案已移除')) {
+            clearBaseImageSelection();
+        }
     }
 };
 
@@ -1891,13 +1904,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // 渲染按鈕綁定與額度攔截 (Paywall)
-    (document.getElementById('btn-render') || document.createElement('div')).addEventListener('click', () => {
-        // 未登入攔截：直接開啟登入流程，不發送任何請求
-        if (!window.loamlabUserEmail) {
-            openLoginModal();
-            return;
-        }
-
+    (document.getElementById('btn-render') || document.createElement('div')).addEventListener('click', withAuth(() => {
         // Smart Canvas 待執行攔截：直接執行替換，不走 SketchUp 截圖流程
         if (SmartCanvas.pendingSwap && SmartCanvas.regions.length > 0) {
             executeSmartSwap();
@@ -2036,7 +2043,7 @@ document.addEventListener("DOMContentLoaded", () => {
             setTimeout(() => window.updateProgressUI('Refining Details...', 75), 3000);
             setTimeout(() => window.receiveFromRuby({ status: 'export_done' }), 5000);
         }
-    });
+    }));
 
     // 資料夾按鈕 & 路徑顯示區：onclick 已直接寫在 index.html，無需 addEventListener
 
@@ -3201,6 +3208,13 @@ function openHistoryModalForPick() {
 }
 
 function pickBaseImage(entry) {
+    // 渲染進行中禁止切換底圖，避免狀態混亂
+    if (window._isRendering) {
+        window._historyPickMode = false;
+        closeHistoryModal();
+        showUpdateToast('⚠️ ' + (t('render_in_progress_no_switch') || '渲染進行中，請稍後再切換底圖'));
+        return;
+    }
     _baseImageEntry = entry;
     window._historyPickMode = false;
     const thumb = document.getElementById('base-image-thumb');
@@ -5684,27 +5698,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // 工具 4 — 360 本機匯出（批次）
 function handle360LocalExport() {
-    if (typeof sketchup === 'undefined') { showUpdateToast('需要在 SketchUp 中執行'); return; }
-    document.getElementById('tool4-status')?.classList.add('hidden');
-    const checked = Array.from(document.querySelectorAll('input[name="scene"]:checked')).map(cb => cb.value);
-    if (checked.length === 0) { showUpdateToast('⚠️ ' + (t('t4_no_scene') || '請先勾選至少一個場景')); return; }
-    const t4Style = JSON.stringify(window._t4ForceStyle || {});
-    const savedDir = window._saveDir360 || localStorage.getItem('loamlab_t4_dir') || '';
-    const quality = document.querySelector('input[name="t4_quality"]:checked')?.value || 'high';
-    sketchup.export_360_local({ scenes: checked, t4_force_style: t4Style, save_dir: savedDir, lang: currentLang, quality });
+    withAuth(() => {
+        if (typeof sketchup === 'undefined') { showUpdateToast('需要在 SketchUp 中執行'); return; }
+        document.getElementById('tool4-status')?.classList.add('hidden');
+        const checked = Array.from(document.querySelectorAll('input[name="scene"]:checked')).map(cb => cb.value);
+        if (checked.length === 0) { showUpdateToast('⚠️ ' + (t('t4_no_scene') || '請先勾選至少一個場景')); return; }
+        const t4Style = JSON.stringify(window._t4ForceStyle || {});
+        const savedDir = window._saveDir360 || localStorage.getItem('loamlab_t4_dir') || '';
+        const quality = document.querySelector('input[name="t4_quality"]:checked')?.value || 'high';
+        sketchup.export_360_local({ scenes: checked, t4_force_style: t4Style, save_dir: savedDir, lang: currentLang, quality });
+    })();
 }
 
 // 工具 4 — 360 雲端分享
 function handle360CloudExport() {
-    if (typeof sketchup === 'undefined') { showUpdateToast('需要在 SketchUp 中執行'); return; }
-    const checked = Array.from(document.querySelectorAll('input[name="scene"]:checked')).map(cb => cb.value);
-    if (checked.length === 0) { showUpdateToast('⚠️ ' + (t('t4_no_scene') || '請先勾選至少一個場景')); return; }
-    document.getElementById('tool4-status')?.classList.add('hidden');
-    totalScenesToRender = 1;
-    finishedScenesCount = 0;
-    const t4Style = JSON.stringify(window._t4ForceStyle || {});
-    const quality = document.querySelector('input[name="t4_quality"]:checked')?.value || 'high';
-    sketchup.export_360_cloud({ scenes: checked, t4_force_style: t4Style, lang: currentLang, quality });
+    withAuth(() => {
+        if (typeof sketchup === 'undefined') { showUpdateToast('需要在 SketchUp 中執行'); return; }
+        const checked = Array.from(document.querySelectorAll('input[name="scene"]:checked')).map(cb => cb.value);
+        if (checked.length === 0) { showUpdateToast('⚠️ ' + (t('t4_no_scene') || '請先勾選至少一個場景')); return; }
+        document.getElementById('tool4-status')?.classList.add('hidden');
+        totalScenesToRender = 1;
+        finishedScenesCount = 0;
+        const t4Style = JSON.stringify(window._t4ForceStyle || {});
+        const quality = document.querySelector('input[name="t4_quality"]:checked')?.value || 'high';
+        sketchup.export_360_cloud({ scenes: checked, t4_force_style: t4Style, lang: currentLang, quality });
+    })();
 }
 
 // Phase 2 Anti-Collage: 將渲染結果降採樣為 16×16，僅保留光影色調，再傳回 Ruby

@@ -668,13 +668,17 @@ async function dashboard(supabase) {
         noTestRef(supabase.from('transactions').select('user_email', { count: 'exact', head: true }).gte('created_at', d7)),
         noTestRef(supabase.from('transactions').select('*', { count: 'exact', head: true }).in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K']).gte('created_at', d30)),
         noTestRef(supabase.from('transactions').select('amount_usd_cents, transaction_type').in('transaction_type', ['TOPUP_SINGLE','TOPUP_SUBSCRIPTION']).gte('created_at', d30)),
-        noTestRef(supabase.from('transactions').select('transaction_type, created_at').in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K']).gte('created_at', d30).limit(1000)),
+        noTestRef(supabase.from('transactions').select('transaction_type, created_at, metadata').in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K']).gte('created_at', d30).limit(1000)),
         noTestRef(supabase.from('render_history').select('user_rating, style, tool_id').gte('created_at', d30).limit(5000)),
         noTestRef(supabase.from('feedback').select('*', { count: 'exact', head: true }).eq('type', 'paywall_trigger').gte('created_at', d30)),
     ]);
 
     const revenue30d = (topups || []).reduce((s, r) => s + ((r.amount_usd_cents || 0) / 100), 0);
-    const toolBreakdown = groupBy((ratingRows || []).map(r => ({...r, tool_id: r.tool_id || 1})), 'tool_id');
+    const toolBreakdown = {};
+    (renders || []).forEach(r => {
+        const tid = String(r.metadata?.tool_id || 1);
+        toolBreakdown[tid] = (toolBreakdown[tid] || 0) + 1;
+    });
     
     // 從 render_history 獲取風格分佈 (30天)
     const styleBreakdown = groupBy(ratingRows || [], 'style');

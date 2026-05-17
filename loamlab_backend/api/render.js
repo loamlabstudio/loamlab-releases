@@ -527,7 +527,7 @@ async function _handleRender(req, res) {
             user_email: userEmail,
             amount: -cost,
             transaction_type: txType,
-            metadata: { plugin_version: pluginVersion, resolution: resVal }
+            metadata: { plugin_version: pluginVersion, resolution: resVal, tool_id: activeTool || 1 }
         }]).select('id').single();
         if (txData) transactionId = txData.id;
     } catch (txErr) {

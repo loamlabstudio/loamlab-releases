@@ -185,3 +185,5 @@ Commit message 格式：`feat(ui): 說明 [T07][DONE]`（`[T\d+][DONE]` 觸發 `
 | `GOOGLE_CLIENT_SECRET` | `auth/google-callback.js` | Google OAuth Client Secret（同上）|
 | `GOOGLE_APPLICATION_CREDENTIALS` | Vertex AI Inpainting（未實裝）| Service Account JSON 路徑 |
 | `GOOGLE_CLOUD_PROJECT` | Vertex AI Inpainting（未實裝）| GCP 控制台取得 |
+| `RESEND_API_KEY` | `stats.js` (`notify_users` action) | Resend 發信 API key；缺少時 notify_users 回傳 503 |
+| `RESEND_FROM_EMAIL` | `stats.js` (`notify_users` action) | 發件人地址，預設 `LoamLab <noreply@loamlab.studio>` |

@@ -1844,8 +1844,10 @@ function _updateForceStyleField(key, rawVal) {
   // EdgeDisplayMode 用整數 0/1；DisplayShadows 用 boolean；其餘 boolean 或 number
   if (key === 'EdgeDisplayMode') {
     e.value[key] = (rawVal === true || rawVal === 'true') ? 1 : 0;
-  } else if (key === 'DisplayShadows') {
+  } else if (key === 'DisplayShadows' || key === 'UseSunForAllShading') {
     e.value[key] = (rawVal === true || rawVal === 'true');
+  } else if (['AmbientOcclusionDistance', 'AmbientOcclusionIntensity'].includes(key)) {
+    e.value[key] = parseFloat(rawVal) || 0;
   } else {
     const boolVal = (rawVal === 'true' || rawVal === true) ? true
                   : (rawVal === 'false' || rawVal === false) ? false
@@ -1863,7 +1865,7 @@ function renderRenderForceStyleSection() {
   const v = e.value || {};
   const numRow = (label, key, def) => `<div class="flex items-center justify-between py-2 border-b border-white/[0.04]">
     <span class="text-xs text-gray-400">${label}</span>
-    <input type="number" min="0" max="100" value="${v[key] !== undefined ? v[key] : def}"
+    <input type="number" min="0" max="100" step="any" value="${v[key] !== undefined ? v[key] : def}"
            oninput="_updateForceStyleField('${key}', this.value)"
            class="w-16 bg-black/40 text-gray-200 text-xs text-right px-2 py-1 rounded border border-white/10 focus:border-cyan-500/50 outline-none">
   </div>`;
@@ -1891,6 +1893,7 @@ function renderRenderForceStyleSection() {
     + toggleRow('DisplayShadows（陰影顯示）', 'DisplayShadows', false)
     + numRow('Light（0–100）', 'Light', 17)
     + numRow('Dark（0–100）', 'Dark', 81)
+    + toggleRow('UseSunForAllShading（陽光統一分面，消除拼接縫）', 'UseSunForAllShading', false)
     + sectionLabel('Edge Style')
     + edgeToggleHtml
     + toggleRow('DrawBackEdges（後側邊線）', 'DrawBackEdges', false)
@@ -1899,6 +1902,8 @@ function renderRenderForceStyleSection() {
     + toggleRow('DrawDepthQue（Depth Cue）', 'DrawDepthQue', false)
     + sectionLabel('Face / AO')
     + toggleRow('AmbientOcclusion（環境光遮蔽，僅新引擎）', 'AmbientOcclusion', true)
+    + numRow('AODistance（AO 距離）', 'AmbientOcclusionDistance', 2)
+    + numRow('AOIntensity（AO 強度 0~1）', 'AmbientOcclusionIntensity', 0.8)
     + sectionLabel('Modeling')
     + toggleRow('DisplayInstanceAxes / DisplaySketchAxes（模型座標軸）', 'DisplayInstanceAxes', false);
 }
@@ -2635,40 +2640,171 @@ function filterFeedback(type, btn) {
 }
 
 
+// ── Toast 通知 ────────────────────────────────────────────────────────────────
+function showToast(msg, type) {
+  let el = document.getElementById('admin-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'admin-toast';
+    el.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;max-width:320px;transition:opacity 0.3s';
+    document.body.appendChild(el);
+  }
+  const colors = { success: '#22c55e20;border:1px solid #22c55e66;color:#4ade80', error: '#ef444420;border:1px solid #ef444466;color:#f87171', info: '#3b82f620;border:1px solid #3b82f666;color:#60a5fa' };
+  el.style.cssText += ';background:' + (colors[type] || colors.info);
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 2500);
+}
+
+// ── 洞見動作：複製名單 ────────────────────────────────────────────────────────
+function copyInsightEmails(emails) {
+  if (!emails || !emails.length) { showToast('沒有可複製的 Email', 'error'); return; }
+  const text = emails.join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => showToast('已複製 ' + emails.length + ' 個 Email ✓', 'success')).catch(() => fallbackCopy(text));
+  } else { fallbackCopy(text); }
+}
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); showToast('已複製 ✓', 'success'); } catch { showToast('複製失敗', 'error'); }
+  document.body.removeChild(ta);
+}
+
+// ── 洞見動作：補點 ───────────────────────────────────────────────────────────
+async function executeInsightPoints(emails, amount) {
+  if (!emails || !emails.length) { showToast('沒有可補點的用戶', 'error'); return; }
+  showToast('補點中...', 'info');
+  try {
+    const r = await fetch(API_BASE + '/api/stats?action=add_bonus_points', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + adminKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails, amount }),
+    });
+    const j = await r.json();
+    if (j.code === 0) showToast('已補 ' + amount + ' 點給 ' + j.succeeded + ' 位用戶 ✓', 'success');
+    else showToast('補點失敗：' + j.msg, 'error');
+  } catch(e) { showToast('補點錯誤：' + e.message, 'error'); }
+}
+
+// ── 洞見動作：發郵件 ─────────────────────────────────────────────────────────
+async function executeInsightEmail(emails, template) {
+  if (!emails || !emails.length) { showToast('沒有可發送的 Email', 'error'); return; }
+  showToast('發送中（' + emails.length + ' 封）...', 'info');
+  try {
+    const r = await fetch(API_BASE + '/api/stats?action=notify_users', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + adminKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emails, template }),
+    });
+    const j = await r.json();
+    if (j.code === 0) showToast('已發送 ' + j.sent + ' 封郵件 ✓', 'success');
+    else showToast('發送失敗：' + j.msg, 'error');
+  } catch(e) { showToast('發送錯誤：' + e.message, 'error'); }
+}
+
 // ── 自動洞見 ──────────────────────────────────────────────────────────────────
 function renderInsights(insights) {
   const badge = document.getElementById('insights-badge');
   const list  = document.getElementById('insights-list');
-  const warnings = insights.filter(i => i.severity !== 'info').length;
-  if (warnings) {
-    badge.textContent = warnings + ' 項需關注';
+
+  const warnings = insights.filter(i => i.severity === 'warning').length;
+  const opps     = insights.filter(i => i.severity === 'opportunity').length;
+  if (warnings || opps) {
+    const parts = [];
+    if (warnings) parts.push(warnings + ' 項警告');
+    if (opps)     parts.push(opps + ' 個機會');
+    badge.textContent = parts.join('・');
     badge.classList.remove('hidden');
   }
+
   if (!insights.length) {
     list.innerHTML = '<div class="text-xs text-gray-700 py-2">暫無洞見，數據量可能不足</div>';
     return;
   }
+
+  const CATEGORIES = {
+    activation: { label: '激活缺口', color: '#ef4444', icon: '🔴' },
+    retention:  { label: '留存危機', color: '#f97316', icon: '🟠' },
+    conversion: { label: '轉化視窗', color: '#22c55e', icon: '🟢' },
+    product:    { label: '產品信號', color: '#3b82f6', icon: '🔵' },
+  };
+
   const SEV = {
     warning:     { border: '#f97316', bg: '#f9741608', icon: '⚠️' },
     opportunity: { border: '#22c55e', bg: '#22c55e08', icon: '💡' },
     info:        { border: '#3b82f6', bg: '#3b82f608', icon: 'ℹ️' },
   };
-  list.innerHTML = insights.map(ins => {
-    const s = SEV[ins.severity] || SEV.info;
-    const emailHint = ins.emails?.length ? `<div class="mt-1.5 font-mono text-[10px] text-gray-600">${ins.emails.join(' · ')}${ins.count > 5 ? ` +${ins.count - 5}` : ''}</div>` : '';
-    return `
-      <div style="border:1px solid ${s.border}33;background:${s.bg};border-radius:10px;padding:12px 14px;">
-        <div class="flex items-start gap-2.5">
-          <span class="text-base leading-none mt-0.5">${s.icon}</span>
-          <div class="flex-1 min-w-0">
-            <div class="text-xs text-gray-200 leading-relaxed">${ins.message}</div>
-            <div class="text-[11px] mt-1" style="color:${s.border}cc">→ ${ins.action}</div>
+
+  const TREND_HTML = (trend) => {
+    if (!trend || trend.direction === 'same') return '<span style="color:#64748b;font-size:10px">→</span>';
+    if (trend.direction === 'up')   return '<span style="color:#ef4444;font-size:10px">↑+' + trend.delta + '</span>';
+    return '<span style="color:#22c55e;font-size:10px">↓-' + trend.delta + '</span>';
+  };
+
+  const grouped = {};
+  insights.forEach(ins => {
+    const cat = ins.category || 'product';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(ins);
+  });
+
+  const catOrder = ['activation', 'retention', 'conversion', 'product'];
+  let html = '';
+
+  catOrder.forEach(cat => {
+    const items = grouped[cat];
+    if (!items || !items.length) return;
+    const meta = CATEGORIES[cat] || { label: cat, color: '#64748b', icon: '⚪' };
+
+    html += `<div style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <span style="font-size:11px">${meta.icon}</span>
+        <span style="font-size:11px;font-weight:700;color:${meta.color}">${meta.label}</span>
+        <span style="font-size:10px;color:#475569;background:#1e293b;border-radius:4px;padding:1px 6px">${items.length}</span>
+      </div>`;
+
+    items.forEach(ins => {
+      const s = SEV[ins.severity] || SEV.info;
+      const all_emails = ins.all_emails || ins.emails || [];
+      const emailHint = ins.emails?.length
+        ? `<div style="margin-top:6px;font-family:monospace;font-size:10px;color:#64748b">${ins.emails.join(' · ')}${ins.count > 5 ? ' +' + (ins.count - 5) : ''}</div>`
+        : '';
+      const trendBadge = TREND_HTML(ins.trend);
+
+      const acts = ins.auto_actions || ['copy'];
+      const btnBase = 'border:none;cursor:pointer;border-radius:5px;padding:4px 10px;font-size:10px;font-weight:600';
+      const copyBtn = `<button onclick="copyInsightEmails(${JSON.stringify(all_emails)})" style="${btnBase};background:#1e293b;color:#94a3b8">📋 複製名單</button>`;
+      const emailBtn = ins.email_template && acts.includes('email')
+        ? `<button onclick="executeInsightEmail(${JSON.stringify(all_emails)}, '${ins.email_template}')" style="${btnBase};background:#312e81;color:#a5b4fc">📧 發郵件</button>`
+        : '';
+      const pointsBtn = acts.includes('points')
+        ? `<button onclick="executeInsightPoints(${JSON.stringify(all_emails)}, 20)" style="${btnBase};background:#14532d;color:#86efac">💊 補 20 點</button>`
+        : '';
+
+      html += `<div style="border:1px solid ${s.border}33;background:${s.bg};border-radius:10px;padding:12px 14px;margin-bottom:6px">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <span style="font-size:14px;line-height:1;margin-top:2px">${s.icon}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;color:#e2e8f0;line-height:1.5">${ins.message}</div>
+            <div style="font-size:11px;margin-top:4px;color:${s.border}cc">→ ${ins.action}</div>
             ${emailHint}
+            <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${copyBtn}${emailBtn}${pointsBtn}</div>
           </div>
-          <span class="text-white font-bold text-sm shrink-0">${fmt(ins.count)}</span>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;shrink:0">
+            <span style="color:#fff;font-weight:700;font-size:14px">${fmt(ins.count)}</span>
+            ${trendBadge}
+          </div>
         </div>
       </div>`;
-  }).join('');
+    });
+
+    html += '</div>';
+  });
+
+  list.innerHTML = html;
 }
 
 

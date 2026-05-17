@@ -501,6 +501,123 @@ export default async function handler(req, res) {
         return res.status(400).json({ code: -1, msg: 'Invalid sub. Use: list | settle | export | mark_paid' });
     }
 
+    // ── 批量發送郵件（Resend）────────────────────────────────────────────────────
+    if (req.method === 'POST' && action === 'notify_users') {
+        const { emails, template } = req.body || {};
+        if (!emails?.length || !template) return res.status(400).json({ code: -1, msg: 'Missing emails or template' });
+        const RESEND_API_KEY = process.env.RESEND_API_KEY;
+        if (!RESEND_API_KEY) return res.status(503).json({ code: -1, msg: 'RESEND_API_KEY not configured' });
+
+        const from = process.env.RESEND_FROM_EMAIL || 'LoamLab <noreply@loamlab.studio>';
+        const TEMPLATES = {
+            onboarding: {
+                subject: '🏠 你的 LoamLab 渲染點數還在等你 | Your render credits are waiting',
+                html: `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
+  <div style="font-size:22px;font-weight:700;color:#a78bfa;margin-bottom:16px">🏠 LoamLab AI 渲染插件</div>
+  <p style="margin:0 0 12px">你好！你已經有 LoamLab 帳號，但還沒試過第一次 AI 渲染。</p>
+  <p style="margin:0 0 20px;color:#94a3b8">只需 3 步就能看到你的 SketchUp 場景變成 AI 渲染圖：</p>
+  <ol style="padding-left:20px;line-height:2">
+    <li>打開 SketchUp，調好你想渲染的視角</li>
+    <li>點擊外掛程式選單 → LoamLab AI 渲染</li>
+    <li>選擇渲染風格，點擊「渲染」按鈕</li>
+  </ol>
+  <div style="margin:28px 0">
+    <a href="https://loamlab.studio" style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">立即開始渲染 →</a>
+  </div>
+  <p style="font-size:12px;color:#64748b;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · 土窟設計 AI 渲染插件<br>如不希望收到此類郵件，請回覆此郵件告知我們。</p>
+</div>`
+            },
+            reengagement: {
+                subject: '🎁 你的 LoamLab 點數快過期了，我們送你補充包 | Your credits need a refresh',
+                html: `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
+  <div style="font-size:22px;font-weight:700;color:#f97316;margin-bottom:16px">👋 好久不見！</div>
+  <p style="margin:0 0 12px">我們發現你已經一段時間沒有使用 LoamLab 了。</p>
+  <p style="margin:0 0 20px;color:#94a3b8">為了讓你重新體驗 AI 渲染的樂趣，我們為你準備了一些使用技巧：</p>
+  <ul style="padding-left:20px;line-height:2;color:#cbd5e1">
+    <li>試試 T2 SpaceReform：上傳參考圖，AI 幫你重新詮釋空間</li>
+    <li>使用 T4 SmartCanvas：多張參考圖融合成你的專屬風格</li>
+    <li>4K 解析度：讓細節更清晰，適合作品集展示</li>
+  </ul>
+  <div style="margin:28px 0">
+    <a href="https://loamlab.studio" style="display:inline-block;background:#f97316;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">重新開始渲染 →</a>
+  </div>
+  <p style="font-size:12px;color:#64748b;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · 土窟設計 AI 渲染插件<br>如不希望收到此類郵件，請回覆此郵件告知我們。</p>
+</div>`
+            },
+            upgrade: {
+                subject: '⭐ 訂閱 LoamLab，每月無限渲染 | Unlock unlimited renders',
+                html: `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
+  <div style="font-size:22px;font-weight:700;color:#22c55e;margin-bottom:16px">💎 你值得更多渲染次數</div>
+  <p style="margin:0 0 12px">你已經是 LoamLab 的重度使用者了！</p>
+  <p style="margin:0 0 20px;color:#94a3b8">訂閱方案讓你每月都有穩定的渲染點數，再也不用擔心點數耗盡：</p>
+  <div style="background:#1e293b;border-radius:10px;padding:16px 20px;margin:20px 0">
+    <div style="color:#22c55e;font-weight:700;font-size:16px;margin-bottom:8px">訂閱方案優點</div>
+    <ul style="padding-left:20px;line-height:2;margin:0;color:#cbd5e1">
+      <li>每月固定點數補充，不怕用完</li>
+      <li>比單次購買更划算（省 30%+）</li>
+      <li>支援所有工具（T1～T4）</li>
+    </ul>
+  </div>
+  <div style="margin:28px 0">
+    <a href="https://loamlab.studio" style="display:inline-block;background:#22c55e;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">查看訂閱方案 →</a>
+  </div>
+  <p style="font-size:12px;color:#64748b;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · 土窟設計 AI 渲染插件<br>如不希望收到此類郵件，請回覆此郵件告知我們。</p>
+</div>`
+            },
+        };
+
+        const tpl = TEMPLATES[template];
+        if (!tpl) return res.status(400).json({ code: -1, msg: `Unknown template: ${template}` });
+
+        const emailList = emails.slice(0, 50);
+        const payload = emailList.map(to => ({ from, to: [to], subject: tpl.subject, html: tpl.html }));
+
+        try {
+            const r = await fetch('https://api.resend.com/emails/batch', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const result = await r.json();
+            if (!r.ok) return res.status(502).json({ code: -1, msg: result?.message || 'Resend error' });
+            return res.status(200).json({ code: 0, sent: emailList.length, result });
+        } catch (e) {
+            return res.status(500).json({ code: -1, msg: e.message });
+        }
+    }
+
+    // ── 批量補點（Admin）─────────────────────────────────────────────────────────
+    if (req.method === 'POST' && action === 'add_bonus_points') {
+        const { emails, amount } = req.body || {};
+        if (!emails?.length || !amount || amount < 1 || amount > 200) {
+            return res.status(400).json({ code: -1, msg: 'Missing emails or invalid amount (1-200)' });
+        }
+        const emailList = emails.slice(0, 50).filter(e => !isTest(e));
+
+        const { data: currentUsers, error: fetchErr } = await supabase.from('users')
+            .select('email, points').in('email', emailList);
+        if (fetchErr) return res.status(500).json({ code: -1, msg: fetchErr.message });
+
+        const updateResults = await Promise.allSettled(
+            (currentUsers || []).map(u =>
+                supabase.from('users').update({ points: Math.max(0, (u.points || 0) + amount) }).eq('email', u.email)
+            )
+        );
+
+        const succeeded = updateResults.filter(r => r.status === 'fulfilled' && !r.value?.error).length;
+
+        if (succeeded > 0) {
+            await supabase.from('transactions').insert(
+                (currentUsers || []).slice(0, succeeded).map(u => ({
+                    user_email: u.email, amount, transaction_type: 'ADMIN_BONUS',
+                    metadata: { reason: 'admin_insight_bonus', granted_at: new Date().toISOString() },
+                }))
+            );
+        }
+
+        return res.status(200).json({ code: 0, succeeded, total: emailList.length });
+    }
+
     const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic };
     if (!actions[action]) return res.status(400).json({ code: -1, msg: `Unknown action: ${action}` });
 
@@ -557,7 +674,7 @@ async function dashboard(supabase) {
     ]);
 
     const revenue30d = (topups || []).reduce((s, r) => s + ((r.amount_usd_cents || 0) / 100), 0);
-    const toolBreakdown = groupBy((ratingRows || []).filter(r => r.tool_id != null), 'tool_id');
+    const toolBreakdown = groupBy((ratingRows || []).map(r => ({...r, tool_id: r.tool_id || 1})), 'tool_id');
     
     // 從 render_history 獲取風格分佈 (30天)
     const styleBreakdown = groupBy(ratingRows || [], 'style');
@@ -728,14 +845,17 @@ async function funnel(supabase) {
 async function insights(supabase) {
     const d3  = daysAgo(3);
     const d7  = daysAgo(7);
+    const d14 = daysAgo(14);
     const d30 = daysAgo(30);
 
-    // 拉取需要的原始數據
     const [
         { data: allUsers },
         { data: allRenders },
+        { data: prevRenders },
         { data: paywallFb },
         { data: topups },
+        { data: renderHist },
+        { data: allRefunds },
     ] = await Promise.all([
         noTest(supabase.from('users')
             .select('email, points, lifetime_points, subscription_plan, created_at')
@@ -744,105 +864,194 @@ async function insights(supabase) {
             .select('user_email, created_at')
             .in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K'])
             .gte('created_at', d30)),
+        noTestRef(supabase.from('transactions')
+            .select('user_email')
+            .in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K'])
+            .gte('created_at', d14).lt('created_at', d7)),
         noTestRef(supabase.from('feedback')
             .select('user_email')
             .eq('type', 'paywall_trigger')),
         noTestRef(supabase.from('transactions')
             .select('user_email')
             .in('transaction_type', ['TOPUP_SINGLE','TOPUP_SUBSCRIPTION'])),
+        noTestRef(supabase.from('render_history')
+            .select('user_email, tool_id, user_rating')
+            .gte('created_at', d30)
+            .limit(3000)),
+        noTestRef(supabase.from('transactions')
+            .select('user_email, created_at')
+            .gte('created_at', d30)
+            .like('transaction_type', 'REFUND_%')),
     ]);
 
-    const users    = (allUsers || []).filter(u => !isTest(u.email));
-    const renders  = (allRenders || []).filter(r => !isTest(r.user_email));
-    const paidSet  = new Set((topups || []).map(t => t.user_email));
+    const users       = (allUsers    || []).filter(u => !isTest(u.email));
+    const renders     = (allRenders  || []).filter(r => !isTest(r.user_email));
+    const prev        = (prevRenders || []).filter(r => !isTest(r.user_email));
+    const paidSet     = new Set((topups     || []).map(t => t.user_email));
+    const hist        = (renderHist  || []).filter(r => !isTest(r.user_email));
+    const refunds     = (allRefunds  || []).filter(r => !isTest(r.user_email));
 
-    // 渲染計數 Map（30天）
     const renderMap = {};
     renders.forEach(r => { renderMap[r.user_email] = (renderMap[r.user_email] || 0) + 1; });
 
-    // 7天內有渲染的 Set
-    const active7d = new Set(renders.filter(r => r.created_at >= d7).map(r => r.user_email));
+    const active7d     = new Set(renders.filter(r => r.created_at >= d7).map(r => r.user_email));
+    const prevActive7d = new Set(prev.map(r => r.user_email));
 
-    // Paywall 觸發次數 Map
     const paywallMap = {};
     (paywallFb || []).forEach(f => {
         if (f.user_email) paywallMap[f.user_email] = (paywallMap[f.user_email] || 0) + 1;
     });
 
+    function makeTrend(current, previous) {
+        const delta = current - previous;
+        if (Math.abs(delta) <= 1) return { direction: 'same', delta: 0 };
+        return { direction: delta > 0 ? 'up' : 'down', delta: Math.abs(delta) };
+    }
+
     const result = [];
 
-    // 1. Onboarding 卡住：註冊 >3天，從未渲染，points > 0
-    const stuck = users.filter(u =>
-        u.created_at < d3 &&
-        !renderMap[u.email] &&
-        (u.points || 0) > 0
-    );
+    // 1. Onboarding 卡住（activation / priority 1）
+    const stuck = users.filter(u => u.created_at < d3 && !renderMap[u.email] && (u.points || 0) > 0);
+    const stuckPrev = users.filter(u => {
+        const c = u.created_at;
+        return c < daysAgo(10) && c >= d14 && !renderMap[u.email] && (u.points || 0) > 0;
+    });
     if (stuck.length) result.push({
-        type: 'onboarding_stuck',
-        severity: 'warning',
+        type: 'onboarding_stuck', category: 'activation', priority: 1, severity: 'warning',
         count: stuck.length,
         message: `${stuck.length} 位新用戶卡在 onboarding（已註冊 3+ 天，從未渲染，還有點數）`,
         action: '考慮發送 onboarding 激活郵件',
         emails: stuck.slice(0, 5).map(u => u.email),
+        all_emails: stuck.map(u => u.email),
+        trend: makeTrend(stuck.length, stuckPrev.length),
+        auto_actions: ['email', 'points', 'copy'],
+        email_template: 'onboarding',
     });
 
-    // 2. 升級候選：Paywall 觸發 ≥2 次，未付費
-    const upgradeCandidates = users.filter(u =>
-        (paywallMap[u.email] || 0) >= 2 && !paidSet.has(u.email)
-    );
-    if (upgradeCandidates.length) result.push({
-        type: 'upgrade_candidate',
-        severity: 'opportunity',
-        count: upgradeCandidates.length,
-        message: `${upgradeCandidates.length} 位用戶碰過 Paywall 2+ 次但尚未付費`,
-        action: '優化 paywall 文案 / 考慮個人化私訊',
-        emails: upgradeCandidates.slice(0, 5).map(u => u.email),
-    });
-
-    // 3. 流失風險：30天內有渲染，但近7天沉默，且 points < 20
-    const churnRisk = users.filter(u =>
-        renderMap[u.email] &&
-        !active7d.has(u.email) &&
-        (u.points || 0) < 20 &&
-        !u.subscription_plan
-    );
+    // 2. 流失風險（retention / priority 1）
+    const churnRisk = users.filter(u => renderMap[u.email] && !active7d.has(u.email) && (u.points || 0) < 20 && !u.subscription_plan);
+    const churnPrev = users.filter(u => renderMap[u.email] && !prevActive7d.has(u.email) && (u.points || 0) < 20 && !u.subscription_plan);
     if (churnRisk.length) result.push({
-        type: 'churn_risk',
-        severity: 'warning',
+        type: 'churn_risk', category: 'retention', priority: 1, severity: 'warning',
         count: churnRisk.length,
         message: `${churnRisk.length} 位活躍用戶近 7 天沉默且點數偏低（可能快流失）`,
         action: '觸發 re-engage 郵件或低點數補點提醒',
         emails: churnRisk.slice(0, 5).map(u => u.email),
+        all_emails: churnRisk.map(u => u.email),
+        trend: makeTrend(churnRisk.length, churnPrev.length),
+        auto_actions: ['email', 'points', 'copy'],
+        email_template: 'reengagement',
     });
 
-    // 4. 高價值未訂閱：lifetime_points > 100 且無訂閱
-    const highValue = users.filter(u =>
-        (u.lifetime_points || 0) > 100 && !u.subscription_plan
-    );
-    if (highValue.length) result.push({
-        type: 'high_value_no_sub',
-        severity: 'opportunity',
-        count: highValue.length,
-        message: `${highValue.length} 位重度用戶（累計點數 >100）尚未訂閱`,
-        action: '個人化升級推薦，說明訂閱性價比',
-        emails: highValue.slice(0, 5).map(u => u.email),
-    });
-
-    // 5. 首次渲染後 >7 天未再渲染（有意願但未形成習慣）
-    const secondMissing = users.filter(u =>
-        renderMap[u.email] === 1 &&
-        !active7d.has(u.email) &&
-        !paidSet.has(u.email)
-    );
+    // 3. 首次渲染後未再渲染（activation / priority 2）
+    const secondMissing = users.filter(u => renderMap[u.email] === 1 && !active7d.has(u.email) && !paidSet.has(u.email));
     if (secondMissing.length) result.push({
-        type: 'second_render_missing',
-        severity: 'opportunity',
+        type: 'second_render_missing', category: 'activation', priority: 2, severity: 'opportunity',
         count: secondMissing.length,
         message: `${secondMissing.length} 位用戶首次渲染後超過 7 天未再渲染（有意願但未養成習慣）`,
         action: '發送第二次渲染提醒郵件，附上使用技巧或限時優惠',
         emails: secondMissing.slice(0, 5).map(u => u.email),
+        all_emails: secondMissing.map(u => u.email),
+        trend: { direction: 'same', delta: 0 },
+        auto_actions: ['email', 'copy'],
+        email_template: 'reengagement',
     });
 
+    // 4. 升級候選（conversion / priority 2）
+    const upgradeCandidates = users.filter(u => (paywallMap[u.email] || 0) >= 2 && !paidSet.has(u.email));
+    if (upgradeCandidates.length) result.push({
+        type: 'upgrade_candidate', category: 'conversion', priority: 2, severity: 'opportunity',
+        count: upgradeCandidates.length,
+        message: `${upgradeCandidates.length} 位用戶碰過 Paywall 2+ 次但尚未付費`,
+        action: '優化 paywall 文案 / 考慮個人化私訊',
+        emails: upgradeCandidates.slice(0, 5).map(u => u.email),
+        all_emails: upgradeCandidates.map(u => u.email),
+        trend: { direction: 'same', delta: 0 },
+        auto_actions: ['email', 'copy'],
+        email_template: 'upgrade',
+    });
+
+    // 5. 高價值未訂閱（conversion / priority 3）
+    const highValue = users.filter(u => (u.lifetime_points || 0) > 100 && !u.subscription_plan);
+    if (highValue.length) result.push({
+        type: 'high_value_no_sub', category: 'conversion', priority: 3, severity: 'opportunity',
+        count: highValue.length,
+        message: `${highValue.length} 位重度用戶（累計點數 >100）尚未訂閱`,
+        action: '個人化升級推薦，說明訂閱性價比',
+        emails: highValue.slice(0, 5).map(u => u.email),
+        all_emails: highValue.map(u => u.email),
+        trend: { direction: 'same', delta: 0 },
+        auto_actions: ['email', 'copy'],
+        email_template: 'upgrade',
+    });
+
+    // 6. KOL 候選人（conversion / priority 3）
+    const goodRatingUsers = new Set(hist.filter(r => r.user_rating != null && r.user_rating >= 4).map(r => r.user_email));
+    const kolList = users.filter(u => (u.lifetime_points || 0) > 80 && !u.subscription_plan && goodRatingUsers.has(u.email));
+    if (kolList.length) result.push({
+        type: 'kol_candidate', category: 'conversion', priority: 3, severity: 'opportunity',
+        count: kolList.length,
+        message: `${kolList.length} 位高活躍且評分佳的用戶未訂閱，適合邀請成為 KOL/推薦大使`,
+        action: '發送個人化邀請，提供 KOL 折扣碼和佣金計劃說明',
+        emails: kolList.slice(0, 5).map(u => u.email),
+        all_emails: kolList.map(u => u.email),
+        trend: { direction: 'same', delta: 0 },
+        auto_actions: ['email', 'copy'],
+        email_template: 'upgrade',
+    });
+
+    // 7. 渲染錯誤率過高（product / priority 1）
+    const totalRenders = renders.length;
+    if (totalRenders > 10 && refunds.length / totalRenders > 0.15) {
+        result.push({
+            type: 'error_spike', category: 'product', priority: 1, severity: 'warning',
+            count: refunds.length,
+            message: `渲染錯誤率過高：${Math.round(refunds.length / totalRenders * 100)}%（${refunds.length} 次退款 / ${totalRenders} 次渲染，30天）`,
+            action: '檢查 Coze API 狀態、圖床可用性、後端錯誤日誌',
+            emails: [],
+            all_emails: [],
+            trend: { direction: 'same', delta: 0 },
+            auto_actions: ['copy'],
+            email_template: null,
+        });
+    }
+
+    // 8. 低評分集中（product / priority 2）
+    const lowRatingMap = {};
+    hist.filter(r => r.user_rating != null && r.user_rating <= 2)
+        .forEach(r => { lowRatingMap[r.user_email] = (lowRatingMap[r.user_email] || 0) + 1; });
+    const lowRatingList = Object.keys(lowRatingMap);
+    if (lowRatingList.length >= 2) result.push({
+        type: 'low_rating_cluster', category: 'product', priority: 2, severity: 'warning',
+        count: lowRatingList.length,
+        message: `${lowRatingList.length} 位用戶有低評分記錄（≤2 顆星），需檢查渲染品質`,
+        action: '分析低評分渲染的共同特徵（風格/解析度/提示詞），改善模型調校',
+        emails: lowRatingList.slice(0, 5),
+        all_emails: lowRatingList,
+        trend: { direction: 'same', delta: 0 },
+        auto_actions: ['copy'],
+        email_template: null,
+    });
+
+    // 9. 工具使用集中（product / priority 4）
+    const toolCounts = {};
+    hist.forEach(r => { const t = String(r.tool_id || 1); toolCounts[t] = (toolCounts[t] || 0) + 1; });
+    const totalHist = hist.length;
+    const t1Count = toolCounts['1'] || 0;
+    const otherCount = totalHist - t1Count;
+    if (totalHist > 20 && otherCount / totalHist < 0.1) result.push({
+        type: 'tool_underuse', category: 'product', priority: 4, severity: 'info',
+        count: otherCount,
+        message: `T2/T3/T4 合計只佔 ${Math.round(otherCount / totalHist * 100)}% 渲染量，用戶集中在 T1`,
+        action: '考慮在 onboarding 和 UI 中突出介紹其他工具的使用場景',
+        emails: [],
+        all_emails: [],
+        trend: { direction: 'same', delta: 0 },
+        auto_actions: ['copy'],
+        email_template: null,
+    });
+
+    result.sort((a, b) => a.priority - b.priority);
     return { insights: result, analyzed_users: users.length };
 }
 

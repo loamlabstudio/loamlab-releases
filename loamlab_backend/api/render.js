@@ -362,7 +362,8 @@ async function _handleRender(req, res) {
     if (clientIp !== 'unknown') {
         try {
             const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
-            if (!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp) {
+            // 僅當 last_login_ip 已記錄且與當前 IP 不符時拒絕（null 表示舊版用戶未記錄，不擋）
+            if (userRow?.last_login_ip && userRow.last_login_ip !== clientIp) {
                 return res.status(401).json({ code: -1, msg: '登入憑證已過期或網路環境發生變更。為保障您的點數安全，請在外掛首頁重新點擊登入以驗證身分。' });
             }
         } catch (ipErr) {

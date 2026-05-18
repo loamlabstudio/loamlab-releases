@@ -33,6 +33,7 @@ function withAuth(fn) {
 
 // 實時進度條計時器與背景列隊計數器
 let renderTimer = null;
+let renderWatchdogTimer = null;
 let currentPct = 0;
 let totalScenesToRender = 0;
 let finishedScenesCount = 0;
@@ -1063,6 +1064,7 @@ function updateCostPreview() {
 function finalizeRenderUI() {
     window._isRendering = false;
     stopRenderTimer();
+    if (renderWatchdogTimer) { clearTimeout(renderWatchdogTimer); renderWatchdogTimer = null; }
     updateProgressUI('Done!', 100);
     // 所有渲染結果已收到，此時才還原 SketchUp 的強制樣式設定
     try { sketchup.restore_render_style({}); } catch(_) {}
@@ -1230,20 +1232,58 @@ window.receiveFromRuby = function (data) {
         if (data.dist_channel) window.loamlabDistChannel = data.dist_channel;
         if (data.build_type === 'dev') {
             window._isDev = true;
+
+            // DEV badge（給 id 供切換控制）
             const badge = document.createElement('div');
+            badge.id = 'dev-badge';
             badge.textContent = 'DEV';
             badge.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);background:#dc2626;color:white;font-size:10px;font-weight:900;padding:2px 12px;border-radius:4px;z-index:9999;letter-spacing:3px;pointer-events:none;box-shadow:0 0 12px rgba(220,38,38,0.6);';
             document.body.appendChild(badge);
-            // Dev 模式：顯示所有開發中工具
-            document.querySelectorAll('.dev-only-tool').forEach(el => el.classList.remove('hidden'));
-            // 還原上次選區（localStorage 持久化，熱重載後立即顯示重測按鈕）
+
+            // 視角切換按鈕（右下角固定，USER 視角時仍可見以便切回）
+            const toggleBtn = document.createElement('button');
+            toggleBtn.id = 'dev-mode-toggle-btn';
+            toggleBtn.style.cssText = 'position:fixed;bottom:10px;right:10px;font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px;border:1px solid;cursor:pointer;z-index:9998;letter-spacing:1px;pointer-events:auto;user-select:none;line-height:1.4;';
+            toggleBtn.addEventListener('click', function() { window.toggleDevViewMode(); });
+            document.body.appendChild(toggleBtn);
+
+            // 還原上次選區資料（熱重載持久化）
             try {
                 const saved = localStorage.getItem('_devLastScBody');
-                if (saved) {
-                    window._devLastScBody = JSON.parse(saved);
-                    (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
-                }
+                if (saved) window._devLastScBody = JSON.parse(saved);
             } catch(_) {}
+
+            // 統一控制所有 dev UI 元素的顯示狀態
+            window.applyDevModeState = function(isDev) {
+                window._devViewActive = isDev;
+                const _badge = document.getElementById('dev-badge');
+                if (_badge) _badge.style.display = isDev ? '' : 'none';
+                document.querySelectorAll('.dev-only-tool').forEach(function(el) {
+                    el.classList.toggle('hidden', !isDev);
+                });
+                const retestBtn = document.getElementById('dev-retest-btn');
+                if (retestBtn) {
+                    if (isDev && window._devLastScBody) retestBtn.classList.remove('hidden');
+                    else retestBtn.classList.add('hidden');
+                }
+                const _btn = document.getElementById('dev-mode-toggle-btn');
+                if (_btn) {
+                    _btn.textContent = isDev ? 'DEV 視角' : 'USER 視角';
+                    _btn.style.background = isDev ? 'rgba(220,38,38,0.15)' : 'rgba(59,130,246,0.15)';
+                    _btn.style.color = isDev ? '#fca5a5' : '#93c5fd';
+                    _btn.style.borderColor = isDev ? 'rgba(220,38,38,0.4)' : 'rgba(59,130,246,0.4)';
+                }
+            };
+
+            window.toggleDevViewMode = function() {
+                const next = !window._devViewActive;
+                try { localStorage.setItem('_devModeOverride', next ? 'dev' : 'user'); } catch(_) {}
+                window.applyDevModeState(next);
+            };
+
+            // 讀取 localStorage 決定初始狀態，預設為開發者視角
+            const _override = localStorage.getItem('_devModeOverride');
+            window.applyDevModeState(_override !== 'user');
         }
         const langStr = data.lang || localStorage.getItem('loamlab_lang') || 'en-US';
         (document.getElementById('lang-select') || document.createElement('div')).value = langStr;
@@ -1396,6 +1436,26 @@ window.receiveFromRuby = function (data) {
         const langObj3 = UI_LANG[currentLang];
         statusText.textContent = langObj3['export_done'] || 'All scenes sent. Rendering in cloud...';
         statusText.classList.replace('text-red-400', 'text-amber-400');
+        // 看門狗：360 秒內若沒收到 render_success/render_failed，主動解鎖 UI
+        if (renderWatchdogTimer) clearTimeout(renderWatchdogTimer);
+        renderWatchdogTimer = setTimeout(() => {
+            renderWatchdogTimer = null;
+            if (!window._isRendering) return;
+            finalizeRenderUI();
+            const wdLang = UI_LANG[currentLang] || UI_LANG['en-US'];
+            showUpdateToast('⚠️ ' + (wdLang['render_timeout_hint'] || '渲染等待超時。如已出圖請至渲染歷史查看；如未出圖點數已退還，請重試。'));
+            if (statusText) {
+                statusText.textContent = wdLang['render_timeout_hint'] || '等待超時，請至渲染歷史確認';
+                statusText.classList.replace('text-amber-400', 'text-[#dc2626]');
+            }
+            // 自動刷新並開啟渲染歷史，讓用戶直接撈回可能已生成的圖
+            setTimeout(() => {
+                if (typeof openHistoryModal === 'function') {
+                    if (window.sketchup) { try { sketchup.list_saved_renders({}); } catch(_) {} }
+                    openHistoryModal();
+                }
+            }, 1200);
+        }, 360000);
     } else if (data.status === 'render_success') {
         console.log('[render_success] scene_name=', data.scene_name, 'url=', (data.url||'').slice(0,60));
         finishedScenesCount++;
@@ -1572,8 +1632,13 @@ window.receiveFromRuby = function (data) {
         if (data.error === 'resolution_limit') {
             if (typeof openPricingModal === 'function') openPricingModal({ highlight: 'pro' });
         }
+        // 登入憑證過期 → 自動開啟登入 modal，引導用戶重新登入
+        const _msg401 = data.message || '';
+        if (_msg401.includes('重新點擊登入') || _msg401.includes('重新登入') || _msg401.includes('登入已過期') || _msg401.includes('憑證已過期')) {
+            if (typeof openLoginModal === 'function') setTimeout(() => openLoginModal(), 400);
+        }
         const langObj5 = UI_LANG[currentLang];
-        let failMsg = sanitizeMsg(data.message || langObj5['render_failed'] || 'Render Failed');
+        let failMsg = sanitizeMsg(_msg401 || langObj5['render_failed'] || 'Render Failed');
         if (data.points_refunded) {
             failMsg += ` (${langObj5['points_refunded'] || 'Points Refunded'})`;
         }
@@ -5511,11 +5576,11 @@ async function executeSmartSwap(overrideBody = null) {
 
             fetchBody = { tool: 2, parameters: { ...originalParam, base_image: compositeBase64, prompt, resolution, ...(refImages.length > 0 && { ref_images: refImages }) } };
 
-            // DEV：儲存供重測使用，並顯示區域數量（localStorage 持久化，熱重載後仍可使用）
+            // DEV：儲存供重測使用（資料存取與視角無關；toast 僅 DEV 視角顯示）
             if (window._isDev) {
                 window._devLastScBody = { _body: fetchBody, _label: displayLabel, _resolution: resolution };
                 try { localStorage.setItem('_devLastScBody', JSON.stringify(window._devLastScBody)); } catch(_) {}
-                showUpdateToast(`[DEV] 送出 ${SmartCanvas.regions.length} 區域，參考圖 ${refImages.length} 張`);
+                if (window._devViewActive) showUpdateToast(`[DEV] 送出 ${SmartCanvas.regions.length} 區域，參考圖 ${refImages.length} 張`);
             }
         }
 
@@ -5554,14 +5619,14 @@ async function executeSmartSwap(overrideBody = null) {
             appendInpaintResultCard(result.url, displayLabel);
             if (window.sketchup) sketchup.auto_save_render({ url: result.url, scene: SmartCanvas.baseScene || 'render', resolution, prompt: displayLabel });
             showUpdateToast('✅ 替換完成！');
-            if (window._isDev) (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
+            if (window._isDev && window._devViewActive) (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
         } else {
             // 失敗時清除 pendingSwap，避免再點 Start Engine 重複發送相同請求
             SmartCanvas.pendingSwap = false;
             SmartCanvas.regions = [];
             _scUpdatePendingIndicator();
             showUpdateToast('❌ ' + (result.msg || '替換失敗') + '，請至 Render History 確認是否已完成');
-            if (window._isDev) (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
+            if (window._isDev && window._devViewActive) (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
         }
     } catch (err) {
         // 失敗時清除 pendingSwap，避免再點 Start Engine 重複發送相同請求
@@ -5571,7 +5636,7 @@ async function executeSmartSwap(overrideBody = null) {
         const isTimeout = err.name === 'TimeoutError' || err.name === 'AbortError';
         const msg = isTimeout ? '渲染超時（AI 需 4–5 分鐘），請至 Render History 查看是否已完成，勿重試' : '網路錯誤: ' + err.message;
         showUpdateToast('❌ ' + msg);
-        if (window._isDev) (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
+        if (window._isDev && window._devViewActive) (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
     } finally {
         finalizeRenderUI();
         SmartCanvas._executing = false;

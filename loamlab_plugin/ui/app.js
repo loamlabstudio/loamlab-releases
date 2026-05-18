@@ -2277,7 +2277,8 @@ function togglePlanFeatures(btn) {
 
 function openPricingModal(ctx = null) {
     if (ctx && ctx.cost !== undefined && ctx.balance !== undefined && ctx.cost > ctx.balance) {
-        submitFeedback({ type: 'paywall_trigger', metadata: { cost: ctx.cost, balance: ctx.balance } });
+        const _res = document.querySelector('input[name="resolution"]:checked');
+        submitFeedback({ type: 'paywall_trigger', metadata: { cost: ctx.cost, balance: ctx.balance, plugin_version: window.LOAMLAB_VERSION || '—', resolution: _res ? _res.value : '—' } });
     }
     const banner = document.getElementById('paywall-context-banner');
     if (banner) {

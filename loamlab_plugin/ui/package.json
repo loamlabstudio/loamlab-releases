@@ -5,6 +5,7 @@
   "main": "app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint app.js",
     "watch:i18n": "node ../scripts/watch_i18n.js"
   },
   "keywords": [],
@@ -13,5 +14,8 @@
   "type": "commonjs",
   "dependencies": {
     "playwright": "^1.58.2"
+  },
+  "devDependencies": {
+    "eslint": "^10.4.0"
   }
 }

@@ -59,6 +59,16 @@ Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "[1/5] Packaging .rbz ..." -ForegroundColor Yellow
 
+# Lint check: ensure no ES2020+ syntax in UI code
+Write-Host "[Lint] Checking UI syntax (ES2019 compliance)..." -ForegroundColor Yellow
+$lintExit = 0
+& powershell -ExecutionPolicy Bypass -Command "Set-Location '$ROOT\loamlab_plugin\ui'; npm run lint" ; $lintExit = $LASTEXITCODE
+if ($lintExit -ne 0) {
+    Write-Host "[ABORT] ESLint failed. Fix syntax errors before packaging." -ForegroundColor Red
+    exit 1
+}
+Write-Host "[Lint] OK - no ES2020+ syntax detected" -ForegroundColor Green
+
 if (Test-Path $OUT_ZIP) { Remove-Item $OUT_ZIP -Force }
 if (Test-Path $OUT_RBZ) { Remove-Item $OUT_RBZ -Force }
 

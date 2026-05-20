@@ -1,0 +1,7 @@
+{
+  "parserOptions": {
+    "ecmaVersion": 2019
+  },
+  "ignorePatterns": ["node_modules/"],
+  "rules": {}
+}

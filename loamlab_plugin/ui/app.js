@@ -192,18 +192,18 @@ function renderT1Nodes() {
             if (node.system) return; // 核心約束由系統管理，插件不顯示
             let label = t(node.id);
             if (!label || label === node.id) {
-                label = node.labels?.[currentLang] || node.labels?.['en-US'] || node.id;
+                label = (node.labels && node.labels[currentLang]) || (node.labels && node.labels['en-US']) || node.id;
             }
-            const ph = node.placeholders?.[currentLang] || node.placeholders?.['en-US'] || '';
+            const ph = (node.placeholders && node.placeholders[currentLang]) || (node.placeholders && node.placeholders['en-US']) || '';
 
             const item = document.createElement('div');
             item.className = 'node-item';
 
             if (node.type === 'slider') {
-                const min = node.min ?? 0;
-                const max = node.max ?? 100;
-                const step = node.step ?? 1;
-                const def = node.default ?? node.min ?? 0;
+                const min = node.min != null ? node.min : 0;
+                const max = node.max != null ? node.max : 100;
+                const step = node.step != null ? node.step : 1;
+                const def = node.default != null ? node.default : (node.min != null ? node.min : 0);
                 const _sliderVals = JSON.parse(localStorage.getItem('loamlab_node_vals') || '{}');
                 const initVal = _sliderVals[node.id] !== undefined ? _sliderVals[node.id] : def;
 
@@ -228,12 +228,12 @@ function renderT1Nodes() {
                 const adminOpts = optionsData.filter(o => o.field_id === node.id);
                 const personalOpts = (userChips[node.id] || []).map(c => ({
                     label: c.label, value: c.value, _isPersonal: true,
-                    strategy: adminOpts[0]?.strategy || 'replace', is_default: false
+                    strategy: (adminOpts[0] && adminOpts[0].strategy) || 'replace', is_default: false
                 }));
                 const nodeOpts = [...adminOpts, ...personalOpts];
                 // 依語言決定 chip 顯示文字（如果沒有多語系設定，則回退到中文或英文值）
                 const isCJK = ['zh-TW', 'zh-CN'].includes(currentLang);
-                const chipDisplay = (o) => o.labels?.[currentLang] || (isCJK ? (o.label || o.value) : (o.value || o.label));
+                const chipDisplay = (o) => (o.labels && o.labels[currentLang]) || (isCJK ? (o.label || o.value) : (o.value || o.label));
                 const makeChipHtml = (o) => {
                     if (o.is_silent) return ''; // 靜默 chip：自動加入提示詞，插件不顯示
                     const chipBtn = '<button type="button" class="node-chip' + (o._isPersonal ? ' node-chip-personal' : '') + '"' +
@@ -351,7 +351,7 @@ function _showSystemHint(hintId) {
     el.className = 'mx-3 mb-2 flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2';
     el.innerHTML = `<svg class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><p class="text-[11px] text-amber-200/80 leading-relaxed flex-1">${msg}</p><button onclick="this.parentElement.remove();localStorage.setItem('${dismissedKey}','1')" class="text-white/30 hover:text-white/60 text-[10px] flex-shrink-0 mt-0.5">✕</button>`;
     const anchor = document.getElementById('style-ref-picker') || document.querySelector('.tool-panel-top') || document.body;
-    anchor.parentNode?.insertBefore(el, anchor) || document.body.prepend(el);
+    anchor.parentNode ? anchor.parentNode.insertBefore(el, anchor) : document.body.prepend(el);
 }
 
 // ── 工具1 風格參考圖（從歷史渲染選取） ────────────────────────────────────────
@@ -370,7 +370,7 @@ function _renderStyleRefThumbs() {
             uploadArea.className = 'relative flex-shrink-0 cursor-pointer rounded-md overflow-hidden ring-2 ring-amber-400 transition-all' ;
             uploadArea.style.cssText = 'width:52px;height:39px;';
             uploadArea.innerHTML = `<input type="file" id="style-ref-input" accept="image/*" class="hidden" onchange="_onStyleRefUpload(this)"><img src="${_tool1StyleRefUrl}" class="w-full h-full object-cover"><div class="absolute inset-0 flex items-center justify-center bg-amber-500/25">${CHECK_SVG}</div>`;
-            uploadArea.onclick = () => uploadArea.querySelector('input')?.click();
+            uploadArea.onclick = function() { var _inp = uploadArea.querySelector('input'); if (_inp) _inp.click(); };
         } else {
             uploadArea.className = 'relative flex-shrink-0 cursor-pointer rounded-md border border-dashed border-white/20 hover:border-amber-400/50 hover:bg-amber-500/5 transition-all flex items-center justify-center overflow-hidden';
             uploadArea.style.cssText = 'width:52px;height:39px;';
@@ -390,7 +390,7 @@ function _renderStyleRefThumbs() {
     if (clearBtn) clearBtn.classList.toggle('hidden', !_tool1StyleRefUrl);
 }
 function _onStyleRefUpload(input) {
-    const file = input.files?.[0];
+    const file = input.files && input.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = e => {
@@ -412,9 +412,9 @@ function _clearStyleRef() {
 // ── Legacy/Nodes 模式：純後端控制 ────────────────────────────────────────────
 function _applyPromptMode() {
     const isLegacy = promptEngineMode === 'legacy';
-    document.getElementById('t1-dynamic-nodes')?.classList.toggle('hidden', isLegacy);
-    document.getElementById('t1-legacy-notice')?.classList.toggle('hidden', !isLegacy);
-    document.getElementById('t1-presets-section')?.classList.toggle('hidden', isLegacy);
+    var _dn = document.getElementById('t1-dynamic-nodes'); if (_dn) _dn.classList.toggle('hidden', isLegacy);
+    var _ln = document.getElementById('t1-legacy-notice'); if (_ln) _ln.classList.toggle('hidden', !isLegacy);
+    var _ps = document.getElementById('t1-presets-section'); if (_ps) _ps.classList.toggle('hidden', isLegacy);
 }
 
 // ── 用戶自訂材質節點（surface-node 架構）──────────────────────────────────────
@@ -432,7 +432,7 @@ function _getSurfacePresets() {
     const fromBackend = (typeof optionsData !== 'undefined' ? optionsData : [])
         .filter(o => o.field_id === '_surf_presets');
     return fromBackend.length > 0
-        ? fromBackend.map(o => ({ label: o.labels?.[currentLang] || o.label || o.value, val: o.value || o.label }))
+        ? fromBackend.map(o => ({ label: (o.labels && o.labels[currentLang]) || o.label || o.value, val: o.value || o.label }))
         : _SURF_PRESETS_FALLBACK;
 }
 
@@ -442,12 +442,12 @@ function _saveSurfaceNodes() {
 
 function addUserSurfaceNode() {
     const nameEl = document.getElementById('user-surface-name-input');
-    const name = (nameEl?.value || '').trim();
+    const name = ((nameEl && nameEl.value) || '').trim();
     if (!name) return;
     userSurfaceNodes.push({ id: Date.now().toString(36), name, value: '' });
     _saveSurfaceNodes();
     if (nameEl) nameEl.value = '';
-    document.getElementById('user-surface-add-row')?.classList.add('hidden');
+    var _ar = document.getElementById('user-surface-add-row'); if (_ar) _ar.classList.add('hidden');
     _rebuildUserSurfaceSection();
 }
 
@@ -533,7 +533,7 @@ function _buildSurfaceNodeItem(node) {
     // Preset chip click（replace strategy）
     chipsRow.querySelectorAll('.node-chip:not(.node-chip-personal)').forEach(btn => {
         btn.addEventListener('click', () => {
-            chipsRow.querySelectorAll('.node-chip-personal').forEach(c => c.closest('.node-chip-wrap')?.remove() || c.remove());
+            chipsRow.querySelectorAll('.node-chip-personal').forEach(function(c) { var _w = c.closest('.node-chip-wrap'); if (_w) _w.remove(); c.remove(); });
             chipsRow.querySelectorAll('.node-chip').forEach(o => o.classList.remove('active'));
             btn.classList.add('active');
             hiddenInput.value = btn.dataset.chipValue;
@@ -685,7 +685,7 @@ function exportPresetCode(idx) {
     codeEl.value = code;
     row.classList.remove('hidden');
     codeEl.select();
-    navigator.clipboard?.writeText(code).catch(() => {});
+    if (navigator.clipboard) navigator.clipboard.writeText(code).catch(function() {});
 }
 
 function importPresetCode() {
@@ -702,7 +702,7 @@ function importPresetCode() {
         userPresets = userPresets.slice(0, 20);
         localStorage.setItem('loamlab_presets', JSON.stringify(userPresets));
         input.value = '';
-        document.getElementById('t1-import-row')?.classList.add('hidden');
+        var _ir = document.getElementById('t1-import-row'); if (_ir) _ir.classList.add('hidden');
         renderPresets();
         _pushPresetsToServer();
     } catch(e) { alert('分享碼格式錯誤'); }
@@ -751,7 +751,7 @@ function startRenamePreset(idx) {
     const nameEl = document.getElementById('t1-preset-name-' + idx);
     if (!row) return;
     row.classList.remove('hidden');
-    nameEl?.classList.add('hidden');
+    if (nameEl) nameEl.classList.add('hidden');
     const input = document.getElementById('t1-rename-input-' + idx);
     if (input) { input.focus(); input.select(); }
 }
@@ -769,18 +769,20 @@ function confirmRenamePreset(idx) {
 function cancelRenamePreset(idx) {
     const row = document.getElementById('t1-rename-row-' + idx);
     const nameEl = document.getElementById('t1-preset-name-' + idx);
-    row?.classList.add('hidden');
-    nameEl?.classList.remove('hidden');
+    if (row) row.classList.add('hidden');
+    if (nameEl) nameEl.classList.remove('hidden');
 }
 
 function copyPresetCode(idx) {
     const input = document.getElementById('t1-export-code-' + idx);
     const btn = document.getElementById('t1-copy-btn-' + idx);
     if (!input || !input.value) return;
-    navigator.clipboard?.writeText(input.value).catch(() => {
-        input.select();
-        document.execCommand('copy');
-    });
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(input.value).catch(function() {
+            input.select();
+            document.execCommand('copy');
+        });
+    }
     if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = '複製'; }, 1500); }
 }
 
@@ -837,8 +839,8 @@ function setActiveTool(n, skipTutorial) {
             renderPresets();
         } else {
             t1NodesContainer.classList.add('hidden');
-            document.getElementById('t1-legacy-notice')?.classList.add('hidden');
-            document.getElementById('t1-presets-section')?.classList.add('hidden');
+            var _ln2 = document.getElementById('t1-legacy-notice'); if (_ln2) _ln2.classList.add('hidden');
+            var _ps2 = document.getElementById('t1-presets-section'); if (_ps2) _ps2.classList.add('hidden');
         }
     }
 
@@ -855,7 +857,7 @@ function setActiveTool(n, skipTutorial) {
     var refPicker = document.getElementById('reference-image-picker');
     if (refPicker) refPicker.classList.add('hidden');
     clearReferenceImage();
-    document.getElementById('style-ref-picker')?.classList.add('hidden');
+    var _srp = document.getElementById('style-ref-picker'); if (_srp) _srp.classList.add('hidden');
     // 重置：切換工具時恢復 scenes-container，恢復按鈕文字，恢復 picker 樣式
     if (scenesContainer) scenesContainer.classList.remove('hidden');
     if (renderLabel) renderLabel.textContent = t('btn_render');
@@ -879,16 +881,16 @@ function setActiveTool(n, skipTutorial) {
     if (filled0) filled0.style.minHeight = '';
 
     // 重置 Tool 4 面板與渲染按鈕（切換工具時統一還原）
-    document.getElementById('tool4-panel')?.classList.add('hidden');
-    document.getElementById('btn-render')?.classList.remove('hidden');
+    var _t4p = document.getElementById('tool4-panel'); if (_t4p) _t4p.classList.add('hidden');
+    var _brn = document.getElementById('btn-render'); if (_brn) _brn.classList.remove('hidden');
     // 離開 Tool 4 時還原一般存檔路徑
     window.updateSaveDir(window._lastNormalSaveDir);
     // 還原 IG 分享按鈕與進階設定可見性，還原 wow shot CTA
-    document.getElementById('btn-show-share')?.classList.remove('hidden');
-    document.querySelector('[data-wow-shot-cta]')?.classList.remove('hidden');
+    var _bss = document.getElementById('btn-show-share'); if (_bss) _bss.classList.remove('hidden');
+    var _wsc = document.querySelector('[data-wow-shot-cta]'); if (_wsc) _wsc.classList.remove('hidden');
     if (advancedDetails) advancedDetails.classList.remove('hidden');
-    document.getElementById('t4-quality-section')?.classList.add('hidden');
-    document.getElementById('resolution-selector')?.closest('.w-full.flex.flex-col.pt-2')?.classList.remove('hidden');
+    var _t4q = document.getElementById('t4-quality-section'); if (_t4q) _t4q.classList.add('hidden');
+    var _rs = document.getElementById('resolution-selector'); var _rsp = _rs && _rs.closest('.w-full.flex.flex-col.pt-2'); if (_rsp) _rsp.classList.remove('hidden');
 
     if (n === 1) {
         if (titleEl) titleEl.textContent = (UI_LANG[currentLang] || UI_LANG['en-US'])['title'];
@@ -939,15 +941,15 @@ function setActiveTool(n, skipTutorial) {
         // 保留 scenes-container：360 批次匯出需勾選場景
         if (scenesContainer) scenesContainer.classList.remove('hidden');
         // T4 隱藏 wow shot CTA；顯示進階設定（僅畫質，不自動展開）
-        document.querySelector('[data-wow-shot-cta]')?.classList.add('hidden');
+        var _wsc2 = document.querySelector('[data-wow-shot-cta]'); if (_wsc2) _wsc2.classList.add('hidden');
         if (advancedDetails) { advancedDetails.classList.remove('hidden'); advancedDetails.open = false; }
-        document.getElementById('resolution-selector')?.closest('.w-full.flex.flex-col.pt-2')?.classList.add('hidden');
-        document.getElementById('t4-quality-section')?.classList.remove('hidden');
+        var _rs2 = document.getElementById('resolution-selector'); var _rs2p = _rs2 && _rs2.closest('.w-full.flex.flex-col.pt-2'); if (_rs2p) _rs2p.classList.add('hidden');
+        var _t4q2 = document.getElementById('t4-quality-section'); if (_t4q2) _t4q2.classList.remove('hidden');
         const tool4Panel = document.getElementById('tool4-panel');
         if (tool4Panel) { tool4Panel.classList.remove('hidden'); }
         var basePicker = document.getElementById('base-image-picker');
         if (basePicker) basePicker.classList.add('hidden');
-        document.getElementById('style-ref-picker')?.classList.add('hidden');
+        var _srp2 = document.getElementById('style-ref-picker'); if (_srp2) _srp2.classList.add('hidden');
         const btnRender = document.getElementById('btn-render');
         if (btnRender) btnRender.classList.add('hidden');
         // 顯示 360 專屬存檔路徑（從 localStorage 還原）
@@ -1417,7 +1419,7 @@ window.receiveFromRuby = function (data) {
         }
     } else if (data.status === '360_local_done') {
         finalizeRenderUI();
-        document.getElementById('tool4-status')?.classList.remove('hidden');
+        var _t4st = document.getElementById('tool4-status'); if (_t4st) _t4st.classList.remove('hidden');
         const t4s = document.getElementById('tool4-status');
         if (t4s) t4s.textContent = (t('t4_saved') || '已儲存：') + (data.path || '');
     } else if (data.status === '360_cancelled') {
@@ -1516,7 +1518,7 @@ window.receiveFromRuby = function (data) {
                             <input id="t4-cloud-url-input" readonly value="${targetUrl}"
                                 class="flex-1 min-w-0 text-[10px] bg-white/5 border border-white/10 rounded px-2 py-1 text-blue-300 truncate cursor-pointer"
                                 onclick="this.select()" title="${targetUrl}"/>
-                            <button onclick="navigator.clipboard?.writeText('${targetUrl}').then(()=>{this.textContent='✓';setTimeout(()=>{this.textContent='複製'},1200)})"
+                            <button onclick="if(navigator.clipboard){navigator.clipboard.writeText('${targetUrl}').then(()=>{this.textContent='✓';setTimeout(()=>{this.textContent='複製'},1200)})}"
                                 class="shrink-0 text-[9px] px-2 py-1 rounded border border-white/15 text-white/60 hover:bg-white/10 transition-colors">複製</button>
                         </div>`;
                 }
@@ -2071,7 +2073,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         advanced_settings[node.id] = finalVals.filter(Boolean).join('"+"');
                     }
                 });
-                userSurfaceNodes.filter(n => n.name && n.value?.trim()).forEach(n => {
+                userSurfaceNodes.filter(n => n.name && n.value && n.value.trim()).forEach(n => {
                     advanced_settings['_usr_' + n.name] = n.value;
                 });
             }
@@ -2523,9 +2525,9 @@ function generateShareTextWithReferral() {
     const template = getCurrentShareTemplate() || _buildFallbackShareTemplate();
     // window.loamlabUserReferralCode 由 updateLoginUI 設定；localStorage 為 fallback
     const myCode = window.loamlabUserReferralCode || localStorage.getItem('loamlab_user_referral_code') || '';
-    const project = document.getElementById('share-input-project')?.value || '';
-    const designer = document.getElementById('share-input-designer')?.value || '';
-    const content = document.getElementById('share-input-content')?.value || '';
+    const project = (document.getElementById('share-input-project') || {}).value || '';
+    const designer = (document.getElementById('share-input-designer') || {}).value || '';
+    const content = (document.getElementById('share-input-content') || {}).value || '';
     return template
         .replace(/{project}/g, project)
         .replace(/{designer}/g, designer)
@@ -2595,9 +2597,9 @@ async function _createAndRenderQR(qrContainer) {
     const baseUrl = (typeof API_BASE !== 'undefined' && API_BASE) || 'https://loamlab-camera.vercel.app';
     const myCode = window.loamlabUserReferralCode || localStorage.getItem('loamlab_user_referral_code') || '';
     const text_data = {
-        project: document.getElementById('share-input-project')?.value || '',
-        designer: document.getElementById('share-input-designer')?.value || '',
-        content: document.getElementById('share-input-content')?.value || ''
+        project: (document.getElementById('share-input-project') || {}).value || '',
+        designer: (document.getElementById('share-input-designer') || {}).value || '',
+        content: (document.getElementById('share-input-content') || {}).value || ''
     };
 
     // 傳送所有已有 cloud URL 的圖片
@@ -2955,10 +2957,10 @@ async function fetchKolDashboard(email) {
         const d = await res.json();
 
         const el = (id) => document.getElementById(id);
-        if (el('kol-total-users')) el('kol-total-users').textContent = d.total_paid_users ?? '-';
-        if (el('kol-current-rate')) el('kol-current-rate').textContent = d.current_commission_rate ?? '-';
+        if (el('kol-total-users')) el('kol-total-users').textContent = d.total_paid_users != null ? d.total_paid_users : '-';
+        if (el('kol-current-rate')) el('kol-current-rate').textContent = d.current_commission_rate != null ? d.current_commission_rate : '-';
         if (el('kol-ready-withdraw')) {
-            const usd = d.earnings?.ready_to_withdraw ?? 0;
+            const usd = (d.earnings && d.earnings.ready_to_withdraw != null) ? d.earnings.ready_to_withdraw : 0;
             const lang = currentLang || localStorage.getItem('loamlab_lang') || 'en-US';
             let display;
             if (lang === 'zh-TW') display = `NT$ ${Math.round(usd * 32)}`;
@@ -2984,7 +2986,7 @@ async function fetchKolDashboard(email) {
             if (el('kol-progress-label')) el('kol-progress-label').textContent = `${total} 人`;
             if (el('kol-tier-label')) el('kol-tier-label').textContent = `Tier 3 · ${d.current_commission_rate} 最高階梯 🏆`;
             if (el('kol-next-tier-hint')) el('kol-next-tier-hint').textContent = '';
-            if (el('kol-progress-wrap')) el('kol-progress-wrap').querySelector('#kol-next-tier-hint')?.remove();
+            if (el('kol-progress-wrap')) { var _nth = el('kol-progress-wrap').querySelector('#kol-next-tier-hint'); if (_nth) _nth.remove(); }
         }
     } catch (e) {
         console.warn('[KOL] fetchKolDashboard failed:', e.message);
@@ -5766,12 +5768,12 @@ document.addEventListener('DOMContentLoaded', () => {
 function handle360LocalExport() {
     withAuth(() => {
         if (typeof sketchup === 'undefined') { showUpdateToast('需要在 SketchUp 中執行'); return; }
-        document.getElementById('tool4-status')?.classList.add('hidden');
+        var _t4s1 = document.getElementById('tool4-status'); if (_t4s1) _t4s1.classList.add('hidden');
         const checked = Array.from(document.querySelectorAll('input[name="scene"]:checked')).map(cb => cb.value);
         if (checked.length === 0) { showUpdateToast('⚠️ ' + (t('t4_no_scene') || '請先勾選至少一個場景')); return; }
         const t4Style = JSON.stringify(window._t4ForceStyle || {});
         const savedDir = window._saveDir360 || localStorage.getItem('loamlab_t4_dir') || '';
-        const quality = document.querySelector('input[name="t4_quality"]:checked')?.value || 'high';
+        const quality = (document.querySelector('input[name="t4_quality"]:checked') || {}).value || 'high';
         sketchup.export_360_local({ scenes: checked, t4_force_style: t4Style, save_dir: savedDir, lang: currentLang, quality });
     })();
 }
@@ -5782,11 +5784,11 @@ function handle360CloudExport() {
         if (typeof sketchup === 'undefined') { showUpdateToast('需要在 SketchUp 中執行'); return; }
         const checked = Array.from(document.querySelectorAll('input[name="scene"]:checked')).map(cb => cb.value);
         if (checked.length === 0) { showUpdateToast('⚠️ ' + (t('t4_no_scene') || '請先勾選至少一個場景')); return; }
-        document.getElementById('tool4-status')?.classList.add('hidden');
+        var _t4s2 = document.getElementById('tool4-status'); if (_t4s2) _t4s2.classList.add('hidden');
         totalScenesToRender = 1;
         finishedScenesCount = 0;
         const t4Style = JSON.stringify(window._t4ForceStyle || {});
-        const quality = document.querySelector('input[name="t4_quality"]:checked')?.value || 'high';
+        const quality = (document.querySelector('input[name="t4_quality"]:checked') || {}).value || 'high';
         sketchup.export_360_cloud({ scenes: checked, t4_force_style: t4Style, lang: currentLang, quality });
     })();
 }

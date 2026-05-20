@@ -31,6 +31,16 @@ if ($ew) {
 $outZip = "$sourceDir\loamlab_plugin.zip"
 $outRbz = "$sourceDir\$outRbzName"
 
+# Lint check: ensure no ES2020+ syntax in UI code
+Write-Host "[Lint] Checking UI syntax (ES2019 compliance)..." -ForegroundColor Yellow
+$lintExit = 0
+& powershell -ExecutionPolicy Bypass -Command "Set-Location '$sourceDir\loamlab_plugin\ui'; npm run lint" ; $lintExit = $LASTEXITCODE
+if ($lintExit -ne 0) {
+    Write-Host "[ABORT] ESLint failed. Fix syntax errors before packaging." -ForegroundColor Red
+    exit 1
+}
+Write-Host "[Lint] OK - no ES2020+ syntax detected" -ForegroundColor Green
+
 if (Test-Path $outZip) { Remove-Item $outZip -Force }
 if (Test-Path $outRbz) { Remove-Item $outRbz -Force }
 

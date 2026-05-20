@@ -3731,7 +3731,7 @@ function startOAuthFlow() {
         const res = await fetch(`${API_BASE}/api/auth/otp?action=send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email })
+            body: JSON.stringify({ email, lang: currentLang })
         });
         const data = await res.json();
         

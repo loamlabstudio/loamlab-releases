@@ -113,7 +113,7 @@ Get-ChildItem -Path "$ROOT\loamlab_plugin" -Recurse -File | Where-Object {
     $fp = $_.FullName
     $skip = $false
     foreach ($pat in $excludePatterns) {
-        if ($fp -match "[\\/]$pat[\\/]" -or $fp -like "*\$pat" -or $fp -like "*\$pat.*") { $skip = $true; break }
+        if ($fp -match "[\\/]$pat[\\/]" -or $fp -like "*\$pat" -or $fp -like "*\$pat.*" -or $fp -like "*\$pat\*") { $skip = $true; break }
     }
     -not $skip
 } | ForEach-Object {

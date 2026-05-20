@@ -75,11 +75,12 @@ load 'c:/Users/qingwen/.gemini/antigravity/workspaces/土窟設計su渲染插件
 powershell -ExecutionPolicy Bypass -Command "cd loamlab_backend; vercel dev"
 ```
 
-### Release New Version（完整四步，說「發佈更新」直接執行不再詢問）
-1. 版本號遞增（patch +1），同步 `config.rb` (`VERSION`) / `loamlab_plugin.rb` (`ext.version`) / `loamlab_backend/api/version.js` (`latest_version` + `download_url`) → commit
-2. `powershell -ExecutionPolicy Bypass -File ".\build_rbz.ps1"`
-3. 在 `loamlabstudio/loamlab-releases` 建新 Release tag（如 `v1.2.1-beta`），上傳 .rbz
-4. `powershell -ExecutionPolicy Bypass -Command "vercel --prod"` （從 repo root 執行，Vercel 專案已設 rootDirectory=loamlab_backend）
+### Release New Version（三步，說「發佈更新」直接執行不再詢問）
+1. 版本號遞增（patch +1），同步 `config.rb` (`VERSION`) / `loamlab_plugin.rb` (`ext.version`) / `loamlab_backend/api/version.js` (`latest_version`) → commit
+2. `powershell -ExecutionPolicy Bypass -File ".\build_rbz.ps1"` （含 ESLint 語法檢查，失敗即中止）
+3. `powershell -ExecutionPolicy Bypass -File ".\publish.ps1"` （GitHub Release 上傳 + Vercel 部署，一步完成）
+
+> `release.ps1` 已廢棄，勿使用。
 
 ### Test Coze API
 ```ruby

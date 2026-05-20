@@ -1,5 +1,5 @@
 param([switch]$ew)
-
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $sourceDir = $PSScriptRoot
 $configFile = "$sourceDir\loamlab_plugin\config.rb"
 

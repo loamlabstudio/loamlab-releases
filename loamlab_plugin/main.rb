@@ -48,7 +48,9 @@ module LoamLab
       'SilhouetteWidth'     => 1,       # Profile 粗細（像素）
       'DrawDepthQue'        => false,   # Depth Cue
       # AO（AmbientOcclusion；新圖形引擎支援，classic engine 靜默跳過）
-      'AmbientOcclusion'    => true,
+      'AmbientOcclusion'          => true,
+      'AmbientOcclusionDistance'  => 2.0,
+      'AmbientOcclusionIntensity' => 0.8,
       # Modeling
       'DisplayInstanceAxes' => false,
       'DisplaySketchAxes'   => false,
@@ -119,7 +121,7 @@ module LoamLab
       SHADOW_KEYS_DEFAULT.keys.each do |k|
         begin; model.set_attribute('LoamLabRenderOverride', "si:#{k}", si[k]); rescue => e; end
       end
-      SHADOW_KEYS_DEFAULT.each { |k, v| begin; si[k] = v; rescue => e; end }
+      SHADOW_KEYS_DEFAULT.each { |k, v| begin; si[k] = v; rescue => e; end } unless si['DisplayShadows'] == true
       # 不在此處做全頁 p.update — SU2023 批量 page update 可能在 C++ 層崩潰；
       # 截圖前的每場景 safe_set_render_keys 已確保截圖樣式正確，還原時由 restore_render_keys 統一 p.update。
       model.set_attribute('LoamLabRenderOverride', 'applied', true)
@@ -143,7 +145,7 @@ module LoamLab
     end
 
     # admin 透過 _render_force_style 覆蓋截圖樣式值（原始值已由 apply_render_keys 儲存，此處只覆蓋不重存）
-    def self.apply_force_style_override(model, force_style)
+    def self.apply_force_style_override(model, force_style, skip_shadow: false)
       return if force_style.nil? || force_style.empty?
       ro = model.rendering_options
       # rendering_options 的有效 key（EdgeDisplayMode 是主開關，DrawEdges 不存在）
@@ -153,14 +155,16 @@ module LoamLab
       ro_keys.each do |k|
         begin; ro[k] = force_style[k] if force_style.key?(k) && ro.keys.include?(k); rescue => e; end
       end
-      # shadow_info 的 key（DisplayShadows, Light, Dark, UseSunForAllShading）
-      si = model.shadow_info
-      bool_si_keys = ['DisplayShadows', 'UseSunForAllShading']
-      ['DisplayShadows', 'Light', 'Dark', 'UseSunForAllShading'].each do |k|
-        next unless force_style.key?(k)
-        begin
-          si[k] = bool_si_keys.include?(k) ? !!force_style[k] : force_style[k].to_i
-        rescue => e; end
+      unless skip_shadow
+        # shadow_info 的 key（DisplayShadows, Light, Dark, UseSunForAllShading）
+        si = model.shadow_info
+        bool_si_keys = ['DisplayShadows', 'UseSunForAllShading']
+        ['DisplayShadows', 'Light', 'Dark', 'UseSunForAllShading'].each do |k|
+          next unless force_style.key?(k)
+          begin
+            si[k] = bool_si_keys.include?(k) ? !!force_style[k] : force_style[k].to_i
+          rescue => e; end
+        end
       end
     end
 
@@ -503,10 +507,12 @@ module LoamLab
           next unless model
           force_style = begin; JSON.parse(params["force_style"].to_s); rescue; {}; end
           @@t4_saved_style = {
-            ro: {}.tap { |h| %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes SilhouetteWidth DrawDepthQue AmbientOcclusion DisplayInstanceAxes DisplaySketchAxes].each { |k| h[k] = model.rendering_options[k] rescue nil } },
+            ro: {}.tap { |h| %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes SilhouetteWidth DrawDepthQue AmbientOcclusion AmbientOcclusionDistance AmbientOcclusionIntensity DisplayInstanceAxes DisplaySketchAxes].each { |k| h[k] = model.rendering_options[k] rescue nil } },
             si: {}.tap { |h| %w[DisplayShadows Light Dark UseSunForAllShading].each { |k| h[k] = model.shadow_info[k] rescue nil } }
           }
-          self.apply_force_style_override(model, force_style) unless force_style.empty?
+          unless force_style.empty?
+            self.apply_force_style_override(model, force_style, skip_shadow: model.shadow_info['DisplayShadows'] == true)
+          end
           base64_img = self.get_preview_base64
           dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status:'preview_updated', batch_data:[{scene:'當前即時視角', image_data: base64_img}]})})")
         rescue => e
@@ -542,7 +548,7 @@ module LoamLab
           _sync_save = lambda do |mdl|
             ro = mdl.rendering_options; si = mdl.shadow_info
             saved_ro = {}; saved_si = {}
-            %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes SilhouetteWidth DrawDepthQue AmbientOcclusion DisplayInstanceAxes DisplaySketchAxes].each { |k| saved_ro[k] = ro[k] rescue nil }
+            %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes SilhouetteWidth DrawDepthQue AmbientOcclusion AmbientOcclusionDistance AmbientOcclusionIntensity DisplayInstanceAxes DisplaySketchAxes].each { |k| saved_ro[k] = ro[k] rescue nil }
             %w[DisplayShadows Light Dark UseSunForAllShading].each { |k| saved_si[k] = si[k] rescue nil }
             { ro: saved_ro, si: saved_si }
           end
@@ -555,7 +561,7 @@ module LoamLab
             model = Sketchup.active_model
             if model && !force_style.empty?
               saved = _sync_save.call(model)
-              self.apply_force_style_override(model, force_style)
+              self.apply_force_style_override(model, force_style, skip_shadow: model.shadow_info['DisplayShadows'] == true)
               base64_img = self.get_preview_base64
               _sync_restore.call(model, saved)
             else
@@ -605,7 +611,9 @@ module LoamLab
                   # 延長至 200ms 給引擎充足緩衝，防閃退
                   UI.start_timer(0.2, false) do
                     saved_fs = _sync_save.call(model) unless force_style.empty?
-                    self.apply_force_style_override(model, force_style) unless force_style.empty?
+                    unless force_style.empty?
+                      self.apply_force_style_override(model, force_style, skip_shadow: model.shadow_info['DisplayShadows'] == true)
+                    end
                     base64_img = self.get_preview_base64
                     _sync_restore.call(model, saved_fs) if saved_fs
                     batch_data << { scene: scene_name, image_data: base64_img }
@@ -1041,7 +1049,9 @@ module LoamLab
 
     # file:/// URL → 本地路徑（反向轉換，跨平台正確）
     def self.file_uri_to_path(uri)
+      require 'cgi'
       path = uri.sub('file://', '')        # → "/Users/..." or "/C:/Users/..."
+      path = CGI.unescape(path)            # 解碼 %E5%9C%9F → 土窟（中文路徑必要）
       path = path[1..-1] if path.match?(%r{\A/[A-Za-z]:/})  # Windows: 移除多餘開頭 /
       path
     end
@@ -1100,7 +1110,9 @@ module LoamLab
     end
 
     def self.pano_apply_render_settings(model, force_style = {})
-      self.apply_force_style_override(model, force_style) unless force_style.empty?
+      unless force_style.empty?
+        self.apply_force_style_override(model, force_style, skip_shadow: model.shadow_info['DisplayShadows'] == true)
+      end
     end
 
     # 水平翻轉圖像並輸出到 dst_path（使用 Sketchup::ImageRep）
@@ -1138,12 +1150,12 @@ module LoamLab
           t[:model].active_view.camera = cam
 
           face_res = t[:cubemap_size] || (t[:type] == :cloud ? 1024 : 2048)
-          tmp_src  = File.join(Dir.tmpdir, "ll360_#{fc[:name]}_#{Time.now.to_i}.png")
-          tmp_out  = tmp_src.sub('.png', '_f.png')
-          t[:model].active_view.write_image(tmp_src, face_res, face_res, false)
+          tmp_src  = File.join(Dir.tmpdir, "ll360_#{fc[:name]}_#{Time.now.to_i}.jpg")
+          tmp_out  = tmp_src.sub('.jpg', '_f.jpg')
+          t[:model].active_view.write_image(tmp_src, face_res, face_res, false, 0.85)
           pano_flip_h(tmp_src, tmp_out)
           img_data = File.read(tmp_out, mode: 'rb')
-          t[:cur_faces][fc[:name]] = "data:image/png;base64,#{Base64.strict_encode64(img_data)}"
+          t[:cur_faces][fc[:name]] = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
           File.delete(tmp_src) rescue nil
           File.delete(tmp_out)  rescue nil
 
@@ -1452,12 +1464,12 @@ module LoamLab
           new_cam.fov = 90.0
           view.camera = new_cam
 
-          tmp_src = File.join(temp_dir, "loamlab_360_#{fc[:name]}_#{Time.now.to_i}.png")
-          tmp_out = tmp_src.sub('.png', '_f.png')
-          view.write_image(tmp_src, 2048, 2048, false)
+          tmp_src = File.join(temp_dir, "loamlab_360_#{fc[:name]}_#{Time.now.to_i}.jpg")
+          tmp_out = tmp_src.sub('.jpg', '_f.jpg')
+          view.write_image(tmp_src, 2048, 2048, false, 0.85)
           pano_flip_h(tmp_src, tmp_out)
           img_data = File.read(tmp_out, mode: 'rb')
-          results[fc[:name]] = "data:image/png;base64,#{Base64.strict_encode64(img_data)}"
+          results[fc[:name]] = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
           File.delete(tmp_src) rescue nil
           File.delete(tmp_out)  rescue nil
         end
@@ -1649,8 +1661,11 @@ module LoamLab
       if @@ao_unsupported
         @@pending_results << { status: 'system_hint', hint_id: 'new_engine_for_ao' }
       end
-      # 套用 admin 覆蓋值（在 RENDER_KEYS 基礎上再覆蓋）
-      self.apply_force_style_override(model, render_force_style) unless render_force_style.empty?
+      # 套用 admin 覆蓋值（在 RENDER_KEYS 基礎上再覆蓋；若場景已開陰影則保留其陽光設定）
+      unless render_force_style.empty?
+        self.apply_force_style_override(model, render_force_style, skip_shadow: model.shadow_info['DisplayShadows'] == true)
+        model.active_view.invalidate
+      end
       # 不做批量 p.update：SU2023 批量 page update 可能在 C++ 層崩潰（致少部分用戶閃退）
       # 每場景的 safe_set_render_keys 已在 selected_page= 後重新套用，批量 update 為冗餘操作
 
@@ -1696,8 +1711,12 @@ module LoamLab
           begin
             self.safe_set_render_keys(model.rendering_options, RENDER_KEYS)
             si = model.shadow_info
-            SHADOW_KEYS_DEFAULT.each { |k, v| begin; si[k] = v; rescue => _e; end }
-            self.apply_force_style_override(model, render_force_style) unless render_force_style.empty?
+            _scene_shadow_on = si['DisplayShadows'] == true
+            SHADOW_KEYS_DEFAULT.each { |k, v| begin; si[k] = v; rescue => _e; end } unless _scene_shadow_on
+            unless render_force_style.empty?
+              self.apply_force_style_override(model, render_force_style, skip_shadow: _scene_shadow_on)
+              model.active_view.invalidate
+            end
           rescue => e
             LoamLab.log "[LoamLab] style re-apply: #{e.message}"
           end

@@ -5784,6 +5784,16 @@ function handle360LocalExport() {
         const t4Style = JSON.stringify(window._t4ForceStyle || {});
         const savedDir = window._saveDir360 || localStorage.getItem('loamlab_t4_dir') || '';
         const quality = (document.querySelector('input[name="t4_quality"]:checked') || {}).value || 'high';
+        
+        // 統計本地匯出紀錄
+        try {
+            fetch(`${API_BASE}/api/render`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-User-Email': window.loamlabUserEmail || '' },
+                body: JSON.stringify({ action: 'track_360_local', tool: 4 })
+            }).catch(e => console.error(e));
+        } catch (e) {}
+
         sketchup.export_360_local({ scenes: checked, t4_force_style: t4Style, save_dir: savedDir, lang: currentLang, quality });
     })();
 }

@@ -249,6 +249,10 @@ async function _handleRender(req, res) {
             // Embed scene metadata in URL so viewer doesn't depend on meta.json availability
             const snEncoded = encodeURIComponent(sceneNames.slice(0, nScenes).join('|'));
             const shareUrl = `https://loamlab-camera-backend.vercel.app/360-viewer.html?id=${shareId}&sc=${nScenes}&sn=${snEncoded}`;
+            try {
+                await supa.from('transactions').insert([{ user_email: userEmail, amount: -5, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
+                await supa.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: 5 }]);
+            } catch(e) {}
             return res.status(200).json({
                 code: 0, share_id: shareId, upload_urls: uploadUrls,
                 meta_url: metaUrlResult.data.signedUrl,
@@ -291,6 +295,10 @@ async function _handleRender(req, res) {
             }
             // 公開 URL 直接作為 share URL（pano-360 bucket 為 public）
             const shareUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/pano-360/${htmlPath}`;
+            try {
+                await supa.from('transactions').insert([{ user_email: userEmail, amount: -COST_360, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
+                await supa.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: COST_360 }]);
+            } catch(e) {}
             return res.status(200).json({
                 code: 0, share_id: shareId,
                 upload_url: urlData.signedUrl,
@@ -382,6 +390,14 @@ async function _handleRender(req, res) {
     const userPayload = req.body || {};
     const activeTool = userPayload.tool || 1;
 
+    // 360 單機匯出統計（免費，僅紀錄）
+    if (userPayload.action === 'track_360_local') {
+        try {
+            await supabase.from('transactions').insert([{ user_email: userEmail, amount: 0, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4, type: 'local' } }]);
+        } catch(e) {}
+        return res.status(200).json({ code: 0, msg: 'tracked' });
+    }
+
     // 360 全景雲端上傳（early return，不走渲染流程）
     if (userPayload.action === 'upload_360') {
         const COST_360 = 5;
@@ -410,6 +426,10 @@ async function _handleRender(req, res) {
                 if (upErr) throw new Error(`${name}: ${upErr.message}`);
             }
             const shareUrl = `https://loamlab-camera-backend.vercel.app/360-viewer.html?id=${shareId}`;
+            try {
+                await supabase.from('transactions').insert([{ user_email: userEmail, amount: -COST_360, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
+                await supabase.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: COST_360 }]);
+            } catch(e) {}
             return res.status(200).json({ code: 0, share_url: shareUrl, points_remaining: user.points - COST_360 });
         } catch (e) {
             await supabase.from('users').update({ points: user.points }).eq('email', userEmail).catch(() => {});
@@ -436,6 +456,10 @@ async function _handleRender(req, res) {
             return res.status(200).json({ code: -1, msg: errMsg });
         }
         const shareUrl = `https://loamlab-camera-backend.vercel.app/360-viewer.html?id=${shareId}`;
+        try {
+            await supabase.from('transactions').insert([{ user_email: userEmail, amount: -COST_360, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
+            await supabase.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: COST_360 }]);
+        } catch(e) {}
         return res.status(200).json({ code: 0, share_url: shareUrl, points_remaining: deductResult360.balance });
     }
 

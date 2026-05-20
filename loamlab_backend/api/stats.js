@@ -618,6 +618,29 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, succeeded, total: emailList.length });
     }
 
+    // ── Admin: 請求記錄日誌 ────────────────────────────────────────────────────
+    if (action === 'request_log' && req.method === 'GET') {
+        const limit = Math.min(parseInt(req.query.limit || '100'), 500);
+        const emailFilter = (req.query.email || '').trim().toLowerCase();
+        const typeFilter = req.query.type || 'all';
+
+        let q = noTestRef(supabase
+            .from('transactions')
+            .select('id, user_email, amount, transaction_type, metadata, created_at')
+            .not('user_email', 'is', null))
+            .order('created_at', { ascending: false })
+            .limit(limit);
+
+        if (emailFilter) q = q.ilike('user_email', `%${emailFilter}%`);
+        if (typeFilter === 'render') q = q.like('transaction_type', 'RENDER_%');
+        else if (typeFilter === 'refund') q = q.like('transaction_type', 'REFUND_%');
+        else if (typeFilter === 'topup') q = q.in('transaction_type', ['TOPUP_SINGLE', 'TOPUP_SUBSCRIPTION']);
+
+        const { data, error } = await q;
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0, logs: data || [] });
+    }
+
     const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic };
     if (!actions[action]) return res.status(400).json({ code: -1, msg: `Unknown action: ${action}` });
 
@@ -666,9 +689,9 @@ async function dashboard(supabase) {
         noTest(supabase.from('users').select('*', { count: 'exact', head: true })),
         noTestRef(supabase.from('transactions').select('user_email', { count: 'exact', head: true }).gte('created_at', d1)),
         noTestRef(supabase.from('transactions').select('user_email', { count: 'exact', head: true }).gte('created_at', d7)),
-        noTestRef(supabase.from('transactions').select('*', { count: 'exact', head: true }).in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K']).gte('created_at', d30)),
+        noTestRef(supabase.from('transactions').select('*', { count: 'exact', head: true }).in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K','RENDER_360']).gte('created_at', d30)),
         noTestRef(supabase.from('transactions').select('amount_usd_cents, transaction_type').in('transaction_type', ['TOPUP_SINGLE','TOPUP_SUBSCRIPTION']).gte('created_at', d30)),
-        noTestRef(supabase.from('transactions').select('transaction_type, created_at, metadata').in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K']).gte('created_at', d30).limit(1000)),
+        noTestRef(supabase.from('transactions').select('transaction_type, created_at, metadata').in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K','RENDER_360']).gte('created_at', d30).limit(1000)),
         noTestRef(supabase.from('render_history').select('user_rating, style, tool_id').gte('created_at', d30).limit(5000)),
         noTestRef(supabase.from('feedback').select('*', { count: 'exact', head: true }).eq('type', 'paywall_trigger').gte('created_at', d30)),
     ]);
@@ -723,7 +746,7 @@ async function users(supabase) {
         noTestRef(supabase.from('transactions')
             .select('user_email, created_at')
             .gte('created_at', d30)
-            .in('transaction_type', ['RENDER_1K', 'RENDER_2K', 'RENDER_4K'])),
+            .in('transaction_type', ['RENDER_1K', 'RENDER_2K', 'RENDER_4K', 'RENDER_360'])),
     ]);
 
     const active7dSet  = new Set((recentTx || []).filter(t => t.created_at >= d7).map(t => t.user_email));
@@ -759,7 +782,7 @@ async function renders(supabase) {
     const { data: rows } = await noTestRef(supabase
         .from('transactions')
         .select('transaction_type, created_at, user_email')
-        .in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K'])
+        .in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K','RENDER_360'])
         .gte('created_at', daysAgo(30))
         .order('created_at', { ascending: false })
         .limit(1000));
@@ -813,7 +836,7 @@ async function funnel(supabase) {
     // Step2: 有任何渲染記錄的獨立用戶（從 transactions 計算）
     const { data: r1 } = await noTestRef(
         supabase.from('transactions').select('user_email')
-            .in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K'])
+            .in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K','RENDER_360'])
     );
     const hasRender = new Set((r1 || []).filter(r => r.user_email).map(r => r.user_email));
 
@@ -866,11 +889,11 @@ async function insights(supabase) {
             .limit(500)),
         noTestRef(supabase.from('transactions')
             .select('user_email, created_at')
-            .in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K'])
+            .in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K','RENDER_360'])
             .gte('created_at', d30)),
         noTestRef(supabase.from('transactions')
             .select('user_email')
-            .in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K'])
+            .in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K','RENDER_360'])
             .gte('created_at', d14).lt('created_at', d7)),
         noTestRef(supabase.from('feedback')
             .select('user_email')

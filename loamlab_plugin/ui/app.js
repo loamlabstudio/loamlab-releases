@@ -3672,7 +3672,7 @@ function startOAuthFlow() {
         }
 
         try {
-            const res = await fetch(`${API_BASE}/api/auth/poll?session_id=${sessionUuid}`);
+            const res = await fetch(`${API_BASE}/api/auth/poll?session_id=${sessionUuid}&t=${Date.now()}`);
             const data = await res.json();
 
             if (data.status === 'success') {
@@ -3782,7 +3782,7 @@ function startOAuthFlow() {
     const token = (document.getElementById('login-code-input') || document.createElement('div')).value.trim();
     const btn = document.getElementById('btn-verify-otp');
     
-    if (!token || token.length < 6) return;
+    if (!token || token.length < 8) return;
 
     btn.disabled = true;
     btn.textContent = 'VERIFYING...';
@@ -3817,12 +3817,22 @@ function startOAuthFlow() {
                 }, 500);
             }, 800);
         } else {
-            alert(data.msg || 'Invalid code');
+            const statusMsg = document.getElementById('otp-status-msg');
+            if (statusMsg) {
+                const errKey = (data.msg || '').toLowerCase().includes('invalid') || (data.msg || '').toLowerCase().includes('expired')
+                    ? 'otp_invalid_code' : null;
+                statusMsg.textContent = errKey ? (t(errKey) || data.msg || 'Invalid code') : (data.msg || 'Invalid code');
+                statusMsg.classList.remove('hidden');
+            }
             btn.disabled = false;
             btn.textContent = 'VERIFY CODE';
         }
     } catch (e) {
-        alert('Verification error: ' + e.message);
+        const statusMsg = document.getElementById('otp-status-msg');
+        if (statusMsg) {
+            statusMsg.textContent = t('otp_network_error') || 'Network error. Please try again.';
+            statusMsg.classList.remove('hidden');
+        }
         btn.disabled = false;
         btn.textContent = 'VERIFY CODE';
     }

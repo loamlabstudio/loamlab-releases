@@ -296,7 +296,9 @@ const UI_LANG = {
         "t4_quality_low": "標準",
         "t4_quality_low_hint": "速度快、容量小",
         "t4_quality_high": "高清",
-        "t4_quality_high_hint": "品質好，清晰"
+        "t4_quality_high_hint": "品質好，清晰",
+        "otp_invalid_code": "驗證碼無效或已過期，請重新索取",
+        "otp_network_error": "網路連線錯誤，請重試"
     },
     "en-US": {
         "title": "LoamLab Camera",
@@ -592,7 +594,9 @@ const UI_LANG = {
         "t4_quality_low": "Standard",
         "t4_quality_low_hint": "Fast, small file",
         "t4_quality_high": "HD",
-        "t4_quality_high_hint": "Sharp, high quality"
+        "t4_quality_high_hint": "Sharp, high quality",
+        "otp_invalid_code": "Invalid or expired code. Please request a new one.",
+        "otp_network_error": "Network error. Please try again."
     },
     "zh-CN": {
         "title": "野人相機 (LoamLab Camera)",
@@ -888,7 +892,9 @@ const UI_LANG = {
         "t4_quality_low": "标准",
         "t4_quality_low_hint": "速度快、容量小",
         "t4_quality_high": "高清",
-        "t4_quality_high_hint": "品质好，清晰"
+        "t4_quality_high_hint": "品质好，清晰",
+        "otp_invalid_code": "验证码无效或已过期，请重新获取",
+        "otp_network_error": "网络连接错误，请重试"
     },
     "es-ES": {
         "title": "LoamLab Camera",
@@ -1184,7 +1190,9 @@ const UI_LANG = {
         "t4_quality_low": "Estándar",
         "t4_quality_low_hint": "Rápido, archivo pequeño",
         "t4_quality_high": "HD",
-        "t4_quality_high_hint": "Nítido, alta calidad"
+        "t4_quality_high_hint": "Nítido, alta calidad",
+        "otp_invalid_code": "Código inválido o vencido. Solicita uno nuevo.",
+        "otp_network_error": "Error de red. Inténtalo de nuevo."
     },
     "pt-BR": {
         "title": "LoamLab Camera",
@@ -1480,7 +1488,9 @@ const UI_LANG = {
         "t4_quality_low": "Padrão",
         "t4_quality_low_hint": "Rápido, arquivo pequeno",
         "t4_quality_high": "HD",
-        "t4_quality_high_hint": "Nítido, alta qualidade"
+        "t4_quality_high_hint": "Nítido, alta qualidade",
+        "otp_invalid_code": "Código inválido ou expirado. Solicite um novo.",
+        "otp_network_error": "Erro de rede. Tente novamente."
     },
     "ja-JP": {
         "title": "LoamLab Camera",
@@ -1776,7 +1786,9 @@ const UI_LANG = {
         "t4_quality_low": "標準",
         "t4_quality_low_hint": "速い・ファイル小",
         "t4_quality_high": "HD",
-        "t4_quality_high_hint": "鮮明・高品質"
+        "t4_quality_high_hint": "鮮明・高品質",
+        "otp_invalid_code": "コードが無効または期限切れです。再送信してください。",
+        "otp_network_error": "ネットワークエラーが発生しました。もう一度お試しください。"
     }
 };
 

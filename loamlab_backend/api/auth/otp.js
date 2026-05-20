@@ -3,6 +3,33 @@
 // POST /api/auth/otp?action=verify - verify OTP token
 // POST /api/auth/otp?action=hook   - Supabase "Send Email" Auth Hook receiver
 const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
+
+// Disable body parser so the hook action can verify Supabase's HMAC signature
+module.exports.config = { api: { bodyParser: false } };
+
+function readRawBody(req) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        req.on('data', c => chunks.push(c));
+        req.on('end', () => resolve(Buffer.concat(chunks)));
+        req.on('error', reject);
+    });
+}
+
+// Verify Supabase Auth Hook HMAC-SHA256 signature
+// Authorization header: "v1,<hex-hmac>"
+// Secret env var:       "v1,whsec_<base64-key>"
+function verifyHookSignature(rawBody, authHeader, secret) {
+    try {
+        const keyBase64 = secret.split(',')[1].replace('whsec_', '');
+        const key = Buffer.from(keyBase64, 'base64');
+        const computed = 'v1,' + crypto.createHmac('sha256', key).update(rawBody).digest('hex');
+        return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(authHeader));
+    } catch (_) {
+        return false;
+    }
+}
 
 const EMAIL_TEMPLATES = {
     'zh-TW': {
@@ -89,6 +116,11 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ code: -1, msg: 'Method not allowed' });
 
+    // Read raw body (bodyParser disabled for HMAC verification)
+    const rawBody = await readRawBody(req);
+    let body = {};
+    try { body = JSON.parse(rawBody.toString()); } catch (_) {}
+
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_ANON_KEY;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -100,15 +132,21 @@ module.exports = async function handler(req, res) {
     const action = req.query.action;
 
     // Supabase "Send Email" Auth Hook receiver
-    // Supabase calls this instead of sending its own email
     if (action === 'hook') {
-        const { user, email_data } = req.body || {};
+        const hookSecret = process.env.SUPABASE_HOOK_SECRET;
+        if (hookSecret) {
+            const authHeader = req.headers['authorization'] || '';
+            if (!verifyHookSignature(rawBody, authHeader, hookSecret)) {
+                return res.status(401).json({ error: 'Invalid signature' });
+            }
+        }
+
+        const { user, email_data } = body;
         if (!user || !email_data || !email_data.token) return res.status(200).json({});
 
         const email = user.email;
         const code = email_data.token;
 
-        // Look up stored language preference
         let lang = 'en-US';
         try {
             const { data } = await admin.from('otp_lang').select('lang').eq('email', email).single();
@@ -125,13 +163,10 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === 'send') {
-        const { email, lang } = req.body || {};
+        const { email, lang } = body;
         if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });
 
-        // Persist language preference so the hook can read it
-        try {
-            await admin.from('otp_lang').upsert({ email, lang: lang || 'en-US' });
-        } catch (_) {}
+        try { await admin.from('otp_lang').upsert({ email, lang: lang || 'en-US' }); } catch (_) {}
 
         const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
         if (error) return res.status(400).json({ code: -1, msg: error.message });
@@ -139,7 +174,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === 'verify') {
-        const { email, token } = req.body || {};
+        const { email, token } = body;
         if (!email || !token) return res.status(400).json({ code: -1, msg: 'Missing email or token' });
 
         const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });

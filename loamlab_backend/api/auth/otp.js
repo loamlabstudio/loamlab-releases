@@ -4,6 +4,7 @@
 // POST /api/auth/otp?action=hook   - Supabase "Send Email" Auth Hook receiver
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 // Disable body parser so the hook action can verify Supabase's HMAC signature
 module.exports.config = { api: { bodyParser: false } };
@@ -95,16 +96,36 @@ const EMAIL_TEMPLATES = {
 };
 
 async function sendOtpEmail(email, code, lang) {
-    const resendKey = process.env.RESEND_API_KEY;
-    if (!resendKey) throw new Error('RESEND_API_KEY not configured');
     const template = EMAIL_TEMPLATES[lang] || EMAIL_TEMPLATES['en-US'];
-    const from = process.env.RESEND_FROM_EMAIL || 'LoamLab <noreply@loamlab.studio>';
-    const resp = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to: email, subject: template.subject, html: template.html(code) })
-    });
-    if (!resp.ok) throw new Error(`Resend ${resp.status}: ${await resp.text()}`);
+
+    // Resend (preferred)
+    if (process.env.RESEND_API_KEY) {
+        const from = process.env.RESEND_FROM_EMAIL || 'LoamLab <noreply@loamlab.studio>';
+        const resp = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from, to: email, subject: template.subject, html: template.html(code) })
+        });
+        if (!resp.ok) throw new Error(`Resend ${resp.status}: ${await resp.text()}`);
+        return;
+    }
+
+    // Gmail fallback via nodemailer
+    if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
+        });
+        await transporter.sendMail({
+            from: `LoamLab <${process.env.GMAIL_USER}>`,
+            to: email,
+            subject: template.subject,
+            html: template.html(code)
+        });
+        return;
+    }
+
+    throw new Error('No email provider configured (need RESEND_API_KEY or GMAIL_USER+GMAIL_APP_PASSWORD)');
 }
 
 module.exports = async function handler(req, res) {

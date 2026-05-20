@@ -23,10 +23,10 @@ Write-Host "===== 發佈 v$version =====" -ForegroundColor Cyan
 
 # Step 1: GitHub Release
 Write-Host "[1/2] 建立 GitHub Release v$version ..." -ForegroundColor Yellow
-$existCheck = gh release view "v$version" --repo "loamlabstudio/loamlab-releases" 2>&1
+gh release view "v$version" --repo "loamlabstudio/loamlab-releases" | Out-Null
 if ($LASTEXITCODE -eq 0) {
     Write-Host "      已存在，刪除後重建 ..." -ForegroundColor Yellow
-    gh release delete "v$version" --repo "loamlabstudio/loamlab-releases" --yes 2>&1
+    gh release delete "v$version" --repo "loamlabstudio/loamlab-releases" --yes | Out-Null
 }
 gh release create "v$version" --repo "loamlabstudio/loamlab-releases" --title "LoamLab v$version" --notes $notes $RBZ
 if ($LASTEXITCODE -ne 0) { Write-Host "[ABORT] GitHub Release 失敗" -ForegroundColor Red; exit 1 }

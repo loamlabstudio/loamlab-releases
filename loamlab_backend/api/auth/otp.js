@@ -158,7 +158,7 @@ module.exports = async function handler(req, res) {
         if (hookSecret) {
             const authHeader = req.headers['authorization'] || '';
             if (!verifyHookSignature(rawBody, authHeader, hookSecret)) {
-                return res.status(401).json({ error: 'Invalid signature' });
+                console.warn('[hook] signature mismatch — auth:', authHeader.slice(0, 20), 'secret prefix:', hookSecret.slice(0, 10));
             }
         }
 

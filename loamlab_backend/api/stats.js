@@ -292,6 +292,18 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
+    // --- Lead Capture（公開端點，無需 ADMIN_KEY）---
+    if (action === 'capture_email' && req.method === 'POST') {
+        const { email } = req.body || {};
+        if (!email || !email.includes('@')) return res.status(400).json({ code: -1, msg: 'Invalid email' });
+        await supabase.from('transactions').insert({
+            user_email: email, amount: 0,
+            transaction_type: 'LEAD_CAPTURE',
+            metadata: { source: 'mobile_hero_cta', user_agent: req.headers['user-agent'] }
+        });
+        return res.status(200).json({ code: 0, msg: 'Saved' });
+    }
+
     // --- Admin 端點（需要 ADMIN_KEY）---
     const adminKeyHeader = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     if (!adminKeyHeader || adminKeyHeader !== process.env.ADMIN_KEY) {

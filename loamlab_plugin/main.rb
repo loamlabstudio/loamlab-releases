@@ -101,6 +101,9 @@ module LoamLab
       valid_keys = ro.keys
       keys_hash.each do |k, v|
         begin
+          if ['AmbientOcclusionDistance', 'AmbientOcclusionIntensity'].include?(k) && v.is_a?(Numeric)
+            v = v.to_f
+          end
           ro[k] = v if valid_keys.include?(k)
         rescue => e
           LoamLab.log "[LoamLab] render key #{k}: #{e.message}"
@@ -153,7 +156,14 @@ module LoamLab
                  'DrawDepthQue', 'AmbientOcclusion', 'AmbientOcclusionDistance', 'AmbientOcclusionIntensity',
                  'DisplayInstanceAxes', 'DisplaySketchAxes']
       ro_keys.each do |k|
-        begin; ro[k] = force_style[k] if force_style.key?(k) && ro.keys.include?(k); rescue => e; end
+        next unless force_style.key?(k) && ro.keys.include?(k)
+        begin
+          val = force_style[k]
+          val = val.to_f if ['AmbientOcclusionDistance', 'AmbientOcclusionIntensity'].include?(k) && val.is_a?(Numeric)
+          ro[k] = val
+        rescue => e
+          LoamLab.log "[LoamLab] render_force_style #{k}: #{e.message}"
+        end
       end
       unless skip_shadow
         # shadow_info 的 key（DisplayShadows, Light, Dark, UseSunForAllShading）

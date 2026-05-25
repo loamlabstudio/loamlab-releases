@@ -295,40 +295,87 @@ export default async function handler(req, res) {
 
     // --- Lead Capture（公開端點，無需 ADMIN_KEY）---
     if (action === 'capture_email' && req.method === 'POST') {
-        const { email } = req.body || {};
+        const { email, lang } = req.body || {};
         if (!email || !email.includes('@')) return res.status(400).json({ code: -1, msg: 'Invalid email' });
         await supabase.from('transactions').insert({
             user_email: email, amount: 0,
             transaction_type: 'LEAD_CAPTURE',
-            metadata: { source: 'mobile_hero_cta', user_agent: req.headers['user-agent'] }
+            metadata: { source: 'mobile_hero_cta', lang: lang || 'us', user_agent: req.headers['user-agent'] }
         });
         if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
             try {
+                const DL_URL = 'https://github.com/loamlabstudio/loamlab-releases/releases/latest/download/loamlab_plugin.rbz';
+                const footer = `<p style="font-size:12px;color:#64748b;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · SketchUp AI Renderer<br>If you did not request this email, please ignore it.</p>`;
+                const DOWNLOAD_TEMPLATES = {
+                    tw: {
+                        subject: '🚀 您的 LoamLab SketchUp AI 渲染插件下載連結',
+                        heading: '🏠 LoamLab AI 渲染插件',
+                        intro: '感謝您的興趣！點擊下方按鈕下載插件：',
+                        btnText: '下載插件 →',
+                        stepsTitle: '安裝步驟',
+                        steps: ['下載 .rbz 檔案至電腦', '開啟 SketchUp → 偏好設定 → 擴充功能 → 安裝擴充功能', '選擇剛下載的 .rbz 檔案', '重啟 SketchUp，在擴充功能選單找到 LoamLab'],
+                    },
+                    us: {
+                        subject: '🚀 Your LoamLab SketchUp AI Renderer Download Link',
+                        heading: '🏠 LoamLab AI Renderer',
+                        intro: 'Thanks for your interest! Click the button below to download the plugin:',
+                        btnText: 'Download Plugin →',
+                        stepsTitle: 'Installation Steps',
+                        steps: ['Download the .rbz file to your computer', 'Open SketchUp → Preferences → Extensions → Install Extension', 'Select the downloaded .rbz file', 'Restart SketchUp and find LoamLab in the Extensions menu'],
+                    },
+                    cn: {
+                        subject: '🚀 您的 LoamLab SketchUp AI 渲染插件下载链接',
+                        heading: '🏠 LoamLab AI 渲染插件',
+                        intro: '感谢您的关注！点击下方按钮下载插件：',
+                        btnText: '下载插件 →',
+                        stepsTitle: '安装步骤',
+                        steps: ['下载 .rbz 文件至电脑', '打开 SketchUp → 偏好设置 → 扩展程序 → 安装扩展程序', '选择刚下载的 .rbz 文件', '重启 SketchUp，在扩展程序菜单找到 LoamLab'],
+                    },
+                    es: {
+                        subject: '🚀 Tu enlace de descarga del plugin LoamLab para SketchUp',
+                        heading: '🏠 LoamLab AI Renderer',
+                        intro: '¡Gracias por tu interés! Haz clic para descargar el plugin:',
+                        btnText: 'Descargar Plugin →',
+                        stepsTitle: 'Pasos de instalación',
+                        steps: ['Descarga el archivo .rbz en tu ordenador', 'Abre SketchUp → Preferencias → Extensiones → Instalar extensión', 'Selecciona el archivo .rbz descargado', 'Reinicia SketchUp y busca LoamLab en el menú de extensiones'],
+                    },
+                    br: {
+                        subject: '🚀 Seu link de download do plugin LoamLab para SketchUp',
+                        heading: '🏠 LoamLab AI Renderer',
+                        intro: 'Obrigado pelo interesse! Clique abaixo para baixar o plugin:',
+                        btnText: 'Baixar Plugin →',
+                        stepsTitle: 'Passos de instalação',
+                        steps: ['Baixe o arquivo .rbz no seu computador', 'Abra o SketchUp → Preferências → Extensões → Instalar Extensão', 'Selecione o arquivo .rbz baixado', 'Reinicie o SketchUp e encontre o LoamLab no menu de extensões'],
+                    },
+                    jp: {
+                        subject: '🚀 LoamLab SketchUp AIレンダリングプラグインのダウンロードリンク',
+                        heading: '🏠 LoamLab AI レンダラー',
+                        intro: 'ご興味いただきありがとうございます！下のボタンからプラグインをダウンロードしてください：',
+                        btnText: 'プラグインをダウンロード →',
+                        stepsTitle: 'インストール手順',
+                        steps: ['.rbzファイルをパソコンにダウンロード', 'SketchUpを開く → 環境設定 → 拡張機能 → 拡張機能をインストール', 'ダウンロードした.rbzファイルを選択', 'SketchUpを再起動し、拡張機能メニューでLoamLabを探す'],
+                    },
+                };
+                const tpl = DOWNLOAD_TEMPLATES[lang] || DOWNLOAD_TEMPLATES['us'];
+                const stepsHtml = tpl.steps.map(s => `<li>${s}</li>`).join('');
+                const html = `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
+  <div style="font-size:22px;font-weight:700;color:#a78bfa;margin-bottom:16px">${tpl.heading}</div>
+  <p style="margin:0 0 20px">${tpl.intro}</p>
+  <div style="margin:28px 0"><a href="${DL_URL}" style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">${tpl.btnText}</a></div>
+  <div style="background:#1e293b;border-radius:10px;padding:16px 20px;margin:20px 0">
+    <div style="color:#a78bfa;font-weight:700;font-size:14px;margin-bottom:8px">${tpl.stepsTitle}</div>
+    <ol style="padding-left:20px;line-height:2;margin:0;color:#cbd5e1;font-size:14px">${stepsHtml}</ol>
+  </div>
+  ${footer}
+</div>`;
                 const transporter = nodemailer.createTransport({
                     service: 'gmail',
                     auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
                 });
-                const html = `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
-  <div style="font-size:22px;font-weight:700;color:#a78bfa;margin-bottom:16px">🏠 LoamLab AI 渲染插件</div>
-  <p style="margin:0 0 20px">感謝您的興趣！點擊下方按鈕下載 LoamLab SketchUp AI 渲染插件：</p>
-  <div style="margin:28px 0">
-    <a href="https://github.com/loamlabstudio/loamlab-releases/releases/latest/download/loamlab_plugin.rbz" style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">下載插件 →</a>
-  </div>
-  <div style="background:#1e293b;border-radius:10px;padding:16px 20px;margin:20px 0">
-    <div style="color:#a78bfa;font-weight:700;font-size:14px;margin-bottom:8px">安裝步驟</div>
-    <ol style="padding-left:20px;line-height:2;margin:0;color:#cbd5e1;font-size:14px">
-      <li>下載 .rbz 檔案至電腦</li>
-      <li>開啟 SketchUp → 偏好設定 → 擴充功能 → 安裝擴充功能</li>
-      <li>選擇剛下載的 .rbz 檔案</li>
-      <li>重啟 SketchUp，在擴充功能選單找到 LoamLab</li>
-    </ol>
-  </div>
-  <p style="font-size:12px;color:#64748b;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · 土窟設計 AI 渲染插件<br>如不希望收到此類郵件，請回覆此郵件告知我們。</p>
-</div>`;
                 await transporter.sendMail({
                     from: `LoamLab <${process.env.GMAIL_USER}>`,
                     to: email,
-                    subject: '🚀 您的 LoamLab SketchUp AI 渲染插件下載連結',
+                    subject: tpl.subject,
                     html
                 });
             } catch (_) {}

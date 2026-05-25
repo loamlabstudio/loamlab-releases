@@ -661,7 +661,7 @@
                 await fetch('/api/stats?action=capture_email', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
+                    body: JSON.stringify({ email, lang: currentLang })
                 });
             } catch(_) {}
             form.style.display    = 'none';

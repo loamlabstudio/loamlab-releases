@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import nodemailer from 'nodemailer';
 
 // ── 測試帳號過濾 ──────────────────────────────────────────────────────────────
 // 排除 testsprite_*、*@example.com、*@loamlab.test* 以及指定的測試帳號
@@ -301,6 +302,37 @@ export default async function handler(req, res) {
             transaction_type: 'LEAD_CAPTURE',
             metadata: { source: 'mobile_hero_cta', user_agent: req.headers['user-agent'] }
         });
+        if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+            try {
+                const transporter = nodemailer.createTransport({
+                    service: 'gmail',
+                    auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
+                });
+                const html = `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
+  <div style="font-size:22px;font-weight:700;color:#a78bfa;margin-bottom:16px">🏠 LoamLab AI 渲染插件</div>
+  <p style="margin:0 0 20px">感謝您的興趣！點擊下方按鈕下載 LoamLab SketchUp AI 渲染插件：</p>
+  <div style="margin:28px 0">
+    <a href="https://github.com/loamlabstudio/loamlab-releases/releases/latest/download/loamlab_plugin.rbz" style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">下載插件 →</a>
+  </div>
+  <div style="background:#1e293b;border-radius:10px;padding:16px 20px;margin:20px 0">
+    <div style="color:#a78bfa;font-weight:700;font-size:14px;margin-bottom:8px">安裝步驟</div>
+    <ol style="padding-left:20px;line-height:2;margin:0;color:#cbd5e1;font-size:14px">
+      <li>下載 .rbz 檔案至電腦</li>
+      <li>開啟 SketchUp → 偏好設定 → 擴充功能 → 安裝擴充功能</li>
+      <li>選擇剛下載的 .rbz 檔案</li>
+      <li>重啟 SketchUp，在擴充功能選單找到 LoamLab</li>
+    </ol>
+  </div>
+  <p style="font-size:12px;color:#64748b;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · 土窟設計 AI 渲染插件<br>如不希望收到此類郵件，請回覆此郵件告知我們。</p>
+</div>`;
+                await transporter.sendMail({
+                    from: `LoamLab <${process.env.GMAIL_USER}>`,
+                    to: email,
+                    subject: '🚀 您的 LoamLab SketchUp AI 渲染插件下載連結',
+                    html
+                });
+            } catch (_) {}
+        }
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 

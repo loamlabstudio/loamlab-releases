@@ -223,6 +223,9 @@
          */
         dismiss: function (permanent, markWhatsNew) {
             var modal = document.getElementById('tutorial-modal');
+            var cb = document.getElementById('tut-no-show-cb');
+            var isPermanent = permanent || (cb && cb.checked);
+
             if (modal) {
                 var box = modal.querySelector('.tut-modal-box');
                 if (box) {
@@ -232,8 +235,11 @@
                     modal.classList.add('hidden');
                 }
             }
-            if (permanent && _activeToolId) {
-                try { localStorage.setItem(_storageKey(_activeToolId), 'done'); } catch (_) {}
+            if (isPermanent) {
+                try { 
+                    if (_activeToolId) localStorage.setItem(_storageKey(_activeToolId), 'done');
+                    localStorage.setItem('loamlab_tut_opted_out', '1'); 
+                } catch (_) {}
             } else if (_activeToolId) {
                 try { localStorage.setItem(_storageKey(_activeToolId), 'skip'); } catch (_) {}
             }
@@ -273,7 +279,7 @@
                 '<button onclick="TutorialSystem.nextStep()" class="tut-btn-next text-[12px] px-4 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-300 hover:bg-amber-500/30 transition-colors font-semibold"></button>' +
             '</div>' +
             '<label class="flex items-center gap-2 cursor-pointer select-none">' +
-                '<input type="checkbox" id="tut-no-show-cb" class="accent-amber-400" onchange="if(this.checked) TutorialSystem.dismiss(true,true)">' +
+                '<input type="checkbox" id="tut-no-show-cb" class="accent-amber-400">' +
                 '<span class="text-[11px] text-white/30">' + (_t('tut_no_show') || '\u4e0d\u518d\u986f\u793a\u6b64\u5de5\u5177\u7684\u5f15\u5c0e') + '</span>' +
             '</label>';
     }

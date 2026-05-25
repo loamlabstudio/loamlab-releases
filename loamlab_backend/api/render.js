@@ -785,26 +785,8 @@ async function _handleRender(req, res) {
                 };
                 const jsonPrompt = {};
                 const projectType = translatedValues['project_type'] || '';
-                jsonPrompt['Project'] = `SU Screenshot to Realistic Photography${projectType ? ' - ' + projectType : ''}${translatedUserPrompt ? ' - ' + translatedUserPrompt : ''}`;
 
-                Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
-                    const section = {};
-                    t1Nodes.filter(n => n.group === group).forEach(node => {
-                        const val = translatedValues[node.id];
-                        if (val) section[node.labels?.['en-US'] || node.id] = val;
-                    });
-                    // 3b. 自訂材質節點與 Material Control 同批次建構，確保 JSON 結構一致
-                    if (group === 'materials' && userMatNodes.length > 0) {
-                        userMatNodes.forEach((m, i) => {
-                            const key = translatedValues[`__umat_${i}_label`] || m.label;
-                            const val = translatedValues[`__umat_${i}_value`] || m.value;
-                            if (key && val?.trim()) section[key] = val.trim();
-                        });
-                    }
-                    if (Object.keys(section).length > 0) jsonPrompt[title] = section;
-                });
-
-                // 4. 批量出圖風格一致性附加（巢狀 JSON 物件，避免字串化）
+                // 3b. 批量出圖：Image Roles / Style Consistency 前置，最大化模型約束力
                 if (styleRefUrl) {
                     const bn = batchNodes;
                     const d = defaultBatchNodes;
@@ -819,6 +801,25 @@ async function _handleRender(req, res) {
                         [bn.never_key || d.never_key]: bn.never || d.never
                     };
                 }
+
+                jsonPrompt['Project'] = `SU Screenshot to Realistic Photography${projectType ? ' - ' + projectType : ''}${translatedUserPrompt ? ' - ' + translatedUserPrompt : ''}`;
+
+                Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
+                    const section = {};
+                    t1Nodes.filter(n => n.group === group).forEach(node => {
+                        const val = translatedValues[node.id];
+                        if (val) section[node.labels?.['en-US'] || node.id] = val;
+                    });
+                    // 自訂材質節點與 Material Control 同批次建構
+                    if (group === 'materials' && userMatNodes.length > 0) {
+                        userMatNodes.forEach((m, i) => {
+                            const key = translatedValues[`__umat_${i}_label`] || m.label;
+                            const val = translatedValues[`__umat_${i}_value`] || m.value;
+                            if (key && val?.trim()) section[key] = val.trim();
+                        });
+                    }
+                    if (Object.keys(section).length > 0) jsonPrompt[title] = section;
+                });
 
                 finalPrompt = JSON.stringify(jsonPrompt, null, 2);
             } else {

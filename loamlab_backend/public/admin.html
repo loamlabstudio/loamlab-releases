@@ -427,10 +427,16 @@
       <div class="w-72 shrink-0 sticky top-4 self-start">
         <div class="bg-black/60 border border-white/10 rounded-xl p-3">
           <div class="flex justify-between items-center mb-2">
-            <span class="text-[10px] text-gray-500 uppercase tracking-wider">Prompt Preview — 最終送出 JSON</span>
+            <span class="text-[10px] text-gray-500 uppercase tracking-wider">Prompt Preview — 有參考圖</span>
             <button onclick="previewPrompt()" class="text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors">↻ 重整</button>
           </div>
           <pre id="prompt-preview-output" class="text-[10px] text-green-300 font-mono whitespace-pre-wrap leading-relaxed overflow-auto max-h-[70vh]">點「↻ 重整」查看組裝結果</pre>
+        </div>
+        <div class="bg-black/60 border border-white/10 rounded-xl p-3 mt-3">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-[10px] text-gray-500 uppercase tracking-wider">Prompt Preview — 無參考圖</span>
+          </div>
+          <pre id="prompt-preview-no-ref" class="text-[10px] text-yellow-200 font-mono whitespace-pre-wrap leading-relaxed overflow-auto max-h-[70vh]">點「↻ 重整」查看組裝結果</pre>
         </div>
       </div>
     </div>
@@ -1144,18 +1150,18 @@ async function loadPrompts() {
     document.getElementById('prompt-t1').value = (j.prompts && j.prompts.TOOL_1) ? j.prompts.TOOL_1 : defaultP1;
     const bn = (j.prompts && j.prompts.TOOL_1_BATCH_NODES) ? JSON.parse(j.prompts.TOOL_1_BATCH_NODES) : defaultBatchNodes;
     const d = defaultBatchNodes;
-    document.getElementById('batch-img1-key').value = bn.img1_key || d.img1_key;
-    document.getElementById('batch-img1').value = bn.img1 || d.img1;
-    document.getElementById('batch-img2-key').value = bn.img2_key || d.img2_key;
-    document.getElementById('batch-img2').value = bn.img2 || d.img2;
-    document.getElementById('batch-forbidden-key').value = bn.forbidden_key || d.forbidden_key;
-    document.getElementById('batch-forbidden').value = bn.forbidden || d.forbidden;
-    document.getElementById('batch-apply-key').value = bn.apply_key || d.apply_key;
-    document.getElementById('batch-apply').value = bn.apply || d.apply;
-    document.getElementById('batch-output-must-be-key').value = bn.output_must_be_key || d.output_must_be_key;
-    document.getElementById('batch-output-must-be').value = bn.output_must_be || d.output_must_be;
-    document.getElementById('batch-never-key').value = bn.never_key || d.never_key;
-    document.getElementById('batch-never').value = bn.never || d.never;
+    document.getElementById('batch-img1-key').value = bn.img1_key !== undefined ? bn.img1_key : d.img1_key;
+    document.getElementById('batch-img1').value = bn.img1 !== undefined ? bn.img1 : d.img1;
+    document.getElementById('batch-img2-key').value = bn.img2_key !== undefined ? bn.img2_key : d.img2_key;
+    document.getElementById('batch-img2').value = bn.img2 !== undefined ? bn.img2 : d.img2;
+    document.getElementById('batch-forbidden-key').value = bn.forbidden_key !== undefined ? bn.forbidden_key : d.forbidden_key;
+    document.getElementById('batch-forbidden').value = bn.forbidden !== undefined ? bn.forbidden : d.forbidden;
+    document.getElementById('batch-apply-key').value = bn.apply_key !== undefined ? bn.apply_key : d.apply_key;
+    document.getElementById('batch-apply').value = bn.apply !== undefined ? bn.apply : d.apply;
+    document.getElementById('batch-output-must-be-key').value = bn.output_must_be_key !== undefined ? bn.output_must_be_key : d.output_must_be_key;
+    document.getElementById('batch-output-must-be').value = bn.output_must_be !== undefined ? bn.output_must_be : d.output_must_be;
+    document.getElementById('batch-never-key').value = bn.never_key !== undefined ? bn.never_key : d.never_key;
+    document.getElementById('batch-never').value = bn.never !== undefined ? bn.never : d.never;
     document.getElementById('prompt-t2').value = (j.prompts && j.prompts.TOOL_2) ? j.prompts.TOOL_2 : defaultP2;
     document.getElementById('prompt-t3').value = (j.prompts && j.prompts.TOOL_3) ? j.prompts.TOOL_3 : defaultP3;
   } catch(e) { console.error('Failed to load prompts:', e); }
@@ -2398,27 +2404,8 @@ function previewPrompt() {
   };
 
   const jsonPrompt = {};
-  const projectTypeNode = t1NodesData.find(n => n.id === 'project_type');
-  const projectTypeVal = projectTypeNode ? (String(projectTypeNode.default || '').trim()) : '';
-  jsonPrompt['Project'] = `SU Screenshot to Realistic Photography${projectTypeVal ? ' - ' + projectTypeVal : ''}`;
 
-  const nodeValues = {};
-  t1NodesData.forEach(node => {
-    if (node.id === 'project_type') return;
-    const val = node.system ? (node.value || '') : (String(node.default || ''));
-    if (val.trim()) nodeValues[node.id] = val;
-  });
-
-  Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
-    const section = {};
-    t1NodesData.filter(n => n.group === group).forEach(node => {
-      const val = nodeValues[node.id];
-      if (val) section[node.labels?.['en-US'] || node.id] = val;
-    });
-    if (Object.keys(section).length > 0) jsonPrompt[title] = section;
-  });
-
-  // 批量出圖 Batch 節點：有風格參考圖時 render.js 自動附加，此處預覽固定展示
+  // 批量出圖 Batch 節點：前置，最大化模型約束力（鏡像 render.js 順序）
   const _img1k = document.getElementById('batch-img1-key')?.value?.trim() || 'Image 1 [PRIMARY OUTPUT BASIS]';
   const _img1 = document.getElementById('batch-img1')?.value?.trim();
   const _img2k = document.getElementById('batch-img2-key')?.value?.trim() || 'Image 2 [STYLE EXTRACTION ONLY]';
@@ -2442,7 +2429,38 @@ function previewPrompt() {
   if (_never) _styleConsistency[_nevk] = _never;
   if (Object.keys(_styleConsistency).length) jsonPrompt['Style Consistency'] = _styleConsistency;
 
+  const projectTypeNode = t1NodesData.find(n => n.id === 'project_type');
+  const projectTypeVal = projectTypeNode ? (String(projectTypeNode.default || '').trim()) : '';
+  jsonPrompt['Project'] = `SU Screenshot to Realistic Photography${projectTypeVal ? ' - ' + projectTypeVal : ''}`;
+
+  const nodeValues = {};
+  t1NodesData.forEach(node => {
+    if (node.id === 'project_type') return;
+    const val = node.system ? (node.value || '') : (String(node.default || ''));
+    if (val.trim()) nodeValues[node.id] = val;
+  });
+
+  Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
+    const section = {};
+    t1NodesData.filter(n => n.group === group).forEach(node => {
+      const val = nodeValues[node.id];
+      if (val) section[node.labels?.['en-US'] || node.id] = val;
+    });
+    if (Object.keys(section).length > 0) jsonPrompt[title] = section;
+  });
+
   output.textContent = JSON.stringify(jsonPrompt, null, 2);
+
+  // 第二預覽：無參考圖版本（不含 Image Roles / Style Consistency）
+  const noRefOutput = document.getElementById('prompt-preview-no-ref');
+  if (noRefOutput) {
+    const noRefPrompt = {};
+    noRefPrompt['Project'] = jsonPrompt['Project'];
+    Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
+      if (jsonPrompt[title]) noRefPrompt[title] = jsonPrompt[title];
+    });
+    noRefOutput.textContent = JSON.stringify(noRefPrompt, null, 2);
+  }
 }
 
 function renderDashboard(data) {

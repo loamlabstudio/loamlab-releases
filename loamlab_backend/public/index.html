@@ -750,8 +750,20 @@
         window.addEventListener('mousemove', handleMove); window.addEventListener('touchmove', handleMove);
 
         // --- 3. 動態六國語言與貨幣換算 (US/TW/CN/ES/BR/JP) ---
-        // 預設語言為英文 US
-        let currentLang = 'us'; 
+        function detectLang() {
+            const langs = (navigator.languages && navigator.languages.length)
+                ? navigator.languages : [navigator.language || 'en'];
+            for (const l of langs) {
+                const lc = l.toLowerCase();
+                if (lc.startsWith('zh-tw') || lc.startsWith('zh-hant') || lc === 'zh-hk' || lc === 'zh-mo') return 'tw';
+                if (lc.startsWith('zh')) return 'cn';
+                if (lc.startsWith('ja')) return 'jp';
+                if (lc.startsWith('es')) return 'es';
+                if (lc.startsWith('pt')) return 'br';
+            }
+            return 'us';
+        }
+        let currentLang = detectLang();
         
         // Features list object
         const FeatText = {
@@ -1320,7 +1332,8 @@
 
         // 初始化
         window.addEventListener('DOMContentLoaded', () => {
-            changeLang(currentLang); // 強制用 default (us) 刷新整個字典（包含 renderPricing）
+            changeLang(currentLang);
+            document.getElementById('langSelect').value = currentLang;
             renderFeatures();
             renderFAQ();
             loadAnnouncement();

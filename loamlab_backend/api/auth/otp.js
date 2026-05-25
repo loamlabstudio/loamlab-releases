@@ -202,6 +202,11 @@ module.exports = async function handler(req, res) {
         if (error) return res.status(400).json({ code: -1, msg: 'Invalid or expired code' });
         if (!data.user) return res.status(400).json({ code: -1, msg: 'Verification failed' });
 
+        const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress;
+        if (clientIp) {
+            await admin.from('users').update({ last_login_ip: clientIp }).eq('email', email);
+        }
+
         return res.status(200).json({ code: 0, email: data.user.email, session: data.session });
     }
 

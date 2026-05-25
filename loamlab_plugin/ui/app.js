@@ -3782,7 +3782,7 @@ function startOAuthFlow() {
     const token = (document.getElementById('login-code-input') || document.createElement('div')).value.trim();
     const btn = document.getElementById('btn-verify-otp');
     
-    if (!token || token.length < 8) return;
+    if (!token || token.length < 6) return;
 
     btn.disabled = true;
     btn.textContent = 'VERIFYING...';

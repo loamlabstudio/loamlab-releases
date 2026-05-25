@@ -156,7 +156,7 @@ export default async function handler(req, res) {
         const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
         if (clientIp !== 'unknown') {
             const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', email).maybeSingle();
-            if (!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp) {
+            if (userRow?.last_login_ip && userRow.last_login_ip !== clientIp) {
                 return res.status(401).json({ code: -1, msg: '登入已過期或網路變更，請重新登入' });
             }
         }

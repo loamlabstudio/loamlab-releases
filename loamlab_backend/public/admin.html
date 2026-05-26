@@ -242,6 +242,55 @@
     </div>
   </div>
 
+  <!-- 洞見郵件範本預覽 -->
+  <div class="card mb-5 border border-indigo-600/30 bg-[#13102a]/40">
+    <div class="flex items-center justify-between mb-4">
+      <div class="text-sm font-semibold text-white flex items-center gap-2">
+        <span class="text-indigo-400">✉️</span> 洞見郵件範本
+      </div>
+      <div class="text-xs text-gray-500">自動洞見 → 發郵件 按鈕套用以下範本</div>
+    </div>
+    <div class="grid grid-cols-1 gap-3">
+
+      <!-- onboarding -->
+      <div style="border:1px solid #a78bfa33;background:#a78bfa08;border-radius:10px;padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:700;color:#a78bfa">Onboarding 激活</span>
+          <span style="font-size:10px;color:#475569;background:#1e293b;border-radius:4px;padding:1px 6px">onboarding_stuck</span>
+        </div>
+        <div style="font-size:11px;color:#c4b5fd;margin-bottom:2px">🇹🇼 🏠 你的 LoamLab 渲染點數還在等你</div>
+        <div style="font-size:11px;color:#a5b4fc;margin-bottom:8px">🇺🇸 🏠 Your LoamLab render credits are waiting</div>
+        <div style="font-size:10px;color:#64748b">觸發條件：已註冊 3+ 天、從未渲染、仍有剩餘點數</div>
+      </div>
+
+      <!-- reengagement -->
+      <div style="border:1px solid #f9731633;background:#f9731608;border-radius:10px;padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:700;color:#f97316">Re-engagement 召回</span>
+          <span style="font-size:10px;color:#475569;background:#1e293b;border-radius:4px;padding:1px 6px">churn_risk · second_render_missing</span>
+        </div>
+        <div style="font-size:11px;color:#fdba74;margin-bottom:2px">🇹🇼 🎁 好久不見！回來試試新功能</div>
+        <div style="font-size:11px;color:#fb923c;margin-bottom:8px">🇺🇸 🎁 Miss you! Come back and render something amazing</div>
+        <div style="font-size:10px;color:#64748b">觸發條件：7 天內未渲染且點數偏低，或首次渲染後超過 7 天未回訪</div>
+      </div>
+
+      <!-- upgrade -->
+      <div style="border:1px solid #22c55e33;background:#22c55e08;border-radius:10px;padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:700;color:#22c55e">Upgrade 轉化</span>
+          <span style="font-size:10px;color:#475569;background:#1e293b;border-radius:4px;padding:1px 6px">upgrade_candidate · high_value_no_sub · kol_candidate</span>
+        </div>
+        <div style="font-size:11px;color:#86efac;margin-bottom:2px">🇹🇼 ⭐ 訂閱 LoamLab，每月無限渲染</div>
+        <div style="font-size:11px;color:#4ade80;margin-bottom:8px">🇺🇸 ⭐ Unlock unlimited renders with LoamLab</div>
+        <div style="font-size:10px;color:#64748b">觸發條件：碰過 Paywall 2+ 次未付費、累積點數 &gt;100、或高評分活躍用戶</div>
+      </div>
+
+    </div>
+    <div class="mt-3 pt-3 border-t border-white/8 text-xs text-gray-600">
+      語言自動依用戶 <code>locale</code> 欄位派送（en-* → English，其餘 → 繁中）。同一範本 7 天內不重複發送。
+    </div>
+  </div>
+
   </div><!-- /atab-content -->
 
   <!-- ── Tab: Prompt 管理 ── -->
@@ -2760,9 +2809,30 @@ async function executeInsightPoints(emails, amount) {
   } catch(e) { showToast('補點錯誤：' + e.message, 'error'); }
 }
 
-// ── 洞見動作：發郵件 ─────────────────────────────────────────────────────────
-async function executeInsightEmail(emails, template) {
+// ── 洞見動作：發郵件（帶審核 Modal）────────────────────────────────────────
+const TPL_META = {
+  onboarding:    { label: 'Onboarding 激活',   color: '#a78bfa', subjectZh: '🏠 你的 LoamLab 渲染點數還在等你',      subjectEn: '🏠 Your LoamLab render credits are waiting' },
+  reengagement:  { label: 'Re-engagement 召回', color: '#f97316', subjectZh: '🎁 好久不見！回來試試新功能',           subjectEn: '🎁 Miss you! Come back and render something amazing' },
+  upgrade:       { label: 'Upgrade 轉化',       color: '#22c55e', subjectZh: '⭐ 訂閱 LoamLab，每月無限渲染',        subjectEn: '⭐ Unlock unlimited renders with LoamLab' },
+};
+
+function executeInsightEmail(emails, template) {
   if (!emails || !emails.length) { showToast('沒有可發送的 Email', 'error'); return; }
+  const meta = TPL_META[template] || { label: template, color: '#64748b', subjectZh: template, subjectEn: template };
+  const sample = emails.slice(0, 5).join('<br>') + (emails.length > 5 ? `<br><span style="color:#64748b">...等共 ${emails.length} 位</span>` : '');
+
+  document.getElementById('email-modal-tpl-label').textContent = meta.label;
+  document.getElementById('email-modal-tpl-label').style.color  = meta.color;
+  document.getElementById('email-modal-count').textContent = emails.length + ' 位收件人';
+  document.getElementById('email-modal-subject-zh').textContent = meta.subjectZh;
+  document.getElementById('email-modal-subject-en').textContent = meta.subjectEn;
+  document.getElementById('email-modal-sample').innerHTML = sample;
+  document.getElementById('email-modal-confirm').onclick = () => _doSendInsightEmail(emails, template);
+  document.getElementById('email-send-modal').classList.remove('hidden');
+}
+
+async function _doSendInsightEmail(emails, template) {
+  document.getElementById('email-send-modal').classList.add('hidden');
   showToast('發送中（' + emails.length + ' 封）...', 'info');
   try {
     const r = await fetch(API_BASE + '/api/stats?action=notify_users', {
@@ -2771,8 +2841,10 @@ async function executeInsightEmail(emails, template) {
       body: JSON.stringify({ emails, template }),
     });
     const j = await r.json();
-    if (j.code === 0) showToast('已發送 ' + j.sent + ' 封郵件 ✓', 'success');
-    else showToast('發送失敗：' + j.msg, 'error');
+    if (j.code === 0) {
+      const msg = '已發送 ' + j.sent + ' 封' + (j.skipped ? '（略過重複 ' + j.skipped + ' 封）' : '') + ' ✓';
+      showToast(msg, 'success');
+    } else { showToast('發送失敗：' + j.msg, 'error'); }
   } catch(e) { showToast('發送錯誤：' + e.message, 'error'); }
 }
 
@@ -3101,5 +3173,46 @@ switchAdminTab = function(tab) {
   }
 };
 </script>
+<!-- ── 發信審核 Modal ── -->
+<div id="email-send-modal" class="hidden" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px)" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div style="background:#0f172a;border:1px solid #312e81;border-radius:16px;padding:28px 32px;max-width:460px;width:90%;box-shadow:0 24px 64px #000a">
+    <div style="font-size:15px;font-weight:700;color:#e2e8f0;margin-bottom:18px;display:flex;align-items:center;gap:8px">
+      📧 發信審核
+    </div>
+
+    <div style="background:#1e293b;border-radius:10px;padding:14px 16px;margin-bottom:14px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:6px">範本</div>
+      <div id="email-modal-tpl-label" style="font-size:13px;font-weight:700"></div>
+    </div>
+
+    <div style="background:#1e293b;border-radius:10px;padding:14px 16px;margin-bottom:14px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:6px">收件人數</div>
+      <div id="email-modal-count" style="font-size:18px;font-weight:700;color:#fff"></div>
+      <div style="font-size:10px;color:#475569;margin-top:4px">後端自動略過 7 天內已收過相同範本的收件人</div>
+    </div>
+
+    <div style="background:#1e293b;border-radius:10px;padding:14px 16px;margin-bottom:14px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:8px">信件主旨預覽</div>
+      <div style="font-size:11px;color:#a5b4fc;margin-bottom:4px">🇹🇼 <span id="email-modal-subject-zh"></span></div>
+      <div style="font-size:11px;color:#93c5fd">🇺🇸 <span id="email-modal-subject-en"></span></div>
+    </div>
+
+    <div style="background:#1e293b;border-radius:10px;padding:14px 16px;margin-bottom:20px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:6px">前 5 位收件人</div>
+      <div id="email-modal-sample" style="font-size:11px;font-family:monospace;color:#94a3b8;line-height:1.8"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="document.getElementById('email-send-modal').classList.add('hidden')"
+        style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer">
+        取消
+      </button>
+      <button id="email-modal-confirm"
+        style="background:#4f46e5;color:#fff;border:none;border-radius:8px;padding:8px 24px;font-size:13px;font-weight:700;cursor:pointer">
+        確認發送
+      </button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

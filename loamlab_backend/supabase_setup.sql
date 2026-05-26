@@ -263,3 +263,23 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS dodo_discount_code TEXT DEFAUL
 -- ==============================================================================
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_partner BOOLEAN DEFAULT false;
 CREATE INDEX IF NOT EXISTS idx_users_is_partner ON public.users(is_partner) WHERE is_partner = true;
+
+-- ==============================================================================
+-- Phase 22: 郵件發送記錄（email_logs）
+-- 用於防止同一用戶短期內重複收到相同範本（後端 7 天 dedup 窗口）
+-- notify_users API 在發送前查詢此表，發送後寫入；graceful degradation（表不存在時跳過）
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.email_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_email TEXT NOT NULL,
+    template_name TEXT NOT NULL,
+    sent_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+CREATE INDEX IF NOT EXISTS idx_email_logs_lookup ON public.email_logs(user_email, template_name, sent_at);
+
+-- ==============================================================================
+-- Phase 22: users.locale 欄位
+-- 選填，記錄用戶慣用語言（如 zh-TW, en-US）
+-- notify_users API 依此欄位選擇郵件語言版本；null 預設 zh-TW
+-- ==============================================================================
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS locale TEXT DEFAULT NULL;

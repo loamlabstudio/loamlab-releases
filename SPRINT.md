@@ -1,36 +1,29 @@
-# 核心問題剖析
+# LoamLab Admin 郵件發送與反饋機制優化計畫 (Sprint)
 
-針對用戶回報的三個登錄與顯示問題，已經找到根本原因（Root Causes）：
+## CONTEXT_DIGEST
+目前 Admin 面板的「自動洞見」中，點擊「發郵件」會發送 API `action=notify_users`，但後端 (`stats.js`) 尚未實作該接口，導致點擊無反應。
+本計畫旨在從「自動性、審核、多語言推斷」的角度，重建成熟的郵件反饋機制，避免誤發、重複發送，並提供管理員友善的審核預覽。
 
-1. **驗證碼登錄登錄不進去**：
-   - 原因：Supabase 預設發送的 OTP 驗證碼長度為 6 碼。但在前端 `loamlab_plugin/ui/app.js` 中（約 3785 行），強制擋下了 `token.length < 8` 的請求，導致點擊驗證按鈕後直接 return，連後端都沒送到。
-2. **登錄後沒顯示綁定的賬號，但可以順利渲染** 以及 **重新登錄點數依然顯示 "-"**：
-   - 原因 1：當用戶透過 OTP 登錄時，後端 `api/auth/otp.js` 的 `verify` 行為**沒有**將用戶當前的 IP 寫入 `users` 表的 `last_login_ip` 欄位（而 Google 登錄的 poll.js 有寫入）。
-   - 原因 2：在 `api/user.js` 取點數的邏輯中，強制檢查了 `!userRow.last_login_ip`。如果是 null 或不匹配當前 IP，就會回傳 401。這導致前端 `fetchUserPoints` 失敗，UI 上的點數顯示 "-"，且因為 catch 而跳過 `updateLoginUI`（所以沒顯示綁定帳號）。
-   - 矛盾點：`api/render.js` 允許 `last_login_ip` 為 null 的用戶進行渲染（為了相容舊用戶），所以用戶雖然取不到點數，卻可以順利渲染。
+## TASKS
 
----
+- [x] **Phase 1: 後端發信基建與 API 修復**
+  - **影響檔案**: `loamlab_backend/api/stats.js`, `loamlab_backend/api/utils/email.js` (新建或沿用)
+  - **描述**: 在 `stats.js` 實作 `action=notify_users` 處理邏輯。整合 Email 服務 (例如 Resend 或現有 SMTP)，並在 DB (Supabase) 建立 `email_logs` (或類似紀錄表) 記錄 `user_email` 與 `template_id`，防止同一洞見對同一用戶短期內重複發送。
+  - **DB Schema 變更**: 新增 `email_logs` 表 (欄位: `id`, `user_email`, `template_name`, `sent_at`)。
 
-# TASKS
+- [x] **Phase 2: 動態情境模板系統與多語言推斷**
+  - **影響檔案**: `loamlab_backend/api/stats.js`, `loamlab_backend/public/admin.html`
+  - **描述**: 依賴 Phase 1。針對不同的洞見情境（如 `onboarding_stuck` 激活郵件、`churn_risk` 留存提醒、`paywall_trigger` 轉化推播）建立獨立的信件範本。系統需在發送前，依據 `users` 表的 `last_login_ip` 或新增的 `locale` 欄位推斷用戶國籍，並動態組裝對應語言（中/英/日等）的內容。
+  - **DB Schema 變更**: `users` 表可考慮補上 `locale` 欄位 (字串，選填) 供後續長效紀錄。
 
-## 1. [x] 修正前端 OTP 驗證長度限制 [MUST]
-- **影響檔案**：`loamlab_plugin/ui/app.js`、`loamlab_plugin/ui/index.html`
-- **執行動作**：
-  - 將 `app.js` 中 `btn-verify-otp` 事件裡的 `token.length < 8` 改為 `token.length < 6`。
-  - 將 `index.html` 中 `#login-code-input` 的 `maxlength="8"` 改為 `maxlength="6"`。
+- [x] **Phase 3: 前端範本管理與發送預覽窗口 (UI/UX)**
+  - **影響檔案**: `loamlab_backend/public/admin.html`
+  - **描述**: 
+    1. **內容管理**: 在 Admin 既有的「📢 內容」分頁中，新增「✉️ 洞見郵件範本管理」區塊，讓管理員能直觀編輯並預覽 onboarding、retention 等不同問題對應的多語言郵件內容。
+    2. **發送審核**: 將目前的 `executeInsightEmail` 一鍵發送改為彈出「發信審核 Modal」。在 Modal 內顯示即將發送的總人數、針對該問題套用的信件預覽及語言分布。管理員確認無誤後，點擊「確認發送」才真實觸發批量 API。
 
-## 2. [x] 補齊 OTP 登錄時的 IP Pinning 紀錄 [MUST]
-- **影響檔案**：`loamlab_backend/api/auth/otp.js`
-- **執行動作**：
-  - 在 `verify` 成功 (拿到 `data.session` 或驗證通過) 時，獲取當前 `clientIp`（參考 `poll.js` 寫法，如 `(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress`）。
-  - 使用 Supabase admin client 執行 `update({ last_login_ip: clientIp }).eq('email', email)`，確保透過驗證碼登錄的用戶也能正確綁定 IP。
-
-## 3. [x] 放寬 api/user.js 的 IP 檢查邏輯以相容舊用戶 [MUST]
-- **影響檔案**：`loamlab_backend/api/user.js`
-- **執行動作**：
-  - 對齊 `api/render.js` 的邏輯：僅當 `userRow.last_login_ip` 存在且不等於 `clientIp` 時才擋下。若 `last_login_ip` 為 `null` 則放行。
-  - 修改 `!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp` 為 `if (userRow?.last_login_ip && userRow.last_login_ip !== clientIp) { ... }`。
-
----
+- [NICE] **Phase 4: 全流程驗收與自動化洞見排程預備** _(跳過，NICE 優先級)_
+  - **影響檔案**: `loamlab_backend/api/stats.js`, `admin.html`
+  - **描述**: 依賴 Phase 3。整合測試全流程，確保發送信件不超時 (Vercel limits)。優化 UI 發送中的 Loading 狀態與進度條。標記已處理的洞見，避免每次重整都顯示相同名單。
 
 status: DONE

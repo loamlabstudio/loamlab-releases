@@ -2828,11 +2828,11 @@ function executeInsightEmail(emails, template) {
   document.getElementById('email-modal-subject-en').textContent = meta.subjectEn;
   document.getElementById('email-modal-sample').innerHTML = sample;
   document.getElementById('email-modal-confirm').onclick = () => _doSendInsightEmail(emails, template);
-  document.getElementById('email-send-modal').classList.remove('hidden');
+  document.getElementById('email-send-modal').style.display = 'flex';
 }
 
 async function _doSendInsightEmail(emails, template) {
-  document.getElementById('email-send-modal').classList.add('hidden');
+  document.getElementById('email-send-modal').style.display = 'none';
   showToast('發送中（' + emails.length + ' 封）...', 'info');
   try {
     const r = await fetch(API_BASE + '/api/stats?action=notify_users', {
@@ -3174,7 +3174,7 @@ switchAdminTab = function(tab) {
 };
 </script>
 <!-- ── 發信審核 Modal ── -->
-<div id="email-send-modal" class="hidden" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px)" onclick="if(event.target===this)this.classList.add('hidden')">
+<div id="email-send-modal" style="display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px)" onclick="if(event.target===this)this.style.display='none'">
   <div style="background:#0f172a;border:1px solid #312e81;border-radius:16px;padding:28px 32px;max-width:460px;width:90%;box-shadow:0 24px 64px #000a">
     <div style="font-size:15px;font-weight:700;color:#e2e8f0;margin-bottom:18px;display:flex;align-items:center;gap:8px">
       📧 發信審核
@@ -3203,7 +3203,7 @@ switchAdminTab = function(tab) {
     </div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button onclick="document.getElementById('email-send-modal').classList.add('hidden')"
+      <button onclick="document.getElementById('email-send-modal').style.display='none'"
         style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer">
         取消
       </button>

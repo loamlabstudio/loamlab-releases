@@ -2919,12 +2919,13 @@ function renderInsights(insights) {
 
       const acts = ins.auto_actions || ['copy'];
       const btnBase = 'border:none;cursor:pointer;border-radius:5px;padding:4px 10px;font-size:10px;font-weight:600';
-      const copyBtn = `<button onclick="copyInsightEmails(${JSON.stringify(all_emails)})" style="${btnBase};background:#1e293b;color:#94a3b8">📋 複製名單</button>`;
+      const _eq = JSON.stringify(all_emails).replace(/"/g, '&quot;');
+      const copyBtn = `<button onclick="copyInsightEmails(${_eq})" style="${btnBase};background:#1e293b;color:#94a3b8">📋 複製名單</button>`;
       const emailBtn = ins.email_template && acts.includes('email')
-        ? `<button onclick="executeInsightEmail(${JSON.stringify(all_emails)}, '${ins.email_template}')" style="${btnBase};background:#312e81;color:#a5b4fc">📧 發郵件</button>`
+        ? `<button onclick="executeInsightEmail(${_eq}, '${ins.email_template}')" style="${btnBase};background:#312e81;color:#a5b4fc">📧 發郵件</button>`
         : '';
       const pointsBtn = acts.includes('points')
-        ? `<button onclick="executeInsightPoints(${JSON.stringify(all_emails)}, 20)" style="${btnBase};background:#14532d;color:#86efac">💊 補 20 點</button>`
+        ? `<button onclick="executeInsightPoints(${_eq}, 20)" style="${btnBase};background:#14532d;color:#86efac">💊 補 20 點</button>`
         : '';
 
       html += `<div style="border:1px solid ${s.border}33;background:${s.bg};border-radius:10px;padding:12px 14px;margin-bottom:6px">

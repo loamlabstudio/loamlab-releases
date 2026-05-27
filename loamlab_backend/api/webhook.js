@@ -46,9 +46,24 @@ export default async function handler(req, res) {
             if (event.type === 'payment.succeeded') {
                 const data = event.data;
                 const customerEmail = data.customer?.email || data.email || data.customer_email;
-                const variantId = data.product_cart?.[0]?.product_id || data.product_id || data.plan_id;
+                let variantId = data.product_cart?.[0]?.product_id || data.product_id || data.plan_id;
                 const orderId = data.payment_id;
                 const discountCode = data.discount?.code || data.discount_code || null;
+
+                // 某些訂閱的 payment.succeeded 不帶 product_id → 用 subscription_id 補查
+                if (!variantId && data.subscription_id && process.env.DODO_API_KEY) {
+                    try {
+                        const subRes = await fetch(
+                            `https://live.dodopayments.com/subscriptions/${data.subscription_id}`,
+                            { headers: { 'Authorization': `Bearer ${process.env.DODO_API_KEY}` } }
+                        );
+                        const subData = await subRes.json();
+                        variantId = subData.product_id || subData.plan_id || subData.items?.[0]?.product_id;
+                        console.log(`[Dodo] Resolved variantId from subscription lookup: ${variantId}`);
+                    } catch (e) {
+                        console.warn('[Dodo] subscription lookup failed:', e.message);
+                    }
+                }
 
                 if (customerEmail && variantId && orderId) {
                     try {
@@ -58,7 +73,7 @@ export default async function handler(req, res) {
                         throw e; // 讓外層回傳 500，Dodo 會重試
                     }
                 } else {
-                    await logWebhookError('DODO', event.type, null, customerEmail || 'unknown', 'Missing required fields', data);
+                    await logWebhookError('DODO', event.type, orderId, customerEmail || 'unknown', `Missing fields: variantId=${variantId} orderId=${orderId}`, data);
                     throw new Error(`payment.succeeded missing fields: email=${customerEmail} variantId=${variantId} orderId=${orderId}`);
                 }
             }

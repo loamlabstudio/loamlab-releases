@@ -43,34 +43,30 @@ export default async function handler(req, res) {
                 return res.status(200).json({ status: 'success' });
             }
 
-            if (event.type === 'payment.succeeded' || event.type === 'subscription.active' || event.type === 'subscription.renewed') {
+            if (event.type === 'payment.succeeded') {
                 const data = event.data;
-                const customerEmail = data.customer?.email;
-                // Dodo 的商品 ID 在 product_cart[0].product_id，或直接在 data.product_id
-                const variantId = data.product_cart?.[0]?.product_id || data.product_id;
-                
-                // 【修復雙倍點數 Bug】如果是訂閱的 payment.succeeded，直接忽略，交給 subscription.active 處理
-                if (event.type === 'payment.succeeded' && variantId !== 'pdt_0NbIlveGNSETSOveL7Xmk') {
-                    console.log(`[Dodo] 忽略訂閱的 payment.succeeded，交給 active/renewed 處理`);
-                    return res.status(200).json({ status: 'ignored' });
-                }
-
-                // 【修復續約 0 點 Bug】續約時 subscription_id 相同，必須加上週期時間防止冪等擋下
-                let orderId = data.payment_id || data.subscription_id;
-                if (event.type === 'subscription.renewed' || event.type === 'subscription.active') {
-                    const period = data.current_period_start || new Date().toISOString().substring(0, 7);
-                    orderId = `${data.subscription_id}_${period}`;
-                }
-
-                // 從 payload 讀取折扣碼（用於晚期 KOL 歸因）
+                const customerEmail = data.customer?.email || data.email || data.customer_email;
+                const variantId = data.product_cart?.[0]?.product_id || data.product_id || data.plan_id;
+                const orderId = data.payment_id;
                 const discountCode = data.discount?.code || data.discount_code || null;
 
-                if (customerEmail && variantId) {
-                    await processTopup(customerEmail, variantId, orderId, 'DODO', discountCode);
+                if (customerEmail && variantId && orderId) {
+                    await processTopup(customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id);
+                } else {
+                    console.error(`[Dodo] Missing required fields in payment.succeeded. Payload:`, JSON.stringify(data));
+                }
+            }
+            
+            if (event.type === 'subscription.active' || event.type === 'subscription.renewed') {
+                const data = event.data;
+                const customerEmail = data.customer?.email || data.email || data.customer_email;
+                if (customerEmail && data.subscription_id) {
+                    await supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
+                        .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
                 }
             } else if (event.type === 'subscription.cancelled' || event.type === 'subscription.canceled' || event.type === 'subscription.expired') {
                 const data = event.data;
-                const customerEmail = data.customer?.email;
+                const customerEmail = data.customer?.email || data.email || data.customer_email;
                 if (customerEmail) {
                     await processCancellation(customerEmail, 'DODO');
                 }
@@ -133,7 +129,7 @@ async function processCancellation(customerEmail, platform) {
 }
 
 // 核心充值邏輯 (從 LS 邏輯抽離，支援多平台)
-async function processTopup(customerEmail, variantId, orderId, platform, discountCode = null) {
+async function processTopup(customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null) {
     // 冪等性檢查
     const fullOrderId = `${platform}_${orderId}`;
     const { data: existingTx } = await supabase.from('transactions').select('id').eq('order_id', fullOrderId).maybeSingle();
@@ -223,8 +219,8 @@ async function processTopup(customerEmail, variantId, orderId, platform, discoun
     }
 
     // 儲存 Dodo subscription_id（供 save_offer pause 使用，Phase 24 migration 前不影響主流程）
-    if (isSubscription && data.subscription_id) {
-        supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
+    if (isSubscription && subscriptionId) {
+        supabase.from('users').update({ dodo_subscription_id: subscriptionId }).eq('email', customerEmail)
             .then(() => {}).catch(e => console.warn('[subscription_id] store failed (non-fatal):', e.message));
     }
 

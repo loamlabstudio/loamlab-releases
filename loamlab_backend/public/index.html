@@ -651,11 +651,28 @@
         // --- 1. 動態算圖計數器 (高頻持續跳動) ---
         // email 提交成功後隱藏 form（純 DOM 操作，不做 layout 切換）
 
+        const EMAIL_TYPO_MAP = {
+            'gamil.com': 'gmail.com', 'gmai.com': 'gmail.com',
+            'gmial.com': 'gmail.com', 'gmail.con': 'gmail.com',
+            'gmail.cim': 'gmail.com', 'gnail.com': 'gmail.com',
+        };
+
         async function submitLeadEmail(e) {
             e.preventDefault();
-            const email   = document.getElementById('leadEmail').value.trim();
+            const input  = document.getElementById('leadEmail');
+            let email    = input.value.trim().toLowerCase();
             const form    = document.getElementById('leadForm');
             const success = document.getElementById('leadSuccess');
+
+            const domain = email.split('@')[1] || '';
+            if (EMAIL_TYPO_MAP[domain]) {
+                const suggested = email.replace('@' + domain, '@' + EMAIL_TYPO_MAP[domain]);
+                const ok = window.confirm(`查無此地址，您是否輸入的是：\n${suggested}？`);
+                if (!ok) return;
+                email = suggested;
+                input.value = suggested;
+            }
+
             if (email) localStorage.setItem('loamlab_lead_email', email);
             try {
                 await fetch('/api/stats?action=capture_email', {

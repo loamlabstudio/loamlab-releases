@@ -396,15 +396,8 @@ export default async function handler(req, res) {
 
     // --- Lead Capture（公開端點，無需 ADMIN_KEY）---
     if (action === 'capture_email' && req.method === 'POST') {
-        let { email, lang } = req.body || {};
+        const { email, lang } = req.body || {};
         if (!email || !email.includes('@')) return res.status(400).json({ code: -1, msg: 'Invalid email' });
-        email = email.trim().toLowerCase()
-            .replace(/@gamil\.com$/,  '@gmail.com')
-            .replace(/@gmai\.com$/,   '@gmail.com')
-            .replace(/@gmial\.com$/,  '@gmail.com')
-            .replace(/@gmail\.con$/,  '@gmail.com')
-            .replace(/@gmail\.cim$/,  '@gmail.com')
-            .replace(/@gnail\.com$/,  '@gmail.com');
         await supabase.from('transactions').insert({
             user_email: email, amount: 0,
             transaction_type: 'LEAD_CAPTURE',

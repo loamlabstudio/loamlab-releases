@@ -2,9 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 
 const DODO_PRODUCTS = {
     TOPUP:   'pdt_0NbIlveGNSETSOveL7Xmk',
-    STARTER: 'pdt_0NbImUvFnwJe36ymTELWV',
-    PRO:     'pdt_0NbImafnebUuGNrMRvJp4',
-    STUDIO:  'pdt_0NbImhwhr5WXfNyDHpaA2'
+    STARTER: 'pdt_0NblmUvFrwJe36ymTELWV',
+    PRO:     'pdt_0NblmafncbUuGNrMRvJp4',
+    STUDIO:  'pdt_0Nblmhwbr5WXfNyDHpaA2'
 };
 
 export default async function handler(req, res) {

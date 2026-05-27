@@ -3182,9 +3182,9 @@ const LS_VARIANTS = {
 
 const DODO_VARIANTS = {
     TOPUP: 'pdt_0NbIlveGNSETSOveL7Xmk',
-    STARTER: 'pdt_0NbImUvFnwJe36ymTELWV',
-    PRO: 'pdt_0NbImafnebUuGNrMRvJp4',
-    STUDIO: 'pdt_0NbImhwhr5WXfNyDHpaA2'
+    STARTER: 'pdt_0NblmUvFrwJe36ymTELWV',
+    PRO: 'pdt_0NblmafncbUuGNrMRvJp4',
+    STUDIO: 'pdt_0Nblmhwbr5WXfNyDHpaA2'
 };
 const BETA_DISCOUNT_CODE = 'LOAM_BETA_30'; // 僅 LemonSqueezy fallback 使用；DODO 折扣碼由後端 DODO_DISCOUNT_CODE env var 管理
 const BETA_DISCOUNT_RATE = 0.70; // UI 顯示用（-30% 折扣視覺計算）

@@ -67,8 +67,18 @@ export default async function handler(req, res) {
                 const data = event.data;
                 const customerEmail = data.customer?.email || data.email || data.customer_email;
                 if (customerEmail && data.subscription_id) {
-                    await supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
+                    // 從 subscription event 判斷 plan（作為 payment.succeeded 的 fallback）
+                    const subProductId = data.product_id || data.plan_id || data.product_cart?.[0]?.product_id;
+                    const DODO_IDS = IDS.DODO;
+                    let subPlan = null;
+                    if (subProductId === DODO_IDS.STARTER) subPlan = 'starter';
+                    else if (subProductId === DODO_IDS.PRO) subPlan = 'pro';
+                    else if (subProductId === DODO_IDS.STUDIO) subPlan = 'studio';
+                    const updateFields = { dodo_subscription_id: data.subscription_id };
+                    if (subPlan) updateFields.subscription_plan = subPlan;
+                    await supabase.from('users').update(updateFields).eq('email', customerEmail)
                         .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
+                    if (subPlan) console.log(`[Dodo] subscription.active: ${customerEmail} → ${subPlan}`);
                 }
             } else if (event.type === 'subscription.cancelled' || event.type === 'subscription.canceled' || event.type === 'subscription.expired') {
                 const data = event.data;
@@ -139,22 +149,22 @@ async function processCancellation(customerEmail, platform) {
     }).eq('email', customerEmail);
 }
 
+const IDS = {
+    LS: { TOPUP: 1432023, STARTER: 1432194, PRO: 1432198, STUDIO: 1432205 },
+    DODO: {
+        TOPUP: 'pdt_0NbIlveGNSETSOveL7Xmk',
+        STARTER: 'pdt_0NblmUvFrwJe36ymTELWV',
+        PRO: 'pdt_0NblmafncbUuGNrMRvJp4',
+        STUDIO: 'pdt_0Nblmhwbr5WXfNyDHpaA2'
+    }
+};
+
 // 核心充值邏輯 (從 LS 邏輯抽離，支援多平台)
 async function processTopup(customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null) {
     // 冪等性檢查
     const fullOrderId = `${platform}_${orderId}`;
     const { data: existingTx } = await supabase.from('transactions').select('id').eq('order_id', fullOrderId).maybeSingle();
     if (existingTx) return console.log(`[🔁冪等] ${fullOrderId} 已處理過`);
-
-    const IDS = {
-        LS: { TOPUP: 1432023, STARTER: 1432194, PRO: 1432198, STUDIO: 1432205 },
-        DODO: {
-            TOPUP: 'pdt_0NbIlveGNSETSOveL7Xmk',
-            STARTER: 'pdt_0NbImUvFnwJe36ymTELWV',
-            PRO: 'pdt_0NbImafnebUuGNrMRvJp4',
-            STUDIO: 'pdt_0NbImhwhr5WXfNyDHpaA2'
-        }
-    };
 
     const pIds = IDS[platform];
     let pointsToAdd = 0;

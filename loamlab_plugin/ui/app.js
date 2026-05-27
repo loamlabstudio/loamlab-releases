@@ -2315,7 +2315,7 @@ function refreshPricingModalBadge() {
 
 function openCancelFlow() {
     const email = window.loamlabUserEmail || '';
-    const url = 'https://loamlab.studio/billing/cancel?email=' + encodeURIComponent(email);
+    const url = 'https://loamlabwebsite.vercel.app/billing/cancel?email=' + encodeURIComponent(email);
     if (window.sketchup) {
         try { sketchup.open_browser(url); } catch(_) {}
     } else {

@@ -539,6 +539,13 @@ async function _handleRender(req, res) {
     }
     if (!deductResult?.success) {
         if (deductResult?.error === 'insufficient_points') {
+            // 即時觸發升級信（fire-and-forget，不阻塞渲染回應）
+            const _base = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://loamlab-camera.vercel.app';
+            fetch(`${_base}/api/stats?action=notify_users`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${process.env.ADMIN_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ emails: [userEmail], template: 'upgrade' })
+            }).catch(() => {});
             return res.status(402).json({ code: -1, msg: sanitizeError(`點數不足！本次渲染需 ${cost} 點，您的餘額僅剩 ${deductResult.balance} 點。`) });
         }
         return res.status(403).json({ code: -1, msg: sanitizeError(`扣款失敗：${deductResult?.error}`) });

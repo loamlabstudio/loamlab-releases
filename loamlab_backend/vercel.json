@@ -4,6 +4,12 @@
       "maxDuration": 300
     }
   },
+  "crons": [
+    {
+      "path": "/api/stats?action=cron_insights",
+      "schedule": "0 10 * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/", "destination": "/public/index.html" },
     { "source": "/auth-bridge", "destination": "/public/auth-bridge.html" },

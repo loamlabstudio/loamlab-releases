@@ -1,6 +1,107 @@
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 
+// ── 洞見郵件共用工具 ──────────────────────────────────────────────────────────
+function getLangKey(locale) {
+    if (!locale) return 'tw';
+    const l = locale.toLowerCase();
+    if (l.startsWith('zh-cn') || l === 'cn') return 'cn';
+    if (l.startsWith('zh')) return 'tw';
+    if (l.startsWith('en')) return 'en';
+    if (l.startsWith('es')) return 'es';
+    if (l.startsWith('pt')) return 'br';
+    if (l.startsWith('ja')) return 'jp';
+    return 'tw';
+}
+
+function wrapBody(subject, body) {
+    const bodyHtml = (body || '').replace(/\n/g, '<br>');
+    return `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0"><div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #1e293b">${subject}</div><div style="line-height:1.9;color:#cbd5e1;margin-top:16px">${bodyHtml}</div><p style="font-size:11px;color:#475569;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · <a href="https://loamlab.studio" style="color:#7c3aed;text-decoration:none">loamlab.studio</a> · <a href="https://loamlab.studio/unsubscribe" style="color:#475569;text-decoration:none">退訂 / Unsubscribe</a></p></div>`;
+}
+
+const EMAIL_DEFAULTS = {
+    onboarding: {
+        tw: { subject: '你還沒用過的 60 點，能做什麼', body: '嗨，\n\n你加入 LoamLab 已經幾天了，帳戶裡有 60 點還沒動過。\n\n這 60 點可以做一件很具體的事：在你現在正在畫的 SketchUp 場景裡，選一個視角，90 秒後得到一張可以直接給客戶看的效果圖——不用匯出、不用學新軟體、不用等渲染農場排隊。\n\n很多設計師的第一張 LoamLab 圖都是提案當天臨時生成的，客戶看到直接點頭。\n\n試試看 → https://loamlab.studio\n\nLoamLab 團隊' },
+        en: { subject: 'What can you do with the 60 points you haven\'t used?', body: 'Hi,\n\nYou joined LoamLab a few days ago and still have 60 points sitting in your account.\n\nThose 60 points can do something very concrete: pick a view in the SketchUp scene you\'re already working on, and get a client-ready render in 90 seconds — no export, no new software to learn, no render farm queue.\n\nMany designers generate their first LoamLab render the day of a presentation. Clients say yes on the spot.\n\nTry it → https://loamlab.studio\n\nLoamLab Team' },
+    },
+    reengagement: {
+        tw: { subject: '你最近有沒有案子需要效果圖？', body: '嗨，\n\n有段時間沒見到你了。\n\n不知道你現在手上有什麼，但如果剛好有需要快速出圖的案子——LoamLab 最近批量場景渲染、新的光效風格都有在優化。\n\n很多用 SketchUp 的設計師最常用 LoamLab 的時機是提案前一天：不需要另外開渲染軟體，直接在插件選視角和風格，十分鐘出完整套圖。\n\n如果帳戶裡還有點數，隨時可以回來用 → https://loamlab.studio\n\nLoamLab 團隊' },
+        en: { subject: 'Do you have a project that needs renders?', body: 'Hi,\n\nIt\'s been a while since we\'ve seen you render.\n\nIf you happen to have a project that needs quick visuals — LoamLab has been improving batch scene rendering and new lighting styles lately.\n\nMany SketchUp designers use LoamLab the day before a presentation: no need to open another app, just pick your views and styles in the plugin, and get a full set in ten minutes.\n\nIf you still have credits, come back anytime → https://loamlab.studio\n\nLoamLab Team' },
+    },
+    upgrade: {
+        tw: { subject: '點數快見底了，但案子還在繼續', body: '嗨，\n\n你的 LoamLab 點數快用完了。\n\n在問你要不要補點之前，想先問：之前渲出來的圖，有沒有讓提案過程更順一點？\n\n如果有，可能值得繼續。Starter 方案每月 $9 美金，換 500 點——大概是一整個空間方案所有視角的用量，或 10 個獨立場景的 1K 效果圖，點數一到帳就能繼續。\n\n查看方案 → https://loamlab.studio\n\nLoamLab 團隊' },
+        en: { subject: 'Your credits are running low, but the project isn\'t done', body: 'Hi,\n\nYour LoamLab credits are almost gone.\n\nBefore asking whether you\'d like to top up — did the renders you\'ve done help make presentations go more smoothly?\n\nIf so, it might be worth continuing. The Starter plan is $9/month for 500 credits — roughly enough for a full space at all angles, or 10 separate 1K renders. Credits hit your account immediately.\n\nSee plans → https://loamlab.studio\n\nLoamLab Team' },
+    },
+};
+
+// 核心發信函式（notify_users 和 cron_insights 共用）
+async function sendBatchInsightEmails(emailList, template, supabase) {
+    if (!emailList.length) return { sent: 0, skipped: 0 };
+    if (!EMAIL_DEFAULTS[template]) throw new Error(`Unknown template: ${template}`);
+
+    // 7天 dedup
+    const alreadySent = new Set();
+    try {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+        const { data: logs } = await supabase.from('email_logs').select('user_email')
+            .eq('template_name', template).gte('sent_at', sevenDaysAgo).in('user_email', emailList);
+        if (logs) logs.forEach(l => alreadySent.add(l.user_email));
+    } catch (_) {}
+
+    const toSend = emailList.filter(e => !alreadySent.has(e));
+    if (!toSend.length) return { sent: 0, skipped: emailList.length };
+
+    // 取 DB 範本（優先）
+    let dbTpl = null;
+    try {
+        const { data } = await supabase.from('email_templates').select('*').eq('id', template).single();
+        if (data && data.body_tw) dbTpl = data;
+    } catch (_) {}
+
+    // 取用戶語言
+    const { data: userRows } = await supabase.from('users').select('email, locale').in('email', toSend);
+    const localeMap = {};
+    (userRows || []).forEach(u => { if (u.locale) localeMap[u.email] = u.locale; });
+
+    const emailItems = toSend.map(to => {
+        const key = getLangKey(localeMap[to]);
+        let subject, html;
+        if (dbTpl) {
+            const subjectText = dbTpl[`subject_${key}`] || dbTpl.subject_tw || '';
+            const bodyText    = dbTpl[`body_${key}`]    || dbTpl.body_tw    || '';
+            subject = subjectText;
+            html = wrapBody(subjectText, bodyText);
+        } else {
+            const fallbackKey = (key === 'en') ? 'en' : 'tw';
+            const variant = EMAIL_DEFAULTS[template][fallbackKey];
+            subject = variant.subject;
+            html = wrapBody(variant.subject, variant.body);
+        }
+        return { to, subject, html };
+    });
+
+    const from = `LoamLab <${process.env.GMAIL_USER}>`;
+    const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        pool: true,
+        maxConnections: 1,
+        rateDelta: 300,
+        rateLimit: 3,
+        auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
+    });
+    for (const item of emailItems) {
+        await transporter.sendMail({ from, to: item.to, subject: item.subject, html: item.html });
+    }
+    transporter.close();
+
+    try {
+        const now = new Date().toISOString();
+        await supabase.from('email_logs').insert(toSend.map(e => ({ user_email: e, template_name: template, sent_at: now })));
+    } catch (_) {}
+
+    return { sent: toSend.length, skipped: emailList.length - toSend.length };
+}
+
 // ── 測試帳號過濾 ──────────────────────────────────────────────────────────────
 // 排除 testsprite_*、*@example.com、*@loamlab.test* 以及指定的測試帳號
 const TEST_REGEX = /testsprite|@example\.com|\.test[_.]|\.test$|^loamlabstudio@gmail\.com$|^loamlabs@gmail\.com$/i;
@@ -618,117 +719,67 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && action === 'notify_users') {
         const { emails, template } = req.body || {};
         if (!emails?.length || !template) return res.status(400).json({ code: -1, msg: 'Missing emails or template' });
+        if (!EMAIL_DEFAULTS[template]) return res.status(400).json({ code: -1, msg: `Unknown template: ${template}` });
         if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
             return res.status(503).json({ code: -1, msg: 'Gmail not configured' });
         }
-        const from = `LoamLab <${process.env.GMAIL_USER}>`;
-
-        // locale string → DB column key (tw/en/cn/es/br/jp)
-        function getLangKey(locale) {
-            if (!locale) return 'tw';
-            const l = locale.toLowerCase();
-            if (l.startsWith('zh-cn') || l === 'cn') return 'cn';
-            if (l.startsWith('zh')) return 'tw';
-            if (l.startsWith('en')) return 'en';
-            if (l.startsWith('es')) return 'es';
-            if (l.startsWith('pt')) return 'br';
-            if (l.startsWith('ja')) return 'jp';
-            return 'tw';
-        }
-
-        // Wrap plain-text body in dark-theme HTML shell
-        function wrapBody(subject, body) {
-            const bodyHtml = (body || '').replace(/\n/g, '<br>');
-            return `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0"><div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #1e293b">${subject}</div><div style="line-height:1.9;color:#cbd5e1;margin-top:16px">${bodyHtml}</div><p style="font-size:11px;color:#475569;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · <a href="https://loamlab.studio" style="color:#7c3aed;text-decoration:none">loamlab.studio</a></p></div>`;
-        }
-
-        // Fallback hardcoded defaults (zh-TW / en-US only)
-        const DEFAULTS = {
-            onboarding: {
-                tw: { subject: '🏠 你的 LoamLab 渲染點數還在等你', body: '你好！你已經有 LoamLab 帳號，但還沒試過第一次 AI 渲染。\n\n只需打開 SketchUp → 外掛程式 → LoamLab AI 渲染，選擇風格後點「渲染」即可。\n\n立即開始：https://loamlab.studio' },
-                en: { subject: '🏠 Your LoamLab render credits are waiting', body: "Hi! You have a LoamLab account but haven't tried AI rendering yet.\n\nJust open SketchUp → Extensions → LoamLab AI Renderer, pick a style and hit Render.\n\nGet started: https://loamlab.studio" },
-            },
-            reengagement: {
-                tw: { subject: '🎁 好久不見！回來試試新功能', body: '我們發現你已經一段時間沒有使用 LoamLab 了。\n\n試試 T2 SpaceReform 或 T4 SmartCanvas，用多張參考圖打造你的專屬風格。\n\n重新開始：https://loamlab.studio' },
-                en: { subject: '🎁 Miss you! Come back and render something amazing', body: "We noticed you haven't used LoamLab for a while.\n\nTry T2 SpaceReform or T4 SmartCanvas — blend reference images into your unique style.\n\nStart again: https://loamlab.studio" },
-            },
-            upgrade: {
-                tw: { subject: '⭐ 訂閱 LoamLab，每月無限渲染', body: '你已經是 LoamLab 的重度使用者了！\n\n訂閱方案每月固定補充點數，比單次購買更划算（省 30%+），支援所有工具 T1～T4。\n\n查看方案：https://loamlab.studio' },
-                en: { subject: '⭐ Unlock unlimited renders with LoamLab', body: "You're a LoamLab power user! A subscription gives you monthly credit refills — better value than one-time purchases (save 30%+), works with all tools T1–T4.\n\nSee plans: https://loamlab.studio" },
-            },
-        };
-
-        if (!DEFAULTS[template]) return res.status(400).json({ code: -1, msg: `Unknown template: ${template}` });
-
-        // Try to load template from DB
-        let dbTpl = null;
         try {
-            const { data } = await supabase.from('email_templates').select('*').eq('id', template).single();
-            if (data && data.body_tw) dbTpl = data;
-        } catch (_) {}
-
-        const rawEmails = emails.slice(0, 50);
-
-        // Dedup: 7-day window (graceful degradation)
-        const alreadySent = new Set();
-        try {
-            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-            const { data: logs } = await supabase.from('email_logs').select('user_email')
-                .eq('template_name', template).gte('sent_at', sevenDaysAgo).in('user_email', rawEmails);
-            if (logs) logs.forEach(l => alreadySent.add(l.user_email));
-        } catch (_) {}
-
-        const emailList = rawEmails.filter(e => !alreadySent.has(e));
-        if (!emailList.length) {
-            return res.status(200).json({ code: 0, sent: 0, skipped: rawEmails.length, msg: 'All recipients already received this template within 7 days' });
-        }
-
-        // Fetch user locales
-        const { data: userRows } = await supabase.from('users').select('email, locale').in('email', emailList);
-        const localeMap = {};
-        (userRows || []).forEach(u => { if (u.locale) localeMap[u.email] = u.locale; });
-
-        const emailItems = emailList.map(to => {
-            const key = getLangKey(localeMap[to]);
-            let subject, html;
-            if (dbTpl) {
-                const subjectText = dbTpl[`subject_${key}`] || dbTpl.subject_tw || '';
-                const bodyText    = dbTpl[`body_${key}`]    || dbTpl.body_tw    || '';
-                subject = subjectText;
-                html = wrapBody(subjectText, bodyText);
-            } else {
-                const fallbackKey = (key === 'en') ? 'en' : 'tw';
-                const variant = DEFAULTS[template][fallbackKey];
-                subject = variant.subject;
-                html = wrapBody(variant.subject, variant.body);
-            }
-            return { to, subject, html };
-        });
-
-        try {
-            const transporter = nodemailer.createTransport({
-                service: 'gmail',
-                pool: true,
-                maxConnections: 1,
-                rateDelta: 300,
-                rateLimit: 3,
-                auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
-            });
-            for (const item of emailItems) {
-                await transporter.sendMail({ from, to: item.to, subject: item.subject, html: item.html });
-            }
-            transporter.close();
-
-            // Log sent emails for dedup (graceful degradation)
-            try {
-                const now = new Date().toISOString();
-                await supabase.from('email_logs').insert(emailList.map(e => ({ user_email: e, template_name: template, sent_at: now })));
-            } catch (_) {}
-
-            return res.status(200).json({ code: 0, sent: emailList.length, skipped: rawEmails.length - emailList.length });
+            const result = await sendBatchInsightEmails(emails.slice(0, 50), template, supabase);
+            return res.status(200).json({ code: 0, ...result });
         } catch (e) {
             return res.status(500).json({ code: -1, msg: e.message });
         }
+    }
+
+    // ── 每日自動洞見發信（Vercel Cron 或管理員手動觸發）────────────────────────
+    if (action === 'cron_insights') {
+        const isCron = req.headers['x-vercel-cron'] === '1';
+        const isAdmin = (req.headers['authorization'] || '').replace('Bearer ', '') === process.env.ADMIN_KEY;
+        if (!isCron && !isAdmin) return res.status(401).json({ code: -1, msg: 'Unauthorized' });
+        if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+            return res.status(503).json({ code: -1, msg: 'Gmail not configured' });
+        }
+
+        const now = new Date();
+        const summary = {};
+
+        // Onboarding：1–3 天前註冊，從未渲染
+        try {
+            const d1 = new Date(now - 1 * 24 * 3600 * 1000).toISOString();
+            const d3 = new Date(now - 3 * 24 * 3600 * 1000).toISOString();
+            const { data: candidates } = await noTest(supabase.from('users').select('email'))
+                .gte('created_at', d3).lte('created_at', d1);
+            if (candidates?.length) {
+                const emails = candidates.map(u => u.email);
+                const { data: rendered } = await supabase.from('render_history').select('user_email').in('user_email', emails);
+                const renderedSet = new Set((rendered || []).map(r => r.user_email));
+                const targets = emails.filter(e => !renderedSet.has(e) && !isTest(e));
+                if (targets.length) {
+                    summary.onboarding = await sendBatchInsightEmails(targets, 'onboarding', supabase);
+                }
+            }
+        } catch (e) { summary.onboarding_error = e.message; }
+
+        // Re-engagement：14–60 天內曾渲染，但最後一次超過 14 天
+        try {
+            const d14 = new Date(now - 14 * 24 * 3600 * 1000).toISOString();
+            const d60 = new Date(now - 60 * 24 * 3600 * 1000).toISOString();
+            const { data: stale } = await supabase.from('render_history').select('user_email')
+                .gte('created_at', d60).lt('created_at', d14);
+            if (stale?.length) {
+                const candidates = [...new Set(stale.map(r => r.user_email))].filter(e => !isTest(e));
+                // 排除 14 天內有新渲染的
+                const { data: recent } = await supabase.from('render_history').select('user_email')
+                    .gte('created_at', d14).in('user_email', candidates);
+                const recentSet = new Set((recent || []).map(r => r.user_email));
+                const targets = candidates.filter(e => !recentSet.has(e));
+                if (targets.length) {
+                    summary.reengagement = await sendBatchInsightEmails(targets, 'reengagement', supabase);
+                }
+            }
+        } catch (e) { summary.reengagement_error = e.message; }
+
+        return res.status(200).json({ code: 0, ran_at: now.toISOString(), ...summary });
     }
 
     // ── 批量補點（Admin）─────────────────────────────────────────────────────────

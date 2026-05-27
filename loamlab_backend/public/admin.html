@@ -2901,9 +2901,32 @@ async function executeInsightEmail(emails, template) {
   document.getElementById('email-send-modal').style.display = 'flex';
 }
 
+function _resetEmailModal() {
+  document.getElementById('email-modal-actions').style.display = 'flex';
+  const p = document.getElementById('email-modal-progress');
+  p.style.display = 'none';
+  const bar = document.getElementById('email-modal-progbar');
+  bar.style.width = '0%';
+  bar.style.background = '#4f46e5';
+}
+
 async function _doSendInsightEmail(emails, template) {
-  document.getElementById('email-send-modal').style.display = 'none';
-  showToast('發送中（' + emails.length + ' 封）...', 'info');
+  // 隱藏按鈕，顯示進度條
+  document.getElementById('email-modal-actions').style.display = 'none';
+  const progWrap = document.getElementById('email-modal-progress');
+  const progBar  = document.getElementById('email-modal-progbar');
+  const progText = document.getElementById('email-modal-progtext');
+  progWrap.style.display = 'block';
+  progText.textContent = `發送中… 共 ${emails.length} 封`;
+
+  // 估算時間動畫（每封約 600ms，最少跑 2s）
+  const estimatedMs = Math.max(2000, emails.length * 600);
+  let pct = 0;
+  const ticker = setInterval(() => {
+    pct = Math.min(pct + (80 / (estimatedMs / 120)), 80);
+    progBar.style.width = pct + '%';
+  }, 120);
+
   try {
     const r = await fetch(API_BASE + '/api/stats?action=notify_users', {
       method: 'POST',
@@ -2911,11 +2934,27 @@ async function _doSendInsightEmail(emails, template) {
       body: JSON.stringify({ emails, template }),
     });
     const j = await r.json();
+    clearInterval(ticker);
+
     if (j.code === 0) {
-      const msg = '已發送 ' + j.sent + ' 封' + (j.skipped ? '（略過重複 ' + j.skipped + ' 封）' : '') + ' ✓';
-      showToast(msg, 'success');
-    } else { showToast('發送失敗：' + j.msg, 'error'); }
-  } catch(e) { showToast('發送錯誤：' + e.message, 'error'); }
+      progBar.style.width = '100%';
+      const skipNote = j.skipped ? `，略過 ${j.skipped} 封（7天內已發）` : '';
+      progText.textContent = `✓ 已發送 ${j.sent} 封${skipNote}`;
+      progBar.style.background = '#22c55e';
+      setTimeout(() => { document.getElementById('email-send-modal').style.display = 'none'; _resetEmailModal(); }, 2800);
+    } else {
+      progBar.style.width = '100%';
+      progBar.style.background = '#ef4444';
+      progText.textContent = '發送失敗：' + (j.msg || r.status);
+      setTimeout(() => { document.getElementById('email-send-modal').style.display = 'none'; _resetEmailModal(); }, 3500);
+    }
+  } catch(e) {
+    clearInterval(ticker);
+    progBar.style.width = '100%';
+    progBar.style.background = '#ef4444';
+    progText.textContent = '發送錯誤：' + e.message;
+    setTimeout(() => { document.getElementById('email-send-modal').style.display = 'none'; _resetEmailModal(); }, 3500);
+  }
 }
 
 // ── 郵件範本管理 ──────────────────────────────────────────────────────────────
@@ -3372,7 +3411,14 @@ switchAdminTab = function(tab) {
       <div id="email-modal-sample" style="font-size:11px;font-family:monospace;color:#94a3b8;line-height:1.8"></div>
     </div>
 
-    <div style="display:flex;gap:10px;justify-content:flex-end">
+    <div id="email-modal-progress" style="display:none;margin-bottom:18px">
+      <div id="email-modal-progtext" style="font-size:11px;color:#94a3b8;margin-bottom:8px">發送中...</div>
+      <div style="background:#1e293b;border-radius:100px;height:6px;overflow:hidden">
+        <div id="email-modal-progbar" style="height:100%;width:0%;background:#4f46e5;border-radius:100px;transition:width 0.15s ease"></div>
+      </div>
+    </div>
+
+    <div id="email-modal-actions" style="display:flex;gap:10px;justify-content:flex-end">
       <button onclick="document.getElementById('email-send-modal').style.display='none'"
         style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer">
         取消

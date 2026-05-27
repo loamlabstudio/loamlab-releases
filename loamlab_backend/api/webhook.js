@@ -58,27 +58,35 @@ export default async function handler(req, res) {
                         throw e; // 讓外層回傳 500，Dodo 會重試
                     }
                 } else {
-                    console.error(`[Dodo] Missing required fields in payment.succeeded. Payload:`, JSON.stringify(data));
                     await logWebhookError('DODO', event.type, null, customerEmail || 'unknown', 'Missing required fields', data);
+                    throw new Error(`payment.succeeded missing fields: email=${customerEmail} variantId=${variantId} orderId=${orderId}`);
                 }
             }
             
             if (event.type === 'subscription.active' || event.type === 'subscription.renewed') {
                 const data = event.data;
                 const customerEmail = data.customer?.email || data.email || data.customer_email;
-                if (customerEmail && data.subscription_id) {
-                    // 從 subscription event 判斷 plan（作為 payment.succeeded 的 fallback）
-                    const subProductId = data.product_id || data.plan_id || data.product_cart?.[0]?.product_id;
-                    const DODO_IDS = IDS.DODO;
-                    let subPlan = null;
-                    if (subProductId === DODO_IDS.STARTER) subPlan = 'starter';
-                    else if (subProductId === DODO_IDS.PRO) subPlan = 'pro';
-                    else if (subProductId === DODO_IDS.STUDIO) subPlan = 'studio';
-                    const updateFields = { dodo_subscription_id: data.subscription_id };
-                    if (subPlan) updateFields.subscription_plan = subPlan;
-                    await supabase.from('users').update(updateFields).eq('email', customerEmail)
+                const subProductId = data.product_id || data.plan_id || data.product_cart?.[0]?.product_id;
+                if (customerEmail && data.subscription_id && subProductId) {
+                    // 先存 subscription_id
+                    await supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
                         .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
-                    if (subPlan) console.log(`[Dodo] subscription.active: ${customerEmail} → ${subPlan}`);
+                    // 用週期做冪等 key，避免與 payment.succeeded 的 pay_xxx 衝突，也防止續費重複發
+                    const period = data.current_period_start || new Date().toISOString().substring(0, 7);
+                    const fallbackOrderId = `${data.subscription_id}_${period}`;
+                    try {
+                        await processTopup(customerEmail, subProductId, fallbackOrderId, 'DODO', null, data.subscription_id);
+                        console.log(`[Dodo] ${event.type} processTopup OK: ${customerEmail}`);
+                    } catch (e) {
+                        // 未知商品拋錯正常（topup 商品走 payment.succeeded），其餘記錄
+                        if (!e.message.includes('Unknown product')) {
+                            await logWebhookError('DODO', event.type, fallbackOrderId, customerEmail, e.message, data);
+                        }
+                    }
+                } else if (customerEmail && data.subscription_id) {
+                    // payload 沒有 product_id 時退化為只存 subscription_id
+                    await supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
+                        .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
                 }
             } else if (event.type === 'subscription.cancelled' || event.type === 'subscription.canceled' || event.type === 'subscription.expired') {
                 const data = event.data;
@@ -176,7 +184,10 @@ async function processTopup(customerEmail, variantId, orderId, platform, discoun
     else if (variantId == pIds.STUDIO) { pointsToAdd = 9000; planName = 'studio'; isSubscription = true; }
     else if (variantId == pIds.TOPUP) { pointsToAdd = 200; isSubscription = false; }
 
-    if (pointsToAdd <= 0) return console.warn(`[⚠️充值] 未知商品 ID: ${variantId} (${platform})`);
+    if (pointsToAdd <= 0) {
+        // 拋出讓外層回傳 500 → Dodo 自動重試，不再靜默丟棄
+        throw new Error(`Unknown product ID: ${variantId} (${platform})`);
+    }
 
     // 【T1修復】先查 KOL 碼對應的邀請人，再取/建用戶，確保新用戶也能完成歸因
     let kolEmailFromCode = null;

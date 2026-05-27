@@ -544,6 +544,95 @@ export default async function handler(req, res) {
         }
     }
 
+    // ── Admin: 補發所有 Dodo 訂閱用戶（一次性修復）────────────────────────────
+    if (req.method === 'GET' && req.query.action === 'sync_dodo_subscriptions') {
+        if (req.query.key !== process.env.ADMIN_KEY) return res.status(401).json({ error: 'Unauthorized' });
+
+        const DODO_API_KEY = process.env.DODO_API_KEY;
+        if (!DODO_API_KEY) return res.status(500).json({ error: 'DODO_API_KEY not set' });
+
+        const PLAN_MAP = {
+            [DODO_PRODUCTS.STARTER]: { plan: 'starter', points: 300,  cents: 700  },
+            [DODO_PRODUCTS.PRO]:     { plan: 'pro',     points: 2000, cents: 1500 },
+            [DODO_PRODUCTS.STUDIO]:  { plan: 'studio',  points: 9000, cents: 3500 },
+        };
+
+        const results = { fixed: [], skipped: [], errors: [] };
+
+        try {
+            // 拉所有 active/trialing 訂閱（最多 100 筆）
+            const listRes = await fetch(
+                'https://live.dodopayments.com/subscriptions?status=active&limit=100',
+                { headers: { 'Authorization': `Bearer ${DODO_API_KEY}` } }
+            );
+            const listData = await listRes.json();
+            const subs = listData.items || listData.subscriptions || listData.data || [];
+
+            for (const sub of subs) {
+                const subId   = sub.subscription_id || sub.id;
+                const email   = sub.customer?.email || sub.customer_email;
+                const prodId  = sub.product_id || sub.plan_id || sub.items?.[0]?.product_id;
+                const planCfg = PLAN_MAP[prodId];
+
+                if (!email || !planCfg) {
+                    results.skipped.push({ subId, email, prodId, reason: 'unknown_product_or_no_email' });
+                    continue;
+                }
+
+                try {
+                    // 取得目前 DB 狀態
+                    let { data: user } = await supabase.from('users').select('email, subscription_plan, points, lifetime_points').eq('email', email).maybeSingle();
+
+                    if (!user) {
+                        // 訂閱前未建帳號（直接從網站購買）→ 新建
+                        await supabase.from('users').insert([{
+                            email, points: planCfg.points, lifetime_points: planCfg.points,
+                            subscription_plan: planCfg.plan, dodo_subscription_id: subId,
+                            is_beta_tester: true, last_topup_at: new Date().toISOString()
+                        }]);
+                        results.fixed.push({ email, action: 'created', plan: planCfg.plan });
+                    } else if (!user.subscription_plan) {
+                        // 有帳號但沒有 plan → 補發
+                        await supabase.from('users').update({
+                            subscription_plan: planCfg.plan,
+                            dodo_subscription_id: subId,
+                            points: planCfg.points,
+                            lifetime_points: (user.lifetime_points || 0) + planCfg.points,
+                            last_topup_at: new Date().toISOString()
+                        }).eq('email', email);
+                        results.fixed.push({ email, action: 'updated', plan: planCfg.plan });
+                    } else {
+                        // 已有 plan → 跳過
+                        results.skipped.push({ email, reason: 'already_has_plan', plan: user.subscription_plan });
+                        continue;
+                    }
+
+                    // 補 transaction 記錄（冪等）
+                    await supabase.from('transactions').insert([{
+                        user_email: email, amount: planCfg.points,
+                        transaction_type: 'TOPUP_SUBSCRIPTION',
+                        order_id: `SYNC_${subId}`,
+                        amount_usd_cents: planCfg.cents
+                    }]).select(); // ignore conflict silently
+
+                } catch (e) {
+                    results.errors.push({ email, subId, error: e.message });
+                }
+            }
+
+            return res.status(200).json({
+                code: 0,
+                total_subs: subs.length,
+                fixed: results.fixed.length,
+                skipped: results.skipped.length,
+                errors: results.errors.length,
+                details: results
+            });
+        } catch (e) {
+            return res.status(500).json({ code: -1, error: e.message });
+        }
+    }
+
     return res.status(405).json({ code: -1, msg: 'Method Not Allowed' });
 }
 

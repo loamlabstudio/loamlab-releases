@@ -2870,16 +2870,32 @@ const TPL_META = {
   upgrade:       { label: 'Upgrade 轉化',       color: '#22c55e', subjectZh: '⭐ 訂閱 LoamLab，每月無限渲染',        subjectEn: '⭐ Unlock unlimited renders with LoamLab' },
 };
 
-function executeInsightEmail(emails, template) {
+async function executeInsightEmail(emails, template) {
   if (!emails || !emails.length) { showToast('沒有可發送的 Email', 'error'); return; }
   const meta = TPL_META[template] || { label: template, color: '#64748b', subjectZh: template, subjectEn: template };
+
+  // 從 DB 讀取已儲存的主旨（fallback 硬編碼）
+  let subjectZh = meta.subjectZh;
+  let subjectEn = meta.subjectEn;
+  try {
+    const r = await fetch(API_BASE + '/api/stats?action=get_email_templates', {
+      headers: { 'Authorization': 'Bearer ' + adminKey }
+    });
+    const j = await r.json();
+    const dbTpl = (j.templates || []).find(t => t.id === template);
+    if (dbTpl) {
+      if (dbTpl.subject_tw) subjectZh = dbTpl.subject_tw;
+      if (dbTpl.subject_en) subjectEn = dbTpl.subject_en;
+    }
+  } catch (_) {}
+
   const sample = emails.slice(0, 5).join('<br>') + (emails.length > 5 ? `<br><span style="color:#64748b">...等共 ${emails.length} 位</span>` : '');
 
   document.getElementById('email-modal-tpl-label').textContent = meta.label;
   document.getElementById('email-modal-tpl-label').style.color  = meta.color;
   document.getElementById('email-modal-count').textContent = emails.length + ' 位收件人';
-  document.getElementById('email-modal-subject-zh').textContent = meta.subjectZh;
-  document.getElementById('email-modal-subject-en').textContent = meta.subjectEn;
+  document.getElementById('email-modal-subject-zh').textContent = subjectZh;
+  document.getElementById('email-modal-subject-en').textContent = subjectEn;
   document.getElementById('email-modal-sample').innerHTML = sample;
   document.getElementById('email-modal-confirm').onclick = () => _doSendInsightEmail(emails, template);
   document.getElementById('email-send-modal').style.display = 'flex';

@@ -314,3 +314,22 @@ CREATE POLICY "backend_rw" ON public.email_templates FOR ALL USING (true) WITH C
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS dodo_subscription_id TEXT DEFAULT NULL;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS retention_offer_used BOOLEAN DEFAULT false;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS subscription_paused_until TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+
+-- ==============================================================================
+-- Phase 25: Webhook 失敗審計表（webhook_errors）
+-- 每次 processTopup 拋例外時寫入，確保付款資料永不丟失
+-- 查詢未處理失敗：SELECT * FROM webhook_errors ORDER BY created_at DESC;
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.webhook_errors (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    platform    TEXT NOT NULL,           -- 'DODO' | 'LS'
+    event_type  TEXT NOT NULL,           -- 'payment.succeeded' 等
+    order_id    TEXT,                    -- payment_id 或 subscription_id
+    customer_email TEXT,
+    error_message  TEXT,
+    raw_payload    TEXT,                 -- 原始 JSON（最多 8000 字）
+    resolved    BOOLEAN DEFAULT false,   -- 手動標記已處理
+    created_at  TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+ALTER TABLE public.webhook_errors ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_rw" ON public.webhook_errors FOR ALL USING (true) WITH CHECK (true);

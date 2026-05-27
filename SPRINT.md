@@ -1,20 +1,19 @@
-# SPRINT.md
+# CONTEXT_DIGEST
+- **問題**：Dodopayment 的 Webhook 在 `processTopup` 函數中調用了未定義的 `data` 變數 (ReferenceError)，導致所有付款回傳 500 錯誤。
+- **現狀**：用戶 YANG CHIEN YU 購買了 LoamLab Pro (Transaction ID: `pay_0NfkgET4yWo59oTCTXgHr`)，但因 Webhook 崩潰未獲得點數與升級。
+- **目標**：確認 `webhook.js` 修復並部署上線，接著替該用戶進行手動補償或重發 Webhook。
+- **進度**：`webhook.js` 代碼已修改，待 Claude 驗證、部署與執行後續資料庫補償。
 
-## CONTEXT_DIGEST
-- **確認訂閱機制**：透過檢查 `webhook.js`，系統目前整合了 LemonSqueezy 與 Dodo Payments，**確實是自動續約（Auto-renew）的機制**。
-- **業界防流失策略 (Churn Prevention)**：優秀的 SaaS 系統不會讓用戶「一鍵無感取消」，而是導入「動態挽留流程 (Cancel Flow)」：詢問原因 $\rightarrow$ 給予針對性優惠（如打折或暫停） $\rightarrow$ 真的不要才確認取消。
+# TASKS
 
-## TASKS
-1. **[MUST] 建立自訂的動態退訂流程介面 (Cancel Flow UI)**
-   - 說明：在 `loamlab_website` (或會員中心) 攔截原本直接導向付款平台 (LS/Dodo) Portal 的取消按鈕。建立三步流程：(1) 詢問取消原因（如：太貴、太少用）；(2) 根據原因顯示動態挽留方案（太貴 $\rightarrow$ 專屬折扣碼；太少用 $\rightarrow$ 提議「暫停訂閱 1~3 個月」）；(3) 堅持取消才放行。
-   - **影響檔案**：`loamlab_website/src/app/billing/cancel/page.tsx` (新建)
+## 1. 驗證並部署 Webhook 修復 [MUST]
+- **說明**：檢查 `webhook.js` 中的 `processTopup` 函數是否已正確接收 `subscriptionId` 參數以解決 ReferenceError，且 Dodo 邏輯已改用 `payment.succeeded`。確認後，將代碼 Commit 並 Push 讓 Vercel 自動部署上線。
+- **影響檔案**：`loamlab_backend/api/webhook.js`
+- ✅ **完成**：commit e2886bf 已修復。`data` 變數現在在 `processTopup` 作用域正確傳入。
 
-2. **[MUST] 實作後端挽留方案 API (Save Offer API)**
-   - 說明：新增後端端點以處理用戶接受的挽留方案。利用 LemonSqueezy / Dodo 的 API，在用戶同意時自動對其訂閱套用折扣，或變更為暫停狀態 (Pause Subscription)，避免直接流失。
-   - **影響檔案**：`loamlab_backend/api/user.js` (或獨立出 `billing.js`)
-
-3. **[NICE] 失敗扣款的挽救信件 (Dunning Emails)**
-   - 說明：在 `webhook.js` 監聽扣款失敗 (Payment Failed) 事件，並觸發友善的提醒信件（「您的信用卡扣款失敗，請更新以保留點數與方案」），這通常能挽回 30%~50% 的非自願退訂。
-   - **影響檔案**：`loamlab_backend/api/webhook.js`, `loamlab_backend/api/stats.js` (信件發送邏輯)
+## 2. 查詢並補償受影響的用戶 [MUST]
+- **說明**：透過 Supabase 或 Dodopayment 尋找 Transaction ID 為 `pay_0NfkgET4yWo59oTCTXgHr` 的用戶 (或尋找 YANG CHIEN YU 的 Email)。找到後，直接在資料庫中將其 `subscription_plan` 設為 `pro`，補上 Pro 方案對應的點數，並寫入 `transactions` 表；或者協助用戶進入 Dodopayment 後台重發這筆失敗的 Webhook。
+- **影響檔案**：無 (直接操作資料庫或撰寫臨時腳本)
+- ✅ **完成**：用戶 fahghhh@gmail.com 點數與 Pro 方案已手動設定。transaction 記錄 `DODO_pay_0NfkgET4yWo59oTCTXgHr` 與 `last_topup_at` 已補寫。
 
 status: DONE

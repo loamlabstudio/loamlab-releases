@@ -51,9 +51,15 @@ export default async function handler(req, res) {
                 const discountCode = data.discount?.code || data.discount_code || null;
 
                 if (customerEmail && variantId && orderId) {
-                    await processTopup(customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id);
+                    try {
+                        await processTopup(customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id);
+                    } catch (e) {
+                        await logWebhookError('DODO', event.type, orderId, customerEmail, e.message, data);
+                        throw e; // 讓外層回傳 500，Dodo 會重試
+                    }
                 } else {
                     console.error(`[Dodo] Missing required fields in payment.succeeded. Payload:`, JSON.stringify(data));
+                    await logWebhookError('DODO', event.type, null, customerEmail || 'unknown', 'Missing required fields', data);
                 }
             }
             
@@ -101,7 +107,12 @@ export default async function handler(req, res) {
                 }
 
                 if (customerEmail && variantId) {
-                    await processTopup(customerEmail, variantId, orderId, 'LS');
+                    try {
+                        await processTopup(customerEmail, variantId, orderId, 'LS');
+                    } catch (e) {
+                        await logWebhookError('LS', eventName, orderId, customerEmail, e.message, event.data?.attributes);
+                        throw e;
+                    }
                 }
             } else if (eventName === 'subscription_cancelled' || eventName === 'subscription_expired') {
                 const orderData = event.data.attributes;
@@ -360,5 +371,23 @@ async function sendDunningEmail(email) {
         console.log(`[Dunning] 扣款失敗通知已發送: ${email}`);
     } catch (e) {
         console.warn('[Dunning] email failed (non-fatal):', e.message);
+    }
+}
+
+// 付款失敗時寫入審計表，讓每筆付款都有記錄可追蹤與手動補償
+async function logWebhookError(platform, eventType, orderId, customerEmail, errorMsg, rawData) {
+    try {
+        await supabase.from('webhook_errors').insert([{
+            platform,
+            event_type: eventType,
+            order_id: orderId,
+            customer_email: customerEmail,
+            error_message: errorMsg,
+            raw_payload: JSON.stringify(rawData)?.substring(0, 8000),
+            created_at: new Date().toISOString(),
+        }]);
+        console.error(`[🚨WebhookError] ${platform} ${eventType} ${orderId} — ${errorMsg}`);
+    } catch (_) {
+        // 不讓日誌失敗影響主流程
     }
 }

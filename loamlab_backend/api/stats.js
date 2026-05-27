@@ -837,6 +837,19 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, logs: data || [] });
     }
 
+    // ── Admin: 付款審計（webhook_errors + 異常用戶）────────────────────────────
+    if (req.method === 'GET' && action === 'payment_audit') {
+        return res.status(200).json({ code: 0, data: await paymentAudit(supabase) });
+    }
+
+    if (req.method === 'POST' && action === 'resolve_webhook_error') {
+        const { id } = req.body || {};
+        if (!id) return res.status(400).json({ code: -1, msg: 'Missing id' });
+        const { error } = await supabase.from('webhook_errors').update({ resolved: true }).eq('id', id);
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0 });
+    }
+
     const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic };
     if (!actions[action]) return res.status(400).json({ code: -1, msg: `Unknown action: ${action}` });
 
@@ -1347,4 +1360,37 @@ function getTier(user, active7dSet, active30dSet) {
     if (new Date(user.created_at) > new Date(daysAgo(7))) return 'new';
     if (!active30dSet.has(user.email)) return 'churned';
     return 'active';
+}
+
+// ── 付款審計 ──────────────────────────────────────────────────────────────────
+async function paymentAudit(supabase) {
+    const [errRes, zeroRes, topupRes] = await Promise.all([
+        // 未解決的 webhook 失敗紀錄
+        supabase.from('webhook_errors')
+            .select('id, platform, event_type, order_id, customer_email, error_message, created_at')
+            .eq('resolved', false)
+            .order('created_at', { ascending: false })
+            .limit(50),
+        // 有訂閱方案但 points = 0（可能漏發）
+        supabase.from('users')
+            .select('email, subscription_plan, points, lifetime_points, last_topup_at')
+            .not('subscription_plan', 'is', null)
+            .eq('points', 0)
+            .not('email', 'ilike', '%test%')
+            .limit(20),
+        // 最近 30 筆儲值紀錄
+        supabase.from('transactions')
+            .select('user_email, amount, order_id, transaction_type, created_at')
+            .in('transaction_type', ['TOPUP_SUBSCRIPTION', 'TOPUP_SINGLE'])
+            .order('created_at', { ascending: false })
+            .limit(30),
+    ]);
+    return {
+        webhook_errors: {
+            unresolved_count: errRes.data?.length || 0,
+            items: errRes.data || [],
+        },
+        suspicious_users: zeroRes.data || [],
+        recent_topups: topupRes.data || [],
+    };
 }

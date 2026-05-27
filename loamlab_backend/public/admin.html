@@ -83,6 +83,7 @@
       <button data-atab="users" onclick="switchAdminTab('users')" class="atab-btn">👥 用戶</button>
       <button data-atab="content" onclick="switchAdminTab('content')" class="atab-btn">📢 內容</button>
       <button data-atab="logs" onclick="switchAdminTab('logs')" class="atab-btn">📋 日誌</button>
+      <button data-atab="payment" onclick="switchAdminTab('payment');loadPaymentAudit()" class="atab-btn">💳 金流</button>
     </div>
   </div>
 
@@ -911,6 +912,77 @@
   </div>
 
   </div><!-- /atab-logs -->
+
+  <!-- ── Tab: 金流審計 ── -->
+  <div id="atab-payment" class="admin-tab hidden">
+
+    <!-- Webhook 失敗紀錄 -->
+    <div class="card mb-5">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <div class="text-sm font-semibold text-white">Webhook 失敗紀錄</div>
+          <span id="payment-audit-err-badge" class="badge" style="background:#ef444422;color:#fca5a5;border:1px solid #ef444444">載入中...</span>
+        </div>
+        <button onclick="loadPaymentAudit()" class="px-3 py-1.5 bg-indigo-600/70 hover:bg-indigo-600 rounded-lg text-xs text-white transition-colors">↺ 重新載入</button>
+      </div>
+      <p class="text-xs text-gray-500 mb-4">每筆付款失敗時自動寫入。「標記已解決」後不再顯示，但資料庫仍保留（resolved=true）。</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead><tr class="text-gray-600 border-b border-white/5 uppercase tracking-wider">
+            <th class="text-left pb-2 font-medium whitespace-nowrap">時間（台北）</th>
+            <th class="text-left pb-2 font-medium">Email</th>
+            <th class="text-left pb-2 font-medium">平台 / 事件</th>
+            <th class="text-left pb-2 font-medium">Order ID</th>
+            <th class="text-left pb-2 font-medium">錯誤訊息</th>
+            <th class="text-right pb-2 font-medium">動作</th>
+          </tr></thead>
+          <tbody id="webhook-errors-tbody">
+            <tr><td colspan="6" class="py-4 text-center text-gray-500">載入中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 異常用戶：有方案但 0 點 -->
+    <div class="card mb-5">
+      <div class="text-sm font-semibold text-white mb-1">⚠️ 異常用戶：有訂閱方案但 0 點</div>
+      <p class="text-xs text-gray-500 mb-4">理論上不應存在。如果出現，代表付款成功但點數未被寫入。</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead><tr class="text-gray-600 border-b border-white/5 uppercase tracking-wider">
+            <th class="text-left pb-2 font-medium">Email</th>
+            <th class="text-left pb-2 font-medium">方案</th>
+            <th class="text-left pb-2 font-medium">目前點數</th>
+            <th class="text-left pb-2 font-medium">累計點數</th>
+            <th class="text-left pb-2 font-medium">最後充值</th>
+          </tr></thead>
+          <tbody id="suspicious-users-tbody">
+            <tr><td colspan="5" class="py-4 text-center text-gray-500">載入中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 最近儲值紀錄 -->
+    <div class="card">
+      <div class="text-sm font-semibold text-white mb-4">最近 30 筆儲值紀錄</div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead><tr class="text-gray-600 border-b border-white/5 uppercase tracking-wider">
+            <th class="text-left pb-2 font-medium whitespace-nowrap">時間（台北）</th>
+            <th class="text-left pb-2 font-medium">Email</th>
+            <th class="text-left pb-2 font-medium">類型</th>
+            <th class="text-left pb-2 font-medium">Order ID</th>
+            <th class="text-right pb-2 font-medium">點數</th>
+          </tr></thead>
+          <tbody id="recent-topups-tbody">
+            <tr><td colspan="5" class="py-4 text-center text-gray-500">載入中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /atab-payment -->
 
 </div>
 
@@ -3458,6 +3530,95 @@ switchAdminTab = function(tab) {
     _logsTimer = null;
   }
 };
+
+// ── 金流審計 ──────────────────────────────────────────────────────────────────
+async function loadPaymentAudit() {
+  const errTbody  = document.getElementById('webhook-errors-tbody');
+  const suspTbody = document.getElementById('suspicious-users-tbody');
+  const topTbody  = document.getElementById('recent-topups-tbody');
+  const badge     = document.getElementById('payment-audit-err-badge');
+
+  [errTbody, suspTbody, topTbody].forEach(t => {
+    if (t) t.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-gray-500 text-xs">載入中...</td></tr>';
+  });
+
+  let data;
+  try {
+    data = await fetchAction('payment_audit');
+  } catch (e) {
+    if (errTbody) errTbody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-red-400 text-xs">載入失敗：${e.message}</td></tr>`;
+    return;
+  }
+
+  // ─ Webhook 錯誤 ─
+  const errCount = data?.webhook_errors?.unresolved_count || 0;
+  if (badge) {
+    badge.textContent = errCount === 0 ? '✅ 無未解決' : `⚠️ ${errCount} 筆未解決`;
+    badge.style.background = errCount === 0 ? '#15803d22' : '#ef444422';
+    badge.style.color = errCount === 0 ? '#4ade80' : '#fca5a5';
+    badge.style.border = `1px solid ${errCount === 0 ? '#15803d44' : '#ef444444'}`;
+  }
+  if (errTbody) {
+    const items = data?.webhook_errors?.items || [];
+    errTbody.innerHTML = items.length === 0
+      ? '<tr><td colspan="6" class="py-6 text-center text-gray-500 text-xs">✅ 無未解決的付款失敗</td></tr>'
+      : items.map(e => `
+        <tr class="border-b border-white/5 hover:bg-white/3 transition-colors">
+          <td class="py-2 pr-3 text-gray-400 whitespace-nowrap">${new Date(e.created_at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'})}</td>
+          <td class="py-2 pr-3 text-indigo-300">${e.customer_email||'-'}</td>
+          <td class="py-2 pr-3 text-yellow-400 whitespace-nowrap">${e.platform} / ${e.event_type}</td>
+          <td class="py-2 pr-3 text-gray-400 font-mono text-xs">${e.order_id||'-'}</td>
+          <td class="py-2 pr-3 text-red-400 max-w-xs" style="word-break:break-all">${e.error_message||'-'}</td>
+          <td class="py-2 text-right whitespace-nowrap">
+            <button onclick="resolveWebhookError('${e.id}')"
+              class="px-2 py-1 bg-green-600/30 hover:bg-green-600/60 text-green-300 text-xs rounded transition-colors">
+              ✓ 已解決
+            </button>
+          </td>
+        </tr>`).join('');
+  }
+
+  // ─ 異常用戶 ─
+  if (suspTbody) {
+    const users = data?.suspicious_users || [];
+    suspTbody.innerHTML = users.length === 0
+      ? '<tr><td colspan="5" class="py-6 text-center text-gray-500 text-xs">✅ 無異常用戶</td></tr>'
+      : users.map(u => `
+        <tr class="border-b border-white/5">
+          <td class="py-2 pr-3 text-indigo-300">${u.email}</td>
+          <td class="py-2 pr-3"><span class="badge badge-subscriber">${u.subscription_plan}</span></td>
+          <td class="py-2 pr-3 text-red-400 font-bold">${u.points}</td>
+          <td class="py-2 pr-3 text-gray-400">${u.lifetime_points||0}</td>
+          <td class="py-2 text-gray-500">${u.last_topup_at ? new Date(u.last_topup_at).toLocaleDateString('zh-TW') : '從未'}</td>
+        </tr>`).join('');
+  }
+
+  // ─ 最近儲值 ─
+  if (topTbody) {
+    const rows = data?.recent_topups || [];
+    topTbody.innerHTML = rows.length === 0
+      ? '<tr><td colspan="5" class="py-4 text-center text-gray-500 text-xs">無記錄</td></tr>'
+      : rows.map(r => `
+        <tr class="border-b border-white/5">
+          <td class="py-2 pr-3 text-gray-400 whitespace-nowrap">${new Date(r.created_at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'})}</td>
+          <td class="py-2 pr-3 text-indigo-300">${r.user_email}</td>
+          <td class="py-2 pr-3 text-gray-400">${r.transaction_type}</td>
+          <td class="py-2 pr-3 text-gray-400 font-mono text-xs">${r.order_id||'-'}</td>
+          <td class="py-2 text-right text-green-400 font-semibold">+${r.amount}</td>
+        </tr>`).join('');
+  }
+}
+
+async function resolveWebhookError(id) {
+  const r = await fetch(`${API_BASE}/api/stats?action=resolve_webhook_error`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${adminKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id })
+  });
+  const j = await r.json();
+  if (j.code === 0) loadPaymentAudit();
+  else alert('操作失敗：' + j.msg);
+}
 </script>
 <!-- ── 發信審核 Modal ── -->
 <div id="email-send-modal" style="display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px)" onclick="if(event.target===this)this.style.display='none'">

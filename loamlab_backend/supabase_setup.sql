@@ -307,3 +307,10 @@ CREATE TABLE IF NOT EXISTS public.email_templates (
 );
 ALTER TABLE public.email_templates ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "backend_rw" ON public.email_templates FOR ALL USING (true) WITH CHECK (true);
+
+-- ==============================================================================
+-- Phase 24: 訂閱挽留系統（Cancel Flow / Save Offer / Dunning）
+-- ==============================================================================
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS dodo_subscription_id TEXT DEFAULT NULL;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS retention_offer_used BOOLEAN DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS subscription_paused_until TIMESTAMP WITH TIME ZONE DEFAULT NULL;

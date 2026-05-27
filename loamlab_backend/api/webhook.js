@@ -37,6 +37,12 @@ export default async function handler(req, res) {
                 return res.status(200).json({ status: 'success' });
             }
 
+            if (event.type === 'payment.failed') {
+                const customerEmail = event.data?.customer?.email;
+                if (customerEmail) await sendDunningEmail(customerEmail);
+                return res.status(200).json({ status: 'success' });
+            }
+
             if (event.type === 'payment.succeeded' || event.type === 'subscription.active' || event.type === 'subscription.renewed') {
                 const data = event.data;
                 const customerEmail = data.customer?.email;
@@ -216,6 +222,12 @@ async function processTopup(customerEmail, variantId, orderId, platform, discoun
         }
     }
 
+    // 儲存 Dodo subscription_id（供 save_offer pause 使用，Phase 24 migration 前不影響主流程）
+    if (isSubscription && data.subscription_id) {
+        supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
+            .then(() => {}).catch(e => console.warn('[subscription_id] store failed (non-fatal):', e.message));
+    }
+
     // 點數結轉與更新（無論新舊用戶統一走此路徑）
     const carryOver = isSubscription ? (user?.points || 0) : 0;
     const updatePayload = {
@@ -323,4 +335,34 @@ async function getRawBody(req) {
         req.on('data', (c) => chunks.push(c));
         req.on('end', () => resolve(Buffer.concat(chunks)));
     });
+}
+
+async function sendDunningEmail(email) {
+    try {
+        if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return;
+
+        // dedup：3 天內不重複發
+        const threeDaysAgo = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
+        const { data: recent } = await supabase.from('email_logs')
+            .select('id').eq('user_email', email).eq('template_name', 'dunning')
+            .gte('sent_at', threeDaysAgo).maybeSingle();
+        if (recent) return console.log(`[Dunning] 3 天內已發送，跳過: ${email}`);
+
+        const { default: nodemailer } = await import('nodemailer');
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
+        });
+
+        const subject = '您的 LoamLab 訂閱扣款失敗，請更新付款方式';
+        const bodyText = `親愛的設計師，\n\n您的 LoamLab 訂閱因信用卡扣款失敗而暫停。\n\n請前往以下連結更新您的付款資訊，確保點數和渲染服務不中斷：\n\nhttps://loamlab.studio/billing\n\n如有任何疑問，請回覆此信聯繫我們。\n\nLoamLab 團隊`;
+        const bodyHtml = bodyText.replace(/\n/g, '<br>');
+        const html = `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0"><div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #1e293b">${subject}</div><div style="line-height:1.9;color:#cbd5e1;margin-top:16px">${bodyHtml}</div><p style="font-size:11px;color:#475569;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · <a href="https://loamlab.studio" style="color:#7c3aed;text-decoration:none">loamlab.studio</a> · <a href="https://loamlab.studio/unsubscribe" style="color:#475569;text-decoration:none">退訂 / Unsubscribe</a></p></div>`;
+
+        await transporter.sendMail({ from: `LoamLab <${process.env.GMAIL_USER}>`, to: email, subject, html });
+        await supabase.from('email_logs').insert([{ user_email: email, template_name: 'dunning', sent_at: new Date().toISOString() }]);
+        console.log(`[Dunning] 扣款失敗通知已發送: ${email}`);
+    } catch (e) {
+        console.warn('[Dunning] email failed (non-fatal):', e.message);
+    }
 }

@@ -2307,6 +2307,20 @@ function refreshPricingModalBadge() {
             activeBtn.style.cursor = 'not-allowed';
         }
     }
+
+    // 訂閱用戶才顯示「取消訂閱」入口
+    const cancelRow = document.getElementById('cancel-subscription-row');
+    if (cancelRow) cancelRow.classList.toggle('hidden', !plan);
+}
+
+function openCancelFlow() {
+    const email = window.loamlabUserEmail || '';
+    const url = 'https://loamlab.studio/billing/cancel?email=' + encodeURIComponent(email);
+    if (window.sketchup) {
+        try { sketchup.open_browser(url); } catch(_) {}
+    } else {
+        window.open(url, '_blank');
+    }
 }
 
 function switchPricingTab(tab) {

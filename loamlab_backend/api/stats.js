@@ -743,12 +743,12 @@ export default async function handler(req, res) {
         const now = new Date();
         const summary = {};
 
-        // Onboarding：1–3 天前註冊，從未渲染
+        // Onboarding：24–48 小時前註冊，從未渲染（第二天早上，熱情最高）
         try {
             const d1 = new Date(now - 1 * 24 * 3600 * 1000).toISOString();
-            const d3 = new Date(now - 3 * 24 * 3600 * 1000).toISOString();
+            const d2 = new Date(now - 2 * 24 * 3600 * 1000).toISOString();
             const { data: candidates } = await noTest(supabase.from('users').select('email'))
-                .gte('created_at', d3).lte('created_at', d1);
+                .gte('created_at', d2).lte('created_at', d1);
             if (candidates?.length) {
                 const emails = candidates.map(u => u.email);
                 const { data: rendered } = await supabase.from('render_history').select('user_email').in('user_email', emails);
@@ -760,17 +760,17 @@ export default async function handler(req, res) {
             }
         } catch (e) { summary.onboarding_error = e.message; }
 
-        // Re-engagement：14–60 天內曾渲染，但最後一次超過 14 天
+        // Re-engagement：7–21 天前曾渲染，但最近 7 天沒有活躍（黃金介入窗口）
         try {
-            const d14 = new Date(now - 14 * 24 * 3600 * 1000).toISOString();
-            const d60 = new Date(now - 60 * 24 * 3600 * 1000).toISOString();
+            const d7  = new Date(now - 7  * 24 * 3600 * 1000).toISOString();
+            const d21 = new Date(now - 21 * 24 * 3600 * 1000).toISOString();
             const { data: stale } = await supabase.from('render_history').select('user_email')
-                .gte('created_at', d60).lt('created_at', d14);
+                .gte('created_at', d21).lt('created_at', d7);
             if (stale?.length) {
                 const candidates = [...new Set(stale.map(r => r.user_email))].filter(e => !isTest(e));
-                // 排除 14 天內有新渲染的
+                // 排除 7 天內有新渲染的
                 const { data: recent } = await supabase.from('render_history').select('user_email')
-                    .gte('created_at', d14).in('user_email', candidates);
+                    .gte('created_at', d7).in('user_email', candidates);
                 const recentSet = new Set((recent || []).map(r => r.user_email));
                 const targets = candidates.filter(e => !recentSet.has(e));
                 if (targets.length) {

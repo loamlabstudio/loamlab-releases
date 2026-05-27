@@ -2313,13 +2313,330 @@ function refreshPricingModalBadge() {
     if (cancelRow) cancelRow.classList.toggle('hidden', !plan);
 }
 
+// ─── Cancel Flow (Internal Modal) ─────────────────────────────────
+var _cfState = { reason: null, offer: null };
+
+var CF_I18N = {
+    'zh-TW': {
+        lbl:'取消訂閱', h1:'在離開前，可以告訴我們原因嗎？',
+        sub:'這幫助我們改善 LoamLab，也讓我們確認是否有更好的解決方案。',
+        cont:'繼續', off_lbl:'專屬方案', ph:'選擇暫停月數後直接生效',
+        skip:'不了，我確定要取消', done_h1:'已為您處理',
+        done_sub:'您的方案已套用，感謝繼續使用 LoamLab。',
+        cancel_h1:'取消訂閱',
+        cancel_p1:'請直接聯繫我們，我們將在 24 小時內為您取消並確認。',
+        cancel_p2:'取消後，當前月份點數仍可繼續使用至期末。',
+        cancel_btn:'發信取消訂閱', cancel_subj:'訂閱取消申請', loading:'處理中...',
+        mo: function(n){ return n + ' 個月'; },
+        r:['訂閱費用超出預算','最近案子少，暫時用不到','改用其他工具','其他原因'],
+        dt:'先別走 — 這是給你的', ds:'立即補充 100 點，繼續完成手邊的案子',
+        dd:'100 點 = 5 張 2K 效果圖，今天就能用', dc:'接受回饋，繼續使用',
+        pt:'案子少？先暫停一下', ps:'點數和方案暫時凍結，想用再自動恢復',
+        pd:'暫停期間不扣費，點數保留，隨時可提前恢復',
+    },
+    'en-US': {
+        lbl:'Cancel Subscription', h1:'Before you leave, could you tell us why?',
+        sub:'This helps us improve LoamLab and find a better solution for you.',
+        cont:'Continue', off_lbl:'Exclusive Offer', ph:'Choose number of months to pause',
+        skip:'No thanks, I still want to cancel', done_h1:'Done',
+        done_sub:'Your offer has been applied. Thank you for staying with LoamLab.',
+        cancel_h1:'Cancel Subscription',
+        cancel_p1:'Please contact us directly and we\'ll cancel within 24 hours.',
+        cancel_p2:'Your current month\'s points remain usable until the end of the period.',
+        cancel_btn:'Email to Cancel', cancel_subj:'Subscription Cancellation Request', loading:'Processing...',
+        mo: function(n){ return n + ' month' + (n > 1 ? 's' : ''); },
+        r:['Subscription cost is too high','Not using it much lately','Switching to another tool','Other reasons'],
+        dt:'Wait — here\'s something for you', ds:'Get 100 bonus points now and keep your projects going',
+        dd:'100 pts = 5 renders at 2K quality, usable today', dc:'Accept offer, keep using',
+        pt:'Slow season? Pause for a while', ps:'Points and plan frozen until you need them again',
+        pd:'No charges during pause, points preserved, resume anytime',
+    },
+    'zh-CN': {
+        lbl:'取消订阅', h1:'在离开前，可以告诉我们原因吗？',
+        sub:'这有助于我们改进 LoamLab，也让我们确认是否有更好的解决方案。',
+        cont:'继续', off_lbl:'专属方案', ph:'选择暂停月数后直接生效',
+        skip:'不了，我确定要取消', done_h1:'已为您处理',
+        done_sub:'您的方案已套用，感谢继续使用 LoamLab。',
+        cancel_h1:'取消订阅',
+        cancel_p1:'请直接联系我们，我们将在 24 小时内为您取消并确认。',
+        cancel_p2:'取消后，当前月份点数仍可继续使用至期末。',
+        cancel_btn:'发信取消订阅', cancel_subj:'订阅取消申请', loading:'处理中...',
+        mo: function(n){ return n + ' 个月'; },
+        r:['订阅费用超出预算','最近项目少，暂时用不到','改用其他工具','其他原因'],
+        dt:'先别走 — 这是给你的', ds:'立即补充 100 点，继续完成手头的项目',
+        dd:'100 点 = 5 张 2K 效果图，今天就能用', dc:'接受回馈，继续使用',
+        pt:'项目少？先暂停一下', ps:'点数和方案暂时冻结，想用再自动恢复',
+        pd:'暂停期间不扣费，点数保留，随时可提前恢复',
+    },
+    'es-ES': {
+        lbl:'Cancelar suscripción', h1:'Antes de irte, ¿puedes decirnos por qué?',
+        sub:'Esto nos ayuda a mejorar LoamLab y encontrar una solución mejor para ti.',
+        cont:'Continuar', off_lbl:'Oferta exclusiva', ph:'Elige cuántos meses pausar',
+        skip:'No gracias, igual quiero cancelar', done_h1:'¡Listo!',
+        done_sub:'Tu oferta ha sido aplicada. Gracias por quedarte con LoamLab.',
+        cancel_h1:'Cancelar suscripción',
+        cancel_p1:'Contáctanos directamente y cancelaremos en 24 horas.',
+        cancel_p2:'Tus puntos del mes actual siguen disponibles hasta el final del período.',
+        cancel_btn:'Enviar email para cancelar', cancel_subj:'Solicitud de cancelación', loading:'Procesando...',
+        mo: function(n){ return n + ' mes' + (n > 1 ? 'es' : ''); },
+        r:['El costo es demasiado alto','Últimamente lo uso poco','Cambio a otra herramienta','Otros motivos'],
+        dt:'Espera — esto es para ti', ds:'Obtén 100 puntos ahora y sigue con tus proyectos',
+        dd:'100 pts = 5 renders en calidad 2K, disponibles hoy', dc:'Aceptar oferta, seguir usando',
+        pt:'¿Temporada baja? Pausa un momento', ps:'Puntos y plan congelados hasta que los necesites',
+        pd:'Sin cobros durante la pausa, puntos guardados, reanuda cuando quieras',
+    },
+    'pt-BR': {
+        lbl:'Cancelar assinatura', h1:'Antes de sair, pode nos dizer o motivo?',
+        sub:'Isso nos ajuda a melhorar o LoamLab e encontrar uma solução melhor para você.',
+        cont:'Continuar', off_lbl:'Oferta exclusiva', ph:'Escolha quantos meses pausar',
+        skip:'Não obrigado, ainda quero cancelar', done_h1:'Concluído',
+        done_sub:'Sua oferta foi aplicada. Obrigado por continuar com o LoamLab.',
+        cancel_h1:'Cancelar assinatura',
+        cancel_p1:'Entre em contato conosco e cancelaremos em 24 horas.',
+        cancel_p2:'Seus pontos do mês atual continuam disponíveis até o final do período.',
+        cancel_btn:'Enviar email para cancelar', cancel_subj:'Solicitação de cancelamento', loading:'Processando...',
+        mo: function(n){ return n + ' ' + (n > 1 ? 'meses' : 'mês'); },
+        r:['O custo está muito alto','Estou usando pouco ultimamente','Mudando para outra ferramenta','Outros motivos'],
+        dt:'Aguarde — isso é para você', ds:'Receba 100 pontos agora e continue seus projetos',
+        dd:'100 pts = 5 renders em qualidade 2K, disponíveis hoje', dc:'Aceitar oferta, continuar usando',
+        pt:'Baixa temporada? Pause um pouco', ps:'Pontos e plano congelados até precisar novamente',
+        pd:'Sem cobranças durante a pausa, pontos preservados, retome quando quiser',
+    },
+    'ja-JP': {
+        lbl:'サブスクリプションをキャンセル', h1:'退会前に、理由を教えていただけますか？',
+        sub:'LoamLabの改善と、より良い解決策を見つけるために使わせていただきます。',
+        cont:'続ける', off_lbl:'特別なオファー', ph:'一時停止する月数を選択してください',
+        skip:'いいえ、やはりキャンセルします', done_h1:'完了しました',
+        done_sub:'オファーが適用されました。LoamLabをご利用いただきありがとうございます。',
+        cancel_h1:'サブスクリプションをキャンセル',
+        cancel_p1:'直接お問い合わせください。24時間以内にキャンセルを確認します。',
+        cancel_p2:'現在の月のポイントは期末まで引き続き使用できます。',
+        cancel_btn:'キャンセルのメールを送る', cancel_subj:'サブスクリプションキャンセルのご依頼', loading:'処理中...',
+        mo: function(n){ return n + 'ヶ月'; },
+        r:['料金が予算を超えている','最近あまり使っていない','別のツールに切り替える','その他の理由'],
+        dt:'待って — これはあなたへのプレゼント', ds:'100ポイントを今すぐ受け取り、プロジェクトを続けましょう',
+        dd:'100pts = 2K品質で5枚レンダリング、今日から使用可能', dc:'オファーを受け入れて使い続ける',
+        pt:'案件が少ない？一時停止しましょう', ps:'ポイントとプランを一時凍結、必要なときに自動再開',
+        pd:'一時停止中は課金なし、ポイント保持、いつでも早期再開可能',
+    },
+};
+
 function openCancelFlow() {
-    const email = window.loamlabUserEmail || '';
-    const url = 'https://loamlabwebsite.vercel.app/billing/cancel?email=' + encodeURIComponent(email);
+    var lang = (typeof currentLang !== 'undefined' ? currentLang : null) || localStorage.getItem('loamlab_lang') || 'en-US';
+    var ct = CF_I18N[lang] || CF_I18N['en-US'];
+    _cfState = { reason: null, offer: null, ct: ct };
+
+    var modal = document.getElementById('cancel-flow-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    _cfRenderStep1();
+}
+
+function closeCancelFlow() {
+    var modal = document.getElementById('cancel-flow-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function _cfRenderStep1() {
+    var ct = _cfState.ct;
+    var offers = ['discount', 'pause', 'discount', 'pause'];
+    var el = document.getElementById('cancel-flow-content');
+    if (!el) return;
+    var rows = ct.r.map(function(label, i) {
+        return '<button onclick="_cfSelectReason(' + i + ',\'' + offers[i] + '\',this)"'
+            + ' class="cancel-r-btn w-full text-left px-4 py-3 rounded-xl border border-white/10 text-white/50 text-xs font-light hover:border-white/30 hover:text-white transition-all"'
+            + ' data-idx="' + i + '">'
+            + '<span class="inline-block w-3 h-3 rounded-full border border-white/30 mr-2.5 align-middle cf-dot"></span>'
+            + label + '</button>';
+    }).join('');
+    el.innerHTML = '<button onclick="closeCancelFlow()" class="absolute top-3 right-3 text-white/30 hover:text-white/70 p-1.5 rounded-full hover:bg-white/10 transition-all">'
+        + '<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg></button>'
+        + '<div style="font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:#DA1E1F;font-weight:700;margin-bottom:12px">' + ct.lbl + '</div>'
+        + '<h2 style="font-size:1rem;font-weight:300;color:#fff;margin-bottom:8px;line-height:1.4">' + ct.h1 + '</h2>'
+        + '<p style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:20px;line-height:1.5">' + ct.sub + '</p>'
+        + '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">' + rows + '</div>'
+        + '<button id="cf-continue-btn" onclick="_cfRenderStep2()" disabled'
+        + ' style="width:100%;padding:10px;border-radius:9999px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.2);font-size:9px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#fff;opacity:0.3;cursor:not-allowed;transition:all 0.2s">'
+        + ct.cont + '</button>';
+}
+
+function _cfSelectReason(idx, offer, btn) {
+    _cfState.reason = idx;
+    _cfState.offer = offer;
+    document.querySelectorAll('.cancel-r-btn').forEach(function(b) {
+        b.style.borderColor = 'rgba(255,255,255,0.1)';
+        b.style.color = 'rgba(255,255,255,0.5)';
+        b.querySelector('.cf-dot').style.background = 'transparent';
+        b.querySelector('.cf-dot').style.borderColor = 'rgba(255,255,255,0.3)';
+    });
+    btn.style.borderColor = '#DA1E1F';
+    btn.style.color = '#fff';
+    btn.querySelector('.cf-dot').style.background = '#DA1E1F';
+    btn.querySelector('.cf-dot').style.borderColor = '#DA1E1F';
+    var cont = document.getElementById('cf-continue-btn');
+    if (cont) { cont.disabled = false; cont.style.opacity = '1'; cont.style.cursor = 'pointer'; }
+}
+
+function _cfRenderStep2() {
+    var ct = _cfState.ct;
+    var offer = _cfState.offer;
+    var el = document.getElementById('cancel-flow-content');
+    if (!el) return;
+    var title = offer === 'discount' ? ct.dt : ct.pt;
+    var sub   = offer === 'discount' ? ct.ds : ct.ps;
+    var detail = offer === 'discount' ? ct.dd : ct.pd;
+    var offerHtml = offer === 'discount'
+        ? '<button onclick="_cfAcceptOffer(\'discount\',1)" id="cf-offer-btn"'
+          + ' style="width:100%;padding:12px;border-radius:9999px;background:#DA1E1F;color:#fff;font-size:9px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:12px;transition:all 0.2s">'
+          + ct.dc + '</button>'
+        : '<div style="display:flex;gap:8px;margin-bottom:8px">'
+          + [1,2,3].map(function(m){ return '<button onclick="_cfAcceptOffer(\'pause\',' + m + ')"'
+              + ' style="flex:1;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);font-size:11px;font-weight:700;color:#fff;background:transparent;letter-spacing:0.1em;cursor:pointer;transition:all 0.2s">'
+              + ct.mo(m) + '</button>'; }).join('')
+          + '</div>'
+          + '<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;margin-bottom:12px">' + ct.ph + '</p>';
+    el.innerHTML = '<button onclick="closeCancelFlow()" class="absolute top-3 right-3 text-white/30 hover:text-white/70 p-1.5 rounded-full hover:bg-white/10 transition-all">'
+        + '<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg></button>'
+        + '<div style="font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:#DA1E1F;font-weight:700;margin-bottom:12px">' + ct.off_lbl + '</div>'
+        + '<h2 style="font-size:1rem;font-weight:300;color:#fff;margin-bottom:6px;line-height:1.4">' + title + '</h2>'
+        + '<p style="font-size:12px;color:rgba(255,255,255,0.7);margin-bottom:4px">' + sub + '</p>'
+        + '<p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:20px">' + detail + '</p>'
+        + offerHtml
+        + '<button onclick="_cfConfirmCancel()"'
+        + ' style="width:100%;padding:10px;border-radius:9999px;font-size:9px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:rgba(255,255,255,0.3);background:transparent;border:none;cursor:pointer;transition:color 0.2s">'
+        + ct.skip + '</button>';
+}
+
+function _cfAcceptOffer(offerType, pauseMonths) {
+    var ct = _cfState.ct;
+    var email = window.loamlabUserEmail || '';
+    var btn = document.getElementById('cf-offer-btn');
+    if (btn) { btn.disabled = true; btn.textContent = ct.loading; }
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 15000);
+    fetch('https://loamlab-camera-backend.vercel.app/api/user?action=save_offer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, offer_type: offerType, pause_months: pauseMonths }),
+        signal: ctrl.signal
+    }).then(function(r){ return r.json(); }).then(function(data){
+        clearTimeout(timer);
+        _cfRenderStep3(data.code === 0, data.code === 0 ? ct.done_sub : (data.msg || ''));
+    }).catch(function(){
+        clearTimeout(timer);
+        _cfRenderStep3(false, '');
+    });
+}
+
+function _cfConfirmCancel() {
+    var ct = _cfState.ct;
+    var email = window.loamlabUserEmail || '';
+    var el = document.getElementById('cancel-flow-content');
+    if (!el) return;
+
+    // 顯示取消中 loading
+    el.innerHTML = '<div style="text-align:center;padding:32px 0">'
+        + '<div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.1);border-top-color:#DA1E1F;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 16px"></div>'
+        + '<p style="font-size:12px;color:rgba(255,255,255,0.4)">' + (ct.loading || 'Processing...') + '</p>'
+        + '</div>'
+        + '<style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
+
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 15000);
+    fetch('https://loamlab-camera-backend.vercel.app/api/user?action=cancel_subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email }),
+        signal: ctrl.signal
+    }).then(function(r){ return r.json(); }).then(function(data){
+        clearTimeout(timer);
+        if (data.code === 0) {
+            _cfRenderStep3(true, _cfCancelDoneMsg(ct));
+        } else {
+            if (data.portal_url && window.sketchup) {
+                try { sketchup.open_browser(data.portal_url); } catch(_) {}
+            }
+            _cfRenderStep3(false, data.portal_url || '');
+        }
+    }).catch(function(){
+        clearTimeout(timer);
+        _cfRenderStep3(false, '');
+    });
+}
+
+function _cfCancelDoneMsg(ct) {
+    var msgs = {
+        'zh-TW': '訂閱已取消。當前月份點數仍可使用至週期結束。',
+        'en-US': 'Your subscription has been cancelled. Points remain usable until the end of this period.',
+        'zh-CN': '订阅已取消。当前月份点数仍可使用至周期结束。',
+        'es-ES': 'Tu suscripción ha sido cancelada. Los puntos siguen disponibles hasta el final del período.',
+        'pt-BR': 'Sua assinatura foi cancelada. Os pontos continuam disponíveis até o final do período.',
+        'ja-JP': 'サブスクリプションがキャンセルされました。ポイントは期末まで使用できます。',
+    };
+    var lang = (typeof currentLang !== 'undefined' ? currentLang : null) || localStorage.getItem('loamlab_lang') || 'en-US';
+    return msgs[lang] || msgs['en-US'];
+}
+
+function _cfRenderStep3(success, msg) {
+    var ct = _cfState.ct;
+    var email = window.loamlabUserEmail || '';
+    var el = document.getElementById('cancel-flow-content');
+    if (!el) return;
+    if (success) {
+        el.innerHTML = '<div style="text-align:center;padding:8px 0">'
+            + '<div style="width:56px;height:56px;border-radius:50%;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">'
+            + '<svg width="24" height="24" fill="none" stroke="#22c55e" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>'
+            + '<h2 style="font-size:1.1rem;font-weight:300;color:#fff;margin-bottom:10px">' + ct.done_h1 + '</h2>'
+            + '<p style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:24px;line-height:1.5">' + msg + '</p>'
+            + '<button onclick="closeCancelFlow()" style="padding:10px 28px;border-radius:9999px;background:#DA1E1F;color:#fff;font-size:9px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;border:none;cursor:pointer">OK ✓</button>'
+            + '</div>';
+    } else if (msg) {
+        // portal_url 已開啟：顯示「已在系統瀏覽器開啟」提示
+        var portalLabels = {
+            'zh-TW': ['已開啟管理頁面', '系統瀏覽器已自動開啟訂閱管理頁面，請在瀏覽器中完成取消操作。', '重新開啟'],
+            'en-US': ['Billing page opened', 'Your subscription management page has been opened in the browser. Please complete the cancellation there.', 'Reopen'],
+            'zh-CN': ['已开启管理页面', '系统浏览器已自动打开订阅管理页面，请在浏览器中完成取消操作。', '重新打开'],
+            'es-ES': ['Página abierta', 'La página de gestión de suscripción se ha abierto en el navegador. Completa la cancelación allí.', 'Reabrir'],
+            'pt-BR': ['Página aberta', 'A página de gerenciamento de assinatura foi aberta no navegador. Conclua o cancelamento lá.', 'Reabrir'],
+            'ja-JP': ['管理ページを開きました', 'サブスクリプション管理ページがブラウザで開かれました。そちらでキャンセルを完了してください。', '再度開く']
+        };
+        var pl = portalLabels[currentLang] || portalLabels['en-US'];
+        var portalUrl = msg;
+        el.innerHTML = '<div style="text-align:center;padding:8px 0">'
+            + '<div style="width:56px;height:56px;border-radius:50%;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">'
+            + '<svg width="24" height="24" fill="none" stroke="#60a5fa" stroke-width="1.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></div>'
+            + '<h2 style="font-size:1.1rem;font-weight:300;color:#fff;margin-bottom:10px">' + pl[0] + '</h2>'
+            + '<p style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:24px;line-height:1.6">' + pl[1] + '</p>'
+            + '<button onclick="(function(){try{sketchup.open_browser(\'' + portalUrl.replace(/'/g, "\\'") + '\');}catch(e){}})();"'
+            + ' style="padding:10px 28px;border-radius:9999px;border:1px solid rgba(255,255,255,0.2);color:#fff;font-size:9px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;background:transparent;cursor:pointer;margin-bottom:12px">'
+            + pl[2] + '</button>'
+            + '<br><button onclick="closeCancelFlow()" style="font-size:10px;color:rgba(255,255,255,0.3);background:none;border:none;cursor:pointer;padding:4px">✕</button>'
+            + '</div>';
+    } else {
+        el.innerHTML = '<div style="text-align:center;padding:8px 0">'
+            + '<div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">'
+            + '<svg width="24" height="24" fill="none" stroke="white" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>'
+            + '<h2 style="font-size:1.1rem;font-weight:300;color:#fff;margin-bottom:10px">' + ct.cancel_h1 + '</h2>'
+            + '<p style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:6px;line-height:1.5">' + ct.cancel_p1 + '</p>'
+            + '<p style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:20px;line-height:1.5">' + ct.cancel_p2 + '</p>'
+            + '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 14px;margin-bottom:16px;cursor:text;user-select:text">'
+            + '<span style="font-size:10px;color:rgba(255,255,255,0.3);display:block;margin-bottom:3px">support email</span>'
+            + '<span style="font-size:13px;color:#fff;font-family:monospace;user-select:text">support@loamlab.studio</span>'
+            + '</div>'
+            + '<button onclick="_cfOpenMail()"'
+            + ' style="padding:10px 28px;border-radius:9999px;border:1px solid rgba(255,255,255,0.2);color:#fff;font-size:9px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;background:transparent;cursor:pointer;margin-bottom:12px">'
+            + ct.cancel_btn + '</button>'
+            + '<br><button onclick="closeCancelFlow()" style="font-size:10px;color:rgba(255,255,255,0.3);background:none;border:none;cursor:pointer;padding:4px">✕</button>'
+            + '</div>';
+    }
+}
+
+function _cfOpenMail() {
+    var url = 'mailto:support@loamlab.studio';
     if (window.sketchup) {
         try { sketchup.open_browser(url); } catch(_) {}
     } else {
-        window.open(url, '_blank');
+        window.location.href = url;
     }
 }
 

@@ -81,6 +81,86 @@ export default async function handler(req, res) {
     }
     // ────────────────────────────────────────────────────────────────────────
 
+    // ── Cancel Subscription（用戶確認取消後直接呼叫 Dodo API）──────────────────
+    if (req.method === 'POST' && req.query.action === 'cancel_subscription') {
+        const { email: cancelEmail } = req.body || {};
+        if (!cancelEmail) return res.status(400).json({ code: -1, msg: 'Missing email' });
+
+        const sbUrl = process.env.SUPABASE_URL;
+        const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+        if (!sbUrl || !sbKey) return res.status(500).json({ code: -1, msg: 'Missing SUPABASE env vars' });
+        const sb = createClient(sbUrl, sbKey);
+
+        const { data: user } = await sb.from('users').select('dodo_subscription_id, subscription_plan').eq('email', cancelEmail).maybeSingle();
+        let subscriptionId = user?.dodo_subscription_id;
+
+        const DODO_API_KEY = process.env.DODO_API_KEY;
+        const PORTAL_URL = `https://checkout.dodopayments.com/billing`;
+
+        if (!DODO_API_KEY) {
+            return res.status(200).json({ code: 2, portal_url: PORTAL_URL, msg: 'config_error' });
+        }
+
+        // subscription_id 未存，嘗試向 Dodo 查詢 email 找出有效訂閱
+        if (!subscriptionId) {
+            try {
+                const listRes = await fetch(
+                    `https://live.dodopayments.com/subscriptions?customer_email=${encodeURIComponent(cancelEmail)}&status=active`,
+                    { headers: { 'Authorization': `Bearer ${DODO_API_KEY}` } }
+                );
+                if (listRes.ok) {
+                    const listData = await listRes.json();
+                    const items = listData.items || listData.subscriptions || listData.data || [];
+                    const active = items.find(s => s.status === 'active' || s.status === 'trialing');
+                    if (active?.subscription_id || active?.id) {
+                        subscriptionId = active.subscription_id || active.id;
+                        // 順便回存
+                        sb.from('users').update({ dodo_subscription_id: subscriptionId }).eq('email', cancelEmail)
+                            .catch(() => {});
+                    }
+                }
+            } catch (_) {}
+        }
+
+        if (!subscriptionId) {
+            return res.status(200).json({ code: 2, portal_url: PORTAL_URL, msg: 'no_subscription_found' });
+        }
+
+        try {
+            // 優先 cancel_at_period_end，讓用戶當期點數不損失
+            const apiRes = await fetch(`https://live.dodopayments.com/subscriptions/${subscriptionId}`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cancel_at_period_end: true })
+            });
+
+            if (apiRes.ok) {
+                await sb.from('users').update({ dodo_subscription_id: null }).eq('email', cancelEmail)
+                    .catch(e => console.warn('[cancel] db update failed:', e.message));
+                return res.json({ code: 0, msg: 'cancelled' });
+            }
+
+            // PATCH 失敗（endpoint 不存在），試 DELETE
+            const delRes = await fetch(`https://live.dodopayments.com/subscriptions/${subscriptionId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' }
+            });
+
+            if (delRes.ok) {
+                await sb.from('users').update({ dodo_subscription_id: null }).eq('email', cancelEmail)
+                    .catch(e => console.warn('[cancel] db update failed:', e.message));
+                return res.json({ code: 0, msg: 'cancelled' });
+            }
+
+            console.error('[cancel_subscription] Dodo error:', delRes.status, await delRes.text().catch(() => ''));
+            return res.status(200).json({ code: 2, portal_url: PORTAL_URL, msg: 'api_error' });
+        } catch (e) {
+            console.error('[cancel_subscription] fetch error:', e.message);
+            return res.status(200).json({ code: 2, portal_url: PORTAL_URL, msg: 'network_error' });
+        }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     // ── Save Offer（取消挽留：折扣點數 / 暫停訂閱）無需 IP 驗證，因為從 website 發起 ──
     if (req.method === 'POST' && req.query.action === 'save_offer') {
         const { email: offerEmail, offer_type, pause_months = 1 } = req.body || {};

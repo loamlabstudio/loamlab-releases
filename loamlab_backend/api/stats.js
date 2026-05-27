@@ -708,11 +708,16 @@ export default async function handler(req, res) {
         try {
             const transporter = nodemailer.createTransport({
                 service: 'gmail',
+                pool: true,
+                maxConnections: 1,
+                rateDelta: 300,
+                rateLimit: 3,
                 auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
             });
-            await Promise.all(emailItems.map(item =>
-                transporter.sendMail({ from, to: item.to, subject: item.subject, html: item.html })
-            ));
+            for (const item of emailItems) {
+                await transporter.sendMail({ from, to: item.to, subject: item.subject, html: item.html });
+            }
+            transporter.close();
 
             // Log sent emails for dedup (graceful degradation)
             try {

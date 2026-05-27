@@ -82,26 +82,39 @@ export default async function handler(req, res) {
                 const data = event.data;
                 const customerEmail = data.customer?.email || data.email || data.customer_email;
                 const subProductId = data.product_id || data.plan_id || data.product_cart?.[0]?.product_id;
-                if (customerEmail && data.subscription_id && subProductId) {
-                    // 先存 subscription_id
+                if (customerEmail && data.subscription_id) {
+                    // 先存 subscription_id（無論 product_id 是否存在都做）
                     await supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
                         .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
-                    // 用週期做冪等 key，避免與 payment.succeeded 的 pay_xxx 衝突，也防止續費重複發
+                }
+                if (customerEmail && data.subscription_id && subProductId) {
                     const period = data.current_period_start || new Date().toISOString().substring(0, 7);
                     const fallbackOrderId = `${data.subscription_id}_${period}`;
-                    try {
-                        await processTopup(customerEmail, subProductId, fallbackOrderId, 'DODO', null, data.subscription_id);
-                        console.log(`[Dodo] ${event.type} processTopup OK: ${customerEmail}`);
-                    } catch (e) {
-                        // 未知商品拋錯正常（topup 商品走 payment.succeeded），其餘記錄
-                        if (!e.message.includes('Unknown product')) {
-                            await logWebhookError('DODO', event.type, fallbackOrderId, customerEmail, e.message, data);
+
+                    // 防雙發：若同週期已有 payment.succeeded 產生的 DODO_pay_% 記錄，跳過 processTopup
+                    const periodStart = period.length === 7 ? `${period}-01T00:00:00Z` : new Date(period).toISOString();
+                    const { data: existingPayTx } = await supabase
+                        .from('transactions')
+                        .select('id, order_id')
+                        .eq('user_email', customerEmail)
+                        .eq('transaction_type', 'TOPUP_SUBSCRIPTION')
+                        .like('order_id', 'DODO_pay_%')
+                        .gte('created_at', periodStart)
+                        .maybeSingle();
+
+                    if (existingPayTx) {
+                        console.log(`[Dodo] ${event.type} skipped — payment.succeeded 已處理: ${existingPayTx.order_id}`);
+                    } else {
+                        // 真正的 fallback：payment.succeeded 未成功，由此補發
+                        try {
+                            await processTopup(customerEmail, subProductId, fallbackOrderId, 'DODO', null, data.subscription_id);
+                            console.log(`[Dodo] ${event.type} fallback processTopup OK: ${customerEmail}`);
+                        } catch (e) {
+                            if (!e.message.includes('Unknown product')) {
+                                await logWebhookError('DODO', event.type, fallbackOrderId, customerEmail, e.message, data);
+                            }
                         }
                     }
-                } else if (customerEmail && data.subscription_id) {
-                    // payload 沒有 product_id 時退化為只存 subscription_id
-                    await supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
-                        .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
                 }
             } else if (event.type === 'subscription.cancelled' || event.type === 'subscription.canceled' || event.type === 'subscription.expired') {
                 const data = event.data;

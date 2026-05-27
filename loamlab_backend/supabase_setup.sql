@@ -283,3 +283,27 @@ CREATE INDEX IF NOT EXISTS idx_email_logs_lookup ON public.email_logs(user_email
 -- notify_users API 依此欄位選擇郵件語言版本；null 預設 zh-TW
 -- ==============================================================================
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS locale TEXT DEFAULT NULL;
+
+-- ==============================================================================
+-- Phase 23: 可編輯郵件範本（email_templates）
+-- Admin 在後台編輯主旨/內文（純文字），支援 6 語言；後端套 HTML 殼發送
+-- notify_users 優先讀 DB，找不到 fallback 硬碼預設值
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.email_templates (
+    id TEXT PRIMARY KEY,                   -- 'onboarding' | 'reengagement' | 'upgrade'
+    subject_tw TEXT NOT NULL DEFAULT '',
+    subject_en TEXT NOT NULL DEFAULT '',
+    subject_cn TEXT NOT NULL DEFAULT '',
+    subject_es TEXT NOT NULL DEFAULT '',
+    subject_br TEXT NOT NULL DEFAULT '',
+    subject_jp TEXT NOT NULL DEFAULT '',
+    body_tw    TEXT NOT NULL DEFAULT '',
+    body_en    TEXT NOT NULL DEFAULT '',
+    body_cn    TEXT NOT NULL DEFAULT '',
+    body_es    TEXT NOT NULL DEFAULT '',
+    body_br    TEXT NOT NULL DEFAULT '',
+    body_jp    TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+ALTER TABLE public.email_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_rw" ON public.email_templates FOR ALL USING (true) WITH CHECK (true);

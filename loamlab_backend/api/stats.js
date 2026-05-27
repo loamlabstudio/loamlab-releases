@@ -592,6 +592,28 @@ export default async function handler(req, res) {
         return res.status(400).json({ code: -1, msg: 'Invalid sub. Use: list | settle | export | mark_paid' });
     }
 
+    // ── 郵件範本管理（讀取）─────────────────────────────────────────────────────
+    if (req.method === 'GET' && action === 'get_email_templates') {
+        const { data, error } = await supabase.from('email_templates').select('*');
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0, templates: data || [] });
+    }
+
+    // ── 郵件範本管理（儲存）─────────────────────────────────────────────────────
+    if (req.method === 'POST' && action === 'save_email_template') {
+        const { id, subject_tw, subject_en, subject_cn, subject_es, subject_br, subject_jp,
+                    body_tw,    body_en,    body_cn,    body_es,    body_br,    body_jp } = req.body || {};
+        if (!id) return res.status(400).json({ code: -1, msg: 'Missing template id' });
+        const row = {
+            id, subject_tw, subject_en, subject_cn, subject_es, subject_br, subject_jp,
+            body_tw, body_en, body_cn, body_es, body_br, body_jp,
+            updated_at: new Date().toISOString(),
+        };
+        const { error } = await supabase.from('email_templates').upsert(row, { onConflict: 'id' });
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0 });
+    }
+
     // ── 批量發送郵件（Resend）────────────────────────────────────────────────────
     if (req.method === 'POST' && action === 'notify_users') {
         const { emails, template } = req.body || {};
@@ -600,138 +622,59 @@ export default async function handler(req, res) {
         if (!RESEND_API_KEY) return res.status(503).json({ code: -1, msg: 'RESEND_API_KEY not configured' });
 
         const from = process.env.RESEND_FROM_EMAIL || 'LoamLab <noreply@loamlab.studio>';
-        const TEMPLATES = {
+
+        // locale string → DB column key (tw/en/cn/es/br/jp)
+        function getLangKey(locale) {
+            if (!locale) return 'tw';
+            const l = locale.toLowerCase();
+            if (l.startsWith('zh-cn') || l === 'cn') return 'cn';
+            if (l.startsWith('zh')) return 'tw';
+            if (l.startsWith('en')) return 'en';
+            if (l.startsWith('es')) return 'es';
+            if (l.startsWith('pt')) return 'br';
+            if (l.startsWith('ja')) return 'jp';
+            return 'tw';
+        }
+
+        // Wrap plain-text body in dark-theme HTML shell
+        function wrapBody(subject, body) {
+            const bodyHtml = (body || '').replace(/\n/g, '<br>');
+            return `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0"><div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #1e293b">${subject}</div><div style="line-height:1.9;color:#cbd5e1;margin-top:16px">${bodyHtml}</div><p style="font-size:11px;color:#475569;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · <a href="https://loamlab.studio" style="color:#7c3aed;text-decoration:none">loamlab.studio</a></p></div>`;
+        }
+
+        // Fallback hardcoded defaults (zh-TW / en-US only)
+        const DEFAULTS = {
             onboarding: {
-                zh: {
-                    subject: '🏠 你的 LoamLab 渲染點數還在等你',
-                    html: `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
-  <div style="font-size:22px;font-weight:700;color:#a78bfa;margin-bottom:16px">🏠 LoamLab AI 渲染插件</div>
-  <p style="margin:0 0 12px">你好！你已經有 LoamLab 帳號，但還沒試過第一次 AI 渲染。</p>
-  <p style="margin:0 0 20px;color:#94a3b8">只需 3 步就能看到你的 SketchUp 場景變成 AI 渲染圖：</p>
-  <ol style="padding-left:20px;line-height:2">
-    <li>打開 SketchUp，調好你想渲染的視角</li>
-    <li>點擊外掛程式選單 → LoamLab AI 渲染</li>
-    <li>選擇渲染風格，點擊「渲染」按鈕</li>
-  </ol>
-  <div style="margin:28px 0">
-    <a href="https://loamlab.studio" style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">立即開始渲染 →</a>
-  </div>
-  <p style="font-size:12px;color:#64748b;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · 土窟設計 AI 渲染插件<br>如不希望收到此類郵件，請回覆此郵件告知我們。</p>
-</div>`,
-                },
-                en: {
-                    subject: '🏠 Your LoamLab render credits are waiting',
-                    html: `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
-  <div style="font-size:22px;font-weight:700;color:#a78bfa;margin-bottom:16px">🏠 LoamLab AI Renderer</div>
-  <p style="margin:0 0 12px">Hi! You have a LoamLab account but haven't tried AI rendering yet.</p>
-  <p style="margin:0 0 20px;color:#94a3b8">Just 3 steps to turn your SketchUp scene into an AI render:</p>
-  <ol style="padding-left:20px;line-height:2">
-    <li>Open SketchUp and frame the view you want to render</li>
-    <li>Go to Extensions menu → LoamLab AI Renderer</li>
-    <li>Choose a render style and click "Render"</li>
-  </ol>
-  <div style="margin:28px 0">
-    <a href="https://loamlab.studio" style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">Start Rendering →</a>
-  </div>
-  <p style="font-size:12px;color:#64748b;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab AI Renderer<br>To stop receiving these emails, reply and let us know.</p>
-</div>`,
-                },
+                tw: { subject: '🏠 你的 LoamLab 渲染點數還在等你', body: '你好！你已經有 LoamLab 帳號，但還沒試過第一次 AI 渲染。\n\n只需打開 SketchUp → 外掛程式 → LoamLab AI 渲染，選擇風格後點「渲染」即可。\n\n立即開始：https://loamlab.studio' },
+                en: { subject: '🏠 Your LoamLab render credits are waiting', body: "Hi! You have a LoamLab account but haven't tried AI rendering yet.\n\nJust open SketchUp → Extensions → LoamLab AI Renderer, pick a style and hit Render.\n\nGet started: https://loamlab.studio" },
             },
             reengagement: {
-                zh: {
-                    subject: '🎁 好久不見！回來試試新功能',
-                    html: `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
-  <div style="font-size:22px;font-weight:700;color:#f97316;margin-bottom:16px">👋 好久不見！</div>
-  <p style="margin:0 0 12px">我們發現你已經一段時間沒有使用 LoamLab 了。</p>
-  <p style="margin:0 0 20px;color:#94a3b8">為了讓你重新體驗 AI 渲染的樂趣，我們為你準備了一些使用技巧：</p>
-  <ul style="padding-left:20px;line-height:2;color:#cbd5e1">
-    <li>試試 T2 SpaceReform：上傳參考圖，AI 幫你重新詮釋空間</li>
-    <li>使用 T4 SmartCanvas：多張參考圖融合成你的專屬風格</li>
-    <li>4K 解析度：讓細節更清晰，適合作品集展示</li>
-  </ul>
-  <div style="margin:28px 0">
-    <a href="https://loamlab.studio" style="display:inline-block;background:#f97316;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">重新開始渲染 →</a>
-  </div>
-  <p style="font-size:12px;color:#64748b;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · 土窟設計 AI 渲染插件<br>如不希望收到此類郵件，請回覆此郵件告知我們。</p>
-</div>`,
-                },
-                en: {
-                    subject: '🎁 Miss you! Come back and render something amazing',
-                    html: `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
-  <div style="font-size:22px;font-weight:700;color:#f97316;margin-bottom:16px">👋 Long time no see!</div>
-  <p style="margin:0 0 12px">We noticed you haven't used LoamLab for a while.</p>
-  <p style="margin:0 0 20px;color:#94a3b8">Here are some tips to help you get back into AI rendering:</p>
-  <ul style="padding-left:20px;line-height:2;color:#cbd5e1">
-    <li>Try T2 SpaceReform: upload a reference image and let AI reimagine your space</li>
-    <li>Use T4 SmartCanvas: blend multiple references into your unique style</li>
-    <li>4K resolution: sharper details, perfect for portfolio shots</li>
-  </ul>
-  <div style="margin:28px 0">
-    <a href="https://loamlab.studio" style="display:inline-block;background:#f97316;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">Start Rendering Again →</a>
-  </div>
-  <p style="font-size:12px;color:#64748b;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab AI Renderer<br>To stop receiving these emails, reply and let us know.</p>
-</div>`,
-                },
+                tw: { subject: '🎁 好久不見！回來試試新功能', body: '我們發現你已經一段時間沒有使用 LoamLab 了。\n\n試試 T2 SpaceReform 或 T4 SmartCanvas，用多張參考圖打造你的專屬風格。\n\n重新開始：https://loamlab.studio' },
+                en: { subject: '🎁 Miss you! Come back and render something amazing', body: "We noticed you haven't used LoamLab for a while.\n\nTry T2 SpaceReform or T4 SmartCanvas — blend reference images into your unique style.\n\nStart again: https://loamlab.studio" },
             },
             upgrade: {
-                zh: {
-                    subject: '⭐ 訂閱 LoamLab，每月無限渲染',
-                    html: `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
-  <div style="font-size:22px;font-weight:700;color:#22c55e;margin-bottom:16px">💎 你值得更多渲染次數</div>
-  <p style="margin:0 0 12px">你已經是 LoamLab 的重度使用者了！</p>
-  <p style="margin:0 0 20px;color:#94a3b8">訂閱方案讓你每月都有穩定的渲染點數，再也不用擔心點數耗盡：</p>
-  <div style="background:#1e293b;border-radius:10px;padding:16px 20px;margin:20px 0">
-    <div style="color:#22c55e;font-weight:700;font-size:16px;margin-bottom:8px">訂閱方案優點</div>
-    <ul style="padding-left:20px;line-height:2;margin:0;color:#cbd5e1">
-      <li>每月固定點數補充，不怕用完</li>
-      <li>比單次購買更划算（省 30%+）</li>
-      <li>支援所有工具（T1～T4）</li>
-    </ul>
-  </div>
-  <div style="margin:28px 0">
-    <a href="https://loamlab.studio" style="display:inline-block;background:#22c55e;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">查看訂閱方案 →</a>
-  </div>
-  <p style="font-size:12px;color:#64748b;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · 土窟設計 AI 渲染插件<br>如不希望收到此類郵件，請回覆此郵件告知我們。</p>
-</div>`,
-                },
-                en: {
-                    subject: '⭐ Unlock unlimited renders with LoamLab',
-                    html: `<div style="font-family:sans-serif;max-width:580px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
-  <div style="font-size:22px;font-weight:700;color:#22c55e;margin-bottom:16px">💎 You deserve more renders</div>
-  <p style="margin:0 0 12px">You're already a power user of LoamLab!</p>
-  <p style="margin:0 0 20px;color:#94a3b8">A subscription gives you a steady monthly credit top-up so you never run out mid-project:</p>
-  <div style="background:#1e293b;border-radius:10px;padding:16px 20px;margin:20px 0">
-    <div style="color:#22c55e;font-weight:700;font-size:16px;margin-bottom:8px">Why subscribe?</div>
-    <ul style="padding-left:20px;line-height:2;margin:0;color:#cbd5e1">
-      <li>Monthly credit refill — never run out</li>
-      <li>Better value than one-time purchases (save 30%+)</li>
-      <li>Works with all tools (T1–T4)</li>
-    </ul>
-  </div>
-  <div style="margin:28px 0">
-    <a href="https://loamlab.studio" style="display:inline-block;background:#22c55e;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">View Subscription Plans →</a>
-  </div>
-  <p style="font-size:12px;color:#64748b;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab AI Renderer<br>To stop receiving these emails, reply and let us know.</p>
-</div>`,
-                },
+                tw: { subject: '⭐ 訂閱 LoamLab，每月無限渲染', body: '你已經是 LoamLab 的重度使用者了！\n\n訂閱方案每月固定補充點數，比單次購買更划算（省 30%+），支援所有工具 T1～T4。\n\n查看方案：https://loamlab.studio' },
+                en: { subject: '⭐ Unlock unlimited renders with LoamLab', body: "You're a LoamLab power user! A subscription gives you monthly credit refills — better value than one-time purchases (save 30%+), works with all tools T1–T4.\n\nSee plans: https://loamlab.studio" },
             },
         };
 
-        const tplDef = TEMPLATES[template];
-        if (!tplDef) return res.status(400).json({ code: -1, msg: `Unknown template: ${template}` });
+        if (!DEFAULTS[template]) return res.status(400).json({ code: -1, msg: `Unknown template: ${template}` });
+
+        // Try to load template from DB
+        let dbTpl = null;
+        try {
+            const { data } = await supabase.from('email_templates').select('*').eq('id', template).single();
+            if (data && data.body_tw) dbTpl = data;
+        } catch (_) {}
 
         const rawEmails = emails.slice(0, 50);
 
-        // Dedup: skip recipients who received this template within 7 days (graceful degradation)
+        // Dedup: 7-day window (graceful degradation)
         const alreadySent = new Set();
         try {
             const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-            const { data: logs } = await supabase
-                .from('email_logs')
-                .select('user_email')
-                .eq('template_name', template)
-                .gte('sent_at', sevenDaysAgo)
-                .in('user_email', rawEmails);
+            const { data: logs } = await supabase.from('email_logs').select('user_email')
+                .eq('template_name', template).gte('sent_at', sevenDaysAgo).in('user_email', rawEmails);
             if (logs) logs.forEach(l => alreadySent.add(l.user_email));
         } catch (_) {}
 
@@ -740,18 +683,28 @@ export default async function handler(req, res) {
             return res.status(200).json({ code: 0, sent: 0, skipped: rawEmails.length, msg: 'All recipients already received this template within 7 days' });
         }
 
-        // Locale-aware dispatch: fetch user locale from DB, default zh
-        const { data: userRows } = await supabase
-            .from('users')
-            .select('email, locale')
-            .in('email', emailList);
+        // Fetch user locales
+        const { data: userRows } = await supabase.from('users').select('email, locale').in('email', emailList);
         const localeMap = {};
         (userRows || []).forEach(u => { if (u.locale) localeMap[u.email] = u.locale; });
 
         const payload = emailList.map(to => {
-            const locale = localeMap[to] || 'zh-TW';
-            const variant = locale.startsWith('en') ? tplDef.en : tplDef.zh;
-            return { from, to: [to], subject: variant.subject, html: variant.html };
+            const key = getLangKey(localeMap[to]);
+            let subject, html;
+            if (dbTpl) {
+                // DB template: pick lang key, fall back tw → en chain
+                const subjectText = dbTpl[`subject_${key}`] || dbTpl.subject_tw || '';
+                const bodyText    = dbTpl[`body_${key}`]    || dbTpl.body_tw    || '';
+                subject = subjectText;
+                html = wrapBody(subjectText, bodyText);
+            } else {
+                // Hardcoded fallback: only tw/en, others → tw
+                const fallbackKey = (key === 'en') ? 'en' : 'tw';
+                const variant = DEFAULTS[template][fallbackKey];
+                subject = variant.subject;
+                html = wrapBody(variant.subject, variant.body);
+            }
+            return { from, to: [to], subject, html };
         });
 
         try {
@@ -766,9 +719,7 @@ export default async function handler(req, res) {
             // Log sent emails for dedup (graceful degradation)
             try {
                 const now = new Date().toISOString();
-                await supabase.from('email_logs').insert(
-                    emailList.map(e => ({ user_email: e, template_name: template, sent_at: now }))
-                );
+                await supabase.from('email_logs').insert(emailList.map(e => ({ user_email: e, template_name: template, sent_at: now })));
             } catch (_) {}
 
             return res.status(200).json({ code: 0, sent: emailList.length, skipped: rawEmails.length - emailList.length, result });

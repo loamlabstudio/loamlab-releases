@@ -242,53 +242,106 @@
     </div>
   </div>
 
-  <!-- 洞見郵件範本預覽 -->
+  <!-- 洞見郵件範本（可編輯） -->
   <div class="card mb-5 border border-indigo-600/30 bg-[#13102a]/40">
     <div class="flex items-center justify-between mb-4">
       <div class="text-sm font-semibold text-white flex items-center gap-2">
-        <span class="text-indigo-400">✉️</span> 洞見郵件範本
+        <span class="text-indigo-400">✉️</span> 洞見郵件範本管理
       </div>
-      <div class="text-xs text-gray-500">自動洞見 → 發郵件 按鈕套用以下範本</div>
+      <div class="text-xs text-gray-500">儲存後立即生效 · 7 天 dedup · 依 locale 自動選語言</div>
     </div>
-    <div class="grid grid-cols-1 gap-3">
 
-      <!-- onboarding -->
-      <div style="border:1px solid #a78bfa33;background:#a78bfa08;border-radius:10px;padding:14px 16px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span style="font-size:12px;font-weight:700;color:#a78bfa">Onboarding 激活</span>
-          <span style="font-size:10px;color:#475569;background:#1e293b;border-radius:4px;padding:1px 6px">onboarding_stuck</span>
-        </div>
-        <div style="font-size:11px;color:#c4b5fd;margin-bottom:2px">🇹🇼 🏠 你的 LoamLab 渲染點數還在等你</div>
-        <div style="font-size:11px;color:#a5b4fc;margin-bottom:8px">🇺🇸 🏠 Your LoamLab render credits are waiting</div>
-        <div style="font-size:10px;color:#64748b">觸發條件：已註冊 3+ 天、從未渲染、仍有剩餘點數</div>
-      </div>
-
-      <!-- reengagement -->
-      <div style="border:1px solid #f9731633;background:#f9731608;border-radius:10px;padding:14px 16px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span style="font-size:12px;font-weight:700;color:#f97316">Re-engagement 召回</span>
-          <span style="font-size:10px;color:#475569;background:#1e293b;border-radius:4px;padding:1px 6px">churn_risk · second_render_missing</span>
-        </div>
-        <div style="font-size:11px;color:#fdba74;margin-bottom:2px">🇹🇼 🎁 好久不見！回來試試新功能</div>
-        <div style="font-size:11px;color:#fb923c;margin-bottom:8px">🇺🇸 🎁 Miss you! Come back and render something amazing</div>
-        <div style="font-size:10px;color:#64748b">觸發條件：7 天內未渲染且點數偏低，或首次渲染後超過 7 天未回訪</div>
-      </div>
-
-      <!-- upgrade -->
-      <div style="border:1px solid #22c55e33;background:#22c55e08;border-radius:10px;padding:14px 16px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span style="font-size:12px;font-weight:700;color:#22c55e">Upgrade 轉化</span>
-          <span style="font-size:10px;color:#475569;background:#1e293b;border-radius:4px;padding:1px 6px">upgrade_candidate · high_value_no_sub · kol_candidate</span>
-        </div>
-        <div style="font-size:11px;color:#86efac;margin-bottom:2px">🇹🇼 ⭐ 訂閱 LoamLab，每月無限渲染</div>
-        <div style="font-size:11px;color:#4ade80;margin-bottom:8px">🇺🇸 ⭐ Unlock unlimited renders with LoamLab</div>
-        <div style="font-size:10px;color:#64748b">觸發條件：碰過 Paywall 2+ 次未付費、累積點數 &gt;100、或高評分活躍用戶</div>
-      </div>
-
+    <!-- Template tabs -->
+    <div class="flex gap-2 mb-4 border-b border-white/8 pb-3">
+      <button id="etpl-tab-onboarding"    onclick="switchEtpl('onboarding')"    class="etpl-tab-btn text-xs px-3 py-1 rounded-md font-semibold transition-colors" style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44">Onboarding 激活</button>
+      <button id="etpl-tab-reengagement"  onclick="switchEtpl('reengagement')"  class="etpl-tab-btn text-xs px-3 py-1 rounded-md font-semibold transition-colors" style="background:transparent;color:#64748b;border:1px solid #1e293b">Re-engagement 召回</button>
+      <button id="etpl-tab-upgrade"       onclick="switchEtpl('upgrade')"       class="etpl-tab-btn text-xs px-3 py-1 rounded-md font-semibold transition-colors" style="background:transparent;color:#64748b;border:1px solid #1e293b">Upgrade 轉化</button>
     </div>
-    <div class="mt-3 pt-3 border-t border-white/8 text-xs text-gray-600">
-      語言自動依用戶 <code>locale</code> 欄位派送（en-* → English，其餘 → 繁中）。同一範本 7 天內不重複發送。
+
+    <!-- Panel: onboarding -->
+    <div id="etpl-panel-onboarding">
+      <div class="text-xs text-gray-600 mb-3">觸發：<code>onboarding_stuck</code> — 已註冊 3+ 天、從未渲染、仍有點數</div>
+      <div class="text-xs font-semibold text-white/50 mb-2 uppercase tracking-widest">主旨 Subject</div>
+      <div class="grid grid-cols-2 gap-2 mb-4">
+        <div><label class="block text-xs text-gray-500 mb-1">🇹🇼 繁體中文</label><input id="etpl-onboarding-subject-tw" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-indigo-200 outline-none focus:border-indigo-500/50" placeholder="🏠 你的 LoamLab 渲染點數還在等你"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇺🇸 English</label><input id="etpl-onboarding-subject-en" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-indigo-200 outline-none focus:border-indigo-500/50" placeholder="🏠 Your LoamLab render credits are waiting"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇨🇳 简体中文</label><input id="etpl-onboarding-subject-cn" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-indigo-200 outline-none focus:border-indigo-500/50"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇪🇸 Español</label><input id="etpl-onboarding-subject-es" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-indigo-200 outline-none focus:border-indigo-500/50"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇧🇷 Português</label><input id="etpl-onboarding-subject-br" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-indigo-200 outline-none focus:border-indigo-500/50"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇯🇵 日本語</label><input id="etpl-onboarding-subject-jp" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-indigo-200 outline-none focus:border-indigo-500/50"></div>
+      </div>
+      <div class="text-xs font-semibold text-white/50 mb-2 uppercase tracking-widest">內文 Body <span class="normal-case font-normal text-gray-600">（純文字，換行保留）</span></div>
+      <div class="grid grid-cols-2 gap-2 mb-4">
+        <div><label class="block text-xs text-gray-500 mb-1">🇹🇼 繁體中文</label><textarea id="etpl-onboarding-body-tw" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-indigo-200 outline-none focus:border-indigo-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇺🇸 English</label><textarea id="etpl-onboarding-body-en" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-indigo-200 outline-none focus:border-indigo-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇨🇳 简体中文</label><textarea id="etpl-onboarding-body-cn" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-indigo-200 outline-none focus:border-indigo-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇪🇸 Español</label><textarea id="etpl-onboarding-body-es" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-indigo-200 outline-none focus:border-indigo-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇧🇷 Português</label><textarea id="etpl-onboarding-body-br" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-indigo-200 outline-none focus:border-indigo-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇯🇵 日本語</label><textarea id="etpl-onboarding-body-jp" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-indigo-200 outline-none focus:border-indigo-500/50 resize-y"></textarea></div>
+      </div>
+      <div class="flex items-center gap-2 justify-end">
+        <span id="etpl-status-onboarding" class="text-xs text-gray-400 hidden"></span>
+        <button id="etpl-translate-btn-onboarding" onclick="translateEmailTemplate('onboarding')" class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">一鍵翻譯（以繁中為主）</button>
+        <button id="etpl-save-btn-onboarding" onclick="saveEmailTemplate('onboarding')" class="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-600/50 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors">儲存</button>
+      </div>
     </div>
+
+    <!-- Panel: reengagement -->
+    <div id="etpl-panel-reengagement" class="hidden">
+      <div class="text-xs text-gray-600 mb-3">觸發：<code>churn_risk · second_render_missing</code> — 7 天沉默且點數偏低，或首渲後 7 天未回訪</div>
+      <div class="text-xs font-semibold text-white/50 mb-2 uppercase tracking-widest">主旨 Subject</div>
+      <div class="grid grid-cols-2 gap-2 mb-4">
+        <div><label class="block text-xs text-gray-500 mb-1">🇹🇼 繁體中文</label><input id="etpl-reengagement-subject-tw" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-orange-200 outline-none focus:border-orange-500/50" placeholder="🎁 好久不見！回來試試新功能"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇺🇸 English</label><input id="etpl-reengagement-subject-en" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-orange-200 outline-none focus:border-orange-500/50" placeholder="🎁 Miss you! Come back and render something amazing"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇨🇳 简体中文</label><input id="etpl-reengagement-subject-cn" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-orange-200 outline-none focus:border-orange-500/50"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇪🇸 Español</label><input id="etpl-reengagement-subject-es" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-orange-200 outline-none focus:border-orange-500/50"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇧🇷 Português</label><input id="etpl-reengagement-subject-br" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-orange-200 outline-none focus:border-orange-500/50"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇯🇵 日本語</label><input id="etpl-reengagement-subject-jp" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-orange-200 outline-none focus:border-orange-500/50"></div>
+      </div>
+      <div class="text-xs font-semibold text-white/50 mb-2 uppercase tracking-widest">內文 Body <span class="normal-case font-normal text-gray-600">（純文字，換行保留）</span></div>
+      <div class="grid grid-cols-2 gap-2 mb-4">
+        <div><label class="block text-xs text-gray-500 mb-1">🇹🇼 繁體中文</label><textarea id="etpl-reengagement-body-tw" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-orange-200 outline-none focus:border-orange-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇺🇸 English</label><textarea id="etpl-reengagement-body-en" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-orange-200 outline-none focus:border-orange-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇨🇳 简体中文</label><textarea id="etpl-reengagement-body-cn" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-orange-200 outline-none focus:border-orange-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇪🇸 Español</label><textarea id="etpl-reengagement-body-es" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-orange-200 outline-none focus:border-orange-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇧🇷 Português</label><textarea id="etpl-reengagement-body-br" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-orange-200 outline-none focus:border-orange-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇯🇵 日本語</label><textarea id="etpl-reengagement-body-jp" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-orange-200 outline-none focus:border-orange-500/50 resize-y"></textarea></div>
+      </div>
+      <div class="flex items-center gap-2 justify-end">
+        <span id="etpl-status-reengagement" class="text-xs text-gray-400 hidden"></span>
+        <button id="etpl-translate-btn-reengagement" onclick="translateEmailTemplate('reengagement')" class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">一鍵翻譯（以繁中為主）</button>
+        <button id="etpl-save-btn-reengagement" onclick="saveEmailTemplate('reengagement')" class="bg-orange-600/20 hover:bg-orange-600/40 text-orange-400 border border-orange-600/50 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors">儲存</button>
+      </div>
+    </div>
+
+    <!-- Panel: upgrade -->
+    <div id="etpl-panel-upgrade" class="hidden">
+      <div class="text-xs text-gray-600 mb-3">觸發：<code>upgrade_candidate · high_value_no_sub · kol_candidate</code></div>
+      <div class="text-xs font-semibold text-white/50 mb-2 uppercase tracking-widest">主旨 Subject</div>
+      <div class="grid grid-cols-2 gap-2 mb-4">
+        <div><label class="block text-xs text-gray-500 mb-1">🇹🇼 繁體中文</label><input id="etpl-upgrade-subject-tw" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-green-200 outline-none focus:border-green-500/50" placeholder="⭐ 訂閱 LoamLab，每月無限渲染"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇺🇸 English</label><input id="etpl-upgrade-subject-en" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-green-200 outline-none focus:border-green-500/50" placeholder="⭐ Unlock unlimited renders with LoamLab"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇨🇳 简体中文</label><input id="etpl-upgrade-subject-cn" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-green-200 outline-none focus:border-green-500/50"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇪🇸 Español</label><input id="etpl-upgrade-subject-es" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-green-200 outline-none focus:border-green-500/50"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇧🇷 Português</label><input id="etpl-upgrade-subject-br" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-green-200 outline-none focus:border-green-500/50"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇯🇵 日本語</label><input id="etpl-upgrade-subject-jp" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-green-200 outline-none focus:border-green-500/50"></div>
+      </div>
+      <div class="text-xs font-semibold text-white/50 mb-2 uppercase tracking-widest">內文 Body <span class="normal-case font-normal text-gray-600">（純文字，換行保留）</span></div>
+      <div class="grid grid-cols-2 gap-2 mb-4">
+        <div><label class="block text-xs text-gray-500 mb-1">🇹🇼 繁體中文</label><textarea id="etpl-upgrade-body-tw" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-green-200 outline-none focus:border-green-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇺🇸 English</label><textarea id="etpl-upgrade-body-en" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-green-200 outline-none focus:border-green-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇨🇳 简体中文</label><textarea id="etpl-upgrade-body-cn" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-green-200 outline-none focus:border-green-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇪🇸 Español</label><textarea id="etpl-upgrade-body-es" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-green-200 outline-none focus:border-green-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇧🇷 Português</label><textarea id="etpl-upgrade-body-br" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-green-200 outline-none focus:border-green-500/50 resize-y"></textarea></div>
+        <div><label class="block text-xs text-gray-500 mb-1">🇯🇵 日本語</label><textarea id="etpl-upgrade-body-jp" rows="5" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-green-200 outline-none focus:border-green-500/50 resize-y"></textarea></div>
+      </div>
+      <div class="flex items-center gap-2 justify-end">
+        <span id="etpl-status-upgrade" class="text-xs text-gray-400 hidden"></span>
+        <button id="etpl-translate-btn-upgrade" onclick="translateEmailTemplate('upgrade')" class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">一鍵翻譯（以繁中為主）</button>
+        <button id="etpl-save-btn-upgrade" onclick="saveEmailTemplate('upgrade')" class="bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-600/50 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors">儲存</button>
+      </div>
+    </div>
+
   </div>
 
   </div><!-- /atab-content -->
@@ -902,6 +955,7 @@ async function loadAll() {
 
     loadAnnouncement();
     loadShareTemplate();
+    loadEmailTemplates();
     loadPrompts();
     loadModels();
     loadEngineConfig();
@@ -2846,6 +2900,105 @@ async function _doSendInsightEmail(emails, template) {
       showToast(msg, 'success');
     } else { showToast('發送失敗：' + j.msg, 'error'); }
   } catch(e) { showToast('發送錯誤：' + e.message, 'error'); }
+}
+
+// ── 郵件範本管理 ──────────────────────────────────────────────────────────────
+const ETPL_IDS   = ['onboarding', 'reengagement', 'upgrade'];
+const ETPL_LANGS = ['tw', 'en', 'cn', 'es', 'br', 'jp'];
+const ETPL_COLORS = { onboarding: '#a78bfa', reengagement: '#f97316', upgrade: '#22c55e' };
+
+function switchEtpl(id) {
+  ETPL_IDS.forEach(t => {
+    const panel = document.getElementById(`etpl-panel-${t}`);
+    const tab   = document.getElementById(`etpl-tab-${t}`);
+    if (!panel || !tab) return;
+    const active = t === id;
+    panel.classList.toggle('hidden', !active);
+    const c = ETPL_COLORS[t];
+    tab.style.background = active ? c + '22' : 'transparent';
+    tab.style.color      = active ? c : '#64748b';
+    tab.style.border     = active ? `1px solid ${c}44` : '1px solid #1e293b';
+  });
+}
+
+async function loadEmailTemplates() {
+  try {
+    const r = await fetch(API_BASE + '/api/stats?action=get_email_templates', {
+      headers: { 'Authorization': 'Bearer ' + adminKey }
+    });
+    const j = await r.json();
+    if (j.code !== 0) return;
+    (j.templates || []).forEach(tpl => {
+      ETPL_LANGS.forEach(lang => {
+        const subj = document.getElementById(`etpl-${tpl.id}-subject-${lang}`);
+        const body = document.getElementById(`etpl-${tpl.id}-body-${lang}`);
+        if (subj) subj.value = tpl[`subject_${lang}`] || '';
+        if (body)  body.value  = tpl[`body_${lang}`]    || '';
+      });
+    });
+  } catch(_) {}
+}
+
+async function translateEmailTemplate(id) {
+  const gtMap = { tw: 'zh-TW', en: 'en', cn: 'zh-CN', es: 'es', br: 'pt', jp: 'ja' };
+  async function gt(text, sl, tl) {
+    const r = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`);
+    const j = await r.json();
+    return j[0].map(s => s[0]).join('');
+  }
+  const btn = document.getElementById(`etpl-translate-btn-${id}`);
+  const status = document.getElementById(`etpl-status-${id}`);
+  btn.disabled = true; btn.textContent = '翻譯中...';
+  status.textContent = ''; status.classList.remove('hidden');
+
+  try {
+    const subjTw = (document.getElementById(`etpl-${id}-subject-tw`)?.value || '').trim();
+    const bodyTw  = (document.getElementById(`etpl-${id}-body-tw`)?.value  || '').trim();
+    if (!subjTw && !bodyTw) { status.textContent = '⚠️ 請先填入繁體中文內容'; btn.disabled = false; btn.textContent = '一鍵翻譯（以繁中為主）'; return; }
+
+    const others = ETPL_LANGS.filter(l => l !== 'tw');
+    await Promise.all(others.map(async lang => {
+      const tl = gtMap[lang];
+      if (subjTw) {
+        const el = document.getElementById(`etpl-${id}-subject-${lang}`);
+        if (el) el.value = await gt(subjTw, 'zh-TW', tl);
+      }
+      if (bodyTw) {
+        const el = document.getElementById(`etpl-${id}-body-${lang}`);
+        if (el) el.value = await gt(bodyTw, 'zh-TW', tl);
+      }
+    }));
+    status.textContent = '✅ 翻譯完成，請確認後儲存';
+  } catch(e) {
+    status.textContent = '❌ 翻譯失敗，請手動填寫';
+  }
+  btn.disabled = false; btn.textContent = '一鍵翻譯（以繁中為主）';
+}
+
+async function saveEmailTemplate(id) {
+  const btn    = document.getElementById(`etpl-save-btn-${id}`);
+  const status = document.getElementById(`etpl-status-${id}`);
+  btn.disabled = true; btn.textContent = '儲存中...';
+  status.classList.remove('hidden'); status.textContent = '';
+
+  const row = { id };
+  ETPL_LANGS.forEach(lang => {
+    row[`subject_${lang}`] = document.getElementById(`etpl-${id}-subject-${lang}`)?.value || '';
+    row[`body_${lang}`]    = document.getElementById(`etpl-${id}-body-${lang}`)?.value    || '';
+  });
+
+  try {
+    const r = await fetch(API_BASE + '/api/stats?action=save_email_template', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + adminKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify(row),
+    });
+    const j = await r.json();
+    status.textContent = j.code === 0 ? '✅ 已儲存' : ('❌ 儲存失敗：' + j.msg);
+  } catch(e) { status.textContent = '❌ ' + e.message; }
+
+  btn.disabled = false; btn.textContent = '儲存';
+  setTimeout(() => status.classList.add('hidden'), 3000);
 }
 
 // ── 自動洞見 ──────────────────────────────────────────────────────────────────

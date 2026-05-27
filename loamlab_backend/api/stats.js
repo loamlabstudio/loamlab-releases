@@ -618,10 +618,10 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && action === 'notify_users') {
         const { emails, template } = req.body || {};
         if (!emails?.length || !template) return res.status(400).json({ code: -1, msg: 'Missing emails or template' });
-        const RESEND_API_KEY = process.env.RESEND_API_KEY;
-        if (!RESEND_API_KEY) return res.status(503).json({ code: -1, msg: 'RESEND_API_KEY not configured' });
-
-        const from = process.env.RESEND_FROM_EMAIL || 'LoamLab <noreply@loamlab.studio>';
+        if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+            return res.status(503).json({ code: -1, msg: 'Gmail not configured' });
+        }
+        const from = `LoamLab <${process.env.GMAIL_USER}>`;
 
         // locale string → DB column key (tw/en/cn/es/br/jp)
         function getLangKey(locale) {
@@ -688,33 +688,31 @@ export default async function handler(req, res) {
         const localeMap = {};
         (userRows || []).forEach(u => { if (u.locale) localeMap[u.email] = u.locale; });
 
-        const payload = emailList.map(to => {
+        const emailItems = emailList.map(to => {
             const key = getLangKey(localeMap[to]);
             let subject, html;
             if (dbTpl) {
-                // DB template: pick lang key, fall back tw → en chain
                 const subjectText = dbTpl[`subject_${key}`] || dbTpl.subject_tw || '';
                 const bodyText    = dbTpl[`body_${key}`]    || dbTpl.body_tw    || '';
                 subject = subjectText;
                 html = wrapBody(subjectText, bodyText);
             } else {
-                // Hardcoded fallback: only tw/en, others → tw
                 const fallbackKey = (key === 'en') ? 'en' : 'tw';
                 const variant = DEFAULTS[template][fallbackKey];
                 subject = variant.subject;
                 html = wrapBody(variant.subject, variant.body);
             }
-            return { from, to: [to], subject, html };
+            return { to, subject, html };
         });
 
         try {
-            const r = await fetch('https://api.resend.com/emails/batch', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+            const transporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
             });
-            const result = await r.json();
-            if (!r.ok) return res.status(502).json({ code: -1, msg: result?.message || 'Resend error' });
+            await Promise.all(emailItems.map(item =>
+                transporter.sendMail({ from, to: item.to, subject: item.subject, html: item.html })
+            ));
 
             // Log sent emails for dedup (graceful degradation)
             try {
@@ -722,7 +720,7 @@ export default async function handler(req, res) {
                 await supabase.from('email_logs').insert(emailList.map(e => ({ user_email: e, template_name: template, sent_at: now })));
             } catch (_) {}
 
-            return res.status(200).json({ code: 0, sent: emailList.length, skipped: rawEmails.length - emailList.length, result });
+            return res.status(200).json({ code: 0, sent: emailList.length, skipped: rawEmails.length - emailList.length });
         } catch (e) {
             return res.status(500).json({ code: -1, msg: e.message });
         }

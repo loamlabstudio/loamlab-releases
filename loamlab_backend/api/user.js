@@ -96,6 +96,7 @@ export default async function handler(req, res) {
 
         const DODO_API_KEY = process.env.DODO_API_KEY;
         const PORTAL_URL = `https://customer.dodopayments.com`;
+        const dodoBase = DODO_API_KEY?.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
 
         if (!DODO_API_KEY) {
             return res.status(200).json({ code: 2, portal_url: PORTAL_URL, msg: 'config_error' });
@@ -105,7 +106,7 @@ export default async function handler(req, res) {
         if (!subscriptionId) {
             try {
                 const listRes = await fetch(
-                    `https://live.dodopayments.com/subscriptions?customer_email=${encodeURIComponent(cancelEmail)}&status=active`,
+                    `${dodoBase}/subscriptions?customer_email=${encodeURIComponent(cancelEmail)}&status=active`,
                     { headers: { 'Authorization': `Bearer ${DODO_API_KEY}` } }
                 );
                 if (listRes.ok) {
@@ -128,7 +129,7 @@ export default async function handler(req, res) {
 
         try {
             // 嘗試透過 API 取消
-            const apiRes = await fetch(`https://live.dodopayments.com/subscriptions/${subscriptionId}`, {
+            const apiRes = await fetch(`${dodoBase}/subscriptions/${subscriptionId}`, {
                 method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ cancel_at_next_billing_date: true })
@@ -141,7 +142,7 @@ export default async function handler(req, res) {
             }
 
             // PATCH 失敗（endpoint 不存在），試 DELETE
-            const delRes = await fetch(`https://live.dodopayments.com/subscriptions/${subscriptionId}`, {
+            const delRes = await fetch(`${dodoBase}/subscriptions/${subscriptionId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' }
             });
@@ -161,7 +162,7 @@ export default async function handler(req, res) {
         let dynamicPortalUrl = PORTAL_URL;
         try {
             // 1. 取得 customer_id
-            const custRes = await fetch(`https://live.dodopayments.com/customers?customer_email=${encodeURIComponent(cancelEmail)}`, {
+            const custRes = await fetch(`${dodoBase}/customers?customer_email=${encodeURIComponent(cancelEmail)}`, {
                 headers: { 'Authorization': `Bearer ${DODO_API_KEY}` }
             });
             if (custRes.ok) {
@@ -171,7 +172,7 @@ export default async function handler(req, res) {
 
                 if (customerId) {
                     // 2. 建立 portal session
-                    const sessRes = await fetch(`https://live.dodopayments.com/customers/${customerId}/customer-portal/session`, {
+                    const sessRes = await fetch(`${dodoBase}/customers/${customerId}/customer-portal/session`, {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ send_email: false })

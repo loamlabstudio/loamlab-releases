@@ -3939,7 +3939,11 @@ function openLoginModal() {
     
     const statusMsg = document.getElementById('otp-status-msg');
     if (statusMsg) { statusMsg.classList.add('hidden'); statusMsg.textContent = ''; }
-    
+    const verifyMsg = document.getElementById('otp-verify-status-msg');
+    if (verifyMsg) { verifyMsg.classList.add('hidden'); verifyMsg.textContent = ''; }
+    const pollMsg = document.getElementById('polling-status-msg');
+    if (pollMsg) { pollMsg.classList.add('hidden'); pollMsg.textContent = ''; pollMsg.style.color = ''; }
+
     // Clear inputs
     const emailInput = document.getElementById('login-email-input');
     const codeInput = document.getElementById('login-code-input');
@@ -3963,21 +3967,18 @@ function startOAuthFlow() {
     if (optView) { optView.classList.remove('flex'); optView.classList.add('hidden'); }
     if (pollView) { pollView.classList.remove('hidden'); pollView.classList.add('flex'); }
 
-    let sessionUuid = localStorage.getItem('loamlab_device_id');
-    if (!sessionUuid) {
-        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
-            sessionUuid = window.crypto.randomUUID();
-        } else if (window.crypto && window.crypto.getRandomValues) {
-            sessionUuid = '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
-                (c ^ window.crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-            );
-        } else {
-            sessionUuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-                const r = Math.random() * 16 | 0;
-                return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-            });
-        }
-        localStorage.setItem('loamlab_device_id', sessionUuid);
+    let sessionUuid;
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        sessionUuid = window.crypto.randomUUID();
+    } else if (window.crypto && window.crypto.getRandomValues) {
+        sessionUuid = '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
+            (c ^ window.crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+        );
+    } else {
+        sessionUuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
     }
 
     // 直接打 /api/auth/login，繞開靜態 auth-bridge 頁面（Vercel 非框架專案不可靠）
@@ -4003,8 +4004,13 @@ function startOAuthFlow() {
         attempts++;
         if (attempts > 300) {
             clearInterval(authPollTimer);
-            closeLoginModal();
+            const msg = document.getElementById('polling-status-msg');
+            if (msg) { msg.textContent = 'Login timed out. Please try again.'; msg.classList.remove('hidden'); }
             return;
+        }
+        if (attempts === 30) {
+            const msg = document.getElementById('polling-status-msg');
+            if (msg) { msg.textContent = 'Waiting... If you completed login in the browser, please wait a moment.'; msg.classList.remove('hidden'); msg.style.color = '#a3a3a3'; }
         }
 
         try {
@@ -4014,17 +4020,20 @@ function startOAuthFlow() {
             if (data.status === 'success') {
                 clearInterval(authPollTimer);
                 window.loamlabUserEmail = data.email;
-                if (window.sketchup) {
-                    sketchup.save_email(data.email);
-                }
-                window.fetchUserPoints(data.email);
-                syncPresetsFromServer();
+                try {
+                    if (window.sketchup) sketchup.save_email(data.email);
+                    window.fetchUserPoints(data.email);
+                    syncPresetsFromServer();
+                } catch(e) { console.error('[auth] post-login error:', e); }
                 closeLoginModal();
             } else if (data.status === 'device_limit') {
                 clearInterval(authPollTimer);
                 closeLoginModal();
                 alert(`Device limit reached.\n${data.message}\n\nUpgrade your plan to connect more devices.`);
                 if (typeof openPricingModal === 'function') openPricingModal();
+            } else if (data.status === 'error') {
+                const msg = document.getElementById('polling-status-msg');
+                if (msg) { msg.textContent = 'Server error. Please try again.'; msg.classList.remove('hidden'); msg.style.color = '#ef4444'; }
             }
         } catch (e) {
             console.error("Polling error:", e);
@@ -4077,7 +4086,10 @@ function startOAuthFlow() {
             const otpView = document.getElementById('login-otp-view');
             if (optView) { optView.classList.remove('flex'); optView.classList.add('hidden'); }
             if (otpView) { otpView.classList.remove('hidden'); otpView.classList.add('flex'); }
-            
+
+            const verifyMsg = document.getElementById('otp-verify-status-msg');
+            if (verifyMsg) { verifyMsg.textContent = ''; verifyMsg.classList.add('hidden'); }
+
             const sentEmailSpan = document.getElementById('otp-sent-email');
             if (sentEmailSpan) sentEmailSpan.textContent = email;
             
@@ -4153,7 +4165,7 @@ function startOAuthFlow() {
                 }, 500);
             }, 800);
         } else {
-            const statusMsg = document.getElementById('otp-status-msg');
+            const statusMsg = document.getElementById('otp-verify-status-msg');
             if (statusMsg) {
                 const errKey = (data.msg || '').toLowerCase().includes('invalid') || (data.msg || '').toLowerCase().includes('expired')
                     ? 'otp_invalid_code' : null;
@@ -4164,7 +4176,7 @@ function startOAuthFlow() {
             btn.textContent = 'VERIFY CODE';
         }
     } catch (e) {
-        const statusMsg = document.getElementById('otp-status-msg');
+        const statusMsg = document.getElementById('otp-verify-status-msg');
         if (statusMsg) {
             statusMsg.textContent = t('otp_network_error') || 'Network error. Please try again.';
             statusMsg.classList.remove('hidden');

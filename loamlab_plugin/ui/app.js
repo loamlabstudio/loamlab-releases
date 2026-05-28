@@ -3965,12 +3965,17 @@ function startOAuthFlow() {
 
     let sessionUuid = localStorage.getItem('loamlab_device_id');
     if (!sessionUuid) {
-        if (typeof crypto.randomUUID === 'function') {
-            sessionUuid = crypto.randomUUID();
-        } else {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            sessionUuid = window.crypto.randomUUID();
+        } else if (window.crypto && window.crypto.getRandomValues) {
             sessionUuid = '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
-                (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+                (c ^ window.crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
             );
+        } else {
+            sessionUuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                const r = Math.random() * 16 | 0;
+                return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            });
         }
         localStorage.setItem('loamlab_device_id', sessionUuid);
     }
@@ -4113,7 +4118,7 @@ function startOAuthFlow() {
     const token = (document.getElementById('login-code-input') || document.createElement('div')).value.trim();
     const btn = document.getElementById('btn-verify-otp');
     
-    if (!token || token.length < 6) return;
+    if (!token || token.length < 8) return;
 
     btn.disabled = true;
     btn.textContent = 'VERIFYING...';

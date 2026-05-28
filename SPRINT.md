@@ -1,22 +1,23 @@
-# 核心分析 (Context Digest)
-Supabase 專案的 Disk IO 預算耗盡，主要是因為後端 API (`stats.js`) 中存在大量高頻的 `transactions` 與 `feedback` 表查詢。這些查詢頻繁過濾 `transaction_type`、`created_at`、`user_email`，但資料庫中**缺少對應的索引 (Indexes)**，導致嚴重的全表掃描 (Full Table Scans)。特別是 `getPublicStats` 中的 `count: 'exact'` 結合 `ilike` 過濾，進一步加劇了 IO 負載。我們將透過新增索引與優化查詢模式來以「零成本」解決此問題。
+# LoamLab SPRINT Plan
+
+## CONTEXT_DIGEST
+- **OTP Length Mismatch**: Supabase now sends 8-digit OTP codes, but the UI is hardcoded with `maxlength="6"` and a 6-character placeholder, preventing users from entering the full code.
+- **Google Login Redirect Failure**: When clicking "Continue with Google", the UI switches to the polling state but fails to open the external browser. This is caused by a JS exception in `app.js:startOAuthFlow` where `crypto.randomUUID` or `crypto.getRandomValues` throws an error if `window.crypto` is undefined in the SketchUp CEF environment, breaking the execution before `sketchup.open_browser` is called.
 
 ## TASKS
-- [x] TASK 1: **[MUST] 建立缺失的核心索引**
-  - **影響檔案**: `loamlab_backend/supabase_setup.sql`
-  - **細節**: 在 `supabase_setup.sql` 中加入以下索引的建立語法：
-    - `transactions(transaction_type)` (加速種類過濾)
-    - `transactions(created_at DESC)` (加速時間範圍如 `gte` 的查詢)
-    - `transactions(user_email)` (加速使用者關聯查詢)
-    - `feedback(type)` 與 `feedback(created_at DESC)`
-  - **預期效果**: 將全表掃描轉化為索引掃描，巨幅降低 Disk IO。
 
-- [x] TASK 2: **[MUST] 優化 `stats.js` 中的高頻統計查詢**
-  - **影響檔案**: `loamlab_backend/api/stats.js`
-  - **細節**: `getPublicStats` 頻繁執行 4 次 `count: 'exact'` 且夾帶 `ilike` (`noTest` / `noTestRef`)。由於這些只是公開統計數據，可以考慮簡化過濾條件（例如僅過濾 `transaction_type` 而不執行昂貴的字串 `ilike` 比對測試帳號），或者延長 Vercel Edge Cache 的時間 (從 60s 延長至 600s)，以大幅降低向 Supabase 發起請求的頻率。
+### 1. Update OTP Input Length [DONE]
+- **影響檔案**: `loamlab_plugin/ui/index.html`, `loamlab_plugin/ui/app.js`
+- **Description**: 
+  - In `index.html`, update the `#login-code-input` element to allow 8 digits: change `maxlength="6"` to `maxlength="8"`, and update the placeholder to `--------`.
+  - In `app.js`, review the OTP verification logic (`btn-verify-otp` click handler). If there is a strict length check (`token.length < 6`), consider updating it to match the 8-digit requirement (e.g., `< 6` is technically fine to allow 8, but updating it to `< 8` makes it strictly correct).
 
-- [x] TASK 3: **[NICE] 增加 `transactions` 複合索引**
-  - **影響檔案**: `loamlab_backend/supabase_setup.sql`
-  - **細節**: 若查詢經常同時使用 `transaction_type` 與 `created_at` (例如 `dashboard` 或 `insights`)，可建立複合索引 `CREATE INDEX idx_transactions_type_created ON transactions (transaction_type, created_at DESC)` 進一步減少 IO。
+### 2. Fix Google Login Browser Redirect Exception [DONE]
+- **影響檔案**: `loamlab_plugin/ui/app.js`
+- **Description**: 
+  - Fix the JS exception in `startOAuthFlow()` that prevents the external browser from opening.
+  - The line `if (typeof crypto.randomUUID === 'function')` throws an error if `window.crypto` is undefined (common in older SketchUp CEF environments without HTTPS).
+  - Update the fallback logic to safely check for `window.crypto` (e.g., `if (window.crypto && typeof window.crypto.randomUUID === 'function')`).
+  - Provide a safe fallback UUID generator using `Math.random()` if `window.crypto` is completely unavailable, ensuring `sessionUuid` is always generated and `sketchup.open_browser(loginUrl)` is successfully called.
 
 status: DONE

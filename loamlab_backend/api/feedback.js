@@ -72,6 +72,8 @@ async function sendEmailNotification({ type, rating, content, tags, transaction_
     const errorCode = metadata?.error_code || '—';
 
     const subject = `[LoamLab AI Renderer 反饋] ${TYPE_LABEL[type] || type}${rating ? ` ${ratingStr}` : ''}`;
+    const KNOWN_METADATA_KEYS = new Set(['plugin_version', 'resolution', 'error_code']);
+    const extraEntries = Object.entries(metadata || {}).filter(([k]) => !KNOWN_METADATA_KEYS.has(k));
     const text = [
         `類型：${TYPE_LABEL[type] || type}`,
         `評分：${ratingStr}`,
@@ -82,6 +84,7 @@ async function sendEmailNotification({ type, rating, content, tags, transaction_
         `解析度：${resolution}`,
         `錯誤碼：${errorCode}`,
         `Transaction ID：${transaction_id || '—'}`,
+        ...(extraEntries.length ? ['--- 附加數據 ---', ...extraEntries.map(([k, v]) => `${k}：${v}`)] : []),
     ].join('\n');
 
     await transporter.sendMail({

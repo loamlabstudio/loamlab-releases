@@ -1013,7 +1013,7 @@ async function renders(supabase) {
 async function feedback(supabase) {
     const [{ data: rows }, { data: ratingRows }] = await Promise.all([
         noTestRef(supabase.from('feedback')
-            .select('user_email, type, rating, content, tags, created_at')
+            .select('user_email, type, rating, content, tags, created_at, metadata')
             .order('created_at', { ascending: false })
             .limit(100)),
         noTestRef(supabase.from('feedback')

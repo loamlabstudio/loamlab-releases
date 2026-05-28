@@ -2903,14 +2903,30 @@ function filterFeedback(type, btn) {
   const rows = type==='all' ? allFeedback : allFeedback.filter(f=>f.type===type);
   const el = document.getElementById('feedback-list');
   if (!rows.length) { el.innerHTML='<div class="py-8 text-center text-gray-700 text-xs">暫無資料</div>'; return; }
-  el.innerHTML = rows.map(f=>`
+  el.innerHTML = rows.map(f=>{
+    let metaStr = '';
+    let metaObj = f.metadata;
+    if (typeof metaObj === 'string') {
+      try { metaObj = JSON.parse(metaObj); } catch(e) {}
+    }
+    if (metaObj && typeof metaObj === 'object' && Object.keys(metaObj).length > 0) {
+      const metaEntries = Object.entries(metaObj).map(([k, v]) => `<span class="text-gray-500">${k}:</span> <span class="text-gray-300">${v}</span>`).join(' | ');
+      metaStr = `<div class="mt-1.5 text-[10px] bg-black/30 p-1.5 rounded border border-white/5 font-mono overflow-x-auto">${metaEntries}</div>`;
+    } else {
+      metaStr = `<div class="text-red-500 text-[10px]">無具體數據 (Empty Metadata in DB)</div>`;
+    }
+    return `
     <div class="flex items-start gap-3 py-3 border-b border-white/[0.04] text-xs">
-      <div class="text-gray-600 w-36 shrink-0 font-mono truncate pt-0.5">${f.user_email||'—'}</div>
+      <div class="text-gray-600 w-36 shrink-0 font-mono truncate pt-0.5" title="${f.user_email||'—'}">${f.user_email||'—'}</div>
       <div class="shrink-0 text-yellow-400/80">${f.rating ? '★'.repeat(f.rating)+'<span class="text-gray-700">'+'★'.repeat(5-f.rating)+'</span>' : ''}</div>
       <div class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold" style="background:#1e2440;color:#8899bb">${f.type}</div>
-      <div class="text-gray-400 flex-1 leading-relaxed">${f.content||''}</div>
-      <div class="text-gray-700 shrink-0">${fmtDate(f.created_at)}</div>
-    </div>`).join('');
+      <div class="text-gray-400 flex-1 leading-relaxed overflow-hidden">
+        <div>${f.content||''}</div>
+        ${metaStr}
+      </div>
+      <div class="text-gray-700 shrink-0 pt-0.5">${fmtDate(f.created_at)}</div>
+    </div>`;
+  }).join('');
 }
 
 

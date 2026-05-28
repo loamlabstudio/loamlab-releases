@@ -127,11 +127,11 @@ export default async function handler(req, res) {
         }
 
         try {
-            // 嘗試透過 API 取消（設定狀態為 cancelled）
+            // 嘗試透過 API 取消
             const apiRes = await fetch(`https://live.dodopayments.com/subscriptions/${subscriptionId}`, {
                 method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'cancelled' })
+                body: JSON.stringify({ cancel_at_next_billing_date: true })
             });
 
             if (apiRes.ok) {

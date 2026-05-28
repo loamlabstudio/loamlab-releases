@@ -95,7 +95,7 @@ export default async function handler(req, res) {
         let subscriptionId = user?.dodo_subscription_id;
 
         const DODO_API_KEY = process.env.DODO_API_KEY;
-        const PORTAL_URL = `https://checkout.dodopayments.com/billing`;
+        const PORTAL_URL = `https://customer.dodopayments.com`;
 
         if (!DODO_API_KEY) {
             return res.status(200).json({ code: 2, portal_url: PORTAL_URL, msg: 'config_error' });
@@ -127,11 +127,11 @@ export default async function handler(req, res) {
         }
 
         try {
-            // 優先 cancel_at_period_end，讓用戶當期點數不損失
+            // 嘗試透過 API 取消（設定狀態為 cancelled）
             const apiRes = await fetch(`https://live.dodopayments.com/subscriptions/${subscriptionId}`, {
                 method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cancel_at_period_end: true })
+                body: JSON.stringify({ status: 'cancelled' })
             });
 
             if (apiRes.ok) {
@@ -175,60 +175,62 @@ export default async function handler(req, res) {
         if (userErr) return res.status(500).json({ code: -1, msg: userErr.message });
         if (!user) return res.status(404).json({ code: -1, msg: 'User not found' });
         if (!user.subscription_plan) return res.status(400).json({ code: -1, msg: 'No active subscription' });
-        // 雙重冪等：DB 欄位（Phase 24 migration 後）+ transactions 表（fallback，用 limit(1) 避免 maybeSingle 多行問題）
-        const offerUsedByFlag = !!user.retention_offer_used;
-        const { data: existingBonusRows } = await sb.from('transactions').select('id').eq('user_email', offerEmail).eq('transaction_type', 'RETENTION_BONUS').limit(1);
-        if (offerUsedByFlag || (existingBonusRows && existingBonusRows.length > 0)) {
-            return res.status(400).json({ code: -1, msg: 'Offer already used' });
-        }
+        if (user.retention_offer_used) return res.status(400).json({ code: -1, msg: '您已使用過此優惠，無法重複領取' });
 
-        // 輔助：更新保留欄位，若 Phase 24 migration 尚未跑則靜默降級
-        const markOfferUsed = async (extra = {}) => {
-            const { error } = await sb.from('users').update({ retention_offer_used: true, ...extra }).eq('email', offerEmail);
-            if (error) console.warn('[save_offer] retention fields unavailable (run Phase 24 migration):', error.message);
-        };
+        const ALREADY_USED = { code: -1, msg: '您已使用過此優惠，無法重複領取' };
 
         if (offer_type === 'discount') {
             const BONUS = 100;
-            const { error: ptsErr } = await sb.from('users').update({ points: (user.points || 0) + BONUS }).eq('email', offerEmail);
-            if (ptsErr) return res.status(500).json({ code: -1, msg: ptsErr.message });
-            await markOfferUsed();
-            await sb.from('transactions').insert([{
+            // insert-first：deterministic order_id + unique index = 原子鎖，天然防 Race Condition
+            const { error: txErr } = await sb.from('transactions').insert([{
                 user_email: offerEmail, amount: BONUS,
-                transaction_type: 'RETENTION_BONUS', order_id: `retention_discount_${Date.now()}`
+                transaction_type: 'RETENTION_BONUS',
+                order_id: `retention_bonus_${offerEmail}`
             }]);
+            if (txErr) {
+                if (txErr.code === '23505') return res.status(400).json(ALREADY_USED);
+                return res.status(500).json({ code: -1, msg: txErr.message });
+            }
+            await sb.from('users').update({ points: (user.points || 0) + BONUS, retention_offer_used: true }).eq('email', offerEmail);
             return res.status(200).json({ code: 0, msg: '已為您補充 100 點作為回饋，感謝繼續使用 LoamLab！', points_added: BONUS });
         }
 
         if (offer_type === 'pause') {
             const months = Math.min(Math.max(parseInt(pause_months) || 1, 1), 3);
             const resumeAt = new Date(Date.now() + months * 30 * 24 * 3600 * 1000).toISOString();
-            const subscriptionId = user.dodo_subscription_id;
 
-            if (!subscriptionId) {
-                await markOfferUsed({ subscription_paused_until: resumeAt });
-                return res.status(200).json({ code: 0, msg: `暫停申請已收到，我們將在 24 小時內為您處理，${new Date(resumeAt).toLocaleDateString('zh-TW')} 後自動恢復`, pending: true });
+            // insert-first 同樣防重複
+            const { error: txErr } = await sb.from('transactions').insert([{
+                user_email: offerEmail, amount: 0,
+                transaction_type: 'RETENTION_PAUSE',
+                order_id: `retention_pause_${offerEmail}`
+            }]);
+            if (txErr) {
+                if (txErr.code === '23505') return res.status(400).json(ALREADY_USED);
+                return res.status(500).json({ code: -1, msg: txErr.message });
             }
 
-            const DODO_API_KEY = process.env.DODO_API_KEY;
-            if (!DODO_API_KEY) {
-                await markOfferUsed({ subscription_paused_until: resumeAt });
-                return res.status(200).json({ code: 0, msg: `暫停申請已記錄，${new Date(resumeAt).toLocaleDateString('zh-TW')} 後自動恢復`, pending: true });
+            const markPauseUsed = () => sb.from('users')
+                .update({ retention_offer_used: true, subscription_paused_until: resumeAt })
+                .eq('email', offerEmail);
+
+            const subscriptionId = user.dodo_subscription_id;
+            if (!subscriptionId || !process.env.DODO_API_KEY) {
+                await markPauseUsed();
+                return res.status(200).json({ code: 0, msg: `暫停申請已收到，我們將在 24 小時內為您處理，${new Date(resumeAt).toLocaleDateString('zh-TW')} 後自動恢復`, pending: true });
             }
 
             try {
                 const apiRes = await fetch(`https://live.dodopayments.com/subscriptions/${subscriptionId}/pause`, {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
+                    headers: { 'Authorization': `Bearer ${process.env.DODO_API_KEY}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ resume_at: resumeAt })
                 });
+                await markPauseUsed();
                 if (!apiRes.ok) {
-                    const errText = await apiRes.text();
-                    console.error('[save_offer/pause] Dodo API error:', apiRes.status, errText);
-                    await markOfferUsed({ subscription_paused_until: resumeAt });
+                    console.error('[save_offer/pause] Dodo API error:', apiRes.status, await apiRes.text());
                     return res.status(200).json({ code: 0, msg: `暫停申請已記錄，我們將盡快為您處理`, pending: true });
                 }
-                await markOfferUsed({ subscription_paused_until: resumeAt });
                 return res.status(200).json({ code: 0, msg: `訂閱已暫停 ${months} 個月，${new Date(resumeAt).toLocaleDateString('zh-TW')} 自動恢復`, resume_at: resumeAt });
             } catch (e) {
                 return res.status(500).json({ code: -1, msg: e.message });

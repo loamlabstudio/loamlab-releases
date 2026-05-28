@@ -2256,6 +2256,61 @@ function updatePlanBadge(plan) {
     }
 }
 
+var CANCEL_PENDING_I18N = {
+    'zh-TW': { msg: '訂閱將於本週期結束後取消', btn: '撤回退訂申請', undoing: '撤回中...', undo_ok: '已恢復訂閱', undo_fail: '請前往管理頁面撤回' },
+    'en-US': { msg: 'Subscription will cancel at period end', btn: 'Undo cancellation', undoing: 'Undoing...', undo_ok: 'Subscription restored', undo_fail: 'Please visit billing portal to undo' },
+    'zh-CN': { msg: '订阅将于本周期结束后取消', btn: '撤回退订申请', undoing: '撤回中...', undo_ok: '已恢复订阅', undo_fail: '请前往管理页面撤回' },
+    'es-ES': { msg: 'La suscripción se cancelará al final del período', btn: 'Deshacer cancelación', undoing: 'Deshaciendo...', undo_ok: 'Suscripción restaurada', undo_fail: 'Visita el portal para deshacer' },
+    'pt-BR': { msg: 'A assinatura será cancelada no fim do período', btn: 'Desfazer cancelamento', undoing: 'Desfazendo...', undo_ok: 'Assinatura restaurada', undo_fail: 'Acesse o portal para desfazer' },
+    'ja-JP': { msg: 'サブスクリプションは期末にキャンセルされます', btn: 'キャンセルを取り消す', undoing: '取り消し中...', undo_ok: 'サブスクリプション復元済み', undo_fail: 'ポータルで取り消してください' },
+};
+
+function updateCancelPendingBanner(isPending) {
+    var banner = document.getElementById('cancel-pending-banner');
+    var cancelRow = document.getElementById('cancel-subscription-row');
+    if (!banner) return;
+    if (isPending) {
+        var lang = (typeof currentLang !== 'undefined' ? currentLang : null) || localStorage.getItem('loamlab_lang') || 'en-US';
+        var ct = CANCEL_PENDING_I18N[lang] || CANCEL_PENDING_I18N['en-US'];
+        banner.querySelector('#cpb-msg').textContent = ct.msg;
+        banner.querySelector('#cpb-btn').textContent = ct.btn;
+        banner.classList.remove('hidden');
+        if (cancelRow) cancelRow.classList.add('hidden');
+    } else {
+        banner.classList.add('hidden');
+        if (cancelRow && window.loamlabSubscriptionPlan) cancelRow.classList.remove('hidden');
+    }
+}
+
+function undoCancel() {
+    var email = window.loamlabUserEmail || '';
+    var btn = document.getElementById('cpb-btn');
+    var lang = (typeof currentLang !== 'undefined' ? currentLang : null) || localStorage.getItem('loamlab_lang') || 'en-US';
+    var ct = CANCEL_PENDING_I18N[lang] || CANCEL_PENDING_I18N['en-US'];
+    if (btn) { btn.disabled = true; btn.textContent = ct.undoing; }
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 15000);
+    fetch('https://loamlab-camera-backend.vercel.app/api/user?action=undo_cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email }),
+        signal: ctrl.signal
+    }).then(function(r){ return r.json(); }).then(function(data){
+        clearTimeout(timer);
+        if (data.code === 0) {
+            window.loamlabCancelPending = false;
+            updateCancelPendingBanner(false);
+            showUpdateToast(ct.undo_ok);
+        } else {
+            if (data.portal_url && window.sketchup) { try { sketchup.open_browser(data.portal_url); } catch(_) {} }
+            if (btn) { btn.disabled = false; btn.textContent = ct.undo_fail; }
+        }
+    }).catch(function(){
+        clearTimeout(timer);
+        if (btn) { btn.disabled = false; btn.textContent = ct.btn; }
+    });
+}
+
 function syncPricingModalI18n() {
     const modal = document.getElementById('pricing-modal');
     if (!modal) return;
@@ -2546,11 +2601,13 @@ function _cfConfirmCancel() {
     fetch('https://loamlab-camera-backend.vercel.app/api/user?action=cancel_subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email }),
+        body: JSON.stringify({ email: email, reason: (_cfState.ct.r && _cfState.ct.r[_cfState.reason]) || '' }),
         signal: ctrl.signal
     }).then(function(r){ return r.json(); }).then(function(data){
         clearTimeout(timer);
         if (data.code === 0) {
+            window.loamlabCancelPending = true;
+            updateCancelPendingBanner(true);
             _cfRenderStep3(true, _cfCancelDoneMsg(ct));
         } else {
             if (data.portal_url && window.sketchup) {
@@ -3364,7 +3421,9 @@ function _doFetchUserPoints(email, attempt) {
                 if (pb) { pb.style.cursor = ''; pb.title = ''; pb.onclick = null; }
                 window.loamlabSubscriptionPlan = data.subscription_plan || null;
                 window.loamlabLastTopupAt = data.last_topup_at || null;
+                window.loamlabCancelPending = data.cancel_pending || false;
                 updatePlanBadge(window.loamlabSubscriptionPlan);
+                updateCancelPendingBanner(window.loamlabCancelPending);
                 window.updateLoginUI(email, data.points, data.display_code || data.referral_code, data.referred_by, data.is_kol, data.is_partner);
 
                 // 邀請人到帳 Toast：比對上次快取的成功邀請數，有增加就通知

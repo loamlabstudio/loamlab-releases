@@ -83,13 +83,23 @@ export default async function handler(req, res) {
 
     // ── Cancel Subscription（用戶確認取消後直接呼叫 Dodo API）──────────────────
     if (req.method === 'POST' && req.query.action === 'cancel_subscription') {
-        const { email: cancelEmail } = req.body || {};
+        const { email: cancelEmail, reason } = req.body || {};
         if (!cancelEmail) return res.status(400).json({ code: -1, msg: 'Missing email' });
 
         const sbUrl = process.env.SUPABASE_URL;
         const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
         if (!sbUrl || !sbKey) return res.status(500).json({ code: -1, msg: 'Missing SUPABASE env vars' });
         const sb = createClient(sbUrl, sbKey);
+
+        // T2: 寫入退訂原因（fire-and-forget，不阻塞主流程）
+        if (reason) {
+            sb.from('feedback').insert([{
+                user_email: cancelEmail,
+                type: 'unsubscribe_reason',
+                content: reason,
+                metadata: { recorded_at: new Date().toISOString() }
+            }]).catch(() => {});
+        }
 
         const { data: user } = await sb.from('users').select('dodo_subscription_id, subscription_plan').eq('email', cancelEmail).maybeSingle();
         let subscriptionId = user?.dodo_subscription_id;
@@ -136,24 +146,14 @@ export default async function handler(req, res) {
             });
 
             if (apiRes.ok) {
-                await sb.from('users').update({ dodo_subscription_id: null }).eq('email', cancelEmail)
+                // T1: 保留 dodo_subscription_id，設 cancel_pending 讓用戶可撤回
+                await sb.from('users').update({ cancel_pending: true }).eq('email', cancelEmail)
                     .catch(e => console.warn('[cancel] db update failed:', e.message));
                 return res.json({ code: 0, msg: 'cancelled' });
             }
 
-            // PATCH 失敗（endpoint 不存在），試 DELETE
-            const delRes = await fetch(`${dodoBase}/subscriptions/${subscriptionId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' }
-            });
-
-            if (delRes.ok) {
-                await sb.from('users').update({ dodo_subscription_id: null }).eq('email', cancelEmail)
-                    .catch(e => console.warn('[cancel] db update failed:', e.message));
-                return res.json({ code: 0, msg: 'cancelled' });
-            }
-
-            console.error('[cancel_subscription] Dodo error:', delRes.status, await delRes.text().catch(() => ''));
+            // T1: PATCH 失敗不再 fallback DELETE，直接進入 portal 流程
+            console.error('[cancel_subscription] PATCH failed:', apiRes.status, await apiRes.text().catch(() => ''));
         } catch (e) {
             console.error('[cancel_subscription] fetch error:', e.message);
         }
@@ -186,6 +186,50 @@ export default async function handler(req, res) {
         } catch (_) {}
 
         return res.status(200).json({ code: 2, portal_url: dynamicPortalUrl, msg: 'api_error_fallback' });
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
+    // ── Undo Cancel（撤回退訂申請，在週期結束前可呼叫）────────────────────────────
+    if (req.method === 'POST' && req.query.action === 'undo_cancel') {
+        const { email: undoEmail } = req.body || {};
+        if (!undoEmail) return res.status(400).json({ code: -1, msg: 'Missing email' });
+
+        const sbUrl2 = process.env.SUPABASE_URL;
+        const sbKey2 = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+        if (!sbUrl2 || !sbKey2) return res.status(500).json({ code: -1, msg: 'Missing SUPABASE env vars' });
+        const sb2 = createClient(sbUrl2, sbKey2);
+
+        const { data: undoUser } = await sb2.from('users')
+            .select('dodo_subscription_id, cancel_pending').eq('email', undoEmail).maybeSingle();
+
+        if (!undoUser?.cancel_pending) return res.status(400).json({ code: -1, msg: 'no_pending_cancel' });
+
+        const DODO_API_KEY2 = process.env.DODO_API_KEY;
+        const PORTAL_URL2 = 'https://customer.dodopayments.com';
+
+        if (!DODO_API_KEY2 || !undoUser?.dodo_subscription_id) {
+            // 無法透過 API 撤回，清除 pending flag 並告知用戶聯繫客服
+            await sb2.from('users').update({ cancel_pending: false }).eq('email', undoEmail).catch(() => {});
+            return res.status(200).json({ code: 2, portal_url: PORTAL_URL2, msg: 'no_api_key_or_id' });
+        }
+
+        const dodoBase2 = DODO_API_KEY2.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+        try {
+            const undoRes = await fetch(`${dodoBase2}/subscriptions/${undoUser.dodo_subscription_id}`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${DODO_API_KEY2}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cancel_at_next_billing_date: false })
+            });
+            if (undoRes.ok) {
+                await sb2.from('users').update({ cancel_pending: false }).eq('email', undoEmail).catch(() => {});
+                return res.json({ code: 0, msg: 'undo_success' });
+            }
+            console.error('[undo_cancel] Dodo PATCH failed:', undoRes.status, await undoRes.text().catch(() => ''));
+        } catch (e) {
+            console.error('[undo_cancel] fetch error:', e.message);
+        }
+        // Dodo API 不支援撤回（或失敗）→ 引導 portal
+        return res.status(200).json({ code: 2, portal_url: PORTAL_URL2, msg: 'undo_failed_use_portal' });
     }
     // ────────────────────────────────────────────────────────────────────────
 
@@ -386,7 +430,7 @@ export default async function handler(req, res) {
         try {
             let { data, error } = await supabase
                 .from('users')
-                .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner')
+                .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending')
                 .eq('email', email)
                 .single();
 
@@ -429,6 +473,7 @@ export default async function handler(req, res) {
                 referral_success_count: referralSuccessCount || 0,
                 is_kol: data ? (data.is_kol || false) : false,
                 is_partner: data ? (data.is_partner || false) : false,
+                cancel_pending: data ? (data.cancel_pending || false) : false,
                 is_new_user: error && error.code === 'PGRST116' ? true : false
             });
         } catch (e) {

@@ -779,6 +779,29 @@ export default async function handler(req, res) {
             }
         } catch (e) { summary.reengagement_error = e.message; }
 
+        // 方案過期清理：如果 dodo_subscription_id 是 null，且 last_topup_at 超過 31 天，自動清空 subscription_plan
+        try {
+            const d31 = new Date(now - 31 * 24 * 3600 * 1000).toISOString();
+            const { error: expireErr } = await supabase.from('users')
+                .update({ subscription_plan: null })
+                .is('dodo_subscription_id', null)
+                .not('subscription_plan', 'is', null)
+                .lt('last_topup_at', d31);
+            if (expireErr) summary.expire_cleanup_error = expireErr.message;
+            else summary.expire_cleanup = 'success';
+        } catch (e) { summary.expire_cleanup_error = e.message; }
+
+        // cancel_pending 安全網：webhook 未觸發時，31天後強制清除
+        try {
+            const d31cp = new Date(now - 31 * 24 * 3600 * 1000).toISOString();
+            const { error: cpErr } = await supabase.from('users')
+                .update({ subscription_plan: null, cancel_pending: false, dodo_subscription_id: null })
+                .eq('cancel_pending', true)
+                .lt('last_topup_at', d31cp);
+            if (cpErr) summary.cancel_pending_cleanup_error = cpErr.message;
+            else summary.cancel_pending_cleanup = 'success';
+        } catch (e) { summary.cancel_pending_cleanup_error = e.message; }
+
         return res.status(200).json({ code: 0, ran_at: now.toISOString(), ...summary });
     }
 

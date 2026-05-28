@@ -1238,6 +1238,12 @@
                 <button onclick="openCancelFlow()" class="text-[10px] text-white/20 hover:text-white/50 transition-colors underline underline-offset-2 tracking-wider" data-i18n="pricing_cancel_sub">取消訂閱 / Cancel Subscription</button>
             </div>
 
+            <!-- 退訂待生效提示（cancel_pending = true 時顯示）-->
+            <div id="cancel-pending-banner" class="hidden mt-3 mx-1 px-3 py-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 text-center">
+                <p id="cpb-msg" class="text-[10px] text-amber-400/70 mb-2 leading-relaxed"></p>
+                <button id="cpb-btn" onclick="undoCancel()" class="text-[9px] font-bold tracking-[0.15em] uppercase text-white/40 hover:text-white/70 border border-white/10 hover:border-white/25 rounded-full px-3 py-1 transition-all"></button>
+            </div>
+
             <!-- Top-up Panel (hidden by default) -->
             <div id="panel-topup" class="hidden justify-center">
                 <div class="bg-[#141420] border border-blue-500/20 rounded-xl p-6 flex flex-col hover:border-blue-400/40 transition-all shadow-inner relative w-72 mx-auto">

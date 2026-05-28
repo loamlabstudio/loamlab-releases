@@ -181,7 +181,9 @@ export default async function handler(req, res) {
 async function processCancellation(customerEmail, platform) {
     console.log(`[🛑取消訂閱] 處理 ${platform} 取消: ${customerEmail}`);
     await supabase.from('users').update({
-        subscription_plan: null
+        subscription_plan: null,
+        cancel_pending: false,
+        dodo_subscription_id: null
     }).eq('email', customerEmail);
 }
 

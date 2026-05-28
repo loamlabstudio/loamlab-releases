@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-TW" style="background-color:#09090b;">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script>
         // Global Error Handler — suppress non-critical errors (CDN + bundled libs), alert only for app errors
         window.onerror = function(msg, url, lineNo, columnNo, error) {
@@ -61,6 +61,7 @@
         html, body {
             width: 100%;
             height: 100%;
+            min-height: 100%;
             margin: 0;
             padding: 0;
             overflow: hidden;
@@ -1376,7 +1377,7 @@
     <!-- Feedback Modal -->
     <!-- Render History Modal -->
     <div id="history-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/90">
-        <div class="w-[700px] max-w-[95vw] bg-[#0f0f12] border border-white/10 rounded-2xl shadow-2xl p-6 flex flex-col gap-4 relative" style="max-height:82vh;">
+        <div class="w-[700px] max-w-[95vw] bg-[#0f0f12] border border-white/10 rounded-2xl shadow-2xl p-6 flex flex-col gap-4 relative" style="max-height:82%;">
             <div class="flex items-center justify-between shrink-0">
                 <span class="text-[13px] font-bold text-white/80 tracking-widest uppercase" data-i18n="history_title">Render History</span>
                 <button id="btn-close-history" onclick="closeHistoryModal()" class="text-white/30 hover:text-white/60 transition-colors text-lg leading-none">✕</button>
@@ -1418,7 +1419,7 @@
 
     <!-- Smart Canvas Modal (智能語義畫布) -->
     <div id="smart-canvas-modal" class="fixed inset-0 bg-black/95 backdrop-blur-md z-50 hidden items-center justify-center">
-        <div class="relative w-[1080px] max-w-[98vw] bg-[#0f0f12] border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden" style="height:90vh;">
+        <div class="relative w-[1080px] max-w-[98vw] bg-[#0f0f12] border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden" style="height:90%;">
             <!-- Header -->
             <div class="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
                 <div>
@@ -1438,7 +1439,7 @@
                     <div class="flex-1 relative flex items-center justify-center overflow-hidden p-3">
                         <div class="relative inline-block" id="sc-canvas-stack">
                             <!-- 底層：渲染結果圖 -->
-                            <img id="sc-base-img" class="block max-w-full rounded-lg select-none opacity-0 transition-opacity duration-300" style="max-height:calc(90vh - 200px);" alt="render" crossorigin="anonymous">
+                            <img id="sc-base-img" class="block max-w-full rounded-lg select-none opacity-0 transition-opacity duration-300" style="max-height:calc(100% - 200px);" alt="render" crossorigin="anonymous">
                             
                             <!-- Loading Spinner -->
                             <div id="sc-loading" class="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm rounded-lg z-[2]">
@@ -1597,7 +1598,7 @@
         <button id="btn-close-preview" class="absolute top-4 right-6 text-white/50 hover:text-white transition-colors p-2 bg-black/20 hover:bg-white/10 rounded-full z-10" onclick="closeImagePreview(); event.stopPropagation();">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
-        <div class="relative max-w-[95vw] max-h-[95vh] w-full h-full flex flex-col items-center justify-center p-4 pointer-events-none">
+        <div class="relative max-w-[95%] max-h-[95%] w-full h-full flex flex-col items-center justify-center p-4 pointer-events-none">
             <!-- Loader -->
             <div id="image-preview-loader" class="absolute flex flex-col items-center justify-center gap-2 pointer-events-none">
                 <div class="w-10 h-10 border-4 border-white/20 border-t-[#dc2626] rounded-full animate-spin"></div>

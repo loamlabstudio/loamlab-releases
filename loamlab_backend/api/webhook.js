@@ -235,6 +235,11 @@ async function processTopup(customerEmail, variantId, orderId, platform, discoun
 
     let { data: user } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
 
+    // 若已取消訂閱（subscription_plan: null），訂閱型點數不補發（防 webhook 時序問題）
+    if (isSubscription && user && user.subscription_plan === null) {
+        return console.log(`[🚫跳過] ${customerEmail} 訂閱已取消，不補發點數 (orderId: ${fullOrderId})`);
+    }
+
     if (!user) {
         // 新用戶：建立時帶入 referred_by（若有折扣碼歸因）
         await supabase.from('users').insert([{

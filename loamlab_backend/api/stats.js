@@ -140,7 +140,7 @@ export default async function handler(req, res) {
 
     // --- 公開端點（無需 key，插件健康檢查用、或獲取公告）---
     if (!action) {
-        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
+        res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=1200');
         return res.status(200).json(await getPublicStats(supabase));
     }
 

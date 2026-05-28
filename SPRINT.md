@@ -1,12 +1,22 @@
-# SPRINT: 優化 Paywall Trigger 反饋信件具體資訊
-
-## CONTEXT_DIGEST
-當使用者觸發付費牆 (`paywall_trigger`) 時，前端 (`loamlab_plugin/ui/app.js`) 已經將當下的所需點數 (`cost`) 與餘額 (`balance`) 附加在 `metadata` 內傳遞給後端。但後端的 Email 發送邏輯 (`loamlab_backend/api/feedback.js`) 在組裝信件時，遺漏了這些非預設的 metadata，導致管理員收到內容為空的無效通知。
+# 核心分析 (Context Digest)
+Supabase 專案的 Disk IO 預算耗盡，主要是因為後端 API (`stats.js`) 中存在大量高頻的 `transactions` 與 `feedback` 表查詢。這些查詢頻繁過濾 `transaction_type`、`created_at`、`user_email`，但資料庫中**缺少對應的索引 (Indexes)**，導致嚴重的全表掃描 (Full Table Scans)。特別是 `getPublicStats` 中的 `count: 'exact'` 結合 `ilike` 過濾，進一步加劇了 IO 負載。我們將透過新增索引與優化查詢模式來以「零成本」解決此問題。
 
 ## TASKS
+- [x] TASK 1: **[MUST] 建立缺失的核心索引**
+  - **影響檔案**: `loamlab_backend/supabase_setup.sql`
+  - **細節**: 在 `supabase_setup.sql` 中加入以下索引的建立語法：
+    - `transactions(transaction_type)` (加速種類過濾)
+    - `transactions(created_at DESC)` (加速時間範圍如 `gte` 的查詢)
+    - `transactions(user_email)` (加速使用者關聯查詢)
+    - `feedback(type)` 與 `feedback(created_at DESC)`
+  - **預期效果**: 將全表掃描轉化為索引掃描，巨幅降低 Disk IO。
 
-1. **[x] 更新後端 Feedback 信件模板動態萃取 Metadata**
-   - **影響檔案**: `loamlab_backend/api/feedback.js`
-   - **描述**: 修改 `sendEmailNotification` 函式，檢查 `metadata` 物件中是否有尚未被標準信件模板（如 `plugin_version`, `resolution`, `error_code`）使用的鍵值對。若有，則將這些額外數據（如 `cost` 和 `balance`）動態格式化，並附加在原本 Email `text` 陣列的最後面（如新增「附加數據：...」區塊），確保後續任何新增的自定義事件數據都能完整呈現於通知信中。
+- [x] TASK 2: **[MUST] 優化 `stats.js` 中的高頻統計查詢**
+  - **影響檔案**: `loamlab_backend/api/stats.js`
+  - **細節**: `getPublicStats` 頻繁執行 4 次 `count: 'exact'` 且夾帶 `ilike` (`noTest` / `noTestRef`)。由於這些只是公開統計數據，可以考慮簡化過濾條件（例如僅過濾 `transaction_type` 而不執行昂貴的字串 `ilike` 比對測試帳號），或者延長 Vercel Edge Cache 的時間 (從 60s 延長至 600s)，以大幅降低向 Supabase 發起請求的頻率。
+
+- [x] TASK 3: **[NICE] 增加 `transactions` 複合索引**
+  - **影響檔案**: `loamlab_backend/supabase_setup.sql`
+  - **細節**: 若查詢經常同時使用 `transaction_type` 與 `created_at` (例如 `dashboard` 或 `insights`)，可建立複合索引 `CREATE INDEX idx_transactions_type_created ON transactions (transaction_type, created_at DESC)` 進一步減少 IO。
 
 status: DONE

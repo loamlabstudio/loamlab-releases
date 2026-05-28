@@ -333,3 +333,14 @@ CREATE TABLE IF NOT EXISTS public.webhook_errors (
 );
 ALTER TABLE public.webhook_errors ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "backend_rw" ON public.webhook_errors FOR ALL USING (true) WITH CHECK (true);
+
+-- ==============================================================================
+-- Phase 26: Disk IO 優化索引
+-- 解決 transactions / feedback 全表掃描導致 Supabase IO 超出預算
+-- ==============================================================================
+CREATE INDEX IF NOT EXISTS idx_transactions_type       ON public.transactions (transaction_type);
+CREATE INDEX IF NOT EXISTS idx_transactions_created    ON public.transactions (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_email      ON public.transactions (user_email);
+CREATE INDEX IF NOT EXISTS idx_transactions_type_created ON public.transactions (transaction_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_feedback_type           ON public.feedback (type);
+CREATE INDEX IF NOT EXISTS idx_feedback_created        ON public.feedback (created_at DESC);

@@ -153,11 +153,38 @@ export default async function handler(req, res) {
             }
 
             console.error('[cancel_subscription] Dodo error:', delRes.status, await delRes.text().catch(() => ''));
-            return res.status(200).json({ code: 2, portal_url: PORTAL_URL, msg: 'api_error' });
         } catch (e) {
             console.error('[cancel_subscription] fetch error:', e.message);
-            return res.status(200).json({ code: 2, portal_url: PORTAL_URL, msg: 'network_error' });
         }
+
+        // --- Fallback: 若 API 自動取消失敗，動態建立專屬 Customer Portal URL ---
+        let dynamicPortalUrl = PORTAL_URL;
+        try {
+            // 1. 取得 customer_id
+            const custRes = await fetch(`https://live.dodopayments.com/customers?customer_email=${encodeURIComponent(cancelEmail)}`, {
+                headers: { 'Authorization': `Bearer ${DODO_API_KEY}` }
+            });
+            if (custRes.ok) {
+                const custData = await custRes.json();
+                const customers = custData.items || custData.customers || custData.data || [];
+                const customerId = customers[0]?.customer_id || customers[0]?.id;
+
+                if (customerId) {
+                    // 2. 建立 portal session
+                    const sessRes = await fetch(`https://live.dodopayments.com/customers/${customerId}/customer-portal/session`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ send_email: false })
+                    });
+                    if (sessRes.ok) {
+                        const sessData = await sessRes.json();
+                        dynamicPortalUrl = sessData.link || sessData.url || sessData.portal_url || PORTAL_URL;
+                    }
+                }
+            }
+        } catch (_) {}
+
+        return res.status(200).json({ code: 2, portal_url: dynamicPortalUrl, msg: 'api_error_fallback' });
     }
     // ────────────────────────────────────────────────────────────────────────
 

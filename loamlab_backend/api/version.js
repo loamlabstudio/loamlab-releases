@@ -27,7 +27,7 @@ export default function handler(req, res) {
     }
     return res.status(200).json({
         ...LATEST,
-        release_notes: "v1.4.40 release"
+        release_notes: `v${LATEST.latest_version} release`
     });
 }
 

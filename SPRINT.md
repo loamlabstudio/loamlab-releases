@@ -1,25 +1,30 @@
-# SPRINT: 修復 SketchUp 插件登入卡死與 UI 破版問題
+# SPRINT
 
 ## CONTEXT_DIGEST
-- 用戶回報 SketchUp 中點擊 Google 登入無跳轉，且登入畫面巨型 Logo 破版。
-- 肇因為 Tailwind CDN 載入失敗（或被牆），同步加載卡死了後續 `app.js` 執行，導致按鈕失效。
-- 且舊版 Chromium 於 `file://` 下呼叫 `crypto.randomUUID()` 具拋錯風險，中斷了跳轉流程。
-- 前置修復已完成，此 Sprint 用於最終審閱、代碼清理與發佈準備。
+- **根因分析**：舊版 SketchUp CEF 無法執行 Tailwind CDN 中的現代 JavaScript (ES2020+) 語法，導致樣式引擎解析失敗。這不僅造成介面嚴重破版（如圖1所示），也連帶導致依賴 `.hidden` 類名控制的登入狀態與 Modal 邏輯失效。
+- **解決方案**：全面棄用客戶端動態編譯（Tailwind CDN），改用 Tailwind CLI 靜態編譯完整的 `style.css` 隨外掛一起發布，確保所有 SketchUp 版本的相容性並恢復介面功能。
 
 ## TASKS
 
-1. **[x] 審閱 Tailwind CDN 異步載入與防破版邏輯**
-   - 確認 CDN 標籤已改為 `async` 且具備 fallback (`unpkg`)。
-   - 確認 Logo 已加上 Inline Style (`width: 32px; height: 32px;`) 防止無 CSS 時撐破畫面。
-   - **影響檔案**：`loamlab_plugin/ui/index.html`
+### 1. [MUST] 初始化 Tailwind CLI 並編譯靜態 CSS
+- **影響檔案**: `loamlab_plugin/ui/tailwind.config.js` (若為v3), `loamlab_plugin/ui/assets/input.css`, `loamlab_plugin/ui/package.json`
+- **描述**:
+  - 在 `loamlab_plugin/ui/` 初始化 Tailwind 專案設定，指定掃描 `content: ["./*.html", "./*.js", "./**/*.js"]`。
+  - 建立入口樣式檔 `assets/input.css`，並載入 Tailwind 基礎指令。
+  - 於 `package.json` 新增 `build:css` 與 `watch:css` scripts。
+  - 執行編譯，產出完整的 `assets/style.css`（覆蓋現有殘缺的 fallback 樣式）。
 
-2. **[x] 審閱 CSS 核心備援與隱藏邏輯**
-   - 確認 `.hidden` 被正確標記為 `display: none !important;` 以防被覆蓋。
-   - 確認加入 `.w-8`, `.h-8`, `.opacity-0` 等關鍵備援類別。
-   - **影響檔案**：`loamlab_plugin/ui/assets/style.css`
+### 2. [MUST] 更新 HTML 移除 Tailwind CDN
+- **影響檔案**: `loamlab_plugin/ui/index.html`
+- **描述**:
+  - 徹底移除 `<script src="https://unpkg.com/tailwindcss-cdn@3.4.13/tailwindcss.js" ...></script>` 標籤。
+  - 確保 `<link rel="stylesheet" href="./assets/style.css">` 為唯一且主要的樣式載入點。
+  - 檢查 HTML 原本定義在行內的 `tailwind.config = {...}` 是否已正確遷移至本地專案設定檔中。
 
-3. **[x] 審閱 OAuth UUID 降級容錯機制**
-   - 檢查 `startOAuthFlow()`，確保 `window.crypto` 生成 UUID 的邏輯被 `try...catch` 妥善包覆，若失敗自動降級至 `Math.random`。
-   - **影響檔案**：`loamlab_plugin/ui/app.js`
+### 3. [NICE] 驗證登入與 UI 狀態切換邏輯
+- **影響檔案**: `loamlab_plugin/ui/app.js`, `loamlab_plugin/ui/index.html`
+- **描述**:
+  - 檢查 `app.js` 內是否有動態拼接字串產生的 Tailwind class (例如 `text-${color}-500`)，若有則需寫明完整類名或加入 safelist。
+  - 確保編譯後，未登入與已登入的狀態顯示（點數餘額、Log In 按鈕）、Modal 開關（如 OTP 視窗）皆能透過靜態的 `.hidden` 類名正確運作，完全恢復如圖2的正常介面。
 
 status: DONE

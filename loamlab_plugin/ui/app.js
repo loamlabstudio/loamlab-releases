@@ -3968,13 +3968,17 @@ function startOAuthFlow() {
     if (pollView) { pollView.classList.remove('hidden'); pollView.classList.add('flex'); }
 
     let sessionUuid;
-    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
-        sessionUuid = window.crypto.randomUUID();
-    } else if (window.crypto && window.crypto.getRandomValues) {
-        sessionUuid = '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
-            (c ^ window.crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-        );
-    } else {
+    try {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            sessionUuid = window.crypto.randomUUID();
+        } else if (window.crypto && window.crypto.getRandomValues) {
+            sessionUuid = '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
+                (c ^ window.crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+            );
+        } else {
+            throw new Error("No crypto");
+        }
+    } catch (err) {
         sessionUuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
             const r = Math.random() * 16 | 0;
             return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);

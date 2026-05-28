@@ -32,11 +32,8 @@
         })();
     </script>
     
-    <!-- 引入本地備援樣式 (防止 CDN 失敗導致黑屏) -->
+    <!-- Tailwind CSS (靜態編譯版，完全相容舊版 SketchUp CEF) -->
     <link rel="stylesheet" href="./assets/style.css">
-    
-    <!-- 引入 Tailwind CSS CDN (用於複雜類別，若失敗則依賴上面的備援) -->
-    <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- QRCode產生庫（本地化，避免 SketchUp WebDialog 無法載入 CDN） -->
     <script src="lib/qrcode.min.js"></script>
@@ -343,9 +340,11 @@
             <!-- Brand Logo -->
             <div class="flex items-center gap-3">
                 <div class="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                     style="width: 32px; height: 32px; flex-shrink: 0;"
                      onclick="window.open('https://www.instagram.com/loamlab_barbarian', '_blank')"
                      title="Follow us on Instagram">
                     <img src="./assets/logo.png" alt="Logo"
+                        style="width: 100%; height: 100%; object-fit: contain;"
                         class="w-full h-full object-contain filter drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">
                 </div>
                 <span class="font-bold text-white tracking-widest text-[16px]">LoamLab <span

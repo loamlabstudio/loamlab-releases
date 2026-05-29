@@ -72,7 +72,12 @@ export default async function handler(req, res) {
                 return res.json({ checkoutUrl: fallbackUrl, discountApplied: false });
             }
             const data = await apiRes.json();
-            return res.json({ checkoutUrl: data.checkout_url || fallbackUrl, discountApplied: !!finalDiscount });
+            // Dodo session URL 不含折扣碼查詢參數，手動附加確保 Dodo 前端 JS 自動預填欄位
+            let checkoutUrl = data.checkout_url || fallbackUrl;
+            if (finalDiscount && checkoutUrl && !checkoutUrl.includes('discount_code=')) {
+                checkoutUrl += (checkoutUrl.includes('?') ? '&' : '?') + `discount_code=${encodeURIComponent(finalDiscount)}`;
+            }
+            return res.json({ checkoutUrl, discountApplied: !!finalDiscount });
         } catch (e) {
             console.error('[checkout] fetch error:', e.message);
             return res.json({ checkoutUrl: fallbackUrl, discountApplied: false });
@@ -449,6 +454,8 @@ export default async function handler(req, res) {
                     const { data: ex } = await sb.from('transactions').select('id').eq('order_id', `DODO_${orderId}`).maybeSingle();
                     if (!ex) {
                         await processTopup(sb, vEmail, productId, orderId, 'DODO', null, sub.subscription_id);
+                        sb.from('webhook_errors').update({ resolved: true })
+                            .eq('customer_email', vEmail).eq('resolved', false).catch(() => {});
                         activated = true;
                     }
                 }
@@ -537,6 +544,10 @@ export default async function handler(req, res) {
                                     .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending')
                                     .eq('email', email).single();
                                 if (refreshed) data = refreshed;
+                                // 標記此 email 的 webhook 錯誤為已解決
+                                supabase.from('webhook_errors').update({ resolved: true })
+                                    .eq('customer_email', email).eq('resolved', false)
+                                    .catch(() => {});
                                 console.log(`[🔄自動修復] ${email} 已自動補發訂閱`);
                             }
                         }

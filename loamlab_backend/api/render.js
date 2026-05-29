@@ -868,7 +868,8 @@ async function _handleRender(req, res) {
         const response = await fetch('https://api.atlascloud.ai/api/v1/model/generateImage', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${ATLASCLOUD_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(reqBody)
+            body: JSON.stringify(reqBody),
+            signal: AbortSignal.timeout(280000)
         });
 
         if (!response.ok) {
@@ -886,12 +887,13 @@ async function _handleRender(req, res) {
             
             const pollDeadline = maxDuration * 1000 - 15000; // Vercel kill 前 15 秒截止
             let attempts = 0;
-            while (attempts < 40 && !finalUrl) {
+            let taskFailed = false;
+            while (attempts < 80 && !finalUrl && !taskFailed) {
                 if (Date.now() - requestStart > pollDeadline) throw new Error('timeout');
                 attempts++;
                 await new Promise(resolve => setTimeout(resolve, 3000));
                 try {
-                    const pRes = await fetch(pollUrl, { headers: { 'Authorization': `Bearer ${ATLASCLOUD_API_KEY}` } });
+                    const pRes = await fetch(pollUrl, { headers: { 'Authorization': `Bearer ${ATLASCLOUD_API_KEY}` }, signal: AbortSignal.timeout(280000) });
                     if (pRes.status === 200) {
                         const pData = await pRes.json();
                         // support multiple potential finished states
@@ -900,13 +902,14 @@ async function _handleRender(req, res) {
                             finalUrl = pData.data.outputs?.[0] || pData.data.image_url || pData.data.images?.[0];
                             break;
                         } else if (state === 'failed' || state === 'error') {
-                            throw new Error(`AtlasCloud task failed: ${pData?.data?.error || 'unknown error'}`);
+                            taskFailed = true; break;
                         }
                     }
                 } catch(e) {
                     console.error('[Polling Error]', e.message);
                 }
             }
+            if (taskFailed) throw new Error('AtlasCloud task failed');
         }
 
         console.log('[AtlasCloud] finalUrl:', finalUrl);
@@ -916,7 +919,7 @@ async function _handleRender(req, res) {
 
         if (finalUrl) {
             saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool, inputUrl: inputUrlForHistory });
-            return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: user.points + user.lifetime_points, transaction_id: transactionId });
+            return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: deductResult.balance, transaction_id: transactionId });
         } else {
             try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch(e) {}
             try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL' }]); } catch(e) {}

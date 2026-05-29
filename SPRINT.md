@@ -1,14 +1,17 @@
-# Sprint Plan: Fix Render Deduction & Refund Race Condition
+# Sprint Plan: Fix Render Deduction via Strict Fetch Timeout & RPC Refund
 
 ## CONTEXT_DIGEST
-用戶回報 SpaceReform 渲染失敗但仍遭扣點（共計 6 次，90 點）。經查 `render_history` 無紀錄，確認為 Vercel 執行緒 Timeout 遭強制中止，未進入 `catch` 區塊退款。且現有 `catch` 區塊退款邏輯使用 `update({ points: user.points })` 會造成 Race Condition 覆蓋。已透過 DB 腳本手動補償 90 點至該帳戶。
+用戶回報 SpaceReform 渲染失敗且遭吞點。經深入邊界測試與防禦性分析，確認根本原因並非輪詢耗盡，而是 Node.js 原生 `fetch` 缺乏超時機制。當 AtlasCloud 壅塞時，`fetch` 永遠卡死，導致 300s 後被 Vercel 強制中止，無法進入 `catch` 區塊退款。且現有 `update` 退款寫法存在 Race Condition 隱患。現採用極簡但嚴密的保命機制進行修復。
 
 ## TASKS
-- [MUST] **重構退款邏輯 (修復 Race Condition)**
+- [x] **防禦 Fetch 卡死 (加入 AbortSignal)**
   **影響檔案**: `loamlab_backend/api/render.js`
-  將 `_handleRender` 以及所有異常捕捉（catch）區塊內的 `update({ points: user.points })` 退款寫法，全面替換為原子操作 `supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost })`，避免覆蓋算圖期間的點數變更。
-- [MUST] **優化 AtlasCloud Polling Timeout 處理**
+  在所有向 AtlasCloud 發送的 `fetch` 請求（包含 `generateImage` 和 `pollUrl`）中，加入 `signal: AbortSignal.timeout(280000)`。確保在 Vercel 的 300s 強殺極限前，主動拋出超時錯誤並進入 `catch` 區塊。
+- [x] **放寬安全輪詢次數**
   **影響檔案**: `loamlab_backend/api/render.js`
-  在 Polling 迴圈中加入嚴格的總時間與超時控制（例如限制在 Vercel 函數 timeout 前 10 秒結束），若超時則主動 `throw new Error('timeout')`，以確保進程能順利進入 `catch` 區塊執行退款，避免被 Vercel 直接 SIGKILL 而吞掉點數。
+  既然已具備 280s 的全局安全網，將原本的輪詢次數從 `40` (約 120s) 提高至 `80` (約 240s)，讓複雜的 4K 渲染有足夠時間完成，降低不必要的失敗率。
+- [x] **重構退款邏輯 (修復 Race Condition)**
+  **影響檔案**: `loamlab_backend/api/render.js`
+  已在 commit 4396dd8 完成，兩個退款路徑均使用 `supabase.rpc('deduct_render_points', ...)`。
 
 status: DONE

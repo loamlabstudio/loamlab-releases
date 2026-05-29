@@ -3943,7 +3943,18 @@ window.openCheckout = async function (planKey, quantity = 1) {
         pollCount++;
         if (pollCount > 100) {
             clearInterval(paymentPollTimer);
-            showUpdateToast('⚠️ 驗證超時，如已付款請稍後重新整理，或聯繫支援');
+            showUpdateToast(`⚠️ 驗證超時，如已完成付款請點擊 <button id="verify-payment-btn" style="text-decoration:underline;cursor:pointer;background:none;border:none;color:inherit;padding:0;font:inherit">確認入帳</button>`, true);
+            const btn = document.getElementById('verify-payment-btn');
+            if (btn) btn.onclick = async () => {
+                btn.disabled = true;
+                btn.textContent = '驗證中...';
+                try {
+                    const r = await fetch(`${API_BASE}/api/user?action=verify_payment`, { headers: { 'X-User-Email': window.loamlabUserEmail } });
+                    const d = await r.json();
+                    if (d.activated) { showUpdateToast('✅ 已補發成功，重新整理中...'); setTimeout(() => location.reload(), 1500); }
+                    else showUpdateToast('⚠️ ' + d.msg + '，請聯繫客服');
+                } catch (e) { showUpdateToast('⚠️ 驗證失敗，請聯繫客服'); }
+            };
             return;
         }
         try {

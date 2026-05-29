@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { DODO_PRODUCTS } from '../config.js';
+import { processTopup, makeSupabase } from '../lib/activate.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -17,7 +18,7 @@ export default async function handler(req, res) {
         if (!productId) return res.status(400).json({ error: 'Invalid planKey' });
         const qty = Math.max(1, parseInt(quantity) || 1);
         const DODO_API_KEY = process.env.DODO_API_KEY;
-        const DODO_DISCOUNT_CODE = process.env.DODO_DISCOUNT_CODE || 'LOAM_BETA_30';
+        const DODO_DISCOUNT_CODE = process.env.DODO_DISCOUNT_CODE || '';
 
         // 歸因綁定 + KOL 折扣查詢（單次 DB 查詢合併）
         let kolDiscountCode = null;
@@ -49,8 +50,8 @@ export default async function handler(req, res) {
         }
 
         const finalDiscount = kolDiscountCode || DODO_DISCOUNT_CODE;
+        // customer_email 不是 Dodo checkout URL 支援的參數，僅透過 Dodo API 的 customer.email 傳遞
         let fallbackUrl = `https://checkout.dodopayments.com/buy?product_id=${productId}&quantity=${qty}`;
-        if (email) fallbackUrl += `&customer_email=${encodeURIComponent(email)}`;
         if (finalDiscount) fallbackUrl += `&discount_code=${encodeURIComponent(finalDiscount)}`;
 
         if (!DODO_API_KEY) {
@@ -422,6 +423,62 @@ export default async function handler(req, res) {
         } catch (e) {
             return res.status(500).json({ code: -1, msg: e.message });
         }
+    }
+
+    if (req.method === 'GET' && req.query.action === 'verify_payment') {
+        const vEmail = req.headers['x-user-email'];
+        if (!vEmail) return res.status(400).json({ code: -1, msg: 'Missing email' });
+        const DODO_API_KEY = process.env.DODO_API_KEY;
+        if (!DODO_API_KEY) return res.status(503).json({ code: -1, msg: 'DODO_API_KEY not configured' });
+        const dodoBase = DODO_API_KEY.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+        const sb = makeSupabase();
+        let activated = false;
+
+        // 查活躍訂閱（STARTER / PRO / STUDIO）
+        try {
+            const subRes = await fetch(
+                `${dodoBase}/subscriptions?customer_email=${encodeURIComponent(vEmail)}&status=active&limit=5`,
+                { headers: { Authorization: `Bearer ${DODO_API_KEY}` } }
+            );
+            if (subRes.ok) {
+                const subs = (await subRes.json()).items || [];
+                for (const sub of subs) {
+                    const productId = sub.product_id || sub.plan_id;
+                    if (!productId) continue;
+                    const orderId = `${sub.subscription_id}_verify`;
+                    const { data: ex } = await sb.from('transactions').select('id').eq('order_id', `DODO_${orderId}`).maybeSingle();
+                    if (!ex) {
+                        await processTopup(sb, vEmail, productId, orderId, 'DODO', null, sub.subscription_id);
+                        activated = true;
+                    }
+                }
+            }
+        } catch (e) { console.warn('[verify_payment] sub check:', e.message); }
+
+        // 查近期單次付款（TOPUP）
+        if (!activated) {
+            try {
+                const payRes = await fetch(
+                    `${dodoBase}/payments?customer_email=${encodeURIComponent(vEmail)}&limit=5`,
+                    { headers: { Authorization: `Bearer ${DODO_API_KEY}` } }
+                );
+                if (payRes.ok) {
+                    const pays = (await payRes.json()).items || [];
+                    for (const pay of pays) {
+                        if (pay.status !== 'succeeded') continue;
+                        const productId = pay.product_cart?.[0]?.product_id || pay.product_id;
+                        if (!productId) continue;
+                        const { data: ex } = await sb.from('transactions').select('id').eq('order_id', `DODO_${pay.payment_id}`).maybeSingle();
+                        if (!ex) {
+                            await processTopup(sb, vEmail, productId, pay.payment_id, 'DODO', null, null);
+                            activated = true;
+                        }
+                    }
+                }
+            } catch (e) { console.warn('[verify_payment] pay check:', e.message); }
+        }
+
+        return res.status(200).json({ code: 0, activated, msg: activated ? '已成功補發' : '查無未入帳的付款記錄' });
     }
 
     if (req.method === 'GET') {

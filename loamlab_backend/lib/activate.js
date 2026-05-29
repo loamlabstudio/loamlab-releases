@@ -1,0 +1,159 @@
+import { createClient } from '@supabase/supabase-js';
+import { PRICING_CONFIG, DODO_PRODUCTS } from '../config.js';
+
+const IDS = {
+    LS: { TOPUP: 1432023, STARTER: 1432194, PRO: 1432198, STUDIO: 1432205 },
+    DODO: DODO_PRODUCTS
+};
+
+export function makeSupabase() {
+    return createClient(
+        process.env.SUPABASE_URL || '',
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || ''
+    );
+}
+
+export async function processTopup(supabase, customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null) {
+    const fullOrderId = `${platform}_${orderId}`;
+    const { data: existingTx } = await supabase.from('transactions').select('id').eq('order_id', fullOrderId).maybeSingle();
+    if (existingTx) return console.log(`[🔁冪等] ${fullOrderId} 已處理過`);
+
+    const pIds = IDS[platform];
+    let pointsToAdd = 0;
+    let planName = null;
+    let isSubscription = false;
+
+    if (variantId == pIds.STARTER) { pointsToAdd = 300; planName = 'starter'; isSubscription = true; }
+    else if (variantId == pIds.PRO) { pointsToAdd = 2000; planName = 'pro'; isSubscription = true; }
+    else if (variantId == pIds.STUDIO) { pointsToAdd = 9000; planName = 'studio'; isSubscription = true; }
+    else if (variantId == pIds.TOPUP) { pointsToAdd = 200; isSubscription = false; }
+
+    if (pointsToAdd <= 0) {
+        throw new Error(`Unknown product ID: ${variantId} (${platform})`);
+    }
+
+    let kolEmailFromCode = null;
+    if (discountCode) {
+        try {
+            const upperDiscountCode = discountCode.toUpperCase();
+            const { data: kolByCode } = await supabase.from('users')
+                .select('email')
+                .or(`referral_code.eq.${upperDiscountCode},dodo_discount_code.eq.${upperDiscountCode}`)
+                .or('is_kol.eq.true,is_partner.eq.true')
+                .maybeSingle();
+            if (kolByCode && kolByCode.email !== customerEmail) kolEmailFromCode = kolByCode.email;
+        } catch (e) {
+            console.warn('[KOL] early-lookup failed (non-fatal):', e.message);
+        }
+    }
+
+    let { data: user } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
+
+    if (isSubscription && user && user.subscription_plan === null) {
+        return console.log(`[🚫跳過] ${customerEmail} 訂閱已取消，不補發點數 (orderId: ${fullOrderId})`);
+    }
+
+    if (!user) {
+        await supabase.from('users').insert([{
+            email: customerEmail,
+            points: 0,
+            lifetime_points: 0,
+            is_beta_tester: true,
+            subscription_plan: planName,
+            last_topup_at: new Date().toISOString(),
+            referred_by: kolEmailFromCode || null,
+        }]);
+        const { data: fetchedUser } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
+        user = fetchedUser;
+        if (kolEmailFromCode) console.log(`[💡KOL新用戶歸因] discount_code=${discountCode}: ${customerEmail} → ${kolEmailFromCode}`);
+    } else if (kolEmailFromCode && !user.referred_by) {
+        await supabase.from('users').update({ referred_by: kolEmailFromCode }).eq('email', customerEmail);
+        user.referred_by = kolEmailFromCode;
+        console.log(`[💡KOL晚期綁定] discount_code=${discountCode}: ${customerEmail} → ${kolEmailFromCode}`);
+    }
+
+    let bonusB = 0;
+    if (user?.referred_by) {
+        const { data: txPaid } = await supabase.from('transactions').select('id').eq('user_email', customerEmail).eq('transaction_type', 'REFERRAL_PAID_B').maybeSingle();
+        if (!txPaid) {
+            const REWARD_A = PRICING_CONFIG.referral.paid_reward_a;
+            const REWARD_B = PRICING_CONFIG.referral.paid_reward_b;
+            bonusB = REWARD_B;
+            const { data: inviter } = await supabase.from('users').select('lifetime_points, referral_success_count').eq('email', user.referred_by).single();
+            if (inviter) {
+                await supabase.from('users').update({
+                    lifetime_points: (inviter.lifetime_points || 0) + REWARD_A,
+                    referral_success_count: (inviter.referral_success_count || 0) + 1
+                }).eq('email', user.referred_by);
+                await supabase.from('transactions').insert([
+                    { user_email: user.referred_by, amount: REWARD_A, transaction_type: 'REFERRAL_PAID_A', order_id: `refA_${fullOrderId}` },
+                    { user_email: customerEmail, amount: REWARD_B, transaction_type: 'REFERRAL_PAID_B', order_id: `refB_${fullOrderId}` }
+                ]);
+            }
+        }
+    }
+
+    if (isSubscription && subscriptionId) {
+        supabase.from('users').update({ dodo_subscription_id: subscriptionId }).eq('email', customerEmail)
+            .then(() => {}).catch(e => console.warn('[subscription_id] store failed (non-fatal):', e.message));
+    }
+
+    const carryOver = isSubscription ? (user?.points || 0) : 0;
+    const updatePayload = {
+        points: isSubscription ? pointsToAdd : (user?.points || 0),
+        lifetime_points: (user?.lifetime_points || 0) + carryOver + (isSubscription ? 0 : pointsToAdd) + bonusB,
+        is_beta_tester: true,
+        last_topup_at: new Date().toISOString(),
+    };
+    if (planName) updatePayload.subscription_plan = planName;
+    await supabase.from('users').update(updatePayload).eq('email', customerEmail);
+
+    const PLAN_PRICES_CENTS = { starter: 700, pro: 1500, studio: 3500, topup: 490 };
+    const amountPaid = planName ? (PLAN_PRICES_CENTS[planName] || 490) : 490;
+    await supabase.from('transactions').insert([{
+        user_email: customerEmail,
+        amount: pointsToAdd,
+        transaction_type: isSubscription ? 'TOPUP_SUBSCRIPTION' : 'TOPUP_SINGLE',
+        order_id: fullOrderId,
+        amount_usd_cents: amountPaid
+    }]);
+
+    await writeKolCommission(supabase, customerEmail, amountPaid, fullOrderId);
+
+    console.log(`[🚀金流] 成功處理 ${platform} 充值: ${customerEmail} (+${pointsToAdd} pts)`);
+}
+
+export async function writeKolCommission(supabase, buyerEmail, amountPaid, orderId) {
+    try {
+        const { data: buyer } = await supabase.from('users')
+            .select('referred_by').eq('email', buyerEmail).maybeSingle();
+        if (!buyer?.referred_by) return;
+
+        const kolEmail = buyer.referred_by;
+        const { data: kol } = await supabase.from('users')
+            .select('referral_code, referral_success_count, is_kol, is_partner').eq('email', kolEmail).maybeSingle();
+        if (!kol?.referral_code || (!kol.is_kol && !kol.is_partner)) return;
+
+        const paidCount = kol.referral_success_count || 0;
+        const tier = paidCount <= 50 ? 1 : paidCount <= 100 ? 2 : 3;
+        const rate = kol.is_partner
+            ? [0.15, 0.20, 0.25][tier - 1]
+            : [0.05, 0.10, 0.15][tier - 1];
+        const commission = Math.round(amountPaid * rate);
+
+        await supabase.from('kol_ledger').insert([{
+            kol_code: kol.referral_code,
+            kol_email: kolEmail,
+            buyer_email: buyerEmail,
+            transaction_id: orderId,
+            amount_paid: amountPaid,
+            commission_rate: rate,
+            commission_amount: commission,
+            status: 'pending'
+        }]);
+        const role = kol.is_partner ? 'partner' : 'kol';
+        console.log(`[💰${role.toUpperCase()}] ${kolEmail} Tier${tier} +${commission}¢ (rate=${rate})`);
+    } catch (e) {
+        console.warn('[KOL] writeKolCommission failed (non-fatal):', e.message);
+    }
+}

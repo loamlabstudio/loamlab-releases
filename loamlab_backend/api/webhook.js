@@ -1,11 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
-import { PRICING_CONFIG, DODO_PRODUCTS } from '../config.js';
 
-// 初始化 Supabase (優先使用 Service Role)
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || ''; 
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { processTopup, makeSupabase } from '../lib/activate.js';
+
+const supabase = makeSupabase();
 
 const WEB_SECRET_LS = process.env.LEMONSQUEEZY_WEBHOOK_SECRET || '';
 const WEB_SECRET_DODO = process.env.DODO_WEBHOOK_SECRET || '';
@@ -67,7 +64,7 @@ export default async function handler(req, res) {
 
                 if (customerEmail && variantId && orderId) {
                     try {
-                        await processTopup(customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id);
+                        await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id);
                     } catch (e) {
                         await logWebhookError('DODO', event.type, orderId, customerEmail, e.message, data);
                         throw e; // 讓外層回傳 500，Dodo 會重試
@@ -107,7 +104,7 @@ export default async function handler(req, res) {
                     } else {
                         // 真正的 fallback：payment.succeeded 未成功，由此補發
                         try {
-                            await processTopup(customerEmail, subProductId, fallbackOrderId, 'DODO', null, data.subscription_id);
+                            await processTopup(supabase, customerEmail, subProductId, fallbackOrderId, 'DODO', null, data.subscription_id);
                             console.log(`[Dodo] ${event.type} fallback processTopup OK: ${customerEmail}`);
                         } catch (e) {
                             if (!e.message.includes('Unknown product')) {
@@ -154,7 +151,7 @@ export default async function handler(req, res) {
 
                 if (customerEmail && variantId) {
                     try {
-                        await processTopup(customerEmail, variantId, orderId, 'LS');
+                        await processTopup(supabase, customerEmail, variantId, orderId, 'LS');
                     } catch (e) {
                         await logWebhookError('LS', eventName, orderId, customerEmail, e.message, event.data?.attributes);
                         throw e;
@@ -185,169 +182,6 @@ async function processCancellation(customerEmail, platform) {
         cancel_pending: false,
         dodo_subscription_id: null
     }).eq('email', customerEmail);
-}
-
-const IDS = {
-    LS: { TOPUP: 1432023, STARTER: 1432194, PRO: 1432198, STUDIO: 1432205 },
-    DODO: DODO_PRODUCTS
-};
-
-// 核心充值邏輯 (從 LS 邏輯抽離，支援多平台)
-async function processTopup(customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null) {
-    // 冪等性檢查
-    const fullOrderId = `${platform}_${orderId}`;
-    const { data: existingTx } = await supabase.from('transactions').select('id').eq('order_id', fullOrderId).maybeSingle();
-    if (existingTx) return console.log(`[🔁冪等] ${fullOrderId} 已處理過`);
-
-    const pIds = IDS[platform];
-    let pointsToAdd = 0;
-    let planName = null;
-    let isSubscription = false;
-
-    if (variantId == pIds.STARTER) { pointsToAdd = 300; planName = 'starter'; isSubscription = true; }
-    else if (variantId == pIds.PRO) { pointsToAdd = 2000; planName = 'pro'; isSubscription = true; }
-    else if (variantId == pIds.STUDIO) { pointsToAdd = 9000; planName = 'studio'; isSubscription = true; }
-    else if (variantId == pIds.TOPUP) { pointsToAdd = 200; isSubscription = false; }
-
-    if (pointsToAdd <= 0) {
-        // 拋出讓外層回傳 500 → Dodo 自動重試，不再靜默丟棄
-        throw new Error(`Unknown product ID: ${variantId} (${platform})`);
-    }
-
-    // 【T1修復】先查 KOL 碼對應的邀請人，再取/建用戶，確保新用戶也能完成歸因
-    let kolEmailFromCode = null;
-    if (discountCode) {
-        try {
-            const upperDiscountCode = discountCode.toUpperCase();
-            const { data: kolByCode } = await supabase.from('users')
-                .select('email')
-                .or(`referral_code.eq.${upperDiscountCode},dodo_discount_code.eq.${upperDiscountCode}`)
-                .or('is_kol.eq.true,is_partner.eq.true')
-                .maybeSingle();
-            if (kolByCode && kolByCode.email !== customerEmail) kolEmailFromCode = kolByCode.email;
-        } catch (e) {
-            console.warn('[KOL] early-lookup failed (non-fatal):', e.message);
-        }
-    }
-
-    let { data: user } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
-
-    // 若已取消訂閱（subscription_plan: null），訂閱型點數不補發（防 webhook 時序問題）
-    if (isSubscription && user && user.subscription_plan === null) {
-        return console.log(`[🚫跳過] ${customerEmail} 訂閱已取消，不補發點數 (orderId: ${fullOrderId})`);
-    }
-
-    if (!user) {
-        // 新用戶：建立時帶入 referred_by（若有折扣碼歸因）
-        await supabase.from('users').insert([{
-            email: customerEmail,
-            points: 0,
-            lifetime_points: 0,
-            is_beta_tester: true,
-            subscription_plan: planName,
-            last_topup_at: new Date().toISOString(),
-            referred_by: kolEmailFromCode || null,
-        }]);
-        const { data: fetchedUser } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
-        user = fetchedUser;
-        if (kolEmailFromCode) console.log(`[💡KOL新用戶歸因] discount_code=${discountCode}: ${customerEmail} → ${kolEmailFromCode}`);
-    } else if (kolEmailFromCode && !user.referred_by) {
-        // 舊用戶晚期歸因：帶折扣碼但未透過插件綁定
-        await supabase.from('users').update({ referred_by: kolEmailFromCode }).eq('email', customerEmail);
-        user.referred_by = kolEmailFromCode;
-        console.log(`[💡KOL晚期綁定] discount_code=${discountCode}: ${customerEmail} → ${kolEmailFromCode}`);
-    }
-
-    // 推薦分銷邏輯（新舊用戶均適用）：B 首次付費 → A +300、B +100
-    let bonusB = 0;
-    if (user?.referred_by) {
-        const { data: txPaid } = await supabase.from('transactions').select('id').eq('user_email', customerEmail).eq('transaction_type', 'REFERRAL_PAID_B').maybeSingle();
-        if (!txPaid) {
-            const REWARD_A = PRICING_CONFIG.referral.paid_reward_a;
-            const REWARD_B = PRICING_CONFIG.referral.paid_reward_b;
-            bonusB = REWARD_B;
-            const { data: inviter } = await supabase.from('users').select('lifetime_points, referral_success_count').eq('email', user.referred_by).single();
-            if (inviter) {
-                await supabase.from('users').update({
-                    lifetime_points: (inviter.lifetime_points || 0) + REWARD_A,
-                    referral_success_count: (inviter.referral_success_count || 0) + 1
-                }).eq('email', user.referred_by);
-                await supabase.from('transactions').insert([
-                    { user_email: user.referred_by, amount: REWARD_A, transaction_type: 'REFERRAL_PAID_A', order_id: `refA_${fullOrderId}` },
-                    { user_email: customerEmail, amount: REWARD_B, transaction_type: 'REFERRAL_PAID_B', order_id: `refB_${fullOrderId}` }
-                ]);
-            }
-        }
-    }
-
-    // 儲存 Dodo subscription_id（供 save_offer pause 使用，Phase 24 migration 前不影響主流程）
-    if (isSubscription && subscriptionId) {
-        supabase.from('users').update({ dodo_subscription_id: subscriptionId }).eq('email', customerEmail)
-            .then(() => {}).catch(e => console.warn('[subscription_id] store failed (non-fatal):', e.message));
-    }
-
-    // 點數結轉與更新（無論新舊用戶統一走此路徑）
-    const carryOver = isSubscription ? (user?.points || 0) : 0;
-    const updatePayload = {
-        points: isSubscription ? pointsToAdd : (user?.points || 0),
-        lifetime_points: (user?.lifetime_points || 0) + carryOver + (isSubscription ? 0 : pointsToAdd) + bonusB,
-        is_beta_tester: true,
-        last_topup_at: new Date().toISOString(),
-    };
-    if (planName) updatePayload.subscription_plan = planName;
-    await supabase.from('users').update(updatePayload).eq('email', customerEmail);
-
-    // 紀錄交易
-    const PLAN_PRICES_CENTS = { starter: 700, pro: 1500, studio: 3500, topup: 490 };
-    const amountPaid = planName ? (PLAN_PRICES_CENTS[planName] || 490) : 490;
-    await supabase.from('transactions').insert([{
-        user_email: customerEmail,
-        amount: pointsToAdd,
-        transaction_type: isSubscription ? 'TOPUP_SUBSCRIPTION' : 'TOPUP_SINGLE',
-        order_id: fullOrderId,
-        amount_usd_cents: amountPaid
-    }]);
-
-    // KOL 分潤快照（每次付款均觸發，與首單點數獎勵並行）
-    await writeKolCommission(customerEmail, amountPaid, fullOrderId);
-
-    console.log(`[🚀金流] 成功處理 ${platform} 充值: ${customerEmail} (+${pointsToAdd} pts)`);
-}
-
-async function writeKolCommission(buyerEmail, amountPaid, orderId) {
-    try {
-        const { data: buyer } = await supabase.from('users')
-            .select('referred_by').eq('email', buyerEmail).maybeSingle();
-        if (!buyer?.referred_by) return;
-
-        const kolEmail = buyer.referred_by;
-        const { data: kol } = await supabase.from('users')
-            .select('referral_code, referral_success_count, is_kol, is_partner').eq('email', kolEmail).maybeSingle();
-        if (!kol?.referral_code || (!kol.is_kol && !kol.is_partner)) return;
-
-        const paidCount = kol.referral_success_count || 0;
-        const tier = paidCount <= 50 ? 1 : paidCount <= 100 ? 2 : 3;
-        // KOL: 5%/10%/15%；Partner（內部）: 15%/20%/25%
-        const rate = kol.is_partner
-            ? [0.15, 0.20, 0.25][tier - 1]
-            : [0.05, 0.10, 0.15][tier - 1];
-        const commission = Math.round(amountPaid * rate);
-
-        await supabase.from('kol_ledger').insert([{
-            kol_code: kol.referral_code,
-            kol_email: kolEmail,
-            buyer_email: buyerEmail,
-            transaction_id: orderId,
-            amount_paid: amountPaid,
-            commission_rate: rate,
-            commission_amount: commission,
-            status: 'pending'
-        }]);
-        const role = kol.is_partner ? 'partner' : 'kol';
-        console.log(`[💰${role.toUpperCase()}] ${kolEmail} Tier${tier} +${commission}¢ (rate=${rate})`);
-    } catch (e) {
-        console.warn('[KOL] writeKolCommission failed (non-fatal):', e.message);
-    }
 }
 
 async function cancelKolCommission(fullOrderId) {

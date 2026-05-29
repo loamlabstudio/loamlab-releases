@@ -803,11 +803,14 @@ export default async function handler(req, res) {
         } catch (e) { summary.cancel_pending_cleanup_error = e.message; }
 
         // DB 付款掃描：無付款記錄且超過 35 天的帳號 → 清除（不依賴 Dodo API，恆常生效）
+        // 重要：只掃 dodo_subscription_id IS NULL 的帳號
+        // 有 sub_id 的用戶（含 webhook 失敗後靠 _auto 修復的真實付款者）交由 dodo_reconcile 驗證，不在此誤傷
         try {
             const d35 = new Date(now - 35 * 24 * 3600 * 1000).toISOString();
             const { data: staleMembers } = await supabase.from('users')
                 .select('email')
                 .not('subscription_plan', 'is', null)
+                .is('dodo_subscription_id', null)
                 .lt('last_topup_at', d35);
 
             const swept = [];

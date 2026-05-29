@@ -163,6 +163,16 @@ export async function writeKolCommission(supabase, buyerEmail, amountPaid, order
             : [0.05, 0.10, 0.15][tier - 1];
         const commission = Math.round(amountPaid * rate);
 
+        // 月度 dedup：同一買家同一日曆月只記一筆佣金，防止 subscription.active + payment.succeeded 雙重計算
+        const monthStart = `${new Date().toISOString().substring(0, 7)}-01T00:00:00Z`;
+        const { data: dupCheck } = await supabase.from('kol_ledger')
+            .select('id').eq('kol_email', kolEmail).eq('buyer_email', buyerEmail)
+            .gte('created_at', monthStart).maybeSingle();
+        if (dupCheck) {
+            console.log(`[KOL] 本月已記錄佣金，跳過重複: ${buyerEmail}`);
+            return;
+        }
+
         await supabase.from('kol_ledger').insert([{
             kol_code: kol.referral_code,
             kol_email: kolEmail,

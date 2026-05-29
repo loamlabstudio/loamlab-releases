@@ -477,9 +477,16 @@ export default async function handler(req, res) {
                 for (const sub of subs) {
                     const subEmail = sub.customer?.email || sub.customer_email;
                     if (subEmail !== vEmail) continue;
+                    // Dodo API 忽略 status 查詢參數；必須手動過濾，防止重新激活已取消的訂閱
+                    if (sub.status !== 'active' && sub.status !== 'trialing') continue;
                     const productId = sub.product_id || sub.plan_id;
                     if (!productId) continue;
-                    const orderId = `${sub.subscription_id}_verify`;
+                    // 使用 period-based order_id（符合 DODO_sub_*_20xx 分類），
+                    // 確保透過 verify_payment 自助補發的合法用戶不被誤認為幽靈會員
+                    const period = sub.current_period_start
+                        ? new Date(sub.current_period_start).toISOString().substring(0, 7)
+                        : new Date().toISOString().substring(0, 7);
+                    const orderId = `${sub.subscription_id}_${period}`;
                     const { data: ex } = await sb.from('transactions').select('id').eq('order_id', `DODO_${orderId}`).maybeSingle();
                     if (!ex) {
                         await processTopup(sb, vEmail, productId, orderId, 'DODO', null, sub.subscription_id);
@@ -570,6 +577,8 @@ export default async function handler(req, res) {
                         for (const sub of subs) {
                             const subEmail = sub.customer?.email || sub.customer_email;
                             if (subEmail !== email) continue;
+                            // Dodo API 忽略 status 查詢參數；必須手動過濾，防止重新激活已取消的訂閱
+                            if (sub.status !== 'active' && sub.status !== 'trialing') continue;
                             const productId = sub.product_id || sub.plan_id;
                             if (!productId) continue;
                             const orderId = `${sub.subscription_id}_auto`;

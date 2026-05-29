@@ -87,24 +87,26 @@ export default async function handler(req, res) {
                         .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
                 }
                 if (customerEmail && data.subscription_id && subProductId) {
-                    const period = data.current_period_start || new Date().toISOString().substring(0, 7);
+                    // fallbackOrderId 使用 current_period_start（確保同週期冪等）
+                    const rawPeriod = data.current_period_start || new Date().toISOString();
+                    const period = rawPeriod.substring(0, 7); // "YYYY-MM"
                     const fallbackOrderId = `${data.subscription_id}_${period}`;
+                    const periodStart = `${period}-01T00:00:00Z`;
 
-                    // 防雙發：若同週期已有 payment.succeeded 產生的 DODO_pay_% 記錄，跳過 processTopup
-                    const periodStart = period.length === 7 ? `${period}-01T00:00:00Z` : new Date(period).toISOString();
-                    const { data: existingPayTx } = await supabase
+                    // 防雙發：若本計費週期已有任何 TOPUP_SUBSCRIPTION（不論 order_id 格式），跳過
+                    // 涵蓋：DODO_pay_*（payment.succeeded）/ DODO_sub_*（_auto / _verify / _YYYY-MM）
+                    const { data: existingTxRows, error: dedupErr } = await supabase
                         .from('transactions')
                         .select('id, order_id')
                         .eq('user_email', customerEmail)
                         .eq('transaction_type', 'TOPUP_SUBSCRIPTION')
-                        .like('order_id', 'DODO_pay_%')
                         .gte('created_at', periodStart)
-                        .maybeSingle();
+                        .limit(1);
 
-                    if (existingPayTx) {
-                        console.log(`[Dodo] ${event.type} skipped — payment.succeeded 已處理: ${existingPayTx.order_id}`);
+                    if (!dedupErr && existingTxRows?.length > 0) {
+                        console.log(`[Dodo] ${event.type} skipped — 已有記錄: ${existingTxRows[0].order_id}`);
                     } else {
-                        // 真正的 fallback：payment.succeeded 未成功，由此補發
+                        // 真正的 fallback：本週期尚無任何激活記錄
                         try {
                             await processTopup(supabase, customerEmail, subProductId, fallbackOrderId, 'DODO', null, data.subscription_id);
                             console.log(`[Dodo] ${event.type} fallback processTopup OK: ${customerEmail}`);

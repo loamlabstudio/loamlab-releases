@@ -839,6 +839,7 @@ module LoamLab
             captured_label = scene_label
             req.start do |_, response|
               begin
+                raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
                 data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
                 result = (data['code'] == 0 && data['url']) ?
                   { status: 'render_success', scene_name: captured_label, url: data['url'],
@@ -1496,6 +1497,53 @@ module LoamLab
       end
     end
 
+    # T2: 截圖後若超大，按比例計算所需 quality 精準降質（保持解析度）
+    def self.write_image_capped(view, path, w, h)
+      view.write_image(path, w, h, true, 0.6)
+      return unless File.exist?(path)
+      sz = File.size(path)
+      return if sz <= 1_500_000
+      # 目標 1.2MB；quality 近似正比於檔案大小，留 3% 緩衝
+      needed_q = [[0.6 * 1_200_000.0 / sz, 0.55].min, 0.2].max
+      view.write_image(path, w, h, false, needed_q)
+      LoamLab.log "[LoamLab] 截圖超大，按比例降質 q#{(needed_q * 100).round}%"
+    end
+
+    # T2: 讀取本地圖片，超過 3MB 時用 Sketchup::ImageRep 縮圖（SU2021+；舊版靜默 fallback 原圖）
+    def self.read_and_maybe_compress(src_path, max_bytes = 3_000_000)
+      return File.read(src_path, mode: 'rb') unless File.exist?(src_path)
+      return File.read(src_path, mode: 'rb') if File.size(src_path) <= max_bytes
+      begin
+        rep = Sketchup::ImageRep.new
+        rep.load_file(src_path)
+        # scale² ≈ target/original，留 3% 緩衝（原 0.85 過度壓縮）
+        scale = Math.sqrt(max_bytes.to_f / File.size(src_path)) * 0.97
+        new_w = [[rep.width  * scale, 64].max.to_i, rep.width].min
+        new_h = [[rep.height * scale, 64].max.to_i, rep.height].min
+        rep.resize(new_w, new_h)
+        tmp = File.join(Dir.tmpdir, "ll_compressed_#{Time.now.to_i}.jpg")
+        rep.save_file(tmp)
+        if File.exist?(tmp)
+          # JPEG 非線性：若第一次仍超限，按新比例再縮一次
+          if File.size(tmp) > max_bytes
+            rep2 = Sketchup::ImageRep.new
+            rep2.load_file(tmp)
+            s2 = Math.sqrt(max_bytes.to_f / File.size(tmp)) * 0.97
+            rep2.resize([[rep2.width * s2, 64].max.to_i, rep2.width].min,
+                        [[rep2.height * s2, 64].max.to_i, rep2.height].min)
+            rep2.save_file(tmp)
+          end
+          data = File.read(tmp, mode: 'rb')
+          File.delete(tmp) rescue nil
+          LoamLab.log "[LoamLab] 底圖自動壓縮 → #{data.bytesize / 1024}KB"
+          return data
+        end
+      rescue => e
+        LoamLab.log "[LoamLab] 底圖壓縮 fallback: #{e.message}"
+      end
+      File.read(src_path, mode: 'rb')
+    end
+
     # 批量導出指定的場景為實體檔案並上傳 Coze
     def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1, base_image_url="", base_image_scene="底圖", reference_image_base64="", advanced_settings={}, user_style_ref_url="", render_force_style={})
       model = Sketchup.active_model
@@ -1519,6 +1567,7 @@ module LoamLab
           captured_scene = base_image_scene
           req.start do |_, response|
             begin
+              raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
               data   = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
               result = (data['code'] == 0 && data['url']) ?
                 { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
@@ -1543,7 +1592,7 @@ module LoamLab
             dialog.execute_script("window.receiveFromRuby(#{JSON.generate({ status: 'render_failed', message: '底圖檔案已移除，請重新選擇底圖' })})")
             return
           end
-          img_data   = File.read(local_path, mode: 'rb')
+          img_data   = self.read_and_maybe_compress(local_path)
           base_data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
           user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
           params_hash = {
@@ -1559,6 +1608,7 @@ module LoamLab
           captured_scene = base_image_scene
           req.start do |_, response|
             begin
+              raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
               data   = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
               result = (data['code'] == 0 && data['url']) ?
                 { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
@@ -1590,6 +1640,7 @@ module LoamLab
           captured_scene = base_image_scene
           req.start do |_, response|
             begin
+              raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
               data   = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
               result = (data['code'] == 0 && data['url']) ?
                 { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
@@ -1614,7 +1665,7 @@ module LoamLab
             dialog.execute_script("window.receiveFromRuby(#{JSON.generate({ status: 'render_failed', message: '底圖檔案已移除，請重新選擇底圖' })})")
             return
           end
-          img_data   = File.read(local_path, mode: 'rb')
+          img_data   = self.read_and_maybe_compress(local_path)
           data_uri   = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
           user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
           request_body = JSON.dump({
@@ -1628,6 +1679,7 @@ module LoamLab
           captured_scene = base_image_scene
           req.start do |_, response|
             begin
+              raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
               data   = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
               result = (data['code'] == 0 && data['url']) ?
                 { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
@@ -1742,7 +1794,7 @@ module LoamLab
               supported_ratios = { "16:9"=>1.77, "9:16"=>0.56, "4:3"=>1.33, "3:4"=>0.75, "3:2"=>1.5, "2:3"=>0.66, "1:1"=>1.0, "21:9"=>2.33 }
               closest_ratio = supported_ratios.min_by { |k, v| (v - ratio_val).abs }[0]
 
-              view.write_image(temp_img_path, 1280, 720, true, 0.6)
+              self.write_image_capped(view, temp_img_path, 1280, 720)
 
               # 定義發送請求的 Proc，避免代碼重複
               send_request = proc do |channel_b64|
@@ -1782,6 +1834,33 @@ module LoamLab
                   rescue => e
                     LoamLab.log "[LoamLab] 縮略圖發送失敗（非致命）: #{e.message}"
                   end
+                  # Payload guard: 超過 Vercel 4.5MB 限制時按比例精準壓縮，用戶無感知
+                  if request_body.bytesize > 4_200_000
+                    begin
+                      # 算出圖片可用空間，再反推所需 quality（目標 payload 4.0MB）
+                      img_overhead = request_body.bytesize - data_uri.bytesize
+                      target_b64   = [4_000_000 - img_overhead, 50_000].max
+                      target_raw   = (target_b64 * 3 / 4).to_i
+                      estimated_q  = [[0.6 * (target_raw.to_f / img_data.bytesize), 0.55].min, 0.15].max
+                      view.write_image(temp_img_path, 1280, 720, false, estimated_q)
+                      img_data = File.read(temp_img_path, mode: 'rb')
+                      data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
+                      scene_params["image"] = [data_uri]
+                      request_body = JSON.dump({ tool: tool, parameters: scene_params, "advanced_settings" => advanced_settings })
+                      LoamLab.log "[LoamLab] Payload 壓縮 q#{(estimated_q * 100).round}% → #{request_body.bytesize / 1024}KB"
+                      # JPEG 非線性導致仍超：最後縮解析度（保持同 quality）
+                      if request_body.bytesize > 4_200_000
+                        view.write_image(temp_img_path, 1024, 576, false, estimated_q)
+                        img_data = File.read(temp_img_path, mode: 'rb')
+                        data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
+                        scene_params["image"] = [data_uri]
+                        request_body = JSON.dump({ tool: tool, parameters: scene_params, "advanced_settings" => advanced_settings })
+                        LoamLab.log "[LoamLab] Payload 降解析度 1024x576 → #{request_body.bytesize / 1024}KB"
+                      end
+                    rescue => _pg_e
+                      LoamLab.log "[LoamLab] payload guard: #{_pg_e.message}"
+                    end
+                  end
                   captured_body    = request_body.dup
                   captured_email   = user_email.dup
                   captured_version = ::LoamLab::VERSION.dup
@@ -1801,6 +1880,7 @@ module LoamLab
                       @@requests.delete(req)
                       result = nil
                       begin
+                        raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
                         body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
                         data   = JSON.parse(body_str)
                         result = (data['code'] == 0 && data['url']) ?
@@ -1926,6 +2006,7 @@ module LoamLab
         @@requests.delete(r)
         result = nil
         begin
+          raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
           data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
           result = (data['code'] == 0 && data['url']) ?
             { status: 'render_success', scene_name: captured_scene, url: data['url'],
@@ -1976,6 +2057,7 @@ module LoamLab
         @@requests.delete(req)
         result = nil
         begin
+          raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
           body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
           data = JSON.parse(body_str)
           result = (data['code'] == 0 && data['url']) ?
@@ -2113,6 +2195,10 @@ module LoamLab
         # Vercel 伺服器崩潰（未修復前的舊版後端）
         if msg.include?('FUNCTION_INVOCATION_FAILED') || msg.include?('A server error has occurred')
           return '渲染請求失敗，請稍後再試。如持續發生請聯繫客服。'
+        end
+        # 處理 Vercel 413 Payload Too Large
+        if msg.include?('FUNCTION_PAYLOAD_TOO_LARGE') || msg.include?('Request Entity Too Large')
+          return '上傳的圖片過大，超過伺服器限制。請嘗試縮小 SketchUp 視窗或隱藏不必要的模型後再試一次。'
         end
         # 針對常見的 Ruby 逾時報錯轉換為友好提示
         if msg.include?('execution expired') || msg.include?('Net::OpenTimeout') || msg.include?('Net::ReadTimeout')

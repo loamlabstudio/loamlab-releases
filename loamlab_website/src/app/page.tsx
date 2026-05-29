@@ -119,7 +119,7 @@ function CompareSlider() {
 
 const PLAN_FALLBACK_URLS: Record<string, string> = {
   STARTER: 'https://checkout.dodopayments.com/buy?product_id=pdt_0NblmUvFrwJe36ymTELWV&discount_code=LOAM_BETA_30',
-  PRO:     'https://checkout.dodopayments.com/buy?product_id=pdt_0NbImafnebUuGNrMRvJp4&discount_code=LOAM_BETA_30',
+  PRO:     'https://checkout.dodopayments.com/buy?product_id=pdt_0NblmafncbUuGNrMRvJp4&discount_code=LOAM_BETA_30',
   STUDIO:  'https://checkout.dodopayments.com/buy?product_id=pdt_0Nblmhwbr5WXfNyDHpaA2&discount_code=LOAM_BETA_30',
   TOPUP:   'https://checkout.dodopayments.com/buy?product_id=pdt_0NbIlveGNSETSOveL7Xmk&discount_code=LOAM_BETA_30',
 };
@@ -130,31 +130,81 @@ export default function Home() {
   };
   const [pricingTab, setPricingTab] = useState<'subscription' | 'topup'>('subscription');
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [emailModal, setEmailModal] = useState<{ open: boolean; planKey: string }>({ open: false, planKey: '' });
+  const [emailInput, setEmailInput] = useState('');
+  const [emailError, setEmailError] = useState('');
 
-  const handleCheckout = async (planKey: string) => {
+  const doCheckout = async (planKey: string, email: string) => {
     setCheckoutLoading(planKey);
     try {
       const res = await fetch('https://loamlab-camera-backend.vercel.app/api/user?action=checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planKey }),
+        body: JSON.stringify({ planKey, email }),
       });
       const data = await res.json();
       if (data.checkoutUrl) {
         window.open(data.checkoutUrl, '_blank');
+        setCheckoutLoading(null);
         return;
       }
-    } catch (_) {
-      // 若 API 失敗則降級至靜態折扣 URL
-    } finally {
-      setCheckoutLoading(null);
-    }
+    } catch (_) {}
     const fallback = PLAN_FALLBACK_URLS[planKey];
     if (fallback) window.open(fallback, '_blank');
+    setCheckoutLoading(null);
+  };
+
+  const handleCheckout = (planKey: string) => {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('loamlab_email') : null;
+    if (saved) {
+      doCheckout(planKey, saved);
+    } else {
+      setEmailInput('');
+      setEmailError('');
+      setEmailModal({ open: true, planKey });
+    }
+  };
+
+  const submitEmailModal = async () => {
+    const email = emailInput.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailError('請輸入有效的電子郵件');
+      return;
+    }
+    localStorage.setItem('loamlab_email', email);
+    setEmailModal({ open: false, planKey: '' });
+    await doCheckout(emailModal.planKey, email);
   };
 
   return (
     <main className="min-h-screen bg-[var(--color-loam-dark)] relative overflow-hidden text-[var(--color-loam-bone)]">
+
+      {/* Email Modal */}
+      {emailModal.open && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+          <div className="bg-[#111] border border-white/10 rounded-3xl p-8 w-full max-w-sm shadow-2xl">
+            <h3 className="text-lg font-bold mb-1">繼續前往結帳</h3>
+            <p className="text-zinc-400 text-sm mb-6 font-light">輸入您的 Email，系統將自動套用 <span className="text-[var(--color-loam-primary)] font-bold">Beta 30% 折扣</span></p>
+            <input
+              type="email"
+              value={emailInput}
+              onChange={e => { setEmailInput(e.target.value); setEmailError(''); }}
+              onKeyDown={e => e.key === 'Enter' && submitEmailModal()}
+              placeholder="your@email.com"
+              autoFocus
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-white/30 mb-2"
+            />
+            {emailError && <p className="text-[var(--color-loam-primary)] text-xs mb-3">{emailError}</p>}
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setEmailModal({ open: false, planKey: '' })} className="flex-1 py-3 rounded-xl border border-white/10 text-zinc-400 text-xs font-bold tracking-widest uppercase hover:bg-white/5 transition-all">取消</button>
+              <button onClick={submitEmailModal} disabled={checkoutLoading === emailModal.planKey} className="flex-1 py-3 rounded-xl bg-[var(--color-loam-primary)] text-white text-xs font-bold tracking-widest uppercase hover:opacity-90 transition-all disabled:opacity-50">
+                {checkoutLoading === emailModal.planKey ? '處理中...' : '前往結帳'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Background Noise & Radial Glow */}
       <div className="fixed top-0 left-1/2 -z-10 h-[800px] w-[800px] -translate-x-1/2 -translate-y-1/2 opacity-10 bg-[radial-gradient(circle_at_center,_var(--color-loam-primary)_0%,_transparent_70%)] blur-[100px] pointer-events-none" />
       <div className="fixed inset-0 opacity-[0.03] pointer-events-none z-0 mix-blend-screen" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg viewBox=\"0 0 200 200\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cfilter id=\"n\"%3E%3CfeTurbulence type=\"fractalNoise\" baseFrequency=\"0.85\" numOctaves=\"3\" stitchTiles=\"stitch\"/%3E%3C/filter%3E%3Crect width=\"100%25\" height=\"100%25\" filter=\"url(%23n)\"/%3E%3C/svg%3E')" }}></div>

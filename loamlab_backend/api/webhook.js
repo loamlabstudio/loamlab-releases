@@ -71,7 +71,8 @@ export default async function handler(req, res) {
                     }
                 } else {
                     await logWebhookError('DODO', event.type, orderId, customerEmail || 'unknown', `Missing fields: variantId=${variantId} orderId=${orderId}`, data);
-                    throw new Error(`payment.succeeded missing fields: email=${customerEmail} variantId=${variantId} orderId=${orderId}`);
+                    // 結構性缺欄位，重試無法修復，回傳 200 停止 Dodo 無限重試；已記錄於 webhook_errors
+                    return res.status(200).json({ status: 'logged', reason: 'missing_fields' });
                 }
             }
             

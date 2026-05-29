@@ -12,12 +12,10 @@ export default async function handler(req, res) {
 
     // ── Checkout sub-route（不需要 Supabase auth）──────────────────────────
     if (req.method === 'POST' && req.query.action === 'checkout') {
-        const { planKey, email, quantity = 1, referralCode } = req.body || {};
+        const { planKey, email, referralCode } = req.body || {};
         if (!planKey) return res.status(400).json({ error: 'Missing planKey' });
         const productId = DODO_PRODUCTS[planKey.toUpperCase()];
         if (!productId) return res.status(400).json({ error: 'Invalid planKey' });
-        const qty = Math.max(1, parseInt(quantity) || 1);
-        const DODO_API_KEY = process.env.DODO_API_KEY;
         const DODO_DISCOUNT_CODE = process.env.DODO_DISCOUNT_CODE || '';
 
         // 歸因綁定 + KOL 折扣查詢（單次 DB 查詢合併）
@@ -50,38 +48,13 @@ export default async function handler(req, res) {
         }
 
         const finalDiscount = kolDiscountCode || DODO_DISCOUNT_CODE;
-        // customer_email 不是 Dodo checkout URL 支援的參數，僅透過 Dodo API 的 customer.email 傳遞
-        let fallbackUrl = `https://checkout.dodopayments.com/buy?product_id=${productId}&quantity=${qty}`;
-        if (finalDiscount) fallbackUrl += `&discount_code=${encodeURIComponent(finalDiscount)}`;
 
-        if (!DODO_API_KEY) {
-            console.warn('[checkout] DODO_API_KEY not set, using fallback URL');
-            return res.json({ checkoutUrl: fallbackUrl, discountApplied: !!finalDiscount });
-        }
-        const body = { product_cart: [{ product_id: productId, quantity: qty }] };
-        if (email) body.customer = { email };
-        if (finalDiscount) body.discount_code = finalDiscount;
-        try {
-            const apiRes = await fetch('https://live.dodopayments.com/checkouts', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            if (!apiRes.ok) {
-                console.error('[checkout] DodoPayments error:', apiRes.status, await apiRes.text());
-                return res.json({ checkoutUrl: fallbackUrl, discountApplied: false });
-            }
-            const data = await apiRes.json();
-            // Dodo session URL 不含折扣碼查詢參數，手動附加確保 Dodo 前端 JS 自動預填欄位
-            let checkoutUrl = data.checkout_url || fallbackUrl;
-            if (finalDiscount && checkoutUrl && !checkoutUrl.includes('discount_code=')) {
-                checkoutUrl += (checkoutUrl.includes('?') ? '&' : '?') + `discount_code=${encodeURIComponent(finalDiscount)}`;
-            }
-            return res.json({ checkoutUrl, discountApplied: !!finalDiscount });
-        } catch (e) {
-            console.error('[checkout] fetch error:', e.message);
-            return res.json({ checkoutUrl: fallbackUrl, discountApplied: false });
-        }
+        // Dodo session API 的 discount_code 欄位被靜默忽略，無法在 session 中套用折扣。
+        // 改用 direct checkout URL：/buy/{productId}?discount_code=...
+        // Dodo 前端 JS 讀取此格式並自動預填折扣碼欄位。
+        const directUrl = `https://checkout.dodopayments.com/buy/${productId}` +
+            (finalDiscount ? `?discount_code=${encodeURIComponent(finalDiscount)}` : '');
+        return res.json({ checkoutUrl: directUrl, discountApplied: !!finalDiscount });
     }
     // ────────────────────────────────────────────────────────────────────────
 
@@ -438,6 +411,16 @@ export default async function handler(req, res) {
         const dodoBase = DODO_API_KEY.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
         const sb = makeSupabase();
         let activated = false;
+
+        // 先查用戶現有狀態：若訂閱已生效且近期已入帳（< 35 天），不重複補發
+        const { data: curUser } = await sb.from('users')
+            .select('subscription_plan, last_topup_at').eq('email', vEmail).maybeSingle();
+        const daysSinceLast = curUser?.last_topup_at
+            ? (Date.now() - new Date(curUser.last_topup_at).getTime()) / (24 * 3600 * 1000)
+            : Infinity;
+        if (curUser?.subscription_plan && daysSinceLast < 35) {
+            return res.status(200).json({ code: 0, activated: false, alreadyActive: true, msg: '訂閱已啟用，點數已入帳' });
+        }
 
         // 查活躍訂閱（STARTER / PRO / STUDIO）
         try {

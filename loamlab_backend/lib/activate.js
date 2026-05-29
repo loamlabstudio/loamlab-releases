@@ -19,6 +19,7 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
     if (existingTx) return console.log(`[🔁冪等] ${fullOrderId} 已處理過`);
 
     const pIds = IDS[platform];
+    if (!pIds) throw new Error(`Unknown platform: ${platform}`);
     let pointsToAdd = 0;
     let planName = null;
     let isSubscription = false;

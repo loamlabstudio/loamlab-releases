@@ -3952,6 +3952,7 @@ window.openCheckout = async function (planKey, quantity = 1) {
                     const r = await fetch(`${API_BASE}/api/user?action=verify_payment`, { headers: { 'X-User-Email': window.loamlabUserEmail } });
                     const d = await r.json();
                     if (d.activated) { showUpdateToast('✅ 已補發成功，重新整理中...'); setTimeout(() => location.reload(), 1500); }
+                    else if (d.alreadyActive) { showUpdateToast('✅ 訂閱已啟用，請重新整理以同步點數'); }
                     else showUpdateToast('⚠️ ' + d.msg + '，請聯繫客服');
                 } catch (e) { showUpdateToast('⚠️ 驗證失敗，請聯繫客服'); }
             };

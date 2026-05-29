@@ -7,7 +7,7 @@ module LoamLab
   # - BUILD_TYPE: "dev" | "release"
   # ==============================================================================
   ENV_MODE = "production"
-  BUILD_TYPE = "dev"
+  BUILD_TYPE = "release"
   DIST_CHANNEL = "direct"   # "direct" = 官網版（自動安裝）| "store" = EW版（跳瀏覽器）
 
   if ENV_MODE == "production"
@@ -18,6 +18,8 @@ module LoamLab
 
   VERSION = '1.4.47'
 end
+
+
 
 
 

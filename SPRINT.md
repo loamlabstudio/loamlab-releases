@@ -1,18 +1,14 @@
-# SPRINT: Vercel 413 Payload Too Large 錯誤優化
+# Sprint Plan: Fix Render Deduction & Refund Race Condition
 
 ## CONTEXT_DIGEST
-- **問題根源**：SketchUp 渲染時截取的圖片轉換為 Base64 後，體積超過 Vercel Serverless Function 的 4.5MB 限制，導致 Vercel 回傳 `413 Request Entity Too Large` 的純文字錯誤。
-- **錯誤現象**：Ruby 端預期回傳 JSON，但在解析純文字錯誤時觸發 `JSON::ParserError` (`783: unexpected token...`)，最終被回報系統記錄為 `unknown` 錯誤碼。
-- **當前進度**：已在 `loamlab_plugin/main.rb` 的 `sanitize_error` 方法中加入對 `FUNCTION_PAYLOAD_TOO_LARGE` 的捕捉，並回傳友善錯誤提示。
+用戶回報 SpaceReform 渲染失敗但仍遭扣點（共計 6 次，90 點）。經查 `render_history` 無紀錄，確認為 Vercel 執行緒 Timeout 遭強制中止，未進入 `catch` 區塊退款。且現有 `catch` 區塊退款邏輯使用 `update({ points: user.points })` 會造成 Race Condition 覆蓋。已透過 DB 腳本手動補償 90 點至該帳戶。
 
 ## TASKS
-
-### 1. 強化 Ruby 端的 API 回應解析與錯誤捕捉 [MUST]
-- [x] 在 `loamlab_plugin/main.rb` 發送 API 請求後（約在 `batch_export_scenes` 及其他有呼叫 `JSON.parse` 的地方），在執行 `JSON.parse` 前先檢查 HTTP Status Code。若為 413，直接拋出明確的 payload too large 錯誤，避免觸發 `JSON::ParserError`。
-- **影響檔案**：`loamlab_plugin/main.rb`
-
-### 2. 優化圖片輸出品質與壓縮機制 (防範機制) [NICE]
-- [x] 實作 `write_image_capped`（截圖後 file_size > 1.5MB 自動降質重試）、`read_and_maybe_compress`（本地大圖用 ImageRep 縮圖）、payload guard（組裝後 bytesize > 4.2MB 迭代縮圖），共 3 層防線，用戶無感知。
-- **影響檔案**：`loamlab_plugin/main.rb`
+- [MUST] **重構退款邏輯 (修復 Race Condition)**
+  **影響檔案**: `loamlab_backend/api/render.js`
+  將 `_handleRender` 以及所有異常捕捉（catch）區塊內的 `update({ points: user.points })` 退款寫法，全面替換為原子操作 `supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost })`，避免覆蓋算圖期間的點數變更。
+- [MUST] **優化 AtlasCloud Polling Timeout 處理**
+  **影響檔案**: `loamlab_backend/api/render.js`
+  在 Polling 迴圈中加入嚴格的總時間與超時控制（例如限制在 Vercel 函數 timeout 前 10 秒結束），若超時則主動 `throw new Error('timeout')`，以確保進程能順利進入 `catch` 區塊執行退款，避免被 Vercel 直接 SIGKILL 而吞掉點數。
 
 status: DONE

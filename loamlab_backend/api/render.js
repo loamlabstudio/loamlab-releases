@@ -129,6 +129,7 @@ export default async function handler(req, res) {
     }
 }
 async function _handleRender(req, res) {
+    const requestStart = Date.now(); // T2: 用於 polling timeout 計算
     // 1. 允許跨域請求 (CORS)
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -432,7 +433,7 @@ async function _handleRender(req, res) {
             } catch(e) {}
             return res.status(200).json({ code: 0, share_url: shareUrl, points_remaining: user.points - COST_360 });
         } catch (e) {
-            await supabase.from('users').update({ points: user.points }).eq('email', userEmail).catch(() => {});
+            await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -COST_360 }).catch(() => {});
             return res.status(200).json({ code: -1, msg: `上傳失敗：${e.message}` });
         }
     }
@@ -586,7 +587,7 @@ async function _handleRender(req, res) {
             userPayload.parameters.image = [signedData.signedUrl];
             tempStorageFile = fileName;
         } catch (uploadErr) {
-            try { await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail); } catch(e) {}
+            try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch(e) {}
             try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_UPLOAD_FAIL' }]); } catch(e) {}
             return res.status(500).json({ code: -1, msg: sanitizeError(`圖床代傳失敗: ${uploadErr.message}`), points_refunded: true });
         }
@@ -883,8 +884,10 @@ async function _handleRender(req, res) {
             console.log('[AtlasCloud] Task started async, polling ID:', taskId);
             const pollUrl = `https://api.atlascloud.ai/api/v1/model/prediction/${taskId}`;
             
+            const pollDeadline = maxDuration * 1000 - 15000; // Vercel kill 前 15 秒截止
             let attempts = 0;
             while (attempts < 40 && !finalUrl) {
+                if (Date.now() - requestStart > pollDeadline) throw new Error('timeout');
                 attempts++;
                 await new Promise(resolve => setTimeout(resolve, 3000));
                 try {
@@ -915,7 +918,7 @@ async function _handleRender(req, res) {
             saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool, inputUrl: inputUrlForHistory });
             return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: user.points + user.lifetime_points, transaction_id: transactionId });
         } else {
-            try { await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail); } catch(e) {}
+            try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch(e) {}
             try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL' }]); } catch(e) {}
             console.error('[render] no_url response:', JSON.stringify(data).slice(0, 200));
             return res.status(500).json({ code: -1, msg: '出圖完成但結果未返回，請稍後再試。', points_refunded: true });
@@ -923,7 +926,7 @@ async function _handleRender(req, res) {
     } catch (apiError) {
         await cleanTemp2().catch(() => {});
         await cleanTemp().catch(() => {});
-        try { await supabase.from('users').update({ points: user.points, lifetime_points: user.lifetime_points }).eq('email', userEmail); } catch(e) {}
+        try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch(e) {}
         try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NETWORK_ERROR' }]); } catch(e) {}
         return res.status(500).json({ code: -1, msg: sanitizeError(apiError?.message || '渲染失敗，請稍後再試。'), points_refunded: true });
     }

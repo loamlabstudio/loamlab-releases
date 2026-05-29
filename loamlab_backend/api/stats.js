@@ -802,6 +802,77 @@ export default async function handler(req, res) {
             else summary.cancel_pending_cleanup = 'success';
         } catch (e) { summary.cancel_pending_cleanup_error = e.message; }
 
+        // DB 付款掃描：無付款記錄且超過 35 天的帳號 → 清除（不依賴 Dodo API，恆常生效）
+        try {
+            const d35 = new Date(now - 35 * 24 * 3600 * 1000).toISOString();
+            const { data: staleMembers } = await supabase.from('users')
+                .select('email')
+                .not('subscription_plan', 'is', null)
+                .lt('last_topup_at', d35);
+
+            const swept = [];
+            for (const m of (staleMembers || [])) {
+                if (isTest(m.email)) continue;
+                // 真實付款：DODO_pay_* / LS_* / MANUAL_* / *_manual / 純數字（LS舊格式）/ DODO_sub_*_20xx
+                const { data: realTxs } = await supabase.from('transactions')
+                    .select('order_id').eq('user_email', m.email)
+                    .in('transaction_type', ['TOPUP_SUBSCRIPTION', 'TOPUP_SINGLE'])
+                    .not('order_id', 'ilike', '%_auto')
+                    .not('order_id', 'ilike', '%_verify')
+                    .not('order_id', 'ilike', 'SYNC_%')
+                    .limit(1);
+                if (!realTxs?.length) {
+                    await supabase.from('users').update({
+                        subscription_plan: null, dodo_subscription_id: null, cancel_pending: false
+                    }).eq('email', m.email);
+                    swept.push(m.email);
+                    console.log(`[cron:payment_sweep] 清除無付款記錄幽靈會員: ${m.email}`);
+                }
+            }
+            summary.payment_sweep = { checked: (staleMembers || []).length, swept: swept.length, emails: swept };
+        } catch (e) { summary.payment_sweep_error = e.message; }
+
+        // Dodo 訂閱對帳：比對 dodo_subscription_id vs Dodo active 名單，清除已取消的幽靈會員
+        // 用 subscription_id 比對（繞過 Dodo API 忽略 customer_email 查詢參數的 bug）
+        try {
+            if (process.env.DODO_API_KEY) {
+                const dodoBase = process.env.DODO_API_KEY.startsWith('test_')
+                    ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+                const listRes = await Promise.race([
+                    fetch(`${dodoBase}/subscriptions?status=active&limit=100`, {
+                        headers: { Authorization: `Bearer ${process.env.DODO_API_KEY}` }
+                    }),
+                    new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 6000))
+                ]);
+                if (listRes.ok) {
+                    const allItems = (await listRes.json()).items || [];
+                    // Dodo 可能忽略 status filter，嚴格用欄位比對
+                    const activeSubIds = new Set(
+                        allItems.filter(s => s.status === 'active' || s.status === 'trialing')
+                                .map(s => s.subscription_id || s.id)
+                    );
+                    // 找出 DB 有 subscription_id 但 Dodo 已無此 active sub 的帳號
+                    const { data: dbSubs } = await supabase.from('users')
+                        .select('email, dodo_subscription_id, subscription_plan')
+                        .not('subscription_plan', 'is', null)
+                        .not('dodo_subscription_id', 'is', null);
+                    const toRevoke = (dbSubs || []).filter(u =>
+                        !isTest(u.email) && !activeSubIds.has(u.dodo_subscription_id)
+                    );
+                    if (toRevoke.length > 0) {
+                        const revokeEmails = toRevoke.map(u => u.email);
+                        await supabase.from('users')
+                            .update({ subscription_plan: null, dodo_subscription_id: null, cancel_pending: false })
+                            .in('email', revokeEmails);
+                        summary.dodo_reconcile = { revoked: toRevoke.length, emails: revokeEmails };
+                        console.log(`[cron:dodo_reconcile] 清除幽靈會員 ${toRevoke.length} 個:`, revokeEmails);
+                    } else {
+                        summary.dodo_reconcile = { revoked: 0 };
+                    }
+                }
+            }
+        } catch (e) { summary.dodo_reconcile_error = e.message; }
+
         return res.status(200).json({ code: 0, ran_at: now.toISOString(), ...summary });
     }
 

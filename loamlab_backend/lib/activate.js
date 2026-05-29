@@ -103,8 +103,11 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
     }
 
     if (isSubscription && subscriptionId) {
-        supabase.from('users').update({ dodo_subscription_id: subscriptionId }).eq('email', customerEmail)
-            .then(() => {}).catch(e => console.warn('[subscription_id] store failed (non-fatal):', e.message));
+        try {
+            await supabase.from('users').update({ dodo_subscription_id: subscriptionId }).eq('email', customerEmail);
+        } catch (e) {
+            console.warn('[subscription_id] store failed (non-fatal):', e.message);
+        }
     }
 
     // 防重複累加：若 last_topup_at 在 2 天內（補發/重試）不計 carryOver，避免 lifetime_points 虛增
@@ -122,13 +125,20 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
 
     const PLAN_PRICES_CENTS = { starter: 700, pro: 1500, studio: 3500, topup: 490 };
     const amountPaid = planName ? (PLAN_PRICES_CENTS[planName] || 490) : 490;
-    await supabase.from('transactions').insert([{
+    const { error: txInsertErr } = await supabase.from('transactions').insert([{
         user_email: customerEmail,
         amount: pointsToAdd,
         transaction_type: isSubscription ? 'TOPUP_SUBSCRIPTION' : 'TOPUP_SINGLE',
         order_id: fullOrderId,
         amount_usd_cents: amountPaid
     }]);
+    // 23505 = order_id unique constraint：並發請求已先一步處理，視為冪等成功
+    if (txInsertErr) {
+        if (txInsertErr.code === '23505' || txInsertErr.message?.includes('unique')) {
+            return console.log(`[processTopup] 23505 idempotent — ${fullOrderId} 已由並發請求處理`);
+        }
+        throw txInsertErr;
+    }
 
     await writeKolCommission(supabase, customerEmail, amountPaid, fullOrderId);
 

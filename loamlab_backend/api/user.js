@@ -109,9 +109,9 @@ export default async function handler(req, res) {
         if (!sbUrl || !sbKey) return res.status(500).json({ code: -1, msg: 'Missing SUPABASE env vars' });
         const sb = createClient(sbUrl, sbKey);
 
-        // T2: 寫入退訂原因（fire-and-forget，不阻塞主流程）
+        // T2: 寫入退訂原因（await 確保 Vercel 不提早凍結進程）
         if (reason) {
-            sb.from('feedback').insert([{
+            await sb.from('feedback').insert([{
                 user_email: cancelEmail,
                 type: 'unsubscribe_reason',
                 content: reason,
@@ -140,7 +140,10 @@ export default async function handler(req, res) {
                 if (listRes.ok) {
                     const listData = await listRes.json();
                     const items = listData.items || listData.subscriptions || listData.data || [];
-                    const active = items.find(s => s.status === 'active' || s.status === 'trialing');
+                    const active = items.find(s => 
+                        (s.status === 'active' || s.status === 'trialing') && 
+                        (s.customer?.email === cancelEmail || s.customer_email === cancelEmail)
+                    );
                     if (active?.subscription_id || active?.id) {
                         subscriptionId = active.subscription_id || active.id;
                         // 順便回存
@@ -472,6 +475,8 @@ export default async function handler(req, res) {
             if (subRes.ok) {
                 const subs = (await subRes.json()).items || [];
                 for (const sub of subs) {
+                    const subEmail = sub.customer?.email || sub.customer_email;
+                    if (subEmail !== vEmail) continue;
                     const productId = sub.product_id || sub.plan_id;
                     if (!productId) continue;
                     const orderId = `${sub.subscription_id}_verify`;
@@ -496,6 +501,8 @@ export default async function handler(req, res) {
                 if (payRes.ok) {
                     const pays = (await payRes.json()).items || [];
                     for (const pay of pays) {
+                        const payEmail = pay.customer?.email || pay.email || pay.customer_email;
+                        if (payEmail !== vEmail) continue;
                         if (pay.status !== 'succeeded') continue;
                         const productId = pay.product_cart?.[0]?.product_id || pay.product_id;
                         if (!productId) continue;
@@ -557,6 +564,8 @@ export default async function handler(req, res) {
                     if (subRes.ok) {
                         const subs = (await subRes.json()).items || [];
                         for (const sub of subs) {
+                            const subEmail = sub.customer?.email || sub.customer_email;
+                            if (subEmail !== email) continue;
                             const productId = sub.product_id || sub.plan_id;
                             if (!productId) continue;
                             const orderId = `${sub.subscription_id}_auto`;

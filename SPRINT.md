@@ -1,17 +1,27 @@
-# Sprint Plan: Fix Render Deduction via Strict Fetch Timeout & RPC Refund
+# Sprint Plan: 修正自動發放點數與 Lifetime Points 雙重累加問題
 
 ## CONTEXT_DIGEST
-用戶回報 SpaceReform 渲染失敗且遭吞點。經深入邊界測試與防禦性分析，確認根本原因並非輪詢耗盡，而是 Node.js 原生 `fetch` 缺乏超時機制。當 AtlasCloud 壅塞時，`fetch` 永遠卡死，導致 300s 後被 Vercel 強制中止，無法進入 `catch` 區塊退款。且現有 `update` 退款寫法存在 Race Condition 隱患。現採用極簡但嚴密的保命機制進行修復。
+用戶反映新帳號會自動獲得 `points: 60` 以及 `lifetime_points: 60`，導致總點數異常。經查核 codebase，發現 `api/user.js`、`api/render.js` 與 `api/auth/google-callback.js` 中有寫死的 `points: 60` 初始發放邏輯，同時部分扣款或同步邏輯（如 `sync_dodo_subscriptions` 和 360 上傳）錯誤地修改或同步累加了 `lifetime_points`。
 
 ## TASKS
-- [x] **防禦 Fetch 卡死 (加入 AbortSignal)**
-  **影響檔案**: `loamlab_backend/api/render.js`
-  在所有向 AtlasCloud 發送的 `fetch` 請求（包含 `generateImage` 和 `pollUrl`）中，加入 `signal: AbortSignal.timeout(280000)`。確保在 Vercel 的 300s 強殺極限前，主動拋出超時錯誤並進入 `catch` 區塊。
-- [x] **放寬安全輪詢次數**
-  **影響檔案**: `loamlab_backend/api/render.js`
-  既然已具備 280s 的全局安全網，將原本的輪詢次數從 `40` (約 120s) 提高至 `80` (約 240s)，讓複雜的 4K 渲染有足夠時間完成，降低不必要的失敗率。
-- [x] **重構退款邏輯 (修復 Race Condition)**
-  **影響檔案**: `loamlab_backend/api/render.js`
-  已在 commit 4396dd8 完成，兩個退款路徑均使用 `supabase.rpc('deduct_render_points', ...)`。
+
+### 1. 統一並重構新註冊贈點邏輯 [MUST] [x]
+- **說明**：將散落於各 API 的硬編碼 `points: 60` 重構，改為使用環境變數或共用設定 `INITIAL_POINTS`。明確註冊時 `lifetime_points` 應為 0，避免因為 API response 中的加總邏輯 (`data.points + data.lifetime_points`) 造成前端數字錯亂。
+- **影響檔案**：
+  - `api/user.js` (約 552 行)
+  - `api/render.js` (約 501 行)
+  - `api/auth/google-callback.js` (約 134 行)
+
+### 2. 修正訂閱同步 `sync_dodo_subscriptions` 雙倍點數 Bug [MUST] [x]
+- **說明**：`api/user.js` 在修復遺漏訂閱（Fallback）時，錯誤地將訂閱的月結算點數 (`planCfg.points`) 同時加給 `points` 與 `lifetime_points`（如 `lifetime_points: (user.lifetime_points || 0) + planCfg.points`）。這會導致點數虛增，應該只將訂閱點數賦予 `points`。
+- **影響檔案**：
+  - `api/user.js` (約 824-835 行)
+
+### 3. 修正 360 全景扣款異常邏輯 [NICE] [x]
+- **說明**：在 `api/render.js` 中 `upload_360` 的扣款邏輯，錯誤地將 `COST_360` 加到 `lifetime_points` (`lifetime_points: (user.lifetime_points || 0) + COST_360`)，而非正確扣除。需修改為瀑布式扣除邏輯（先扣 `points`，不足再扣 `lifetime_points`）。
+- **依賴**：無，但可與 Task 1 同步處理以確保點數系統健全。
+- **影響檔案**：
+  - `api/user.js`
+  - `api/render.js` (約 416 行)
 
 status: DONE

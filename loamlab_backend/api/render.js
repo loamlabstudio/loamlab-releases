@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { PRICING_CONFIG } from '../config.js';
+import { PRICING_CONFIG, INITIAL_POINTS } from '../config.js';
 
 export const maxDuration = 300; // Allow Vercel to run up to 5 minutes to poll AtlasCloud
 
@@ -412,8 +412,7 @@ async function _handleRender(req, res) {
             return res.status(200).json({ code: -1, msg: `點數不足（需要 ${COST_360} 點，目前 ${user?.points ?? 0} 點）` });
         }
         const { error: deductErr } = await supabase.from('users').update({
-            points: user.points - COST_360,
-            lifetime_points: (user.lifetime_points || 0) + COST_360
+            points: user.points - COST_360
         }).eq('email', userEmail);
         if (deductErr) return res.status(200).json({ code: -1, msg: '點數扣除失敗，請稍後再試' });
         try {
@@ -498,7 +497,8 @@ async function _handleRender(req, res) {
             .from('users')
             .insert([{
                 email: userEmail,
-                points: 60,
+                points: INITIAL_POINTS,
+                lifetime_points: 0,
                 referral_code: newReferralCode
             }])
             .select()

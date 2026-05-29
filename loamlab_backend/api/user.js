@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { DODO_PRODUCTS } from '../config.js';
+import { DODO_PRODUCTS, INITIAL_POINTS } from '../config.js';
 import { processTopup, makeSupabase } from '../lib/activate.js';
 
 export default async function handler(req, res) {
@@ -549,7 +549,8 @@ export default async function handler(req, res) {
                     .from('users')
                     .insert([{
                         email: email,
-                        points: 60,
+                        points: INITIAL_POINTS,
+                        lifetime_points: 0,
                         referral_code: newReferralCode
                     }])
                     .select().single();
@@ -821,7 +822,7 @@ export default async function handler(req, res) {
                     if (!user) {
                         // 訂閱前未建帳號（直接從網站購買）→ 新建
                         await supabase.from('users').insert([{
-                            email, points: planCfg.points, lifetime_points: planCfg.points,
+                            email, points: planCfg.points, lifetime_points: 0,
                             subscription_plan: planCfg.plan, dodo_subscription_id: subId,
                             is_beta_tester: true, last_topup_at: new Date().toISOString()
                         }]);
@@ -832,7 +833,6 @@ export default async function handler(req, res) {
                             subscription_plan: planCfg.plan,
                             dodo_subscription_id: subId,
                             points: planCfg.points,
-                            lifetime_points: (user.lifetime_points || 0) + planCfg.points,
                             last_topup_at: new Date().toISOString()
                         }).eq('email', email);
                         results.fixed.push({ email, action: 'updated', plan: planCfg.plan });

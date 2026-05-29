@@ -1,3 +1,5 @@
+export const INITIAL_POINTS = 60;
+
 export const DODO_PRODUCTS = {
     TOPUP:   process.env.DODO_PRODUCT_TOPUP   || 'pdt_0NbIlveGNSETSOveL7Xmk',
     STARTER: process.env.DODO_PRODUCT_STARTER || 'pdt_0NbImUvFnwJe36ymTELWV',

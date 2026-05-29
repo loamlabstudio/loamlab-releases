@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const INITIAL_POINTS = 60; // 與 config.js INITIAL_POINTS 保持同步（CJS 無法 import）
 
 module.exports = async function handler(req, res) {
     const { code, state: sessionId, error: oauthError } = req.query;
@@ -131,7 +132,7 @@ module.exports = async function handler(req, res) {
     }
 
     // 建立新用戶（existing user 的衝突被 ignoreDuplicates 跳過，不影響 points）
-    await supabase.from('users').upsert({ email, points: 60 }, {
+    await supabase.from('users').upsert({ email, points: INITIAL_POINTS, lifetime_points: 0 }, {
         onConflict: 'email',
         ignoreDuplicates: true
     });

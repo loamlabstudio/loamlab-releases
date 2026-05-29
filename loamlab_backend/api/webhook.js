@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
-import { PRICING_CONFIG } from '../config.js';
+import { PRICING_CONFIG, DODO_PRODUCTS } from '../config.js';
 
 // 初始化 Supabase (優先使用 Service Role)
 const supabaseUrl = process.env.SUPABASE_URL || '';
@@ -189,12 +189,7 @@ async function processCancellation(customerEmail, platform) {
 
 const IDS = {
     LS: { TOPUP: 1432023, STARTER: 1432194, PRO: 1432198, STUDIO: 1432205 },
-    DODO: {
-        TOPUP: 'pdt_0NbIlveGNSETSOveL7Xmk',
-        STARTER: 'pdt_0NblmUvFrwJe36ymTELWV',
-        PRO: 'pdt_0NblmafncbUuGNrMRvJp4',
-        STUDIO: 'pdt_0Nblmhwbr5WXfNyDHpaA2'
-    }
+    DODO: DODO_PRODUCTS
 };
 
 // 核心充值邏輯 (從 LS 邏輯抽離，支援多平台)

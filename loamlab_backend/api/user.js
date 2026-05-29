@@ -1,11 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-
-const DODO_PRODUCTS = {
-    TOPUP:   'pdt_0NbIlveGNSETSOveL7Xmk',
-    STARTER: 'pdt_0NblmUvFrwJe36ymTELWV',
-    PRO:     'pdt_0NblmafncbUuGNrMRvJp4',
-    STUDIO:  'pdt_0Nblmhwbr5WXfNyDHpaA2'
-};
+import { DODO_PRODUCTS } from '../config.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);

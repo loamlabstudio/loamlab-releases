@@ -119,7 +119,7 @@ function CompareSlider() {
 
 const PLAN_FALLBACK_URLS: Record<string, string> = {
   STARTER: 'https://checkout.dodopayments.com/buy?product_id=pdt_0NblmUvFrwJe36ymTELWV&discount_code=LOAM_BETA_30',
-  PRO:     'https://checkout.dodopayments.com/buy?product_id=pdt_0NblmafncbUuGNrMRvJp4&discount_code=LOAM_BETA_30',
+  PRO:     'https://checkout.dodopayments.com/buy?product_id=pdt_0NbImafnebUuGNrMRvJp4&discount_code=LOAM_BETA_30',
   STUDIO:  'https://checkout.dodopayments.com/buy?product_id=pdt_0Nblmhwbr5WXfNyDHpaA2&discount_code=LOAM_BETA_30',
   TOPUP:   'https://checkout.dodopayments.com/buy?product_id=pdt_0NbIlveGNSETSOveL7Xmk&discount_code=LOAM_BETA_30',
 };

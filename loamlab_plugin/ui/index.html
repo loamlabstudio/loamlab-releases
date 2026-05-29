@@ -3,6 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="color-scheme" content="dark">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script>
         // Global Error Handler — suppress non-critical errors (CDN + bundled libs), alert only for app errors
@@ -42,6 +43,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
+            color-scheme: dark;
             /* LoamLab Brand Colors */
             --accent-red: #dc2626;
             --accent-red-hover: #ef4444;
@@ -78,6 +80,11 @@
             -ms-overflow-style: none;
             scrollbar-width: none;
         }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.32); }
 
         /* 毛玻璃共用特效 */
         .glass-panel {
@@ -313,6 +320,14 @@
             margin-bottom: 10px;
             padding-bottom: 6px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        /* DPI-aware scaling: only applies on high-DPI displays (Windows 150%/125% scaling) */
+        @media (min-resolution: 1.5dppx) {
+            html { zoom: 0.75; }
+        }
+        @media (min-resolution: 1.2dppx) and (max-resolution: 1.49dppx) {
+            html { zoom: 0.85; }
         }
     </style>
 </head>
@@ -1030,7 +1045,7 @@
                 <div class="flex items-center gap-3" id="referral-input-area">
                     <input type="text" id="input-referral-code"
                         class="flex-1 bg-black border border-white/10 rounded-lg p-3 text-white font-mono text-center text-lg tracking-widest uppercase focus:outline-none focus:border-amber-500/50 transition-all placeholder-white/20"
-                        data-i18n="referral_code_ph" placeholder="輸入推薦碼 / 大使代碼">
+                        maxlength="30" data-i18n="referral_code_ph" placeholder="輸入推薦碼 / 大使代碼">
                     <button id="btn-submit-referral"
                         class="px-5 py-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/40 text-amber-300 text-[12px] font-bold transition-all shrink-0 border-b-2 border-b-amber-700/40 active:border-b-0 active:translate-y-[2px] tracking-widest">APPLY</button>
                 </div>
@@ -1479,8 +1494,8 @@
                             <button class="sc-tool-btn" data-tool="brush" title="筆刷 B  |  Shift拖曳=直線  |  [ ] 調整大小" data-i18n-title="sc_tool_brush">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                             </button>
-                            <input type="color" id="sc-color-picker" value="#ff6432" class="w-7 h-7 rounded-full border-2 border-white/20 cursor-pointer bg-transparent" title="筆刷顏色">
-                            <input type="range" id="sc-brush-size" min="5" max="60" value="20" class="w-16 accent-rose-500" title="筆刷大小">
+                            <input type="color" id="sc-color-picker" value="#ff6432" class="w-7 h-7 rounded-full border-2 border-white/20 cursor-pointer bg-transparent" title="筆刷顏色" data-i18n-title="sc_tool_color_picker">
+                            <input type="range" id="sc-brush-size" min="5" max="60" value="20" class="w-16 accent-rose-500" title="筆刷大小" data-i18n-title="sc_tool_brush_size">
                             <button class="sc-tool-btn" data-tool="eraser" title="橡皮擦 E" data-i18n-title="sc_tool_eraser">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 20H7L3 16l10-10 7 7-3.5 3.5M6 17l4-4"/></svg>
                             </button>
@@ -1488,13 +1503,13 @@
                                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15c-.59.56-.59 1.53 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10 10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z"/></svg>
                             </button>
                             <div class="w-px h-5 bg-white/15 mx-1"></div>
-                            <button id="sc-undo" title="復原 (Undo)" class="sc-ctrl-btn">
+                            <button id="sc-undo" title="復原 (Undo)" class="sc-ctrl-btn" data-i18n-title="sc_tool_undo">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
                             </button>
-                            <button id="sc-redo" title="重做 (Redo)" class="sc-ctrl-btn">
+                            <button id="sc-redo" title="重做 (Redo)" class="sc-ctrl-btn" data-i18n-title="sc_tool_redo">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10H11a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6"/></svg>
                             </button>
-                            <button id="sc-clear" title="清空 (Clear All)" class="sc-ctrl-btn text-white/50 hover:text-rose-400">
+                            <button id="sc-clear" title="清空 (Clear All)" class="sc-ctrl-btn text-white/50 hover:text-rose-400" data-i18n-title="sc_tool_clear">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
                         </div>
@@ -1548,7 +1563,7 @@
                     </div>
                     <!-- 執行按鈕 -->
                     <div class="p-4 border-t border-white/10 shrink-0">
-                        <button id="btn-execute-smart-swap" class="w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-3 rounded-xl font-bold text-[13px] tracking-widest shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] transition-all active:scale-[0.98]">
+                        <button id="btn-execute-smart-swap" data-i18n="sc_execute" class="w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-3 rounded-xl font-bold text-[13px] tracking-widest shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] transition-all active:scale-[0.98]">
                             Apply Changes
                         </button>
                     </div>
@@ -1562,7 +1577,7 @@
         <div class="flex items-center gap-1.5 bg-[#1a1a1e] border border-white/20 rounded-xl shadow-2xl px-3 py-2 backdrop-blur">
             <input type="text" id="sc-label-input" maxlength="80"
                 class="bg-transparent text-[12px] text-white/90 placeholder-white/30 outline-none w-[180px]"
-                placeholder="描述替換內容...">
+                data-i18n="sc_label_ph" placeholder="描述替換內容...">
             <button id="sc-label-confirm" class="text-[11px] px-2 py-0.5 bg-rose-500/30 border border-rose-500/50 text-rose-300 rounded-lg hover:bg-rose-500/50 transition-all font-semibold">✓</button>
             <button id="sc-label-cancel" class="text-[11px] text-white/30 hover:text-white/60 transition-all">✕</button>
         </div>

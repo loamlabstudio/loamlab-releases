@@ -4371,7 +4371,7 @@ const btnSubmitReferral = document.getElementById('btn-submit-referral');
 const inputReferralCode = document.getElementById('input-referral-code');
 if (btnSubmitReferral && inputReferralCode) {
     btnSubmitReferral.addEventListener('click', async () => {
-        const code = inputReferralCode.value.trim().toUpperCase();
+        const code = inputReferralCode.value.trim();
         if (!code) return alert('請輸入大使折扣碼！\nPlease enter ambassador code.');
         if (!window.loamlabUserEmail) return alert('連線異常，請重新登入。');
 

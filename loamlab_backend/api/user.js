@@ -541,7 +541,10 @@ export default async function handler(req, res) {
                 .eq('referral_rewarded', true);
 
             if (error && error.code === 'PGRST116') {
-                const newReferralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                let newReferralCode = '';
+                for (let i = 0; i < 6; i++) { newReferralCode += chars.charAt(Math.floor(Math.random() * chars.length)); }
+                
                 const { data: newUser, error: insertError } = await supabase
                     .from('users')
                     .insert([{
@@ -555,6 +558,16 @@ export default async function handler(req, res) {
                 data = newUser;
             } else if (error) {
                 return res.status(500).json({ code: -1, msg: error.message });
+            }
+
+            // 舊用戶自動補發邀請碼
+            if (data && !data.referral_code) {
+                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                let backfillCode = '';
+                for (let i = 0; i < 6; i++) { backfillCode += chars.charAt(Math.floor(Math.random() * chars.length)); }
+                
+                const { error: bfErr } = await supabase.from('users').update({ referral_code: backfillCode }).eq('email', email);
+                if (!bfErr) data.referral_code = backfillCode;
             }
 
             // 靜默自動修復：用戶有帳、無訂閱 → 主動查 Dodo 補發
@@ -726,10 +739,11 @@ export default async function handler(req, res) {
             if (myErr) return res.status(404).json({ code: -1, msg: '找不到您的帳戶，請先算一張圖進行註冊' });
             if (me.referred_by) return res.status(400).json({ code: -1, msg: '您已經接受過邀請，無法重複領取' });
 
-            const upperCode = code.toUpperCase();
+            const cleanCode = code.trim();
+            const upperCode = cleanCode.toUpperCase();
             const { data: inviter } = await supabase
                 .from('users').select('id, email')
-                .or(`referral_code.eq.${upperCode},dodo_discount_code.eq.${upperCode}`)
+                .or(`referral_code.eq.${upperCode},dodo_discount_code.ilike.${cleanCode}`)
                 .maybeSingle();
 
             if (!inviter) return res.status(404).json({ code: -1, msg: '找不到此推薦碼，請確認後重新輸入' });

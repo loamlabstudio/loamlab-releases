@@ -132,6 +132,8 @@ export default function Home() {
   const doCheckout = async (planKey: string, email: string) => {
     setCheckoutLoading(planKey);
     setCheckoutError(null);
+    // 在同步 click 脈絡中先開空白視窗，避免 async 後被 popup blocker 攔截
+    const win = window.open('', '_blank');
     try {
       const res = await fetch('https://loamlab-camera.vercel.app/api/user?action=checkout', {
         method: 'POST',
@@ -139,12 +141,13 @@ export default function Home() {
         body: JSON.stringify({ planKey, email }),
       });
       const data = await res.json();
-      if (data.checkoutUrl) {
-        window.open(data.checkoutUrl, '_blank');
+      if (data.checkoutUrl && win) {
+        win.location.href = data.checkoutUrl;
         setCheckoutLoading(null);
         return;
       }
     } catch (_) {}
+    if (win) win.close();
     setCheckoutError('無法建立結帳連結，請稍後再試或聯絡客服。');
     setCheckoutLoading(null);
   };

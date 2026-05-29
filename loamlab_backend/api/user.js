@@ -550,8 +550,12 @@ export default async function handler(req, res) {
                 return res.status(500).json({ code: -1, msg: error.message });
             }
 
-            // 靜默自動修復：用戶有帳、無訂閱、從未入帳 → 主動查 Dodo 補發
-            if (data && !data.subscription_plan && !data.last_topup_at && process.env.DODO_API_KEY) {
+            // 靜默自動修復：用戶有帳、無訂閱 → 主動查 Dodo 補發
+            // 觸發條件：從未入帳（新用戶）OR 距上次入帳 > 29 天（月訂閱週期已過，renewal webhook 可能失敗）
+            const _daysSinceLast = data?.last_topup_at
+                ? (Date.now() - new Date(data.last_topup_at).getTime()) / (24 * 3600 * 1000)
+                : Infinity;
+            if (data && !data.subscription_plan && (_daysSinceLast > 29 || !data.last_topup_at) && process.env.DODO_API_KEY) {
                 try {
                     const dodoBase = process.env.DODO_API_KEY.startsWith('test_')
                         ? 'https://test.dodopayments.com'

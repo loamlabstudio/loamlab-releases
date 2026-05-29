@@ -512,6 +512,40 @@ export default async function handler(req, res) {
                 return res.status(500).json({ code: -1, msg: error.message });
             }
 
+            // 靜默自動修復：用戶有帳、無訂閱、從未入帳 → 主動查 Dodo 補發
+            if (data && !data.subscription_plan && !data.last_topup_at && process.env.DODO_API_KEY) {
+                try {
+                    const dodoBase = process.env.DODO_API_KEY.startsWith('test_')
+                        ? 'https://test.dodopayments.com'
+                        : 'https://live.dodopayments.com';
+                    const subRes = await Promise.race([
+                        fetch(`${dodoBase}/subscriptions?customer_email=${encodeURIComponent(email)}&status=active&limit=3`,
+                            { headers: { Authorization: `Bearer ${process.env.DODO_API_KEY}` } }),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+                    ]);
+                    if (subRes.ok) {
+                        const subs = (await subRes.json()).items || [];
+                        for (const sub of subs) {
+                            const productId = sub.product_id || sub.plan_id;
+                            if (!productId) continue;
+                            const orderId = `${sub.subscription_id}_auto`;
+                            const { data: ex } = await supabase.from('transactions').select('id').eq('order_id', `DODO_${orderId}`).maybeSingle();
+                            if (!ex) {
+                                await processTopup(supabase, email, productId, orderId, 'DODO', null, sub.subscription_id);
+                                const { data: refreshed } = await supabase
+                                    .from('users')
+                                    .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending')
+                                    .eq('email', email).single();
+                                if (refreshed) data = refreshed;
+                                console.log(`[🔄自動修復] ${email} 已自動補發訂閱`);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[auto-repair] non-fatal:', e.message);
+                }
+            }
+
             const displayCode = data && (data.is_kol || data.is_partner) && data.dodo_discount_code
                 ? data.dodo_discount_code
                 : (data ? data.referral_code : null);

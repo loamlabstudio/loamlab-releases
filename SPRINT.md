@@ -1,26 +1,18 @@
-# SPRINT: 優化退訂機制與原因反饋
+# SPRINT
 
 ## CONTEXT_DIGEST
-當前系統中 `api/user.js` 的退訂 API 在 `PATCH` (取消於期末) 失敗時，會自動 fallback 到 `DELETE`，導致 Dodo Payments 立即終止訂閱並作廢用戶當月剩餘權益。這會引發用戶客訴。
-目標：1) 移除或加上強烈防護條件來限制 `DELETE` 的觸發；2) 收集用戶退訂原因，並寫入 Supabase 供 Admin 後台審閱（建議存入既有的 `feedback` 表）。
+1. 插件點擊付費出現 404 (`error/not-found`)，主因是 Dodo API 呼叫失敗後降級至 `fallbackUrl`，而該 URL 使用了已棄用的路徑格式 (`/buy/${productId}`)。
+2. 網站的付費按鈕寫死了舊的 Dodo 結帳連結（使用 `?variant_id=` 和 `discount_code=LOAM_BETA_30`），且未與後端共用動態生成邏輯（無法整合 KOL 推薦與動態折扣）。
+3. 目標是修復插件的降級 URL 格式、確保 Dodo API `discount_code` 參數正確，並將網站的付費牆架構優化，統一透過後端 API 或一致的 URL 參數來獲取結帳連結。
 
 ## TASKS
 
-1. **[x] 移除或防護高風險的 DELETE 退訂行為**
-   - 描述：修改後端退訂 API。當 `cancel_at_next_billing_date` 的 `PATCH` 請求失敗時，**不可**自動觸發 `DELETE`。如果 `PATCH` 失敗，應直接 fallback 產生 Dodo Customer Portal URL 讓用戶自行處理，或僅在請求明確帶有 `force_immediate: true` 參數時才執行 `DELETE`。
+1. **[x] 修復後端 Checkout API 與降級 URL 格式** `[MUST]`
    - **影響檔案**：`loamlab_backend/api/user.js`
+   - **說明**：將 `fallbackUrl` 從舊版的 `/buy/${productId}?quantity=...` 修改為正確的 Query 參數格式（例如 `/buy?product_id=${productId}&quantity=${qty}&customer_email=${email}`），並一併附上折扣碼 `discount_code=${finalDiscount}`。同時檢查 Dodo API `checkouts` 的 payload 格式，確保 `discount_code` 或 `discount_codes` 傳遞無誤，防止 API 因折扣碼報錯。支援讓 `email` 成為選填，以便網站未登入也能使用此 API 產生連結。
 
-2. **[x] 後端實作退訂原因寫入機制**
-   - 描述：在 `cancel_subscription` endpoint 接收前端傳來的 `reason` 參數。如果收到原因，將其 INSERT 到現有的 `feedback` 資料表中。
-   - 資料庫操作說明：不需新增欄位，直接使用 `feedback` 表，寫入 `type = 'unsubscribe_reason'`，並將具體原因放入 `content` 或 `metadata` 欄位中，關聯該用戶的 `user_email`。
-   - **影響檔案**：`loamlab_backend/api/user.js`
-
-3. **[x] 前端退訂流程新增「原因收集」對話框**
-   - 描述：在用戶點擊「退訂」時，先彈出一個簡單的對話框或選項，詢問退訂原因（例如：暫時用不到、太貴、渲染效果不滿意等），將用戶選擇或輸入的原因與退訂請求一併發送給後端的 `cancel_subscription`。
-   - **影響檔案**：前端外掛對應的 JS 或 HTML UI 檔案（視前端實作而定，可能是 `public/app.js` 或對應的 React 元件）
-
-4. **[x] Admin 後台顯示退訂反饋**
-   - 描述：在 `stats.js` 的 `feedback` endpoint 查詢邏輯中，確保 `unsubscribe_reason` 類型的反饋能夠被正確撈出並顯示在 Admin 面板，方便管理員查閱。
-   - **影響檔案**：`loamlab_backend/api/stats.js`, `loamlab_backend/public/admin.html`
+2. **[x] 同步網站付費牆並統一架構** `[MUST]` (依賴 Task 1)
+   - **影響檔案**：`loamlab_website/src/app/page.tsx`, `loamlab_backend/api/user.js`
+   - **說明**：將網站的定價方案按鈕改為呼叫後端 `/api/user?action=checkout` 來動態獲取付費連結。這將確保網站與插件統一折扣碼 (`LOAM_BETA_30` 或環境變數)，並讓網站能無縫支援未來的 KOL 歸因邏輯。需在前端處理 API 請求狀態並處理重新導向。
 
 status: DONE

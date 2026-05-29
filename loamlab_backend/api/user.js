@@ -18,17 +18,16 @@ export default async function handler(req, res) {
     // ── Checkout sub-route（不需要 Supabase auth）──────────────────────────
     if (req.method === 'POST' && req.query.action === 'checkout') {
         const { planKey, email, quantity = 1, referralCode } = req.body || {};
-        if (!planKey || !email) return res.status(400).json({ error: 'Missing planKey or email' });
+        if (!planKey) return res.status(400).json({ error: 'Missing planKey' });
         const productId = DODO_PRODUCTS[planKey.toUpperCase()];
         if (!productId) return res.status(400).json({ error: 'Invalid planKey' });
         const qty = Math.max(1, parseInt(quantity) || 1);
         const DODO_API_KEY = process.env.DODO_API_KEY;
-        const DODO_DISCOUNT_CODE = process.env.DODO_DISCOUNT_CODE || '';
-        const fallbackUrl = `https://checkout.dodopayments.com/buy/${productId}?quantity=${qty}&customer_email=${encodeURIComponent(email)}`;
+        const DODO_DISCOUNT_CODE = process.env.DODO_DISCOUNT_CODE || 'LOAM_BETA_30';
 
         // 歸因綁定 + KOL 折扣查詢（單次 DB 查詢合併）
         let kolDiscountCode = null;
-        if (referralCode) {
+        if (referralCode && email) {
             try {
                 const sbUrl = process.env.SUPABASE_URL;
                 const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
@@ -55,12 +54,17 @@ export default async function handler(req, res) {
             }
         }
 
+        const finalDiscount = kolDiscountCode || DODO_DISCOUNT_CODE;
+        let fallbackUrl = `https://checkout.dodopayments.com/buy?product_id=${productId}&quantity=${qty}`;
+        if (email) fallbackUrl += `&customer_email=${encodeURIComponent(email)}`;
+        if (finalDiscount) fallbackUrl += `&discount_code=${encodeURIComponent(finalDiscount)}`;
+
         if (!DODO_API_KEY) {
             console.warn('[checkout] DODO_API_KEY not set, using fallback URL');
-            return res.json({ checkoutUrl: fallbackUrl, discountApplied: false });
+            return res.json({ checkoutUrl: fallbackUrl, discountApplied: !!finalDiscount });
         }
-        const body = { product_cart: [{ product_id: productId, quantity: qty }], customer: { email } };
-        const finalDiscount = kolDiscountCode || DODO_DISCOUNT_CODE;
+        const body = { product_cart: [{ product_id: productId, quantity: qty }] };
+        if (email) body.customer = { email };
         if (finalDiscount) body.discount_code = finalDiscount;
         try {
             const apiRes = await fetch('https://live.dodopayments.com/checkouts', {

@@ -117,11 +117,41 @@ function CompareSlider() {
   );
 }
 
+const PLAN_FALLBACK_URLS: Record<string, string> = {
+  STARTER: 'https://checkout.dodopayments.com/buy?product_id=pdt_0NblmUvFrwJe36ymTELWV&discount_code=LOAM_BETA_30',
+  PRO:     'https://checkout.dodopayments.com/buy?product_id=pdt_0NblmafncbUuGNrMRvJp4&discount_code=LOAM_BETA_30',
+  STUDIO:  'https://checkout.dodopayments.com/buy?product_id=pdt_0Nblmhwbr5WXfNyDHpaA2&discount_code=LOAM_BETA_30',
+  TOPUP:   'https://checkout.dodopayments.com/buy?product_id=pdt_0NbIlveGNSETSOveL7Xmk&discount_code=LOAM_BETA_30',
+};
+
 export default function Home() {
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   };
   const [pricingTab, setPricingTab] = useState<'subscription' | 'topup'>('subscription');
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+
+  const handleCheckout = async (planKey: string) => {
+    setCheckoutLoading(planKey);
+    try {
+      const res = await fetch('https://loamlab-camera-backend.vercel.app/api/user?action=checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planKey }),
+      });
+      const data = await res.json();
+      if (data.checkoutUrl) {
+        window.open(data.checkoutUrl, '_blank');
+        return;
+      }
+    } catch (_) {
+      // 若 API 失敗則降級至靜態折扣 URL
+    } finally {
+      setCheckoutLoading(null);
+    }
+    const fallback = PLAN_FALLBACK_URLS[planKey];
+    if (fallback) window.open(fallback, '_blank');
+  };
 
   return (
     <main className="min-h-screen bg-[var(--color-loam-dark)] relative overflow-hidden text-[var(--color-loam-bone)]">
@@ -178,10 +208,10 @@ export default function Home() {
             Download Free Plugin
           </a>
 
-          <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NblmafncbUuGNrMRvJp4&discount_code=LOAM_BETA_30" target="_blank" className="px-10 py-5 rounded-full border border-white/20 text-white font-bold text-xs tracking-[0.2em] uppercase hover:bg-white/10 transition-all flex items-center justify-center gap-2">
+          <button onClick={() => handleCheckout('PRO')} disabled={checkoutLoading === 'PRO'} className="px-10 py-5 rounded-full border border-white/20 text-white font-bold text-xs tracking-[0.2em] uppercase hover:bg-white/10 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-            升級 Pro 方案
-          </a>
+            {checkoutLoading === 'PRO' ? '處理中...' : '升級 Pro 方案'}
+          </button>
         </div>
       </section>
 
@@ -257,7 +287,9 @@ export default function Home() {
                 <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 15 張 2K 渲染</li>
                 <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> SketchUp 全版本支援</li>
               </ul>
-              <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NblmUvFrwJe36ymTELWV&discount_code=LOAM_BETA_30" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Subscribe</a>
+              <button onClick={() => handleCheckout('STARTER')} disabled={checkoutLoading === 'STARTER'} className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center disabled:opacity-50">
+                {checkoutLoading === 'STARTER' ? '處理中...' : 'Subscribe'}
+              </button>
             </div>
 
             {/* Pro (Hot) */}
@@ -272,7 +304,9 @@ export default function Home() {
                 <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 支援 4K 影院級畫質擴展</li>
                 <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 優先 AI 計算通道</li>
               </ul>
-              <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NblmafncbUuGNrMRvJp4&discount_code=LOAM_BETA_30" target="_blank" className="w-full py-5 rounded-full bg-[var(--color-loam-primary)] text-white text-[10px] font-bold tracking-widest uppercase hover:scale-105 transition-transform text-center">Subscribe</a>
+              <button onClick={() => handleCheckout('PRO')} disabled={checkoutLoading === 'PRO'} className="w-full py-5 rounded-full bg-[var(--color-loam-primary)] text-white text-[10px] font-bold tracking-widest uppercase hover:scale-105 transition-transform text-center disabled:opacity-50">
+                {checkoutLoading === 'PRO' ? '處理中...' : 'Subscribe'}
+              </button>
             </div>
 
             {/* Studio */}
@@ -285,7 +319,9 @@ export default function Home() {
                 <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 450 張 2K 渲染</li>
                 <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 團隊商用授權許可</li>
               </ul>
-              <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0Nblmhwbr5WXfNyDHpaA2&discount_code=LOAM_BETA_30" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Subscribe</a>
+              <button onClick={() => handleCheckout('STUDIO')} disabled={checkoutLoading === 'STUDIO'} className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center disabled:opacity-50">
+                {checkoutLoading === 'STUDIO' ? '處理中...' : 'Subscribe'}
+              </button>
             </div>
           </div>
         )}
@@ -302,7 +338,9 @@ export default function Home() {
                 <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 約可產出 10 張 2K 渲染</li>
                 <li className="flex items-center"><span className="text-[var(--color-loam-primary)] mr-3">✓</span> 無訂閱綁定，用多少買多少</li>
               </ul>
-              <a href="https://checkout.dodopayments.com/buy?variant_id=pdt_0NbIlveGNSETSOveL7Xmk&discount_code=LOAM_BETA_30" target="_blank" className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center">Buy Now</a>
+              <button onClick={() => handleCheckout('TOPUP')} disabled={checkoutLoading === 'TOPUP'} className="w-full py-4 rounded-full border border-white/20 text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all text-center disabled:opacity-50">
+                {checkoutLoading === 'TOPUP' ? '處理中...' : 'Buy Now'}
+              </button>
             </div>
           </div>
         )}

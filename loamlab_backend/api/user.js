@@ -10,17 +10,6 @@ export default async function handler(req, res) {
 
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    // ── [臨時] 查詢 Dodo 產品列表 ──────────────────────────────────────────
-    if (req.method === 'GET' && req.query.action === 'dodo_products') {
-        if (req.query.key !== process.env.ADMIN_KEY) return res.status(403).json({ error: 'forbidden' });
-        const key = process.env.DODO_API_KEY;
-        if (!key) return res.status(500).json({ error: 'no_dodo_key' });
-        const base = key.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
-        const r = await fetch(`${base}/products?page_size=50`, { headers: { 'Authorization': `Bearer ${key}` } });
-        const d = await r.json();
-        return res.json(d);
-    }
-
     // ── Checkout sub-route（不需要 Supabase auth）──────────────────────────
     if (req.method === 'POST' && req.query.action === 'checkout') {
         const { planKey, email, referralCode } = req.body || {};

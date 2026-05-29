@@ -1,8 +1,8 @@
 export const DODO_PRODUCTS = {
     TOPUP:   process.env.DODO_PRODUCT_TOPUP   || 'pdt_0NbIlveGNSETSOveL7Xmk',
-    STARTER: process.env.DODO_PRODUCT_STARTER || 'pdt_0NblmUvFrwJe36ymTELWV',
+    STARTER: process.env.DODO_PRODUCT_STARTER || 'pdt_0NbImUvFnwJe36ymTELWV',
     PRO:     process.env.DODO_PRODUCT_PRO     || 'pdt_0NbImafnebUuGNrMRvJp4',
-    STUDIO:  process.env.DODO_PRODUCT_STUDIO  || 'pdt_0Nblmhwbr5WXfNyDHpaA2'
+    STUDIO:  process.env.DODO_PRODUCT_STUDIO  || 'pdt_0NbImhwhr5WXfNyDHpaA2'
 };
 
 export const PRICING_CONFIG = {

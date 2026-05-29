@@ -117,12 +117,6 @@ function CompareSlider() {
   );
 }
 
-const PLAN_FALLBACK_URLS: Record<string, string> = {
-  STARTER: 'https://checkout.dodopayments.com/buy?product_id=pdt_0NblmUvFrwJe36ymTELWV&discount_code=LOAM_BETA_30',
-  PRO:     'https://checkout.dodopayments.com/buy?product_id=pdt_0NblmafncbUuGNrMRvJp4&discount_code=LOAM_BETA_30',
-  STUDIO:  'https://checkout.dodopayments.com/buy?product_id=pdt_0Nblmhwbr5WXfNyDHpaA2&discount_code=LOAM_BETA_30',
-  TOPUP:   'https://checkout.dodopayments.com/buy?product_id=pdt_0NbIlveGNSETSOveL7Xmk&discount_code=LOAM_BETA_30',
-};
 
 export default function Home() {
   const scrollTo = (id: string) => {
@@ -133,11 +127,13 @@ export default function Home() {
   const [emailModal, setEmailModal] = useState<{ open: boolean; planKey: string }>({ open: false, planKey: '' });
   const [emailInput, setEmailInput] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const doCheckout = async (planKey: string, email: string) => {
     setCheckoutLoading(planKey);
+    setCheckoutError(null);
     try {
-      const res = await fetch('https://loamlab-camera-backend.vercel.app/api/user?action=checkout', {
+      const res = await fetch('https://loamlab-camera.vercel.app/api/user?action=checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planKey, email }),
@@ -149,8 +145,7 @@ export default function Home() {
         return;
       }
     } catch (_) {}
-    const fallback = PLAN_FALLBACK_URLS[planKey];
-    if (fallback) window.open(fallback, '_blank');
+    setCheckoutError('無法建立結帳連結，請稍後再試或聯絡客服。');
     setCheckoutLoading(null);
   };
 
@@ -202,6 +197,13 @@ export default function Home() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {checkoutError && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[110] bg-[#1a0a0a] border border-red-500/40 text-red-400 text-xs px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 max-w-sm">
+          <span>⚠️ {checkoutError}</span>
+          <button onClick={() => setCheckoutError(null)} className="text-red-400/60 hover:text-red-400 ml-1">✕</button>
         </div>
       )}
 

@@ -46,9 +46,10 @@ export default async function handler(req, res) {
                 let variantId = data.product_cart?.[0]?.product_id || data.product_id || data.plan_id;
                 const orderId = data.payment_id;
                 const discountCode = data.discount?.code || data.discount_code || null;
+                const planKey = data.metadata?.planKey || null;
 
-                // 某些訂閱的 payment.succeeded 不帶 product_id → 用 subscription_id 補查
-                if (!variantId && data.subscription_id && process.env.DODO_API_KEY) {
+                // 某些訂閱的 payment.succeeded 不帶 product_id → 用 subscription_id 補查（planKey 已存在時跳過）
+                if (!variantId && !planKey && data.subscription_id && process.env.DODO_API_KEY) {
                     try {
                         const subRes = await fetch(
                             `https://live.dodopayments.com/subscriptions/${data.subscription_id}`,
@@ -62,15 +63,15 @@ export default async function handler(req, res) {
                     }
                 }
 
-                if (customerEmail && variantId && orderId) {
+                if (customerEmail && (variantId || planKey) && orderId) {
                     try {
-                        await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id);
+                        await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey);
                     } catch (e) {
                         await logWebhookError('DODO', event.type, orderId, customerEmail, e.message, data);
                         throw e; // 讓外層回傳 500，Dodo 會重試
                     }
                 } else {
-                    await logWebhookError('DODO', event.type, orderId, customerEmail || 'unknown', `Missing fields: variantId=${variantId} orderId=${orderId}`, data);
+                    await logWebhookError('DODO', event.type, orderId, customerEmail || 'unknown', `Missing fields: variantId=${variantId} planKey=${planKey} orderId=${orderId}`, data);
                     // 結構性缺欄位，重試無法修復，回傳 200 停止 Dodo 無限重試；已記錄於 webhook_errors
                     return res.status(200).json({ status: 'logged', reason: 'missing_fields' });
                 }

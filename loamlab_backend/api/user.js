@@ -16,7 +16,8 @@ export default async function handler(req, res) {
         if (!planKey) return res.status(400).json({ error: 'Missing planKey' });
         const productId = DODO_PRODUCTS[planKey.toUpperCase()];
         if (!productId) return res.status(400).json({ error: 'Invalid planKey' });
-        const DODO_DISCOUNT_CODE = process.env.DODO_DISCOUNT_CODE || '';
+        const DODO_API_KEY = process.env.DODO_API_KEY;
+        const DODO_DISCOUNT_CODE = process.env.DODO_DISCOUNT_CODE || 'LOAM_BETA_30';
 
         // 歸因綁定 + KOL 折扣查詢（單次 DB 查詢合併）
         let kolDiscountCode = null;
@@ -28,11 +29,9 @@ export default async function handler(req, res) {
                     const sb = createClient(sbUrl, sbKey);
                     const { data: kol } = await sb.from('users').select('email, is_kol, is_partner, dodo_discount_code').eq('referral_code', referralCode.toUpperCase()).maybeSingle();
                     if (kol) {
-                        // KOL / 合夥人折扣（優先於全局 BETA 折扣）
                         if ((kol.is_kol || kol.is_partner) && kol.dodo_discount_code) {
                             kolDiscountCode = kol.dodo_discount_code;
                         }
-                        // 歸因綁定（只在尚未綁定時寫入）
                         if (kol.email !== email) {
                             const { data: me } = await sb.from('users').select('referred_by').eq('email', email).maybeSingle();
                             if (me && !me.referred_by) {
@@ -49,12 +48,40 @@ export default async function handler(req, res) {
 
         const finalDiscount = kolDiscountCode || DODO_DISCOUNT_CODE;
 
-        // Dodo session API 的 discount_code 欄位被靜默忽略，無法在 session 中套用折扣。
-        // 改用 direct checkout URL：/buy/{productId}?discount_code=...
-        // Dodo 前端 JS 讀取此格式並自動預填折扣碼欄位。
-        const directUrl = `https://checkout.dodopayments.com/buy/${productId}` +
-            (finalDiscount ? `?discount_code=${encodeURIComponent(finalDiscount)}` : '');
-        return res.json({ checkoutUrl: directUrl, discountApplied: !!finalDiscount });
+        if (!DODO_API_KEY) {
+            return res.status(500).json({ error: 'payment_not_configured' });
+        }
+
+        const dodoBase = DODO_API_KEY.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+        const body = {
+            product_cart: [{ product_id: productId, quantity: 1 }],
+            ...(email && { customer: { email } }),
+            metadata: { planKey: planKey.toUpperCase(), email: email || '' },
+        };
+        if (finalDiscount) body.discount_codes = [finalDiscount];
+
+        try {
+            const apiRes = await fetch(`${dodoBase}/checkouts`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!apiRes.ok) {
+                const errText = await apiRes.text().catch(() => '');
+                console.error('[checkout] Dodo API error:', apiRes.status, errText);
+                return res.status(502).json({ error: 'checkout_api_failed' });
+            }
+            const data = await apiRes.json();
+            let checkoutUrl = data.checkout_url || null;
+            if (checkoutUrl && finalDiscount && !checkoutUrl.includes('discount_code=')) {
+                const sep = checkoutUrl.includes('?') ? '&' : '?';
+                checkoutUrl += `${sep}discount_code=${encodeURIComponent(finalDiscount)}`;
+            }
+            return res.json({ checkoutUrl, discountApplied: !!finalDiscount });
+        } catch (e) {
+            console.error('[checkout] fetch error:', e.message);
+            return res.status(502).json({ error: 'checkout_api_failed' });
+        }
     }
     // ────────────────────────────────────────────────────────────────────────
 

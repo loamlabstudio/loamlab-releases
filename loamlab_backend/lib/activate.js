@@ -13,24 +13,36 @@ export function makeSupabase() {
     );
 }
 
-export async function processTopup(supabase, customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null) {
+export async function processTopup(supabase, customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null, planKey = null) {
     const fullOrderId = `${platform}_${orderId}`;
     const { data: existingTx } = await supabase.from('transactions').select('id').eq('order_id', fullOrderId).maybeSingle();
     if (existingTx) return console.log(`[🔁冪等] ${fullOrderId} 已處理過`);
 
-    const pIds = IDS[platform];
-    if (!pIds) throw new Error(`Unknown platform: ${platform}`);
+    const PLAN_KEY_MAP = {
+        STARTER: { points: 300,  name: 'starter', isSub: true },
+        PRO:     { points: 2000, name: 'pro',     isSub: true },
+        STUDIO:  { points: 9000, name: 'studio',  isSub: true },
+        TOPUP:   { points: 200,  name: null,      isSub: false },
+    };
+
     let pointsToAdd = 0;
     let planName = null;
     let isSubscription = false;
 
-    if (variantId == pIds.STARTER) { pointsToAdd = 300; planName = 'starter'; isSubscription = true; }
-    else if (variantId == pIds.PRO) { pointsToAdd = 2000; planName = 'pro'; isSubscription = true; }
-    else if (variantId == pIds.STUDIO) { pointsToAdd = 9000; planName = 'studio'; isSubscription = true; }
-    else if (variantId == pIds.TOPUP) { pointsToAdd = 200; isSubscription = false; }
+    if (planKey && PLAN_KEY_MAP[planKey.toUpperCase()]) {
+        const m = PLAN_KEY_MAP[planKey.toUpperCase()];
+        pointsToAdd = m.points; planName = m.name; isSubscription = m.isSub;
+    } else {
+        const pIds = IDS[platform];
+        if (!pIds) throw new Error(`Unknown platform: ${platform}`);
+        if (variantId == pIds.STARTER) { pointsToAdd = 300; planName = 'starter'; isSubscription = true; }
+        else if (variantId == pIds.PRO) { pointsToAdd = 2000; planName = 'pro'; isSubscription = true; }
+        else if (variantId == pIds.STUDIO) { pointsToAdd = 9000; planName = 'studio'; isSubscription = true; }
+        else if (variantId == pIds.TOPUP) { pointsToAdd = 200; isSubscription = false; }
+    }
 
     if (pointsToAdd <= 0) {
-        throw new Error(`Unknown product ID: ${variantId} (${platform})`);
+        throw new Error(`Unknown product: planKey=${planKey} variantId=${variantId} (${platform})`);
     }
 
     let kolEmailFromCode = null;
@@ -49,10 +61,6 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
     }
 
     let { data: user } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
-
-    if (isSubscription && user && user.subscription_plan === null) {
-        return console.log(`[🚫跳過] ${customerEmail} 訂閱已取消，不補發點數 (orderId: ${fullOrderId})`);
-    }
 
     if (!user) {
         await supabase.from('users').insert([{

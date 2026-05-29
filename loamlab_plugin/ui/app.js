@@ -3238,7 +3238,7 @@ const LS_VARIANTS = {
 };
 
 
-const BETA_DISCOUNT_CODE = 'LOAM_BETA_30'; // 僅 LemonSqueezy fallback 使用；DODO 折扣碼由後端 DODO_DISCOUNT_CODE env var 管理
+const BETA_DISCOUNT_CODE = 'LOAM_BETA_30';
 const BETA_DISCOUNT_RATE = 0.70; // UI 顯示用（-30% 折扣視覺計算）
 
 function applyBetaDiscountDisplay() {
@@ -3910,10 +3910,11 @@ window.openCheckout = async function (planKey, quantity = 1) {
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            if (!data.checkoutUrl) { showUpdateToast('⚠️ 無法建立結帳連結，請稍後再試'); return; }
             finalUrl = data.checkoutUrl;
         } catch (e) {
             console.error('[checkout]', e);
-            showUpdateToast('⚠️ 無法取得結帳連結，請稍後再試');
+            showUpdateToast('⚠️ 無法建立結帳連結，請稍後再試');
             return;
         }
     } else {

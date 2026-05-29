@@ -691,6 +691,23 @@
                 || '';
         }
 
+        async function handleCheckout(planKey, qty) {
+            const win = window.open('', '_blank');
+            const pk = planKey.replace('-', '');  // "TOP-UP" → "TOPUP"
+            const email = getLeadEmail();
+            try {
+                const res = await fetch('/api/user?action=checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ planKey: pk, email: email || undefined, quantity: qty })
+                });
+                const data = await res.json();
+                if (data.checkoutUrl && win) { win.location.href = data.checkoutUrl; return; }
+            } catch (_) {}
+            if (win) win.close();
+            alert('無法建立結帳連結，請稍後再試或聯絡客服。');
+        }
+
         const bgTicker = document.getElementById('bgTicker');
         const fgTicker = document.getElementById('fgTicker');
         let baseHours = 428;
@@ -1309,7 +1326,7 @@
                     </div>
                     ` : ''}
 
-                    <button onclick="let q = document.getElementById('qty-${plan.id}'); let qv = q ? q.value : 1; let em = getLeadEmail(); let url = '${_DODO}/' + '${plan.checkoutUrl}' + '?quantity=' + qv + '&discount_code=LOAM_BETA_30' + (em ? '&email=' + encodeURIComponent(em) : ''); window.open(url,'_blank')" class="w-full py-4 rounded text-[10px] font-bold tracking-[0.2em] uppercase transition-colors cursor-pointer ${plan.isPopular ? 'bg-w-red text-white hover:bg-red-600' : 'bg-white/10 text-white border border-white/5 hover:bg-white hover:text-black'}">
+                    <button onclick="let q = document.getElementById('qty-${plan.id}'); let qv = q ? parseInt(q.value)||1 : 1; handleCheckout('${plan.id.toUpperCase()}', qv)" class="w-full py-4 rounded text-[10px] font-bold tracking-[0.2em] uppercase transition-colors cursor-pointer ${plan.isPopular ? 'bg-w-red text-white hover:bg-red-600' : 'bg-white/10 text-white border border-white/5 hover:bg-white hover:text-black'}">
                         ${plan.btn[currentLang]}
                     </button>
                 </div>

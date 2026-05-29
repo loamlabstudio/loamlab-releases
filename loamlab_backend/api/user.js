@@ -82,7 +82,7 @@ export default async function handler(req, res) {
             if (!apiRes.ok) {
                 const errText = await apiRes.text().catch(() => '');
                 console.error('[checkout] Dodo API error:', apiRes.status, errText);
-                return res.status(502).json({ error: 'checkout_api_failed' });
+                return res.status(502).json({ error: 'checkout_api_failed', _debug: { status: apiRes.status, body: errText } });
             }
             const data = await apiRes.json();
             let checkoutUrl = data.checkout_url || null;
@@ -94,7 +94,7 @@ export default async function handler(req, res) {
             return res.json({ checkoutUrl, discountApplied: !!appliedDiscount });
         } catch (e) {
             console.error('[checkout] fetch error:', e.message);
-            return res.status(502).json({ error: 'checkout_api_failed' });
+            return res.status(502).json({ error: 'checkout_api_failed', _debug: { fetch_error: e.message } });
         }
     }
     // ────────────────────────────────────────────────────────────────────────

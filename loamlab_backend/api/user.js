@@ -60,12 +60,25 @@ export default async function handler(req, res) {
         };
         if (finalDiscount) body.discount_codes = [finalDiscount];
 
+        const doRequest = (reqBody) => fetch(`${dodoBase}/checkouts`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(reqBody)
+        });
+
         try {
-            const apiRes = await fetch(`${dodoBase}/checkouts`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
+            let apiRes = await doRequest(body);
+            let appliedDiscount = finalDiscount;
+
+            // 若 Dodo 拒絕（折扣碼未綁定此方案），自動 retry 不帶折扣碼
+            if (!apiRes.ok && finalDiscount && body.discount_codes) {
+                const errText = await apiRes.text().catch(() => '');
+                console.warn('[checkout] Dodo rejected with discount, retrying without:', apiRes.status, errText);
+                delete body.discount_codes;
+                apiRes = await doRequest(body);
+                appliedDiscount = null; // 本次 session 不帶折扣，改由 URL 參數讓用戶手動套用
+            }
+
             if (!apiRes.ok) {
                 const errText = await apiRes.text().catch(() => '');
                 console.error('[checkout] Dodo API error:', apiRes.status, errText);
@@ -73,11 +86,12 @@ export default async function handler(req, res) {
             }
             const data = await apiRes.json();
             let checkoutUrl = data.checkout_url || null;
+            // 將折扣碼拼入 URL，讓 Dodo 結帳頁預填折扣欄位
             if (checkoutUrl && finalDiscount && !checkoutUrl.includes('discount_code=')) {
                 const sep = checkoutUrl.includes('?') ? '&' : '?';
                 checkoutUrl += `${sep}discount_code=${encodeURIComponent(finalDiscount)}`;
             }
-            return res.json({ checkoutUrl, discountApplied: !!finalDiscount });
+            return res.json({ checkoutUrl, discountApplied: !!appliedDiscount });
         } catch (e) {
             console.error('[checkout] fetch error:', e.message);
             return res.status(502).json({ error: 'checkout_api_failed' });

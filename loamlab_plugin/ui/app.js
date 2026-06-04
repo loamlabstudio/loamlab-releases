@@ -4528,7 +4528,7 @@ function translateMaterialPrompt(text) {
         '桌子': 'table'
     };
     let result = text;
-    for (const [zh, en] of Object.entries(dict)) result = result.replaceAll(zh, en);
+    for (const [zh, en] of Object.entries(dict)) result = result.split(zh).join(en);
     return result;
 }
 
@@ -4925,9 +4925,12 @@ function openSmartCanvas(channelBase64, renderedUrl, sceneName, keepRegions = fa
             const rect = SmartCanvas.baseImg.getBoundingClientRect();
             const dw = Math.round(rect.width)  || w;
             const dh = Math.round(rect.height) || h;
-            SmartCanvas.canvasW = dw;
-            SmartCanvas.canvasH = dh;
-            _scInitCanvases(dw, dh, channelBase64);
+            
+            // 使用 naturalWidth/Height 作為 Canvas 的邏輯尺寸，保證出圖比例與畫素精度 100% 對齊且不模糊
+            SmartCanvas.canvasW = w;
+            SmartCanvas.canvasH = h;
+            
+            _scInitCanvases(w, h, channelBase64, dw, dh);
             _scBindEvents();
         });
     };
@@ -4956,12 +4959,14 @@ function retryScImageLoad() {
     SmartCanvas.baseImg.src = retryUrl;
 }
 
-function _scInitCanvases(w, h, channelBase64) {
+function _scInitCanvases(w, h, channelBase64, dw = null, dh = null) {
+    const displayW = dw || w;
+    const displayH = dh || h;
     ['sc-channel-canvas', 'sc-highlight-canvas', 'sc-draw-canvas', 'sc-cursor-canvas'].forEach(id => {
         const c = document.getElementById(id);
         if (!c) return;
         c.width = w; c.height = h;
-        c.style.width = w + 'px'; c.style.height = h + 'px';
+        c.style.width = displayW + 'px'; c.style.height = displayH + 'px';
     });
 
     SmartCanvas.channelCanvas = document.getElementById('sc-channel-canvas');
@@ -5111,7 +5116,7 @@ function _scFloodFill(startX, startY) {
     const visited = new Uint8Array(w * h);
     const startIdx = startY * w + startX;
     if (startIdx < 0 || startIdx >= w * h) return mask;
-    if (edges[startIdx]) return mask; // 點在邊線上，返回空遮罩
+    // 點在邊線上，不直接返回空遮罩，防止邊界點擊失效，讓其僅以起點顏色限制向外擴散
     // 採樣起始點顏色
     const COLOR_TOL_SQ = 12000; // ~110 combined（≈63 per channel），讓光影漸層連通
     const sr = pixels ? pixels[startIdx * 4]     : 0;

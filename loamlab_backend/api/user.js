@@ -12,7 +12,8 @@ export default async function handler(req, res) {
 
     // ── Checkout sub-route（不需要 Supabase auth）──────────────────────────
     if (req.method === 'POST' && req.query.action === 'checkout') {
-        const { planKey, email, referralCode } = req.body || {};
+        let { planKey, email, referralCode } = req.body || {};
+        if (email) email = email.toLowerCase().trim();
         if (!planKey) return res.status(400).json({ error: 'Missing planKey' });
         const productId = DODO_PRODUCTS[planKey.toUpperCase()];
         if (!productId) return res.status(400).json({ error: 'Invalid planKey' });
@@ -101,7 +102,8 @@ export default async function handler(req, res) {
 
     // ── Cancel Subscription（用戶確認取消後直接呼叫 Dodo API）──────────────────
     if (req.method === 'POST' && req.query.action === 'cancel_subscription') {
-        const { email: cancelEmail, reason } = req.body || {};
+        let { email: cancelEmail, reason } = req.body || {};
+        if (cancelEmail) cancelEmail = cancelEmail.toLowerCase().trim();
         if (!cancelEmail) return res.status(400).json({ code: -1, msg: 'Missing email' });
 
         const sbUrl = process.env.SUPABASE_URL;
@@ -212,7 +214,8 @@ export default async function handler(req, res) {
 
     // ── Undo Cancel（撤回退訂申請，在週期結束前可呼叫）────────────────────────────
     if (req.method === 'POST' && req.query.action === 'undo_cancel') {
-        const { email: undoEmail } = req.body || {};
+        let { email: undoEmail } = req.body || {};
+        if (undoEmail) undoEmail = undoEmail.toLowerCase().trim();
         if (!undoEmail) return res.status(400).json({ code: -1, msg: 'Missing email' });
 
         const sbUrl2 = process.env.SUPABASE_URL;
@@ -256,7 +259,8 @@ export default async function handler(req, res) {
 
     // ── Save Offer（取消挽留：折扣點數 / 暫停訂閱）無需 IP 驗證，因為從 website 發起 ──
     if (req.method === 'POST' && req.query.action === 'save_offer') {
-        const { email: offerEmail, offer_type, pause_months = 1 } = req.body || {};
+        let { email: offerEmail, offer_type, pause_months = 1 } = req.body || {};
+        if (offerEmail) offerEmail = offerEmail.toLowerCase().trim();
         if (!offerEmail || !offer_type) return res.status(400).json({ code: -1, msg: 'Missing email or offer_type' });
 
         const sbUrl = process.env.SUPABASE_URL;
@@ -346,15 +350,26 @@ export default async function handler(req, res) {
     const isAdmin = process.env.ADMIN_KEY && adminKey === process.env.ADMIN_KEY;
 
     // 先行擷取 email
-    const email = req.query.email || req.headers['x-user-email'] || req.body?.email;
+    let email = req.query.email || req.headers['x-user-email'] || req.body?.email;
+    if (email) email = email.toLowerCase().trim();
 
     // KOL dashboard (email-only, no IP auth — KOL checks own stats)
     if (req.method === 'GET' && req.query.action === 'kol_dashboard') {
         if (!email) return res.status(400).json({ error: 'Missing email' });
-        const { data: kol } = await supabase.from('users')
+        let { data: kol } = await supabase.from('users')
             .select('referral_code, referral_success_count, is_kol, is_partner')
             .eq('email', email).maybeSingle();
         if (!kol?.is_kol && !kol?.is_partner) return res.status(403).json({ error: 'Not a KOL account' });
+        
+        // 自動補發 KOL 邀請碼
+        if (kol && !kol.referral_code) {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let backfillCode = '';
+            for (let i = 0; i < 6; i++) { backfillCode += chars.charAt(Math.floor(Math.random() * chars.length)); }
+            const { error: bfErr } = await supabase.from('users').update({ referral_code: backfillCode }).eq('email', email);
+            if (!bfErr) kol.referral_code = backfillCode;
+        }
+
         if (!kol?.referral_code) return res.status(404).json({ error: 'KOL not found or no referral code' });
 
         const isPartner = !!kol.is_partner;
@@ -448,7 +463,8 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET' && req.query.action === 'verify_payment') {
-        const vEmail = req.headers['x-user-email'];
+        let vEmail = req.headers['x-user-email'];
+        if (vEmail) vEmail = vEmail.toLowerCase().trim();
         if (!vEmail) return res.status(400).json({ code: -1, msg: 'Missing email' });
         const DODO_API_KEY = process.env.DODO_API_KEY;
         if (!DODO_API_KEY) return res.status(503).json({ code: -1, msg: 'DODO_API_KEY not configured' });
@@ -679,7 +695,8 @@ export default async function handler(req, res) {
 
     // --- POST: presets CRUD + history rating ---
     if (req.method === 'POST' && req.body?.action === 'save_preset') {
-        const { email, name, prompt, style, resolution, tool_id } = req.body;
+        let { email, name, prompt, style, resolution, tool_id } = req.body;
+        if (email) email = email.toLowerCase().trim();
         if (!email || !name) return res.status(400).json({ code: -1, msg: 'Missing email or name' });
         try {
             const { data, error } = await supabase
@@ -694,7 +711,8 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST' && req.body?.action === 'delete_preset') {
-        const { email, preset_id } = req.body;
+        let { email, preset_id } = req.body;
+        if (email) email = email.toLowerCase().trim();
         if (!email || !preset_id) return res.status(400).json({ code: -1, msg: 'Missing email or preset_id' });
         try {
             const { error } = await supabase
@@ -710,7 +728,8 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST' && req.body?.action === 'rate_history') {
-        const { email, history_id, rating, is_approved } = req.body;
+        let { email, history_id, rating, is_approved } = req.body;
+        if (email) email = email.toLowerCase().trim();
         if (!email || !history_id) return res.status(400).json({ code: -1, msg: 'Missing email or history_id' });
         try {
             const update = {};
@@ -730,7 +749,8 @@ export default async function handler(req, res) {
 
     // --- POST: Bind referral code (formerly referral.js) ---
     if (req.method === 'POST') {
-        const { email, code } = req.body || {};
+        let { email, code } = req.body || {};
+        if (email) email = email.toLowerCase().trim();
         if (!email || !code) return res.status(400).json({ code: -1, msg: '缺少 Email 或邀請碼' });
 
         try {
@@ -806,7 +826,8 @@ export default async function handler(req, res) {
 
             for (const sub of subs) {
                 const subId   = sub.subscription_id || sub.id;
-                const email   = sub.customer?.email || sub.customer_email;
+                let email   = sub.customer?.email || sub.customer_email;
+                if (email) email = email.toLowerCase().trim();
                 const prodId  = sub.product_id || sub.plan_id || sub.items?.[0]?.product_id;
                 const planCfg = PLAN_MAP[prodId];
 

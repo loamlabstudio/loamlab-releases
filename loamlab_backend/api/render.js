@@ -732,15 +732,32 @@ async function _handleRender(req, res) {
         let finalModel = toolModelMap[`tool${activeTool}`] || 'google/nano-banana-2/edit';
 
         if (activeTool === 2) {
-            const translatedPrompt2 = await translateToEnglish(userPrompt);
             let changes = [];
-            for (const part of (translatedPrompt2 || "").split(';')) {
+            const parts = (userPrompt || "").split(';');
+            for (const part of parts) {
                 const p = part.trim();
                 if (p.includes(': ')) {
                     const spl = p.split(/: (.+)/);
-                    if (spl[0] && spl[1]) {
-                        changes.push(`Zone Color (HEX): ${spl[0].trim()}\n  Target Object: ${spl[1].trim()}`);
+                    const color = spl[0].trim();
+                    let content = spl[1].trim();
+                    
+                    // 提取可能存在的圖片參考後綴（如 see image 3 as visual reference 等）
+                    let refSuffix = "";
+                    const refMatch = content.match(/\(see image \d+ as visual reference\)/i) || 
+                                     content.match(/apply or place what's shown in image \d+/i);
+                    if (refMatch) {
+                        refSuffix = " " + refMatch[0];
+                        content = content.replace(refMatch[0], "").trim();
                     }
+                    
+                    // 只翻譯純文字描述部分
+                    let translatedContent = content;
+                    if (content && !content.toLowerCase().includes("apply or place what's shown")) {
+                        translatedContent = await translateToEnglish(content);
+                    }
+                    
+                    const finalContent = (translatedContent + refSuffix).trim();
+                    changes.push(`Zone Color (HEX): ${color}\n  Target Object: ${finalContent}`);
                 }
             }
             if (changes.length === 0) {

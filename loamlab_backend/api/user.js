@@ -542,19 +542,38 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, activated, msg: activated ? '已成功補發' : '查無未入帳的付款記錄' });
     }
 
+    // --- Admin: 一次性補發所有 referral_code 為空的舊用戶 ---
+    if (req.method === 'GET' && req.query.action === 'backfill_referral_codes') {
+        if (!isAdmin) return res.status(401).json({ code: -1, msg: 'Unauthorized' });
+        try {
+            const { data: users } = await supabase.from('users')
+                .select('email').is('referral_code', null);
+            if (!users?.length) return res.status(200).json({ code: 0, fixed: 0, failed: 0, msg: '所有用戶已有邀請碼' });
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let fixed = 0, failed = 0;
+            for (const u of users) {
+                let ok = false;
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    let code = '';
+                    for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+                    const { error: bfErr } = await supabase.from('users').update({ referral_code: code }).eq('email', u.email);
+                    if (!bfErr) { ok = true; break; }
+                }
+                ok ? fixed++ : failed++;
+            }
+            return res.status(200).json({ code: 0, fixed, failed, total: users.length });
+        } catch (e) {
+            return res.status(500).json({ code: -1, msg: e.message });
+        }
+    }
+
     if (req.method === 'GET') {
         try {
             let { data, error } = await supabase
                 .from('users')
-                .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending')
+                .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending, referral_success_count')
                 .eq('email', email)
                 .single();
-
-            const { count: referralSuccessCount } = await supabase
-                .from('users')
-                .select('id', { count: 'exact', head: true })
-                .eq('referred_by', email)
-                .eq('referral_rewarded', true);
 
             if (error && error.code === 'PGRST116') {
                 const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -577,14 +596,16 @@ export default async function handler(req, res) {
                 return res.status(500).json({ code: -1, msg: error.message });
             }
 
-            // 舊用戶自動補發邀請碼
+            // 舊用戶自動補發邀請碼（最多 3 次 retry，防 UNIQUE 碰撞）
             if (data && !data.referral_code) {
                 const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-                let backfillCode = '';
-                for (let i = 0; i < 6; i++) { backfillCode += chars.charAt(Math.floor(Math.random() * chars.length)); }
-                
-                const { error: bfErr } = await supabase.from('users').update({ referral_code: backfillCode }).eq('email', email);
-                if (!bfErr) data.referral_code = backfillCode;
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    let code = '';
+                    for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+                    const { error: bfErr } = await supabase.from('users').update({ referral_code: code }).eq('email', email);
+                    if (!bfErr) { data.referral_code = code; break; }
+                    if (attempt === 2) console.error('[backfill] referral_code 補發失敗:', email, bfErr.message);
+                }
             }
 
             // 靜默自動修復：用戶有帳、無訂閱 → 主動查 Dodo 補發
@@ -646,7 +667,7 @@ export default async function handler(req, res) {
                 referral_code: data ? data.referral_code : null,
                 display_code: displayCode,
                 referred_by: data ? data.referred_by : null,
-                referral_success_count: referralSuccessCount || 0,
+                referral_success_count: data ? (data.referral_success_count || 0) : 0,
                 is_kol: data ? (data.is_kol || false) : false,
                 is_partner: data ? (data.is_partner || false) : false,
                 cancel_pending: data ? (data.cancel_pending || false) : false,

@@ -1498,66 +1498,114 @@ async function paymentAudit(supabase) {
 }
 
 // ── 流失分析 ──────────────────────────────────────────────────────────────────
+// 正確定義：「流失訂閱者」= 曾有 TOPUP_SUBSCRIPTION 交易，但現在 subscription_plan = null
+// 不依賴 last_topup_at（那對單次充值用戶也會設定，無法區分）
 async function churnStats(supabase) {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+    const d30 = new Date(Date.now() - 30 * 24 * 3600e3).toISOString();
+    const d90 = new Date(Date.now() - 90 * 24 * 3600e3).toISOString();
 
-    const [reasonsRes, retentionRes, cancelPendingRes, recentChurnRes] = await Promise.all([
-        // 所有退訂原因（feedback 表）
+    const PLAN_CENTS = { 700: 'Starter', 1500: 'Pro', 3500: 'Studio' };
+
+    // Step 1：並行查詢基礎數據
+    const [activeRes, reasonsRes, retentionRes, pendingRes, subTxnRes] = await Promise.all([
+        // 活躍訂閱者數
+        supabase.from('users')
+            .select('*', { count: 'exact', head: true })
+            .not('subscription_plan', 'is', null)
+            .not('email', 'ilike', '%test%'),
+        // 退訂原因（feedback 表，走完取消流程才會寫入）
         supabase.from('feedback')
-            .select('content, created_at')
+            .select('content, user_email, created_at')
             .eq('type', 'unsubscribe_reason')
             .order('created_at', { ascending: false })
-            .limit(500),
-        // 近 30 天挽留優惠接受記錄
+            .limit(300),
+        // 近 30 天挽留優惠接受
         supabase.from('transactions')
-            .select('transaction_type, created_at')
+            .select('transaction_type, user_email, created_at')
             .in('transaction_type', ['RETENTION_BONUS', 'RETENTION_PAUSE'])
-            .gte('created_at', thirtyDaysAgo),
-        // 待取消用戶（cancel_pending = true）
+            .gte('created_at', d30),
+        // 待取消用戶（已申請、待週期末執行）
         supabase.from('users')
             .select('email, subscription_plan, last_topup_at')
             .eq('cancel_pending', true)
             .not('email', 'ilike', '%test%')
-            .order('last_topup_at', { ascending: false })
             .limit(50),
-        // 近期流失：subscription_plan = null 但曾經有過 last_topup_at（代表前訂閱者）
-        supabase.from('users')
-            .select('email, last_topup_at')
-            .is('subscription_plan', null)
-            .not('last_topup_at', 'is', null)
-            .gte('last_topup_at', thirtyDaysAgo)
-            .not('email', 'ilike', '%test%')
-            .order('last_topup_at', { ascending: false })
-            .limit(30),
+        // 近 90 天 TOPUP_SUBSCRIPTION 交易（用於精確判斷誰是「曾訂閱者」）
+        supabase.from('transactions')
+            .select('user_email, created_at, amount_usd_cents')
+            .eq('transaction_type', 'TOPUP_SUBSCRIPTION')
+            .gte('created_at', d90)
+            .order('created_at', { ascending: false })
+            .limit(600),
     ]);
 
-    // 原因分佈統計（全時間 + 近 30 天）
-    const allReasons = reasonsRes.data || [];
-    const recentReasons = allReasons.filter(r => r.created_at >= thirtyDaysAgo);
+    // Step 2：從 TOPUP_SUBSCRIPTION 推算每個訂閱用戶的最後付款時間與方案
+    const emailLatest = {};
+    (subTxnRes.data || []).forEach(t => {
+        if (!emailLatest[t.user_email] || t.created_at > emailLatest[t.user_email].at) {
+            emailLatest[t.user_email] = { at: t.created_at, cents: t.amount_usd_cents };
+        }
+    });
+    const subEmails = Object.keys(emailLatest);
 
+    // Step 3：查這些曾訂閱用戶的當前狀態，找出 subscription_plan = null 的（流失）
+    let churnedList = [];
+    if (subEmails.length > 0) {
+        const batchSize = 200;
+        let allChurned = [];
+        for (let i = 0; i < subEmails.length; i += batchSize) {
+            const batch = subEmails.slice(i, i + batchSize);
+            const { data } = await supabase.from('users')
+                .select('email, subscription_plan, last_topup_at')
+                .in('email', batch)
+                .is('subscription_plan', null)
+                .not('email', 'ilike', '%test%');
+            allChurned = allChurned.concat(data || []);
+        }
+        churnedList = allChurned.map(u => ({
+            email: u.email,
+            last_sub_at: emailLatest[u.email]?.at,
+            plan: PLAN_CENTS[emailLatest[u.email]?.cents] || '未知',
+        })).sort((a, b) => (b.last_sub_at || '').localeCompare(a.last_sub_at || ''));
+    }
+
+    const churned30d = churnedList.filter(u => (u.last_sub_at || '') >= d30);
+
+    // Step 4：為流失用戶附上退訂原因（如果有走完取消流程）
+    const reasonByEmail = {};
+    (reasonsRes.data || []).forEach(r => { if (!reasonByEmail[r.user_email]) reasonByEmail[r.user_email] = r.content; });
+    const churnedWithContext = churned30d.map(u => ({ ...u, cancel_reason: reasonByEmail[u.email] || null }));
+
+    // 退訂原因分佈
     function groupByReason(arr) {
         const map = {};
         arr.forEach(r => { map[r.content] = (map[r.content] || 0) + 1; });
         return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([reason, count]) => ({ reason, count }));
     }
 
+    const allReasons = reasonsRes.data || [];
+    const reasons30d = allReasons.filter(r => r.created_at >= d30);
     const retention = retentionRes.data || [];
     const discountAccepted = retention.filter(t => t.transaction_type === 'RETENTION_BONUS').length;
     const pauseAccepted = retention.filter(t => t.transaction_type === 'RETENTION_PAUSE').length;
-    const totalRetained = discountAccepted + pauseAccepted;
-    const retentionRate = recentReasons.length > 0
-        ? Math.round(totalRetained / recentReasons.length * 100)
+
+    // 挽留成功率 = 接受挽留 / (接受挽留 + 實際流失)，分母基於近 30 天
+    const retentionDenom = discountAccepted + pauseAccepted + churned30d.length;
+    const retentionRate = retentionDenom > 0
+        ? Math.round((discountAccepted + pauseAccepted) / retentionDenom * 100)
         : 0;
 
     return {
-        total_cancellations: allReasons.length,
-        cancellations_30d: recentReasons.length,
-        reason_breakdown: groupByReason(allReasons),
-        recent_reason_breakdown: groupByReason(recentReasons),
+        active_subscribers: activeRes.count || 0,
+        churned_30d: churned30d.length,
+        churned_90d: churnedList.length,
+        reason_breakdown_all: groupByReason(allReasons),
+        reason_breakdown_30d: groupByReason(reasons30d),
+        reason_records_total: allReasons.length,
         discount_accepted_30d: discountAccepted,
         pause_accepted_30d: pauseAccepted,
         retention_rate_30d: retentionRate,
-        cancel_pending_users: cancelPendingRes.data || [],
-        recent_churned_users: recentChurnRes.data || [],
+        cancel_pending_users: pendingRes.data || [],
+        churned_users_30d: churnedWithContext,
     };
 }

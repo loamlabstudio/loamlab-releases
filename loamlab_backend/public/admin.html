@@ -986,55 +986,75 @@
     <!-- ── 流失分析 ─────────────────────────────────────────────────────── -->
     <div class="card mt-5 border border-rose-600/30 bg-[#1a0a0f]/40">
       <div class="flex items-center justify-between mb-4">
-        <div class="text-sm font-semibold text-white flex items-center gap-2">
-          <span class="text-rose-400">📉</span> 流失分析
-          <span class="text-xs text-gray-600 font-normal">退訂原因 · 挽留成功率 · 近期流失用戶</span>
+        <div>
+          <div class="text-sm font-semibold text-white flex items-center gap-2">
+            <span class="text-rose-400">📉</span> 流失分析
+          </div>
+          <div class="text-xs text-gray-600 mt-0.5">定義：曾有訂閱付款，但訂閱已終止（非單次充值用戶）</div>
         </div>
         <button onclick="loadChurnStats()" class="px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600/60 rounded-lg text-xs text-rose-300 transition-colors">↺ 重新載入</button>
       </div>
 
-      <!-- KPI 行 -->
-      <div class="grid grid-cols-3 gap-3 mb-5" id="churn-kpi-row">
-        <div class="bg-black/30 rounded-xl p-3 text-center">
-          <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">近 30 天退訂</div>
+      <!-- KPI 行：4 個核心數字 + 說明 -->
+      <div class="grid grid-cols-4 gap-3 mb-5">
+        <div class="bg-black/30 rounded-xl p-3">
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">活躍訂閱者</div>
+          <div class="text-2xl font-bold text-white" id="churn-kpi-active">--</div>
+          <div class="text-[10px] text-gray-600 mt-1">目前有效方案</div>
+        </div>
+        <div class="bg-black/30 rounded-xl p-3">
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">30 天流失</div>
           <div class="text-2xl font-bold text-rose-400" id="churn-kpi-30d">--</div>
+          <div class="text-[10px] text-gray-600 mt-1" id="churn-kpi-30d-rate">佔活躍 --%</div>
         </div>
-        <div class="bg-black/30 rounded-xl p-3 text-center">
-          <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">挽留成功率</div>
+        <div class="bg-black/30 rounded-xl p-3">
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">挽留成功率</div>
           <div class="text-2xl font-bold text-emerald-400" id="churn-kpi-rate">--</div>
-          <div class="text-xs text-gray-600 mt-0.5" id="churn-kpi-retained">折扣 -- · 暫停 --</div>
+          <div class="text-[10px] text-gray-600 mt-1" id="churn-kpi-retained">折扣 -- · 暫停 --</div>
         </div>
-        <div class="bg-black/30 rounded-xl p-3 text-center">
-          <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">待取消用戶</div>
+        <div class="bg-black/30 rounded-xl p-3">
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">待取消中</div>
           <div class="text-2xl font-bold text-yellow-400" id="churn-kpi-pending">--</div>
-          <div class="text-xs text-gray-600 mt-0.5">cancel_pending = true</div>
+          <div class="text-[10px] text-gray-600 mt-1">週期末自動終止</div>
         </div>
       </div>
 
-      <!-- 退訂原因分佈（近 30 天）-->
+      <!-- 近 30 天流失訂閱者清單（主要內容）-->
       <div class="mb-5">
-        <div class="text-xs font-semibold text-white/60 uppercase tracking-widest mb-3">退訂原因分佈 — 近 30 天</div>
-        <div id="churn-reasons-bars" class="space-y-2">
-          <div class="text-xs text-gray-600 text-center py-4">載入中...</div>
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-xs font-semibold text-white/70">近 30 天流失訂閱者</div>
+          <div class="text-[10px] text-gray-600" id="churn-reason-coverage"></div>
         </div>
-        <div class="mt-3 text-right">
-          <button onclick="toggleAllTimeReasons()" id="btn-toggle-alltime" class="text-xs text-gray-500 hover:text-gray-300 transition-colors">▾ 顯示全時間原因分佈</button>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs" id="churn-table">
+            <thead>
+              <tr class="text-gray-600 border-b border-white/5 uppercase tracking-wider text-[10px]">
+                <th class="text-left pb-2 font-medium">Email</th>
+                <th class="text-left pb-2 font-medium whitespace-nowrap">方案</th>
+                <th class="text-left pb-2 font-medium whitespace-nowrap">最後付款</th>
+                <th class="text-left pb-2 font-medium">退訂原因</th>
+              </tr>
+            </thead>
+            <tbody id="churn-users-tbody">
+              <tr><td colspan="4" class="py-4 text-center text-gray-600">載入中...</td></tr>
+            </tbody>
+          </table>
         </div>
-        <div id="churn-reasons-alltime" class="hidden mt-3 space-y-2"></div>
       </div>
 
-      <!-- 兩欄：待取消 + 近期流失 -->
+      <!-- 退訂原因分佈 + 待取消用戶（次要，折疊） -->
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <div class="text-xs font-semibold text-white/60 uppercase tracking-widest mb-2">⏳ 待取消用戶</div>
-          <div id="churn-pending-list" class="space-y-1.5">
-            <div class="text-xs text-gray-600 text-center py-3">載入中...</div>
+          <div class="text-xs font-semibold text-white/50 uppercase tracking-widest mb-2">退訂原因分佈</div>
+          <div id="churn-reasons-bars" class="space-y-2 text-xs">
+            <div class="text-gray-600 text-center py-2">載入中...</div>
           </div>
+          <div class="mt-2 text-[10px] text-gray-700" id="churn-reason-note"></div>
         </div>
         <div>
-          <div class="text-xs font-semibold text-white/60 uppercase tracking-widest mb-2">🚪 近 30 天流失</div>
-          <div id="churn-recent-list" class="space-y-1.5">
-            <div class="text-xs text-gray-600 text-center py-3">載入中...</div>
+          <div class="text-xs font-semibold text-white/50 uppercase tracking-widest mb-2">⏳ 待取消用戶（申請中）</div>
+          <div id="churn-pending-list" class="space-y-1.5">
+            <div class="text-xs text-gray-600 text-center py-2">載入中...</div>
           </div>
         </div>
       </div>
@@ -3695,17 +3715,17 @@ async function resolveWebhookError(id) {
 }
 
 // ── 流失分析 ──────────────────────────────────────────────────────────────────
-let _churnData = null;
-
 async function loadChurnStats() {
-  // 重置狀態
-  ['churn-kpi-30d','churn-kpi-rate','churn-kpi-pending'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = '--';
+  // 重置
+  ['churn-kpi-active','churn-kpi-30d','churn-kpi-rate','churn-kpi-pending'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.textContent = '--';
   });
-  document.getElementById('churn-reasons-bars').innerHTML = '<div class="text-xs text-gray-600 text-center py-4">載入中...</div>';
-  document.getElementById('churn-pending-list').innerHTML = '<div class="text-xs text-gray-600 text-center py-3">載入中...</div>';
-  document.getElementById('churn-recent-list').innerHTML = '<div class="text-xs text-gray-600 text-center py-3">載入中...</div>';
+  document.getElementById('churn-users-tbody').innerHTML =
+    '<tr><td colspan="4" class="py-4 text-center text-gray-600">載入中...</td></tr>';
+  document.getElementById('churn-reasons-bars').innerHTML =
+    '<div class="text-gray-600 text-center py-2">載入中...</div>';
+  document.getElementById('churn-pending-list').innerHTML =
+    '<div class="text-xs text-gray-600 text-center py-2">載入中...</div>';
 
   let data;
   try {
@@ -3715,76 +3735,91 @@ async function loadChurnStats() {
     const j = await r.json();
     if (j.code !== 0) throw new Error(j.msg);
     data = j.data;
-    _churnData = data;
   } catch (e) {
-    document.getElementById('churn-reasons-bars').innerHTML = `<div class="text-xs text-red-400 text-center py-4">載入失敗：${e.message}</div>`;
+    document.getElementById('churn-users-tbody').innerHTML =
+      `<tr><td colspan="4" class="py-4 text-center text-red-400 text-xs">載入失敗：${e.message}</td></tr>`;
     return;
   }
 
-  // KPI
-  document.getElementById('churn-kpi-30d').textContent = data.cancellations_30d ?? '--';
-  document.getElementById('churn-kpi-rate').textContent = `${data.retention_rate_30d ?? '--'}%`;
-  document.getElementById('churn-kpi-retained').textContent = `折扣 ${data.discount_accepted_30d} · 暫停 ${data.pause_accepted_30d}`;
-  document.getElementById('churn-kpi-pending').textContent = data.cancel_pending_users?.length ?? '--';
+  // ── KPI ──
+  const active = data.active_subscribers || 0;
+  const churned30d = data.churned_30d || 0;
+  const churnRate = active > 0 ? Math.round(churned30d / active * 100) : 0;
 
-  // 近 30 天原因分佈
-  renderReasonBars('churn-reasons-bars', data.recent_reason_breakdown || []);
-  renderReasonBars('churn-reasons-alltime', data.reason_breakdown || []);
+  document.getElementById('churn-kpi-active').textContent = active;
+  document.getElementById('churn-kpi-30d').textContent = churned30d;
+  document.getElementById('churn-kpi-30d-rate').textContent =
+    active > 0 ? `佔活躍 ${churnRate}%` : '無活躍訂閱者';
+  document.getElementById('churn-kpi-rate').textContent = `${data.retention_rate_30d ?? 0}%`;
+  document.getElementById('churn-kpi-retained').textContent =
+    `折扣 ${data.discount_accepted_30d} · 暫停 ${data.pause_accepted_30d}`;
+  document.getElementById('churn-kpi-pending').textContent =
+    (data.cancel_pending_users || []).length;
 
-  // 待取消用戶
+  // ── 流失用戶清單（有方案+原因） ──
+  const users = data.churned_users_30d || [];
+  const reasonCoverage = users.length > 0
+    ? users.filter(u => u.cancel_reason).length
+    : 0;
+
+  document.getElementById('churn-reason-coverage').textContent =
+    users.length > 0
+      ? `${reasonCoverage}/${users.length} 人有填退訂原因`
+      : '';
+
+  const tbody = document.getElementById('churn-users-tbody');
+  if (users.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-gray-600 text-xs">✅ 近 30 天無流失訂閱者</td></tr>';
+  } else {
+    const planColor = { 'Starter': '#60a5fa', 'Pro': '#a78bfa', 'Studio': '#f59e0b' };
+    tbody.innerHTML = users.map(u => {
+      const color = planColor[u.plan] || '#6b7280';
+      const dateStr = u.last_sub_at
+        ? new Date(u.last_sub_at).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
+        : '-';
+      const reason = u.cancel_reason
+        ? `<span class="text-gray-300">${u.cancel_reason}</span>`
+        : '<span class="text-gray-600 italic">未走取消流程</span>';
+      return `<tr class="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+        <td class="py-2 pr-3 text-indigo-300">${u.email}</td>
+        <td class="py-2 pr-3 whitespace-nowrap"><span class="font-semibold" style="color:${color}">${u.plan}</span></td>
+        <td class="py-2 pr-3 text-gray-500 whitespace-nowrap">${dateStr}</td>
+        <td class="py-2 text-xs">${reason}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── 退訂原因分佈（全時間，有填才顯示） ──
+  const reasons = data.reason_breakdown_all || [];
+  const reasonsEl = document.getElementById('churn-reasons-bars');
+  const noteEl = document.getElementById('churn-reason-note');
+  if (reasons.length === 0) {
+    reasonsEl.innerHTML = '<div class="text-gray-600 text-center py-2 text-[11px]">暫無資料</div>';
+    noteEl.textContent = '退訂原因僅在用戶主動走完取消流程時記錄。目前多數用戶由 Dodo 直接終止，不經過取消 UI。';
+  } else {
+    const max = reasons[0].count;
+    const colors = ['#f43f5e','#fb923c','#facc15','#34d399','#60a5fa','#a78bfa'];
+    reasonsEl.innerHTML = reasons.map((item, i) => {
+      const pct = Math.round(item.count / max * 100);
+      const c = colors[i % colors.length];
+      return `<div class="flex items-center gap-2">
+        <div class="w-32 shrink-0 text-gray-400 text-[11px] truncate" title="${item.reason}">${item.reason}</div>
+        <div class="flex-1 bg-black/30 rounded-full h-1.5"><div class="h-full rounded-full" style="width:${pct}%;background:${c}"></div></div>
+        <div class="w-5 text-right text-[11px] font-semibold shrink-0" style="color:${c}">${item.count}</div>
+      </div>`;
+    }).join('');
+    noteEl.textContent = `共 ${data.reason_records_total} 筆退訂原因記錄（全時間）`;
+  }
+
+  // ── 待取消用戶 ──
   const pendingEl = document.getElementById('churn-pending-list');
   const pending = data.cancel_pending_users || [];
   pendingEl.innerHTML = pending.length === 0
-    ? '<div class="text-xs text-gray-600 text-center py-3">✅ 無待取消用戶</div>'
-    : pending.map(u => `<div class="flex items-center justify-between bg-black/20 rounded-lg px-3 py-2">
+    ? '<div class="text-xs text-gray-600 text-center py-2">✅ 無待取消用戶</div>'
+    : pending.map(u => `<div class="flex items-center gap-2 bg-black/20 rounded-lg px-3 py-1.5">
         <span class="text-xs text-yellow-300 truncate flex-1">${u.email}</span>
-        <span class="text-xs text-gray-500 ml-2 shrink-0">${u.subscription_plan || '-'}</span>
+        <span class="text-[10px] text-gray-600 shrink-0">${u.subscription_plan || '-'}</span>
       </div>`).join('');
-
-  // 近期流失用戶
-  const recentEl = document.getElementById('churn-recent-list');
-  const churned = data.recent_churned_users || [];
-  recentEl.innerHTML = churned.length === 0
-    ? '<div class="text-xs text-gray-600 text-center py-3">近 30 天無流失記錄</div>'
-    : churned.map(u => `<div class="flex items-center justify-between bg-black/20 rounded-lg px-3 py-2">
-        <span class="text-xs text-rose-300 truncate flex-1">${u.email}</span>
-        <span class="text-xs text-gray-500 ml-2 shrink-0">${u.last_topup_at ? new Date(u.last_topup_at).toLocaleDateString('zh-TW') : '-'}</span>
-      </div>`).join('');
-}
-
-function renderReasonBars(containerId, breakdown) {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  if (!breakdown.length) {
-    el.innerHTML = '<div class="text-xs text-gray-600 text-center py-3">暫無數據</div>';
-    return;
-  }
-  const max = breakdown[0].count;
-  const colors = ['#f43f5e','#fb923c','#facc15','#34d399','#60a5fa','#a78bfa','#f472b6'];
-  el.innerHTML = breakdown.map((item, i) => {
-    const pct = Math.round(item.count / max * 100);
-    const color = colors[i % colors.length];
-    return `<div class="flex items-center gap-3">
-      <div class="text-xs text-gray-400 w-40 shrink-0 truncate" title="${item.reason}">${item.reason}</div>
-      <div class="flex-1 bg-black/30 rounded-full h-1.5 overflow-hidden">
-        <div class="h-full rounded-full transition-all" style="width:${pct}%;background:${color}"></div>
-      </div>
-      <div class="text-xs font-semibold w-6 text-right shrink-0" style="color:${color}">${item.count}</div>
-    </div>`;
-  }).join('');
-}
-
-function toggleAllTimeReasons() {
-  const el = document.getElementById('churn-reasons-alltime');
-  const btn = document.getElementById('btn-toggle-alltime');
-  if (el.classList.contains('hidden')) {
-    el.classList.remove('hidden');
-    btn.textContent = '▴ 收起全時間原因';
-    if (_churnData) renderReasonBars('churn-reasons-alltime', _churnData.reason_breakdown || []);
-  } else {
-    el.classList.add('hidden');
-    btn.textContent = '▾ 顯示全時間原因分佈';
-  }
 }
 </script>
 <!-- ── 發信審核 Modal ── -->

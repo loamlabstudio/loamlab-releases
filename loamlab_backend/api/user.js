@@ -206,7 +206,10 @@ export default async function handler(req, res) {
                     }
                 }
             }
-        } catch (_) {}
+        } catch (portalErr) {
+            console.error('[cancel_subscription] Portal URL generation failed:', portalErr.message);
+            return res.status(200).json({ code: 3, msg: '取消請求暫時無法處理，請聯繫客服 support@loamlab.studio', support_email: 'support@loamlab.studio' });
+        }
 
         return res.status(200).json({ code: 2, portal_url: dynamicPortalUrl, msg: 'api_error_fallback' });
     }
@@ -312,25 +315,30 @@ export default async function handler(req, res) {
                 .eq('email', offerEmail);
 
             const subscriptionId = user.dodo_subscription_id;
-            if (!subscriptionId || !process.env.DODO_API_KEY) {
+            const DODO_API_KEY_PAUSE = process.env.DODO_API_KEY;
+            if (!subscriptionId || !DODO_API_KEY_PAUSE) {
                 await markPauseUsed();
                 return res.status(200).json({ code: 0, msg: `暫停申請已收到，我們將在 24 小時內為您處理，${new Date(resumeAt).toLocaleDateString('zh-TW')} 後自動恢復`, pending: true });
             }
+            const dodoBasePause = DODO_API_KEY_PAUSE.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
 
             try {
-                const apiRes = await fetch(`https://live.dodopayments.com/subscriptions/${subscriptionId}/pause`, {
+                const apiRes = await fetch(`${dodoBasePause}/subscriptions/${subscriptionId}/pause`, {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${process.env.DODO_API_KEY}`, 'Content-Type': 'application/json' },
+                    headers: { 'Authorization': `Bearer ${DODO_API_KEY_PAUSE}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ resume_at: resumeAt })
                 });
-                await markPauseUsed();
                 if (!apiRes.ok) {
-                    console.error('[save_offer/pause] Dodo API error:', apiRes.status, await apiRes.text());
-                    return res.status(200).json({ code: 0, msg: `暫停申請已記錄，我們將盡快為您處理`, pending: true });
+                    const errText = await apiRes.text().catch(() => '');
+                    console.error('[save_offer/pause] Dodo API error:', apiRes.status, errText);
+                    // 不標記 retention_offer_used，讓用戶可以重試
+                    return res.status(200).json({ code: 1, msg: '暫停請求失敗，請稍後重試或聯繫客服', fallback: true });
                 }
+                await markPauseUsed();
                 return res.status(200).json({ code: 0, msg: `訂閱已暫停 ${months} 個月，${new Date(resumeAt).toLocaleDateString('zh-TW')} 自動恢復`, resume_at: resumeAt });
             } catch (e) {
-                return res.status(500).json({ code: -1, msg: e.message });
+                console.error('[save_offer/pause] fetch error:', e.message);
+                return res.status(200).json({ code: 1, msg: '暫停請求失敗，請稍後重試或聯繫客服', fallback: true });
             }
         }
 
@@ -621,7 +629,7 @@ export default async function handler(req, res) {
                     const subRes = await Promise.race([
                         fetch(`${dodoBase}/subscriptions?customer_email=${encodeURIComponent(email)}&status=active&limit=3`,
                             { headers: { Authorization: `Bearer ${process.env.DODO_API_KEY}` } }),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
                     ]);
                     if (subRes.ok) {
                         const subs = (await subRes.json()).items || [];

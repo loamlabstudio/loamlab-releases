@@ -2576,7 +2576,12 @@ function _cfAcceptOffer(offerType, pauseMonths) {
         signal: ctrl.signal
     }).then(function(r){ return r.json(); }).then(function(data){
         clearTimeout(timer);
-        _cfRenderStep3(data.code === 0, data.code === 0 ? ct.done_sub : (data.msg || ''));
+        if (data.code === 0) {
+            _cfRenderStep3(true, ct.done_sub);
+        } else {
+            // code:1 = pause API 失敗；code:-1 = 其他錯誤 → 顯示客服聯絡畫面
+            _cfRenderStep3(false, '');
+        }
     }).catch(function(){
         clearTimeout(timer);
         _cfRenderStep3(false, '');
@@ -2609,11 +2614,15 @@ function _cfConfirmCancel() {
             window.loamlabCancelPending = true;
             updateCancelPendingBanner(true);
             _cfRenderStep3(true, _cfCancelDoneMsg(ct));
-        } else {
-            if (data.portal_url && window.sketchup) {
+        } else if (data.code === 2 && data.portal_url) {
+            // code:2 = API 失敗但有 portal URL → 開啟瀏覽器讓用戶手動操作
+            if (window.sketchup) {
                 try { sketchup.open_browser(data.portal_url); } catch(_) {}
             }
-            _cfRenderStep3(false, data.portal_url || '');
+            _cfRenderStep3(false, data.portal_url);
+        } else {
+            // code:3 = portal 也失敗 / 無法聯絡 Dodo → 顯示客服聯絡畫面
+            _cfRenderStep3(false, '');
         }
     }).catch(function(){
         clearTimeout(timer);

@@ -344,3 +344,8 @@ CREATE INDEX IF NOT EXISTS idx_transactions_email      ON public.transactions (u
 CREATE INDEX IF NOT EXISTS idx_transactions_type_created ON public.transactions (transaction_type, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_feedback_type           ON public.feedback (type);
 CREATE INDEX IF NOT EXISTS idx_feedback_created        ON public.feedback (created_at DESC);
+
+-- ==============================================================================
+-- Phase 27: webhook_errors 加 email_sent 欄位（激活失敗通知防重複）
+-- ==============================================================================
+ALTER TABLE public.webhook_errors ADD COLUMN IF NOT EXISTS email_sent BOOLEAN DEFAULT false;

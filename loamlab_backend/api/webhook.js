@@ -64,16 +64,54 @@ export default async function handler(req, res) {
                 }
 
                 if (customerEmail && (variantId || planKey) && orderId) {
-                    try {
-                        await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey);
-                    } catch (e) {
-                        await logWebhookError('DODO', event.type, orderId, customerEmail, e.message, data);
-                        throw e; // 讓外層回傳 500，Dodo 會重試
+                    // 精確比對：先查 order_id 是否已存在（最可靠的冪等鍵）
+                    const exactOrderId = `DODO_${orderId}`;
+                    const { data: exactMatch } = await supabase.from('transactions')
+                        .select('id').eq('order_id', exactOrderId).maybeSingle();
+                    if (exactMatch) {
+                        console.log(`[🔁冪等-精確] ${exactOrderId} 已處理，跳過`);
+                        if (data.subscription_id) {
+                            await supabase.from('users')
+                                .update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
+                                .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
+                        }
+                        return res.status(200).json({ received: true, reason: 'already_processed' });
+                    }
+
+                    // 月份兜底：同週期不同 order_id 格式（例如 subscription.active 與 payment.succeeded 各自處理）
+                    const nowPeriod = new Date().toISOString().substring(0, 7); // "YYYY-MM"
+                    const periodStart = `${nowPeriod}-01T00:00:00Z`;
+                    const { data: existingPay, error: dedupPayErr } = await supabase
+                        .from('transactions')
+                        .select('id, order_id')
+                        .eq('user_email', customerEmail)
+                        .eq('transaction_type', 'TOPUP_SUBSCRIPTION')
+                        .gte('created_at', periodStart)
+                        .limit(1);
+                    if (!dedupPayErr && existingPay?.length > 0) {
+                        console.log(`[Dodo] payment.succeeded skipped — 本週期已有記錄: ${existingPay[0].order_id}`);
+                        if (data.subscription_id) {
+                            await supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
+                                .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
+                        }
+                    } else {
+                        try {
+                            await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey);
+                        } catch (e) {
+                            await logWebhookError('DODO', event.type, orderId, customerEmail, e.message, data);
+                            await sendActivationFailureEmail(customerEmail, orderId);
+                            throw e; // 讓外層回傳 500，Dodo 會重試
+                        }
                     }
                 } else {
                     await logWebhookError('DODO', event.type, orderId, customerEmail || 'unknown', `Missing fields: variantId=${variantId} planKey=${planKey} orderId=${orderId}`, data);
-                    // 結構性缺欄位，重試無法修復，回傳 200 停止 Dodo 無限重試；已記錄於 webhook_errors
-                    return res.status(200).json({ status: 'logged', reason: 'missing_fields' });
+                    if (!process.env.DODO_API_KEY) {
+                        // API key 缺失，重試無意義 → 通知用戶 + 停止重試
+                        if (customerEmail) await sendActivationFailureEmail(customerEmail, orderId);
+                        return res.status(200).json({ status: 'logged', reason: 'api_key_missing' });
+                    }
+                    // key 存在但 lookup 暫失敗 → 回 500 讓 Dodo 繼續重試
+                    return res.status(500).json({ error: 'product_lookup_failed_retry' });
                 }
             }
             
@@ -86,7 +124,22 @@ export default async function handler(req, res) {
                     await supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
                         .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
                 }
-                if (customerEmail && data.subscription_id && subProductId) {
+                // 若 payload 缺 product_id，嘗試從 DB 現有訂閱方案反推（處理 Dodo 欄位缺失的情況）
+                let resolvedProductId = subProductId;
+                if (customerEmail && data.subscription_id && !resolvedProductId) {
+                    const { data: existUser } = await supabase.from('users')
+                        .select('subscription_plan').eq('email', customerEmail).maybeSingle();
+                    if (existUser?.subscription_plan) {
+                        resolvedProductId = existUser.subscription_plan; // 'starter'/'pro'/'studio' 可被 processTopup 識別為 planKey
+                        console.log(`[Dodo] ${event.type} 缺 product_id，從 DB 反推: ${resolvedProductId}`);
+                    } else {
+                        console.warn(`[Dodo] ${event.type} 缺 product_id 且 DB 無訂閱記錄: ${customerEmail}`);
+                        await logWebhookError('DODO', event.type, data.subscription_id, customerEmail, 'Missing product_id and no DB plan fallback', data);
+                        await sendActivationFailureEmail(customerEmail, data.subscription_id);
+                    }
+                }
+
+                if (customerEmail && data.subscription_id && resolvedProductId) {
                     // fallbackOrderId 使用 current_period_start（確保同週期冪等）
                     const rawPeriod = data.current_period_start || new Date().toISOString();
                     const period = rawPeriod.substring(0, 7); // "YYYY-MM"
@@ -108,7 +161,7 @@ export default async function handler(req, res) {
                     } else {
                         // 真正的 fallback：本週期尚無任何激活記錄
                         try {
-                            await processTopup(supabase, customerEmail, subProductId, fallbackOrderId, 'DODO', null, data.subscription_id);
+                            await processTopup(supabase, customerEmail, resolvedProductId, fallbackOrderId, 'DODO', null, data.subscription_id);
                             console.log(`[Dodo] ${event.type} fallback processTopup OK: ${customerEmail}`);
                         } catch (e) {
                             if (!e.message.includes('Unknown product')) {
@@ -278,5 +331,50 @@ async function logWebhookError(platform, eventType, orderId, customerEmail, erro
         console.error(`[🚨WebhookError] ${platform} ${eventType} ${orderId} — ${errorMsg}`);
     } catch (_) {
         // 不讓日誌失敗影響主流程
+    }
+}
+
+// 激活失敗時主動寄信通知用戶；防重複：查 webhook_errors.email_sent 欄位
+async function sendActivationFailureEmail(customerEmail, orderId) {
+    if (!customerEmail || !process.env.RESEND_API_KEY) return;
+    try {
+        // 防重複：同一 order_id 只寄一次
+        const { data: errRow } = await supabase.from('webhook_errors')
+            .select('email_sent').eq('order_id', String(orderId)).maybeSingle();
+        if (errRow?.email_sent) return;
+
+        const from = process.env.RESEND_FROM_EMAIL || 'LoamLab <noreply@loamlab.studio>';
+        const verifyUrl = 'https://loamlab.studio/verify';
+        const html = `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#0d1117;color:#e2e8f0">
+  <div style="font-size:16px;font-weight:700;color:#e2e8f0;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #1e293b">您的 LoamLab 訂閱激活遇到問題</div>
+  <div style="line-height:1.9;color:#cbd5e1;margin-top:16px">
+    <p>親愛的設計師，</p>
+    <p>我們已收到您的付款，但帳號激活過程中遇到暫時性問題，點數尚未發放。</p>
+    <p>請點擊下方按鈕手動驗證您的付款，通常可立即解決：</p>
+    <a href="${verifyUrl}" style="display:inline-block;margin:16px 0;padding:12px 28px;background:#7c3aed;color:#fff;border-radius:9999px;text-decoration:none;font-weight:700;font-size:14px">立即驗證付款</a>
+    <p style="font-size:12px;color:#94a3b8">若驗證後仍有問題，請回覆此信或聯繫 <a href="mailto:support@loamlab.studio" style="color:#7c3aed">support@loamlab.studio</a></p>
+  </div>
+  <p style="font-size:11px;color:#475569;margin-top:40px;border-top:1px solid #1e293b;padding-top:16px">LoamLab · <a href="https://loamlab.studio" style="color:#7c3aed;text-decoration:none">loamlab.studio</a></p>
+</div>`;
+
+        await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                from,
+                to: customerEmail,
+                subject: '⚠️ 您的 LoamLab 帳號激活需要您的確認',
+                html,
+            }),
+        });
+
+        // 標記已寄，防後續重試重複發
+        await supabase.from('webhook_errors')
+            .update({ email_sent: true }).eq('order_id', String(orderId))
+            .catch(() => {});
+
+        console.log(`[📧激活通知] 已寄送給: ${customerEmail}`);
+    } catch (e) {
+        console.warn('[sendActivationFailureEmail] non-fatal:', e.message);
     }
 }

@@ -939,6 +939,11 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, data: await paymentAudit(supabase) });
     }
 
+    // ── Admin: 流失分析（退訂原因 + 挽留成功率 + 近期流失用戶）────────────────
+    if (req.method === 'GET' && action === 'churn_stats') {
+        return res.status(200).json({ code: 0, data: await churnStats(supabase) });
+    }
+
     if (req.method === 'POST' && action === 'resolve_webhook_error') {
         const { id } = req.body || {};
         if (!id) return res.status(400).json({ code: -1, msg: 'Missing id' });
@@ -1489,5 +1494,70 @@ async function paymentAudit(supabase) {
         },
         suspicious_users: zeroRes.data || [],
         recent_topups: topupRes.data || [],
+    };
+}
+
+// ── 流失分析 ──────────────────────────────────────────────────────────────────
+async function churnStats(supabase) {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+
+    const [reasonsRes, retentionRes, cancelPendingRes, recentChurnRes] = await Promise.all([
+        // 所有退訂原因（feedback 表）
+        supabase.from('feedback')
+            .select('content, created_at')
+            .eq('type', 'unsubscribe_reason')
+            .order('created_at', { ascending: false })
+            .limit(500),
+        // 近 30 天挽留優惠接受記錄
+        supabase.from('transactions')
+            .select('transaction_type, created_at')
+            .in('transaction_type', ['RETENTION_BONUS', 'RETENTION_PAUSE'])
+            .gte('created_at', thirtyDaysAgo),
+        // 待取消用戶（cancel_pending = true）
+        supabase.from('users')
+            .select('email, subscription_plan, last_topup_at')
+            .eq('cancel_pending', true)
+            .not('email', 'ilike', '%test%')
+            .order('last_topup_at', { ascending: false })
+            .limit(50),
+        // 近期流失：subscription_plan = null 但曾經有過 last_topup_at（代表前訂閱者）
+        supabase.from('users')
+            .select('email, last_topup_at')
+            .is('subscription_plan', null)
+            .not('last_topup_at', 'is', null)
+            .gte('last_topup_at', thirtyDaysAgo)
+            .not('email', 'ilike', '%test%')
+            .order('last_topup_at', { ascending: false })
+            .limit(30),
+    ]);
+
+    // 原因分佈統計（全時間 + 近 30 天）
+    const allReasons = reasonsRes.data || [];
+    const recentReasons = allReasons.filter(r => r.created_at >= thirtyDaysAgo);
+
+    function groupByReason(arr) {
+        const map = {};
+        arr.forEach(r => { map[r.content] = (map[r.content] || 0) + 1; });
+        return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([reason, count]) => ({ reason, count }));
+    }
+
+    const retention = retentionRes.data || [];
+    const discountAccepted = retention.filter(t => t.transaction_type === 'RETENTION_BONUS').length;
+    const pauseAccepted = retention.filter(t => t.transaction_type === 'RETENTION_PAUSE').length;
+    const totalRetained = discountAccepted + pauseAccepted;
+    const retentionRate = recentReasons.length > 0
+        ? Math.round(totalRetained / recentReasons.length * 100)
+        : 0;
+
+    return {
+        total_cancellations: allReasons.length,
+        cancellations_30d: recentReasons.length,
+        reason_breakdown: groupByReason(allReasons),
+        recent_reason_breakdown: groupByReason(recentReasons),
+        discount_accepted_30d: discountAccepted,
+        pause_accepted_30d: pauseAccepted,
+        retention_rate_30d: retentionRate,
+        cancel_pending_users: cancelPendingRes.data || [],
+        recent_churned_users: recentChurnRes.data || [],
     };
 }

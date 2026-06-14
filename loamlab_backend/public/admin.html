@@ -832,7 +832,7 @@
 
   <!-- 用戶列表 -->
   <div class="card mb-5">
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-3">
       <div class="text-sm font-semibold text-white">用戶列表</div>
       <div class="flex gap-1" id="user-tabs">
         <button class="tab on" onclick="filterUsers('all',this)">全部</button>
@@ -841,6 +841,16 @@
         <button class="tab" onclick="filterUsers('new',this)">新用戶</button>
         <button class="tab" onclick="filterUsers('churned',this)" title="定義：30天內無渲染記錄，且非鯨魚、非訂閱、非7天內新用戶">流失風險</button>
       </div>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap mb-3 pb-3 border-b border-white/[0.04]">
+      <span class="text-[10px] text-gray-600 uppercase tracking-wider shrink-0">加入時段</span>
+      <input type="date" id="user-from" class="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-blue-500/50 transition-colors">
+      <span class="text-xs text-gray-700">—</span>
+      <input type="date" id="user-to" class="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-blue-500/50 transition-colors">
+      <input type="text" id="user-email-filter" placeholder="Email 搜尋..." class="bg-black/40 border border-white/10 rounded-lg px-3 py-1 text-xs text-white outline-none focus:border-blue-500/50 w-44 transition-colors">
+      <button onclick="searchUsers()" class="px-3 py-1 bg-blue-600/70 hover:bg-blue-600 rounded-lg text-xs text-white transition-colors">🔍 查詢</button>
+      <button onclick="clearUserFilter()" class="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-xs text-gray-400 transition-colors">✕ 清除</button>
+      <span id="user-filter-label" class="text-[10px] text-gray-600 hidden"></span>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-xs">
@@ -859,7 +869,7 @@
 
   <!-- 反饋列表 -->
   <div class="card">
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-3">
       <div class="text-sm font-semibold text-white">反饋記錄</div>
       <div class="flex gap-1" id="fb-tabs">
         <button class="tab on" onclick="filterFeedback('all',this)">全部</button>
@@ -868,6 +878,15 @@
         <button class="tab" onclick="filterFeedback('error_report',this)">錯誤</button>
         <button class="tab" onclick="filterFeedback('unsubscribe_reason',this)">退訂原因</button>
       </div>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap mb-3 pb-3 border-b border-white/[0.04]">
+      <span class="text-[10px] text-gray-600 uppercase tracking-wider shrink-0">時段</span>
+      <input type="date" id="fb-from" class="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-blue-500/50 transition-colors">
+      <span class="text-xs text-gray-700">—</span>
+      <input type="date" id="fb-to" class="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-blue-500/50 transition-colors">
+      <button onclick="searchFeedback()" class="px-3 py-1 bg-blue-600/70 hover:bg-blue-600 rounded-lg text-xs text-white transition-colors">🔍 查詢</button>
+      <button onclick="clearFeedbackFilter()" class="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-xs text-gray-400 transition-colors">✕ 清除</button>
+      <span id="fb-filter-label" class="text-[10px] text-gray-600 hidden"></span>
     </div>
     <div id="feedback-list" class="space-y-0"></div>
   </div>
@@ -880,9 +899,14 @@
   <div class="card mb-5">
     <div class="flex items-center justify-between mb-4">
       <div class="text-sm font-semibold text-white">請求記錄日誌</div>
-      <div class="flex gap-2 items-center">
+      <div class="flex gap-2 items-center flex-wrap">
+        <input type="date" id="log-from"
+          class="bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-indigo-500/50 transition-colors">
+        <span class="text-xs text-gray-700">—</span>
+        <input type="date" id="log-to"
+          class="bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-indigo-500/50 transition-colors">
         <input id="log-email-filter" type="text" placeholder="搜尋 Email..."
-          class="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-indigo-500/50 w-52 transition-colors">
+          class="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-indigo-500/50 w-44 transition-colors">
         <select id="log-type-filter"
           class="bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-indigo-500/50 transition-colors">
           <option value="all">全部類型</option>
@@ -919,14 +943,24 @@
 
     <!-- Webhook 失敗紀錄 -->
     <div class="card mb-5">
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-3">
           <div class="text-sm font-semibold text-white">Webhook 失敗紀錄</div>
           <span id="payment-audit-err-badge" class="badge" style="background:#ef444422;color:#fca5a5;border:1px solid #ef444444">載入中...</span>
         </div>
-        <button onclick="loadPaymentAudit()" class="px-3 py-1.5 bg-indigo-600/70 hover:bg-indigo-600 rounded-lg text-xs text-white transition-colors">↺ 重新載入</button>
       </div>
-      <p class="text-xs text-gray-500 mb-4">每筆付款失敗時自動寫入。「標記已解決」後不再顯示，但資料庫仍保留（resolved=true）。</p>
+      <div class="flex items-center gap-2 flex-wrap mb-3 pb-3 border-b border-white/[0.04]">
+        <span class="text-[10px] text-gray-600 uppercase tracking-wider shrink-0">時段</span>
+        <input type="date" id="webhook-from" class="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-red-500/50 transition-colors">
+        <span class="text-xs text-gray-700">—</span>
+        <input type="date" id="webhook-to" class="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-red-500/50 transition-colors">
+        <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none">
+          <input type="checkbox" id="webhook-show-resolved" class="accent-indigo-500 w-3 h-3" onchange="loadPaymentAudit()">
+          顯示已解決
+        </label>
+        <button onclick="loadPaymentAudit()" class="px-3 py-1 bg-indigo-600/70 hover:bg-indigo-600 rounded-lg text-xs text-white transition-colors">🔍 查詢</button>
+      </div>
+      <p class="text-xs text-gray-500 mb-4">每筆付款失敗時自動寫入。「標記已解決」後預設隱藏，但資料庫仍保留（resolved=true）。</p>
       <div class="overflow-x-auto">
         <table class="w-full text-xs">
           <thead><tr class="text-gray-600 border-b border-white/5 uppercase tracking-wider">
@@ -966,7 +1000,18 @@
 
     <!-- 最近儲值紀錄 -->
     <div class="card">
-      <div class="text-sm font-semibold text-white mb-4">最近 30 筆儲值紀錄</div>
+      <div class="flex items-center justify-between mb-3">
+        <div class="text-sm font-semibold text-white">儲值紀錄</div>
+        <span id="topup-count-badge" class="text-[10px] text-gray-600">預設顯示最近 30 筆</span>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap mb-3 pb-3 border-b border-white/[0.04]">
+        <span class="text-[10px] text-gray-600 uppercase tracking-wider shrink-0">時段</span>
+        <input type="date" id="topup-from" class="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-green-500/50 transition-colors">
+        <span class="text-xs text-gray-700">—</span>
+        <input type="date" id="topup-to" class="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-green-500/50 transition-colors">
+        <button onclick="loadPaymentAudit()" class="px-3 py-1 bg-green-600/50 hover:bg-green-600/80 rounded-lg text-xs text-white transition-colors">🔍 查詢</button>
+        <button onclick="document.getElementById('topup-from').value='';document.getElementById('topup-to').value='';loadPaymentAudit()" class="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-xs text-gray-400 transition-colors">✕ 清除</button>
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full text-xs">
           <thead><tr class="text-gray-600 border-b border-white/5 uppercase tracking-wider">
@@ -992,7 +1037,17 @@
           </div>
           <div class="text-xs text-gray-600 mt-0.5">定義：曾有訂閱付款，但訂閱已終止（非單次充值用戶）</div>
         </div>
-        <button onclick="loadChurnStats()" class="px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600/60 rounded-lg text-xs text-rose-300 transition-colors">↺ 重新載入</button>
+        <div class="flex items-center gap-2">
+          <select id="churn-days" onchange="loadChurnStats()"
+            class="bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-rose-300 outline-none focus:border-rose-600/50 transition-colors">
+            <option value="30">近 30 天</option>
+            <option value="60">近 60 天</option>
+            <option value="90">近 90 天</option>
+            <option value="180">近 180 天</option>
+            <option value="365">近 1 年</option>
+          </select>
+          <button onclick="loadChurnStats()" class="px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600/60 rounded-lg text-xs text-rose-300 transition-colors">↺ 查詢</button>
+        </div>
       </div>
 
       <!-- KPI 行：4 個核心數字 + 說明 -->
@@ -1003,7 +1058,7 @@
           <div class="text-[10px] text-gray-600 mt-1">目前有效方案</div>
         </div>
         <div class="bg-black/30 rounded-xl p-3">
-          <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">30 天流失</div>
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1" id="churn-kpi-30d-label">30 天流失</div>
           <div class="text-2xl font-bold text-rose-400" id="churn-kpi-30d">--</div>
           <div class="text-[10px] text-gray-600 mt-1" id="churn-kpi-30d-rate">佔活躍 --%</div>
         </div>
@@ -1022,7 +1077,7 @@
       <!-- 近 30 天流失訂閱者清單（主要內容）-->
       <div class="mb-5">
         <div class="flex items-center justify-between mb-2">
-          <div class="text-xs font-semibold text-white/70">近 30 天流失訂閱者</div>
+          <div class="text-xs font-semibold text-white/70" id="churn-list-title">近 30 天流失訂閱者</div>
           <div class="text-[10px] text-gray-600" id="churn-reason-coverage"></div>
         </div>
         <div class="overflow-x-auto">
@@ -1105,6 +1160,18 @@ function logout() {
   document.getElementById('login-screen').classList.remove('hidden');
 }
 window.addEventListener('DOMContentLoaded', () => {
+  // 各 date input 設預設值：from = 30 天前，to = 今天
+  const today   = isoDate(0);
+  const d30ago  = isoDate(30);
+  const datePairs = [
+    ['user-from',    d30ago], ['user-to',    today],
+    ['fb-from',      d30ago], ['fb-to',      today],
+    ['log-from',     d30ago], ['log-to',     today],
+    ['webhook-from', d30ago], ['webhook-to', today],
+    ['topup-from',   ''],     ['topup-to',   ''],
+  ];
+  datePairs.forEach(([id, val]) => { const el = document.getElementById(id); if (el) el.value = val; });
+
   const saved = sessionStorage.getItem('admin_key');
   if (saved) { adminKey = saved; login(); }
 });
@@ -3544,16 +3611,98 @@ function last30Days() {
   });
 }
 
+function isoDate(daysBack = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() - daysBack);
+  return d.toISOString().slice(0, 10);
+}
+
+// ── 用戶搜尋（帶日期/Email 篩選）───────────────────────────────────────────────
+async function searchUsers() {
+  const from    = document.getElementById('user-from')?.value || '';
+  const to      = document.getElementById('user-to')?.value || '';
+  const emailF  = (document.getElementById('user-email-filter')?.value || '').trim();
+  if (!from && !to && !emailF) { alert('請至少填入一個篩選條件'); return; }
+
+  const params = new URLSearchParams({ action: 'users' });
+  if (from)   params.set('from', from);
+  if (to)     params.set('to', to);
+  if (emailF) params.set('email_filter', emailF);
+
+  const tbody = document.getElementById('user-table');
+  const lbl   = document.getElementById('user-filter-label');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-gray-500 text-xs">查詢中...</td></tr>';
+
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?${params}`, { headers: { 'Authorization': `Bearer ${adminKey}` } });
+    if (r.status === 401) { logout(); return; }
+    const j = await r.json();
+    if (j.code !== 0) throw new Error(j.msg);
+    allUsers = j.data?.users || [];
+    if (lbl) { lbl.textContent = `查詢結果：${allUsers.length} 筆`; lbl.classList.remove('hidden'); }
+    filterUsers('all');
+  } catch(e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-red-400 text-xs">查詢失敗：${e.message}</td></tr>`;
+  }
+}
+
+function clearUserFilter() {
+  const inputs = ['user-from', 'user-to', 'user-email-filter'];
+  inputs.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const lbl = document.getElementById('user-filter-label');
+  if (lbl) lbl.classList.add('hidden');
+  fetchAction('users').then(data => { allUsers = data?.users || []; filterUsers('all'); }).catch(console.error);
+}
+
+// ── 反饋搜尋（帶日期篩選）────────────────────────────────────────────────────
+async function searchFeedback() {
+  const from = document.getElementById('fb-from')?.value || '';
+  const to   = document.getElementById('fb-to')?.value || '';
+  if (!from && !to) { alert('請至少填入一個日期條件'); return; }
+
+  const params = new URLSearchParams({ action: 'feedback' });
+  if (from) params.set('from', from);
+  if (to)   params.set('to', to);
+
+  const el  = document.getElementById('feedback-list');
+  const lbl = document.getElementById('fb-filter-label');
+  if (el) el.innerHTML = '<div class="py-8 text-center text-gray-500 text-xs">查詢中...</div>';
+
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?${params}`, { headers: { 'Authorization': `Bearer ${adminKey}` } });
+    if (r.status === 401) { logout(); return; }
+    const j = await r.json();
+    if (j.code !== 0) throw new Error(j.msg);
+    allFeedback = j.data?.recent || [];
+    if (lbl) { lbl.textContent = `查詢結果：${allFeedback.length} 筆`; lbl.classList.remove('hidden'); }
+    filterFeedback('all');
+  } catch(e) {
+    if (el) el.innerHTML = `<div class="py-4 text-center text-red-400 text-xs">查詢失敗：${e.message}</div>`;
+  }
+}
+
+function clearFeedbackFilter() {
+  const inputs = ['fb-from', 'fb-to'];
+  inputs.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const lbl = document.getElementById('fb-filter-label');
+  if (lbl) lbl.classList.add('hidden');
+  fetchAction('feedback').then(data => { allFeedback = data?.recent || []; filterFeedback('all'); }).catch(console.error);
+}
+
 // ── 請求日誌 ──────────────────────────────────────────────────────────────────
 let _logsTimer = null;
 let _logRows = [];
 
 async function loadLogs() {
-  const email = (document.getElementById('log-email-filter')?.value || '').trim();
-  const type  = document.getElementById('log-type-filter')?.value || 'all';
-  const params = new URLSearchParams({ action: 'request_log', limit: '100' });
-  if (email) params.set('email', email);
+  const email    = (document.getElementById('log-email-filter')?.value || '').trim();
+  const type     = document.getElementById('log-type-filter')?.value || 'all';
+  const fromDate = (document.getElementById('log-from')?.value || '').trim();
+  const toDate   = (document.getElementById('log-to')?.value || '').trim();
+  const params = new URLSearchParams({ action: 'request_log', limit: '200' });
+  if (email)    params.set('email', email);
   if (type !== 'all') params.set('type', type);
+  if (fromDate) params.set('from', fromDate);
+  if (toDate)   params.set('to', toDate);
 
   const tbody = document.getElementById('logs-tbody');
   const empty = document.getElementById('logs-empty');
@@ -3636,9 +3785,27 @@ async function loadPaymentAudit() {
     if (t) t.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-gray-500 text-xs">載入中...</td></tr>';
   });
 
+  // 讀取各自的篩選條件
+  const webhookFrom   = document.getElementById('webhook-from')?.value || '';
+  const webhookTo     = document.getElementById('webhook-to')?.value || '';
+  const showResolved  = document.getElementById('webhook-show-resolved')?.checked ? 'true' : '';
+  const topupFrom     = document.getElementById('topup-from')?.value || '';
+  const topupTo       = document.getElementById('topup-to')?.value || '';
+
+  const params = new URLSearchParams({ action: 'payment_audit' });
+  if (webhookFrom)  params.set('webhook_from', webhookFrom);
+  if (webhookTo)    params.set('webhook_to', webhookTo);
+  if (showResolved) params.set('show_resolved', 'true');
+  if (topupFrom)    params.set('topup_from', topupFrom);
+  if (topupTo)      params.set('topup_to', topupTo);
+
   let data;
   try {
-    data = await fetchAction('payment_audit');
+    const r = await fetch(`${API_BASE}/api/stats?${params}`, { headers: { 'Authorization': `Bearer ${adminKey}` } });
+    if (r.status === 401) { logout(); return; }
+    const j = await r.json();
+    if (j.code !== 0) throw new Error(j.msg);
+    data = j.data;
   } catch (e) {
     if (errTbody) errTbody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-red-400 text-xs">載入失敗：${e.message}</td></tr>`;
     return;
@@ -3655,21 +3822,22 @@ async function loadPaymentAudit() {
   if (errTbody) {
     const items = data?.webhook_errors?.items || [];
     errTbody.innerHTML = items.length === 0
-      ? '<tr><td colspan="6" class="py-6 text-center text-gray-500 text-xs">✅ 無未解決的付款失敗</td></tr>'
-      : items.map(e => `
-        <tr class="border-b border-white/5 hover:bg-white/3 transition-colors">
+      ? '<tr><td colspan="6" class="py-6 text-center text-gray-500 text-xs">✅ 無符合條件的付款失敗紀錄</td></tr>'
+      : items.map(e => {
+          const isResolved = !!e.resolved;
+          const rowClass = isResolved ? 'opacity-50' : '';
+          const actionCell = isResolved
+            ? '<td class="py-2 text-right whitespace-nowrap"><span class="text-green-500 text-xs">✓ 已解決</span></td>'
+            : `<td class="py-2 text-right whitespace-nowrap"><button onclick="resolveWebhookError('${e.id}')" class="px-2 py-1 bg-green-600/30 hover:bg-green-600/60 text-green-300 text-xs rounded transition-colors">✓ 標記解決</button></td>`;
+          return `<tr class="border-b border-white/5 hover:bg-white/3 transition-colors ${rowClass}">
           <td class="py-2 pr-3 text-gray-400 whitespace-nowrap">${new Date(e.created_at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'})}</td>
           <td class="py-2 pr-3 text-indigo-300">${e.customer_email||'-'}</td>
           <td class="py-2 pr-3 text-yellow-400 whitespace-nowrap">${e.platform} / ${e.event_type}</td>
           <td class="py-2 pr-3 text-gray-400 font-mono text-xs">${e.order_id||'-'}</td>
           <td class="py-2 pr-3 text-red-400 max-w-xs" style="word-break:break-all">${e.error_message||'-'}</td>
-          <td class="py-2 text-right whitespace-nowrap">
-            <button onclick="resolveWebhookError('${e.id}')"
-              class="px-2 py-1 bg-green-600/30 hover:bg-green-600/60 text-green-300 text-xs rounded transition-colors">
-              ✓ 已解決
-            </button>
-          </td>
-        </tr>`).join('');
+          ${actionCell}
+        </tr>`;
+        }).join('');
   }
 
   // ─ 異常用戶 ─
@@ -3690,6 +3858,14 @@ async function loadPaymentAudit() {
   // ─ 最近儲值 ─
   if (topTbody) {
     const rows = data?.recent_topups || [];
+    const topupBadge = document.getElementById('topup-count-badge');
+    const topupFrom = document.getElementById('topup-from')?.value;
+    const topupTo   = document.getElementById('topup-to')?.value;
+    if (topupBadge) {
+      topupBadge.textContent = (topupFrom || topupTo)
+        ? `查詢結果：${rows.length} 筆`
+        : `預設顯示最近 ${rows.length} 筆`;
+    }
     topTbody.innerHTML = rows.length === 0
       ? '<tr><td colspan="5" class="py-4 text-center text-gray-500 text-xs">無記錄</td></tr>'
       : rows.map(r => `
@@ -3716,6 +3892,14 @@ async function resolveWebhookError(id) {
 
 // ── 流失分析 ──────────────────────────────────────────────────────────────────
 async function loadChurnStats() {
+  const days = parseInt(document.getElementById('churn-days')?.value || '30');
+
+  // 更新動態標籤
+  const kpiLbl   = document.getElementById('churn-kpi-30d-label');
+  const listLbl  = document.getElementById('churn-list-title');
+  if (kpiLbl)  kpiLbl.textContent  = `近 ${days} 天流失`;
+  if (listLbl) listLbl.textContent = `近 ${days} 天流失訂閱者`;
+
   // 重置
   ['churn-kpi-active','churn-kpi-30d','churn-kpi-rate','churn-kpi-pending'].forEach(id => {
     const el = document.getElementById(id); if (el) el.textContent = '--';
@@ -3729,7 +3913,7 @@ async function loadChurnStats() {
 
   let data;
   try {
-    const r = await fetch(`${API_BASE}/api/stats?action=churn_stats`, {
+    const r = await fetch(`${API_BASE}/api/stats?action=churn_stats&days=${days}`, {
       headers: { 'Authorization': `Bearer ${adminKey}` }
     });
     const j = await r.json();

@@ -916,6 +916,8 @@ export default async function handler(req, res) {
         const limit = Math.min(parseInt(req.query.limit || '100'), 500);
         const emailFilter = (req.query.email || '').trim().toLowerCase();
         const typeFilter = req.query.type || 'all';
+        const fromDate = (req.query.from || '').trim();
+        const toDate   = (req.query.to   || '').trim();
 
         let q = noTestRef(supabase
             .from('transactions')
@@ -928,6 +930,8 @@ export default async function handler(req, res) {
         if (typeFilter === 'render') q = q.like('transaction_type', 'RENDER_%');
         else if (typeFilter === 'refund') q = q.like('transaction_type', 'REFUND_%');
         else if (typeFilter === 'topup') q = q.in('transaction_type', ['TOPUP_SINGLE', 'TOPUP_SUBSCRIPTION']);
+        if (fromDate) q = q.gte('created_at', new Date(fromDate).toISOString());
+        if (toDate)   q = q.lte('created_at', new Date(toDate + 'T23:59:59.999Z').toISOString());
 
         const { data, error } = await q;
         if (error) return res.status(500).json({ code: -1, msg: error.message });
@@ -936,12 +940,13 @@ export default async function handler(req, res) {
 
     // ── Admin: 付款審計（webhook_errors + 異常用戶）────────────────────────────
     if (req.method === 'GET' && action === 'payment_audit') {
-        return res.status(200).json({ code: 0, data: await paymentAudit(supabase) });
+        return res.status(200).json({ code: 0, data: await paymentAudit(supabase, req.query) });
     }
 
     // ── Admin: 流失分析（退訂原因 + 挽留成功率 + 近期流失用戶）────────────────
     if (req.method === 'GET' && action === 'churn_stats') {
-        return res.status(200).json({ code: 0, data: await churnStats(supabase) });
+        const days = Math.min(parseInt(req.query.days || '30'), 365);
+        return res.status(200).json({ code: 0, data: await churnStats(supabase, days) });
     }
 
     if (req.method === 'POST' && action === 'resolve_webhook_error') {
@@ -956,7 +961,7 @@ export default async function handler(req, res) {
     if (!actions[action]) return res.status(400).json({ code: -1, msg: `Unknown action: ${action}` });
 
     try {
-        return res.status(200).json({ code: 0, data: await actions[action](supabase) });
+        return res.status(200).json({ code: 0, data: await actions[action](supabase, req.query) });
     } catch (e) {
         return res.status(500).json({ code: -1, msg: e.message });
     }
@@ -1045,15 +1050,24 @@ async function dashboard(supabase) {
 }
 
 // ── Admin: 用戶列表（含分層）────────────────────────────────────────────────
-async function users(supabase) {
+async function users(supabase, query = {}) {
     const d7  = daysAgo(7);
     const d30 = daysAgo(30);
+    const fromDate    = query.from          ? new Date(query.from).toISOString()                          : null;
+    const toDate      = query.to            ? new Date(query.to + 'T23:59:59.999Z').toISOString()         : null;
+    const emailFilter = (query.email_filter || '').trim();
+    const hasFilter   = fromDate || toDate || emailFilter;
+
+    let userQ = noTest(supabase.from('users')
+        .select('email, points, lifetime_points, subscription_plan, is_beta_tester, created_at, last_topup_at')
+        .order(hasFilter ? 'created_at' : 'lifetime_points', { ascending: false })
+        .limit(200));
+    if (fromDate)    userQ = userQ.gte('created_at', fromDate);
+    if (toDate)      userQ = userQ.lte('created_at', toDate);
+    if (emailFilter) userQ = userQ.ilike('email', `%${emailFilter}%`);
 
     const [{ data: userRows }, { data: recentTx }] = await Promise.all([
-        noTest(supabase.from('users')
-            .select('email, points, lifetime_points, subscription_plan, is_beta_tester, created_at, last_topup_at')
-            .order('lifetime_points', { ascending: false })
-            .limit(200)),
+        userQ,
         noTestRef(supabase.from('transactions')
             .select('user_email, created_at')
             .gte('created_at', d30)
@@ -1112,12 +1126,19 @@ async function renders(supabase) {
 }
 
 // ── Admin: 反饋彙整 ───────────────────────────────────────────────────────────
-async function feedback(supabase) {
+async function feedback(supabase, query = {}) {
+    const fromDate = query.from ? new Date(query.from).toISOString()                  : null;
+    const toDate   = query.to   ? new Date(query.to + 'T23:59:59.999Z').toISOString() : null;
+
+    let fbQ = noTestRef(supabase.from('feedback')
+        .select('user_email, type, rating, content, tags, created_at, metadata')
+        .order('created_at', { ascending: false })
+        .limit(200));
+    if (fromDate) fbQ = fbQ.gte('created_at', fromDate);
+    if (toDate)   fbQ = fbQ.lte('created_at', toDate);
+
     const [{ data: rows }, { data: ratingRows }] = await Promise.all([
-        noTestRef(supabase.from('feedback')
-            .select('user_email, type, rating, content, tags, created_at, metadata')
-            .order('created_at', { ascending: false })
-            .limit(100)),
+        fbQ,
         noTestRef(supabase.from('feedback')
             .select('rating')
             .not('rating', 'is', null)),
@@ -1465,14 +1486,32 @@ function getTier(user, active7dSet, active30dSet) {
 }
 
 // ── 付款審計 ──────────────────────────────────────────────────────────────────
-async function paymentAudit(supabase) {
+async function paymentAudit(supabase, query = {}) {
+    const webhookFrom   = (query.webhook_from || '').trim();
+    const webhookTo     = (query.webhook_to   || '').trim();
+    const showResolved  = query.show_resolved === 'true';
+    const topupFrom     = (query.topup_from   || '').trim();
+    const topupTo       = (query.topup_to     || '').trim();
+    const hasTopupDate  = topupFrom || topupTo;
+
+    let errQ = supabase.from('webhook_errors')
+        .select('id, platform, event_type, order_id, customer_email, error_message, created_at, resolved')
+        .order('created_at', { ascending: false })
+        .limit(100);
+    if (!showResolved) errQ = errQ.eq('resolved', false);
+    if (webhookFrom) errQ = errQ.gte('created_at', new Date(webhookFrom).toISOString());
+    if (webhookTo)   errQ = errQ.lte('created_at', new Date(webhookTo + 'T23:59:59.999Z').toISOString());
+
+    let topupQ = supabase.from('transactions')
+        .select('user_email, amount, order_id, transaction_type, created_at')
+        .in('transaction_type', ['TOPUP_SUBSCRIPTION', 'TOPUP_SINGLE'])
+        .order('created_at', { ascending: false })
+        .limit(hasTopupDate ? 200 : 30);
+    if (topupFrom) topupQ = topupQ.gte('created_at', new Date(topupFrom).toISOString());
+    if (topupTo)   topupQ = topupQ.lte('created_at', new Date(topupTo + 'T23:59:59.999Z').toISOString());
+
     const [errRes, zeroRes, topupRes] = await Promise.all([
-        // 未解決的 webhook 失敗紀錄
-        supabase.from('webhook_errors')
-            .select('id, platform, event_type, order_id, customer_email, error_message, created_at')
-            .eq('resolved', false)
-            .order('created_at', { ascending: false })
-            .limit(50),
+        errQ,
         // 有訂閱方案但 points = 0（可能漏發）
         supabase.from('users')
             .select('email, subscription_plan, points, lifetime_points, last_topup_at')
@@ -1480,12 +1519,7 @@ async function paymentAudit(supabase) {
             .eq('points', 0)
             .not('email', 'ilike', '%test%')
             .limit(20),
-        // 最近 30 筆儲值紀錄
-        supabase.from('transactions')
-            .select('user_email, amount, order_id, transaction_type, created_at')
-            .in('transaction_type', ['TOPUP_SUBSCRIPTION', 'TOPUP_SINGLE'])
-            .order('created_at', { ascending: false })
-            .limit(30),
+        topupQ,
     ]);
     return {
         webhook_errors: {
@@ -1500,9 +1534,10 @@ async function paymentAudit(supabase) {
 // ── 流失分析 ──────────────────────────────────────────────────────────────────
 // 正確定義：「流失訂閱者」= 曾有 TOPUP_SUBSCRIPTION 交易，但現在 subscription_plan = null
 // 不依賴 last_topup_at（那對單次充值用戶也會設定，無法區分）
-async function churnStats(supabase) {
-    const d30 = new Date(Date.now() - 30 * 24 * 3600e3).toISOString();
-    const d90 = new Date(Date.now() - 90 * 24 * 3600e3).toISOString();
+async function churnStats(supabase, days = 30) {
+    const dN  = new Date(Date.now() - days                       * 24 * 3600e3).toISOString();
+    const d90 = new Date(Date.now() - Math.max(days * 3, 90)     * 24 * 3600e3).toISOString();
+    const d30 = dN; // alias for backward-compat within this function
 
     const PLAN_CENTS = { 700: 'Starter', 1500: 'Pro', 3500: 'Studio' };
 
@@ -1596,6 +1631,7 @@ async function churnStats(supabase) {
         : 0;
 
     return {
+        days,
         active_subscribers: activeRes.count || 0,
         churned_30d: churned30d.length,
         churned_90d: churnedList.length,

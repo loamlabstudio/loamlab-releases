@@ -1,7 +1,28 @@
-param([switch]$ew)
+param([switch]$ew, [switch]$Force)
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $sourceDir = $PSScriptRoot
 $configFile = "$sourceDir\loamlab_plugin\config.rb"
+
+# === Branch Safety Guard ===
+$currentBranch = (git rev-parse --abbrev-ref HEAD).Trim()
+if ($currentBranch -ne "main" -and -not $Force) {
+    Write-Host "[ABORT] build_rbz.ps1 必須在 main 分支執行。目前在：$currentBranch" -ForegroundColor Red
+    Write-Host "        功能完成後請先 merge 到 main，再打包。" -ForegroundColor Yellow
+    Write-Host "        若要強制在當前分支打包（測試用途），加 -Force 參數。" -ForegroundColor DarkYellow
+    exit 1
+}
+if ($Force -and $currentBranch -ne "main") {
+    Write-Host "[WARN] -Force 覆蓋分支檢查，在 $currentBranch 打包（非 release 用）" -ForegroundColor Yellow
+}
+
+# === Dirty Working Tree Guard (tracked files only) ===
+$dirtyFiles = git status --porcelain | Where-Object { $_ -notmatch '^\?\?' -and $_ -match '\.(js|rb|json)$' }
+if ($dirtyFiles -and -not $Force) {
+    Write-Host "[ABORT] 工作樹有未 commit 的源碼變更，打包前請先 commit 或 stash：" -ForegroundColor Red
+    $dirtyFiles | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
+    exit 1
+}
+# ===========================
 
 # Show commits since last tag (informational only)
 try {

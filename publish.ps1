@@ -2,6 +2,15 @@
 param([string]$notes = "")
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+# === Branch Safety Guard (publish always requires main) ===
+$currentBranch = (git rev-parse --abbrev-ref HEAD).Trim()
+if ($currentBranch -ne "main") {
+    Write-Host "[ABORT] publish.ps1 只能在 main 分支執行。目前在：$currentBranch" -ForegroundColor Red
+    Write-Host "        請完成功能後 merge 到 main 再發布。緊急修復請先 git checkout main。" -ForegroundColor Yellow
+    exit 1
+}
+# ===========================================================
+
 $ROOT = $PSScriptRoot
 $CONFIG = "$ROOT\loamlab_plugin\config.rb"
 $RBZ = "$ROOT\loamlab_plugin.rbz"

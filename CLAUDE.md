@@ -82,6 +82,40 @@ powershell -ExecutionPolicy Bypass -Command "cd loamlab_backend; vercel dev"
 
 > `release.ps1` 已廢棄，勿使用。
 
+### Branch Strategy（分支規則）
+
+| 分支 | 職責 |
+|------|------|
+| `main` | 已上線版本，隨時可打包部署 |
+| `dev` | 開發中功能，功能完成再 merge 到 main |
+
+**護欄：** `build_rbz.ps1` 和 `publish.ps1` 在非 `main` 分支執行會 abort（`build_rbz.ps1 -Force` 可強制執行，僅限測試用）。
+
+**緊急修復（用戶回報 bug 時）：**
+```powershell
+git checkout main                         # 切到乾淨的已上線版本
+# 修改 bug + git add + git commit -m "fix: ..."
+# 版本號 +1（config.rb / loamlab_plugin.rb / version.js）
+git commit -m "chore: bump version to x.x.x"
+powershell -ExecutionPolicy Bypass -File ".\build_rbz.ps1"
+powershell -ExecutionPolicy Bypass -File ".\publish.ps1" -notes "fix: 說明"
+git checkout dev; git merge main          # 把修復同步回 dev
+```
+
+**功能完成發布：**
+```powershell
+# 在 dev 分支完成測試後
+git checkout main
+git merge dev --no-ff -m "feat: [功能名] vX.X.X"
+# 版本號 +1，然後走正常三步發布流程
+git checkout dev; git merge main          # 保持 dev 同步
+```
+
+**測試用打包（在 dev 分支本地測試，不 release）：**
+```powershell
+powershell -ExecutionPolicy Bypass -File ".\build_rbz.ps1" -Force
+```
+
 ### Test Coze API
 ```ruby
 ruby test_coze_api.rb

@@ -44,7 +44,8 @@ export default async function handler(req, res) {
                 const data = event.data;
                 const customerEmail = data.customer?.email || data.email || data.customer_email;
                 let variantId = data.product_cart?.[0]?.product_id || data.product_id || data.plan_id;
-                const orderId = data.payment_id;
+                // 訂閱付款帶 subscription_id：orderId 加上 sub_id 作為命名空間，防止同月不同訂閱互相阻塞
+                const orderId = data.subscription_id ? `${data.subscription_id}_${data.payment_id}` : data.payment_id;
                 const discountCode = data.discount?.code || data.discount_code || null;
                 const planKey = data.metadata?.planKey || null;
 
@@ -81,13 +82,17 @@ export default async function handler(req, res) {
                     // 月份兜底：同週期不同 order_id 格式（例如 subscription.active 與 payment.succeeded 各自處理）
                     const nowPeriod = new Date().toISOString().substring(0, 7); // "YYYY-MM"
                     const periodStart = `${nowPeriod}-01T00:00:00Z`;
-                    const { data: existingPay, error: dedupPayErr } = await supabase
+                    let dedupPayQuery = supabase
                         .from('transactions')
                         .select('id, order_id')
                         .eq('user_email', customerEmail)
                         .eq('transaction_type', 'TOPUP_SUBSCRIPTION')
-                        .gte('created_at', periodStart)
-                        .limit(1);
+                        .gte('created_at', periodStart);
+                    // 有 subscription_id 時，限縮到同一訂閱的記錄，避免同月換訂閱被誤判為重複
+                    if (data.subscription_id) {
+                        dedupPayQuery = dedupPayQuery.ilike('order_id', `%${data.subscription_id}%`);
+                    }
+                    const { data: existingPay, error: dedupPayErr } = await dedupPayQuery.limit(1);
                     if (!dedupPayErr && existingPay?.length > 0) {
                         console.log(`[Dodo] payment.succeeded skipped — 本週期已有記錄: ${existingPay[0].order_id}`);
                         if (data.subscription_id) {
@@ -146,14 +151,14 @@ export default async function handler(req, res) {
                     const fallbackOrderId = `${data.subscription_id}_${period}`;
                     const periodStart = `${period}-01T00:00:00Z`;
 
-                    // 防雙發：若本計費週期已有任何 TOPUP_SUBSCRIPTION（不論 order_id 格式），跳過
-                    // 涵蓋：DODO_pay_*（payment.succeeded）/ DODO_sub_*（_auto / _verify / _YYYY-MM）
+                    // 防雙發：限縮到同一訂閱 ID 的記錄，避免同月換訂閱被舊訂閱記錄阻塞
                     const { data: existingTxRows, error: dedupErr } = await supabase
                         .from('transactions')
                         .select('id, order_id')
                         .eq('user_email', customerEmail)
                         .eq('transaction_type', 'TOPUP_SUBSCRIPTION')
                         .gte('created_at', periodStart)
+                        .ilike('order_id', `%${data.subscription_id}%`)
                         .limit(1);
 
                     if (!dedupErr && existingTxRows?.length > 0) {

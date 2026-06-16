@@ -537,9 +537,17 @@ export default async function handler(req, res) {
                         if (pay.status !== 'succeeded') continue;
                         const productId = pay.product_cart?.[0]?.product_id || pay.product_id;
                         if (!productId) continue;
-                        const { data: ex } = await sb.from('transactions').select('id').eq('order_id', `DODO_${pay.payment_id}`).maybeSingle();
-                        if (!ex) {
-                            await processTopup(sb, vEmail, productId, pay.payment_id, 'DODO', null, null);
+                        // 對齊 webhook.js 新 orderId 格式（subscription 付款含 sub_id 前綴）
+                        const orderId = pay.subscription_id ? `${pay.subscription_id}_${pay.payment_id}` : pay.payment_id;
+                        const { data: ex } = await sb.from('transactions').select('id').eq('order_id', `DODO_${orderId}`).maybeSingle();
+                        // fallback：查舊格式（fix 前已寫入的 transaction，避免重複補發）
+                        let alreadyIssued = !!ex;
+                        if (!alreadyIssued && pay.subscription_id) {
+                            const { data: exOld } = await sb.from('transactions').select('id').eq('order_id', `DODO_${pay.payment_id}`).maybeSingle();
+                            alreadyIssued = !!exOld;
+                        }
+                        if (!alreadyIssued) {
+                            await processTopup(sb, vEmail, productId, orderId, 'DODO', null, pay.subscription_id || null);
                             activated = true;
                         }
                     }

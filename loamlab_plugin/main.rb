@@ -36,6 +36,15 @@ module LoamLab
     File.write(cloud_index_path, JSON.generate(index)) rescue nil
   end
 
+  # 安全的暫存目錄：優先使用 SU 內建（確保編碼正確），若無則強制 UTF-8
+  def self.safe_temp_dir
+    return Sketchup.temp_dir.dup.force_encoding("UTF-8") if Sketchup.respond_to?(:temp_dir)
+    require 'tmpdir'
+    Dir.tmpdir.encode("UTF-8", invalid: :replace, undef: :replace, replace: "_")
+  rescue
+    File.expand_path("~")
+  end
+
   module AIURenderer
 
     # 截圖前強制套用的 SketchUp 顯示設定（全用戶統一，截圖後立即還原）
@@ -895,7 +904,7 @@ module LoamLab
           end
 
           # 截圖
-          temp_dir  = Dir.tmpdir
+          temp_dir  = LoamLab.safe_temp_dir
           temp_path = File.join(temp_dir, "loamlab_segmap_#{Time.now.to_i}.jpg")
           view.write_image(temp_path, 1280, 720, true, 0.9)
 
@@ -1072,7 +1081,7 @@ module LoamLab
       model = Sketchup.active_model
       return "" unless model
       
-      temp_dir      = Dir.tmpdir
+      temp_dir      = LoamLab.safe_temp_dir
       temp_img_path = File.join(temp_dir, "loamlab_preview_#{Time.now.to_i}.jpg")
       
       begin
@@ -1161,7 +1170,7 @@ module LoamLab
           t[:model].active_view.camera = cam
 
           face_res = t[:cubemap_size] || (t[:type] == :cloud ? 1024 : 2048)
-          tmp_src  = File.join(Dir.tmpdir, "ll360_#{fc[:name]}_#{Time.now.to_i}.jpg")
+          tmp_src  = File.join(LoamLab.safe_temp_dir, "ll360_#{fc[:name]}_#{Time.now.to_i}.jpg")
           tmp_out  = tmp_src.sub('.jpg', '_f.jpg')
           t[:model].active_view.write_image(tmp_src, face_res, face_res, false, 0.85)
           pano_flip_h(tmp_src, tmp_out)
@@ -1455,7 +1464,7 @@ module LoamLab
         begin; ro['DisplaySketchAxes']   = false;  rescue; end
         begin; ro['DisplayInstanceAxes'] = false;  rescue; end
 
-        temp_dir = Dir.tmpdir
+        temp_dir = LoamLab.safe_temp_dir
         eye = orig_eye
 
         # 六個面（名稱對應 template2.js material 順序）
@@ -1521,7 +1530,7 @@ module LoamLab
         new_w = [[rep.width  * scale, 64].max.to_i, rep.width].min
         new_h = [[rep.height * scale, 64].max.to_i, rep.height].min
         rep.resize(new_w, new_h)
-        tmp = File.join(Dir.tmpdir, "ll_compressed_#{Time.now.to_i}.jpg")
+        tmp = File.join(LoamLab.safe_temp_dir, "ll_compressed_#{Time.now.to_i}.jpg")
         rep.save_file(tmp)
         if File.exist?(tmp)
           # JPEG 非線性：若第一次仍超限，按新比例再縮一次
@@ -1731,7 +1740,7 @@ module LoamLab
       # 不做批量 p.update：SU2023 批量 page update 可能在 C++ 層崩潰（致少部分用戶閃退）
       # 每場景的 safe_set_render_keys 已在 selected_page= 後重新套用，批量 update 為冗餘操作
 
-      temp_dir     = Dir.tmpdir
+      temp_dir     = LoamLab.safe_temp_dir
       project_name = (model.title.empty? ? "未命名專案" : model.title).to_s.dup.force_encoding("UTF-8")
       save_path = self.get_effective_save_path(model)
       timestamp = Time.now.strftime("%Y%m%d_%H%M%S")

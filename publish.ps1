@@ -1,5 +1,11 @@
 # publish.ps1 - Run after build_rbz.ps1 to create GitHub Release + deploy Vercel
-param([string]$notes = "")
+# Usage:
+#   publish.ps1 -notes "說明"           → 功能版本（Feature Release）
+#   publish.ps1 -Patch -notes "fix: 說明" → 補丁修復（Patch Fix，標題帶 [Patch Fix] 標記）
+param(
+    [string]$notes = "",
+    [switch]$Patch
+)
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # === Branch Safety Guard (publish always requires main) ===
@@ -25,9 +31,11 @@ if (-not (Test-Path $RBZ)) {
 }
 
 if (-not $notes) { $notes = "v$version release" }
+$releaseTitle = if ($Patch) { "LoamLab v$version [Patch Fix]" } else { "LoamLab v$version" }
+$releaseType  = if ($Patch) { "PATCH FIX" } else { "FEATURE" }
 
 Write-Host ""
-Write-Host "===== Publishing v$version =====" -ForegroundColor Cyan
+Write-Host "===== Publishing v$version ($releaseType) =====" -ForegroundColor Cyan
 
 # Step 1: GitHub Release
 Write-Host "[1/2] Creating GitHub Release v$version ..." -ForegroundColor Yellow
@@ -36,7 +44,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "      Already exists, deleting and recreating ..." -ForegroundColor Yellow
     gh release delete "v$version" --repo "loamlabstudio/loamlab-releases" --yes | Out-Null
 }
-gh release create "v$version" --repo "loamlabstudio/loamlab-releases" --title "LoamLab v$version" --notes $notes $RBZ
+gh release create "v$version" --repo "loamlabstudio/loamlab-releases" --title $releaseTitle --notes $notes $RBZ
 if ($LASTEXITCODE -ne 0) { Write-Host "[ABORT] GitHub Release failed" -ForegroundColor Red; exit 1 }
 Write-Host "[OK] https://github.com/loamlabstudio/loamlab-releases/releases/tag/v$version" -ForegroundColor Green
 

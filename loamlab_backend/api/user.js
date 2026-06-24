@@ -470,6 +470,42 @@ export default async function handler(req, res) {
         }
     }
 
+    // ── Billing Portal（生成 Dodo Customer Portal URL，供更新信用卡用）────────────
+    if (req.method === 'GET' && req.query.action === 'billing_portal') {
+        if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });
+        const DODO_API_KEY = process.env.DODO_API_KEY;
+        const FALLBACK_URL = 'https://customer.dodopayments.com';
+        if (!DODO_API_KEY) return res.status(200).json({ code: 0, portal_url: FALLBACK_URL });
+
+        const dodoBase = DODO_API_KEY.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+        try {
+            const custRes = await fetch(`${dodoBase}/customers?customer_email=${encodeURIComponent(email)}`, {
+                headers: { 'Authorization': `Bearer ${DODO_API_KEY}` }
+            });
+            if (!custRes.ok) return res.status(200).json({ code: 0, portal_url: FALLBACK_URL });
+
+            const custData = await custRes.json();
+            const customers = custData.items || custData.customers || custData.data || [];
+            const customerId = customers[0]?.customer_id || customers[0]?.id;
+            if (!customerId) return res.status(200).json({ code: 0, portal_url: FALLBACK_URL });
+
+            const sessRes = await fetch(`${dodoBase}/customers/${customerId}/customer-portal/session`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ send_email: false })
+            });
+            if (!sessRes.ok) return res.status(200).json({ code: 0, portal_url: FALLBACK_URL });
+
+            const sessData = await sessRes.json();
+            const portalUrl = sessData.link || sessData.url || sessData.portal_url || FALLBACK_URL;
+            return res.status(200).json({ code: 0, portal_url: portalUrl });
+        } catch (e) {
+            console.warn('[billing_portal] non-fatal:', e.message);
+            return res.status(200).json({ code: 0, portal_url: FALLBACK_URL });
+        }
+    }
+    // ────────────────────────────────────────────────────────────────────────────
+
     if (req.method === 'GET' && req.query.action === 'verify_payment') {
         let vEmail = req.headers['x-user-email'];
         if (vEmail) vEmail = vEmail.toLowerCase().trim();
@@ -498,11 +534,13 @@ export default async function handler(req, res) {
             );
             if (subRes.ok) {
                 const subs = (await subRes.json()).items || [];
+                let foundActive = false;
                 for (const sub of subs) {
                     const subEmail = sub.customer?.email || sub.customer_email;
                     if (subEmail !== vEmail) continue;
                     // Dodo API 忽略 status 查詢參數；必須手動過濾，防止重新激活已取消的訂閱
                     if (sub.status !== 'active' && sub.status !== 'trialing') continue;
+                    foundActive = true;
                     const productId = sub.product_id || sub.plan_id;
                     if (!productId) continue;
                     // 使用 period-based order_id（符合 DODO_sub_*_20xx 分類），
@@ -518,6 +556,10 @@ export default async function handler(req, res) {
                             .eq('customer_email', vEmail).eq('resolved', false).catch(() => {});
                         activated = true;
                     }
+                }
+                // 有活躍訂閱 → 清除扣款失敗旗標（loop 外執行一次）
+                if (foundActive) {
+                    sb.from('users').update({ payment_failed: false }).eq('email', vEmail).catch(() => {});
                 }
             }
         } catch (e) { console.warn('[verify_payment] sub check:', e.message); }
@@ -587,7 +629,7 @@ export default async function handler(req, res) {
         try {
             let { data, error } = await supabase
                 .from('users')
-                .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending, referral_success_count')
+                .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending, referral_success_count, payment_failed')
                 .eq('email', email)
                 .single();
 
@@ -687,6 +729,7 @@ export default async function handler(req, res) {
                 is_kol: data ? (data.is_kol || false) : false,
                 is_partner: data ? (data.is_partner || false) : false,
                 cancel_pending: data ? (data.cancel_pending || false) : false,
+                payment_failed: data ? (data.payment_failed || false) : false,
                 is_new_user: error && error.code === 'PGRST116' ? true : false
             });
         } catch (e) {

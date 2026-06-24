@@ -1,25 +1,19 @@
-# SPRINT PLAN: 解決同月重新訂閱點數分發失敗問題
+# Sprint: 預覽截圖出錯修復 (Hotfix Release)
 
 ## CONTEXT_DIGEST
-用戶 (`hanaxyq@gmail.com`) 反應重新訂閱後只收到 175 點（舊餘額），未收到新訂閱的 2000 點。
-**根本原因**：`webhook.js` 中的「月份兜底」防重複邏輯，僅用 `user_email` 和「當月第一天」作為條件。當用戶在同一個曆月內退訂並再次訂閱時，系統找到本月稍早的訂閱紀錄，誤判為重複事件而 `skipped`，導致新付款完全沒有發放點數。
+- 用戶遇到 `Filename not specified` 錯誤，起因為 Windows 中文用戶名導致 `Dir.tmpdir` 產生非 UTF-8 的路徑編碼錯誤。
+- Antigravity 已完成核心修復：在 `main.rb` 引入 `LoamLab.safe_temp_dir` 並替換了所有 `Dir.tmpdir` 的呼叫（包含 `updater.rb`）。
+- **極度重要警示**：這是一個緊急補丁 (Hotfix) 上線。目前專案內可能存在正在開發中的「SaaS 訂閱扣款失敗處理機制 (Dunning Process)」相關後端或前端代碼。**絕對不能**將未開發完成的內容一起打包或部署上線。
 
 ## TASKS
-
-- [x] **Task 1: 優化 Webhook 冪等性與去重邏輯 (Scoping Dedup to Subscription ID)**
-  - **影響檔案**: `loamlab_backend/api/webhook.js`
-  - **行動**: 
-    1. 在 `payment.succeeded` 區塊，若 `data.subscription_id` 存在，將存入 DB 的 `orderId` 改為包含訂閱 ID：`const orderId = data.subscription_id ? \`${data.subscription_id}_${data.payment_id}\` : data.payment_id;`
-    2. 在 `payment.succeeded` 與 `subscription.active/renewed` 區塊的「月份兜底」查詢中，增加 `.ilike('order_id', \`%${data.subscription_id}%\`)`。這樣同月內的「新訂閱」就不會被「舊訂閱」的紀錄阻塞。
-
-- [x] **Task 2: 同步修改手動驗證與靜默修復邏輯**
-  - **影響檔案**: `loamlab_backend/api/user.js`
-  - **行動**: 
-    1. 在 `verify_payment` 中查詢 `payment.succeeded` (近期單次付款) 時，若 `pay.subscription_id` 存在，其 `orderId` 也應對應改為 `${pay.subscription_id}_${pay.payment_id}`，確保手動補發邏輯與 Webhook 寫入邏輯的 `order_id` 格式完全一致。
-    2. 檢查 `GET /api/user` 的靜默修復區塊是否也需要相應調整（目前主要透過 `subscription_id_auto`，不受 payment 影響，可維持）。
-
-- [x] **Task 3: 撰寫補償與修復腳本給受影響用戶**
-  - **影響檔案**: `loamlab_backend/scratch_fix_hana.mjs` (新建)
-  - **行動**: 寫一個短小精幹的 Node.js script，使用 Supabase client 給 `hanaxyq@gmail.com` 補發缺漏的 2000 點（建立對應的 `transactions` 紀錄，標記 `order_id` 為人工補發，並更新 `users` 表的 `points` 與 `lifetime_points`），執行後確認資料正確。
+- [MUST] **Task 1: 版本號更新與修改確認**
+  - **影響檔案**: `loamlab_plugin/config.rb`
+  - **描述**: 將 `config.rb` 的 `VERSION` 推進一個小版號（如 `1.4.49` -> `1.4.50`）。快速核對 `main.rb` 與 `updater.rb` 的 `safe_temp_dir` 補丁邏輯無誤。
+- [MUST] **Task 2: 隔離未完工代碼與打包插件**
+  - **影響檔案**: `loamlab_plugin/*` (打包目標)
+  - **描述**: 將本地「尚未開發完成的 Dunning Process 代碼」進行 `git stash` 暫存隔離。接著打包最新的 `loamlab_plugin` 資料夾為 `.rbz` 安裝檔。
+- [MUST] **Task 3: 安全部署與版本發布**
+  - **影響檔案**: `loamlab_backend/api/*` (負責版本更新的 endpoint)、Vercel 部署
+  - **描述**: 僅針對「插件更新所需的版本宣告邏輯」進行更新並發布上線。部署完畢確認新版 `.rbz` 可供下載後，透過 `git stash pop` 還原原本正在開發的 Dunning Process 相關代碼。
 
 status: DONE

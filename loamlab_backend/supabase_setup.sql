@@ -349,3 +349,9 @@ CREATE INDEX IF NOT EXISTS idx_feedback_created        ON public.feedback (creat
 -- Phase 27: webhook_errors 加 email_sent 欄位（激活失敗通知防重複）
 -- ==============================================================================
 ALTER TABLE public.webhook_errors ADD COLUMN IF NOT EXISTS email_sent BOOLEAN DEFAULT false;
+
+-- ==============================================================================
+-- Phase 28: Dunning 扣款失敗狀態欄位
+-- payment_failed = true 時 UI 顯示警告橫幅引導更新付款資訊
+-- ==============================================================================
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS payment_failed BOOLEAN DEFAULT false;

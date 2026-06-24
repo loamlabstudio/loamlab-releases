@@ -36,7 +36,11 @@ export default async function handler(req, res) {
 
             if (event.type === 'payment.failed') {
                 const customerEmail = event.data?.customer?.email;
-                if (customerEmail) await sendDunningEmail(customerEmail);
+                if (customerEmail) {
+                    await sendDunningEmail(customerEmail);
+                    await supabase.from('users').update({ payment_failed: true }).eq('email', customerEmail)
+                        .catch(e => console.warn('[Dodo] set payment_failed failed:', e.message));
+                }
                 return res.status(200).json({ status: 'success' });
             }
 
@@ -64,6 +68,10 @@ export default async function handler(req, res) {
                     }
                 }
 
+                if (customerEmail) {
+                    await supabase.from('users').update({ payment_failed: false }).eq('email', customerEmail)
+                        .catch(e => console.warn('[Dodo] clear payment_failed failed:', e.message));
+                }
                 if (customerEmail && (variantId || planKey) && orderId) {
                     // 精確比對：先查 order_id 是否已存在（最可靠的冪等鍵）
                     const exactOrderId = `DODO_${orderId}`;
@@ -125,8 +133,8 @@ export default async function handler(req, res) {
                 const customerEmail = data.customer?.email || data.email || data.customer_email;
                 const subProductId = data.product_id || data.plan_id || data.product_cart?.[0]?.product_id;
                 if (customerEmail && data.subscription_id) {
-                    // 先存 subscription_id（無論 product_id 是否存在都做）
-                    await supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
+                    // 先存 subscription_id，同時清除扣款失敗旗標（無論 product_id 是否存在都做）
+                    await supabase.from('users').update({ dodo_subscription_id: data.subscription_id, payment_failed: false }).eq('email', customerEmail)
                         .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
                 }
                 // 若 payload 缺 product_id，嘗試從 DB 現有訂閱方案反推（處理 Dodo 欄位缺失的情況）
@@ -242,7 +250,8 @@ async function processCancellation(customerEmail, platform) {
     await supabase.from('users').update({
         subscription_plan: null,
         cancel_pending: false,
-        dodo_subscription_id: null
+        dodo_subscription_id: null,
+        payment_failed: false
     }).eq('email', customerEmail);
 }
 

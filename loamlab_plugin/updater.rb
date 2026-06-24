@@ -60,7 +60,7 @@ module LoamLab
         puts "[Updater] 開始下載：#{url}"
 
         require 'tmpdir'
-        zip_path = File.join(Dir.tmpdir, "loamlab_update_#{Time.now.to_i}.rbz")
+        zip_path = File.join(LoamLab.safe_temp_dir, "loamlab_update_#{Time.now.to_i}.rbz")
 
         UI.start_timer(0.1, false) do
           begin

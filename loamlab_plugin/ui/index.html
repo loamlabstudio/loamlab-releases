@@ -1259,6 +1259,15 @@
                 <button id="cpb-btn" onclick="undoCancel()" class="text-[9px] font-bold tracking-[0.15em] uppercase text-white/40 hover:text-white/70 border border-white/10 hover:border-white/25 rounded-full px-3 py-1 transition-all"></button>
             </div>
 
+            <!-- 扣款失敗警告橫幅（payment_failed = true 時顯示）-->
+            <div id="payment-failed-banner" class="hidden mt-3 mx-1 px-3 py-2.5 rounded-xl border border-red-500/30 bg-red-500/8 text-center">
+                <p id="pfb-msg" class="text-[10px] text-red-400/80 mb-2 leading-relaxed font-medium"></p>
+                <div class="flex gap-2 justify-center">
+                    <button id="pfb-portal-btn" onclick="openBillingPortal()" class="text-[9px] font-bold tracking-[0.12em] uppercase bg-red-500/15 hover:bg-red-500/25 text-red-300/80 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 rounded-full px-3 py-1 transition-all"></button>
+                    <button id="pfb-verify-btn" onclick="verifyPaymentFromBanner()" class="text-[9px] font-bold tracking-[0.12em] uppercase text-white/30 hover:text-white/60 border border-white/10 hover:border-white/25 rounded-full px-3 py-1 transition-all"></button>
+                </div>
+            </div>
+
             <!-- Top-up Panel (hidden by default) -->
             <div id="panel-topup" class="hidden justify-center">
                 <div class="bg-[#141420] border border-blue-500/20 rounded-xl p-6 flex flex-col hover:border-blue-400/40 transition-all shadow-inner relative w-72 mx-auto">

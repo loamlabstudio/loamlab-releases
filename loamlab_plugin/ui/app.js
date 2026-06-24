@@ -2265,6 +2265,82 @@ var CANCEL_PENDING_I18N = {
     'ja-JP': { msg: 'サブスクリプションは期末にキャンセルされます', btn: 'キャンセルを取り消す', undoing: '取り消し中...', undo_ok: 'サブスクリプション復元済み', undo_fail: 'ポータルで取り消してください' },
 };
 
+var PAYMENT_FAILED_I18N = {
+    'zh-TW': { msg: '扣款失敗：您的訂閱付款未能成功，請更新付款資訊以避免服務中斷。', portal_btn: '更新付款資訊', verify_btn: '已更新，點此驗證', verifying: '驗證中...', ok: '驗證成功', fail: '請聯繫客服 support@loamlab.studio' },
+    'en-US': { msg: 'Payment failed: Your subscription payment was unsuccessful. Please update your payment info to avoid interruption.', portal_btn: 'Update Payment', verify_btn: 'Updated, verify now', verifying: 'Verifying...', ok: 'Verified', fail: 'Please contact support@loamlab.studio' },
+    'zh-CN': { msg: '扣款失败：您的订阅付款未能成功，请更新付款信息以避免服务中断。', portal_btn: '更新付款信息', verify_btn: '已更新，点此验证', verifying: '验证中...', ok: '验证成功', fail: '请联系客服 support@loamlab.studio' },
+    'es-ES': { msg: 'Pago fallido: Tu suscripción no se pudo cobrar. Actualiza tu método de pago para evitar interrupciones.', portal_btn: 'Actualizar pago', verify_btn: 'Actualizado, verificar', verifying: 'Verificando...', ok: 'Verificado', fail: 'Contacta support@loamlab.studio' },
+    'pt-BR': { msg: 'Pagamento falhou: Sua assinatura não foi cobrada. Atualize seu método de pagamento.', portal_btn: 'Atualizar pagamento', verify_btn: 'Atualizado, verificar', verifying: 'Verificando...', ok: 'Verificado', fail: 'Contate support@loamlab.studio' },
+    'ja-JP': { msg: '支払い失敗：サブスクリプションの支払いに失敗しました。サービス中断を避けるため支払い情報を更新してください。', portal_btn: '支払い情報を更新', verify_btn: '更新済み、確認する', verifying: '確認中...', ok: '確認完了', fail: 'support@loamlab.studioへご連絡ください' },
+};
+
+function updatePaymentFailedBanner(isFailed) {
+    var banner = document.getElementById('payment-failed-banner');
+    if (!banner) return;
+    if (isFailed) {
+        var lang = (typeof currentLang !== 'undefined' ? currentLang : null) || localStorage.getItem('loamlab_lang') || 'en-US';
+        var ct = PAYMENT_FAILED_I18N[lang] || PAYMENT_FAILED_I18N['en-US'];
+        banner.querySelector('#pfb-msg').textContent = ct.msg;
+        banner.querySelector('#pfb-portal-btn').textContent = ct.portal_btn;
+        banner.querySelector('#pfb-verify-btn').textContent = ct.verify_btn;
+        banner.classList.remove('hidden');
+    } else {
+        banner.classList.add('hidden');
+    }
+}
+
+function openBillingPortal() {
+    var email = window.loamlabUserEmail || '';
+    var btn = document.getElementById('pfb-portal-btn');
+    if (btn) { btn.disabled = true; }
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 10000);
+    fetch(API_BASE + '/api/user?action=billing_portal&email=' + encodeURIComponent(email), { signal: ctrl.signal })
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+            clearTimeout(timer);
+            var url = data.portal_url || 'https://customer.dodopayments.com';
+            if (window.sketchup) { try { sketchup.open_browser(url); } catch(_) {} }
+            else { window.open(url, '_blank'); }
+        })
+        .catch(function(){
+            clearTimeout(timer);
+            var url = 'https://customer.dodopayments.com';
+            if (window.sketchup) { try { sketchup.open_browser(url); } catch(_) {} }
+            else { window.open(url, '_blank'); }
+        })
+        .finally(function(){
+            if (btn) { btn.disabled = false; }
+        });
+}
+
+function verifyPaymentFromBanner() {
+    var email = window.loamlabUserEmail || '';
+    var btn = document.getElementById('pfb-verify-btn');
+    var lang = (typeof currentLang !== 'undefined' ? currentLang : null) || localStorage.getItem('loamlab_lang') || 'en-US';
+    var ct = PAYMENT_FAILED_I18N[lang] || PAYMENT_FAILED_I18N['en-US'];
+    if (btn) { btn.disabled = true; btn.textContent = ct.verifying; }
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 15000);
+    fetch(API_BASE + '/api/user?action=verify_payment', { headers: { 'X-User-Email': email }, signal: ctrl.signal })
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+            clearTimeout(timer);
+            if (data.code === 0 && (data.activated || data.alreadyActive)) {
+                window.loamlabPaymentFailed = false;
+                updatePaymentFailedBanner(false);
+                showUpdateToast(ct.ok);
+                if (data.activated) { setTimeout(function(){ fetchUserPoints(email); }, 1000); }
+            } else {
+                if (btn) { btn.disabled = false; btn.textContent = ct.fail; }
+            }
+        })
+        .catch(function(){
+            clearTimeout(timer);
+            if (btn) { btn.disabled = false; btn.textContent = ct.verify_btn; }
+        });
+}
+
 function updateCancelPendingBanner(isPending) {
     var banner = document.getElementById('cancel-pending-banner');
     var cancelRow = document.getElementById('cancel-subscription-row');
@@ -3426,8 +3502,10 @@ function _doFetchUserPoints(email, attempt) {
                 window.loamlabSubscriptionPlan = data.subscription_plan || null;
                 window.loamlabLastTopupAt = data.last_topup_at || null;
                 window.loamlabCancelPending = data.cancel_pending || false;
+                window.loamlabPaymentFailed = data.payment_failed || false;
                 updatePlanBadge(window.loamlabSubscriptionPlan);
                 updateCancelPendingBanner(window.loamlabCancelPending);
+                updatePaymentFailedBanner(window.loamlabPaymentFailed);
                 window.updateLoginUI(email, data.points, data.display_code || data.referral_code, data.referred_by, data.is_kol, data.is_partner);
 
                 // 邀請人到帳 Toast：比對上次快取的成功邀請數，有增加就通知
@@ -6246,23 +6324,7 @@ function handle360CloudExport() {
     })();
 }
 
-// Phase 2 Anti-Collage: 將渲染結果降採樣為 16×16，僅保留光影色調，再傳回 Ruby
+// Phase 2: 直接傳回渲染結果 URL，由後端 Prompt 控制 Anti-Collage，避免 16x16 降採樣導致色調異常（如黃昏色調）
 window.generateStyleReference = function(url) {
-    var img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.onload = function() {
-        try {
-            var canvas = document.createElement('canvas');
-            canvas.width = 16; canvas.height = 16;
-            canvas.getContext('2d').drawImage(img, 0, 0, 16, 16);
-            var base64 = canvas.toDataURL('image/jpeg', 0.8);
-            sketchup.returnStyleReference({ style_ref: base64 });
-        } catch(e) {
-            sketchup.returnStyleReference({ style_ref: url });
-        }
-    };
-    img.onerror = function() {
-        sketchup.returnStyleReference({ style_ref: url });
-    };
-    img.src = url;
+    sketchup.returnStyleReference({ style_ref: url });
 };

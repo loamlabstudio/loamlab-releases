@@ -1,4 +1,4 @@
-# publish.ps1 - Run after build_rbz.ps1 to create GitHub Release + deploy Vercel
+﻿# publish.ps1 - Run after build_rbz.ps1 to create GitHub Release + deploy Vercel
 # Usage:
 #   publish.ps1 -notes "說明"           → 功能版本（Feature Release）
 #   publish.ps1 -Patch -notes "fix: 說明" → 補丁修復（Patch Fix，標題帶 [Patch Fix] 標記）
@@ -58,3 +58,4 @@ else { Write-Host "[OK] Vercel deploy complete" -ForegroundColor Green }
 
 Write-Host ""
 Write-Host "===== v$version published =====" -ForegroundColor Green
+

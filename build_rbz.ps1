@@ -1,4 +1,4 @@
-param([switch]$ew, [switch]$Force)
+﻿param([switch]$ew, [switch]$Force)
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $sourceDir = $PSScriptRoot
 $configFile = "$sourceDir\loamlab_plugin\config.rb"
@@ -127,3 +127,4 @@ if ($ew) {
     Write-Host "EW build: updater.rb excluded, DIST_CHANNEL=store" -ForegroundColor Yellow
 }
 Write-Host "==========================================================" -ForegroundColor Green
+

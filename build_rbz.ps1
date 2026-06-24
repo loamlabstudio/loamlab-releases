@@ -62,6 +62,25 @@ if ($lintExit -ne 0) {
 }
 Write-Host "[Lint] OK - no ES2020+ syntax detected" -ForegroundColor Green
 
+# === Release Gate Check ===
+Write-Host "[Gate] Running pre_release_check.ps1..." -ForegroundColor Cyan
+$gateScript = "$sourceDir\scripts\pre_release_check.ps1"
+if (Test-Path $gateScript) {
+    & powershell -ExecutionPolicy Bypass -File $gateScript
+    $gateExit = $LASTEXITCODE
+    if ($gateExit -ne 0 -and -not $Force) {
+        Write-Host "[ABORT] Release Gate 未通過。修復上述問題後重試。" -ForegroundColor Red
+        Write-Host "        測試打包（非 release）請加 -Force 參數。" -ForegroundColor DarkYellow
+        exit 1
+    }
+    if ($Force -and $gateExit -ne 0) {
+        Write-Host "[WARN] -Force 覆蓋 Release Gate（非 release 用途）" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "[WARN] pre_release_check.ps1 不存在，跳過 Gate 檢查" -ForegroundColor Yellow
+}
+# ==========================
+
 if (Test-Path $outZip) { Remove-Item $outZip -Force }
 if (Test-Path $outRbz) { Remove-Item $outRbz -Force }
 

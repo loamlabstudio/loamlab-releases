@@ -5,6 +5,14 @@
 - Antigravity 已完成核心修復：在 `main.rb` 引入 `LoamLab.safe_temp_dir` 並替換了所有 `Dir.tmpdir` 的呼叫（包含 `updater.rb`）。
 - **極度重要警示**：這是一個緊急補丁 (Hotfix) 上線。目前專案內可能存在正在開發中的「SaaS 訂閱扣款失敗處理機制 (Dunning Process)」相關後端或前端代碼。**絕對不能**將未開發完成的內容一起打包或部署上線。
 
+## RELEASE_GATE
+release_type: hotfix
+verified_diff:
+  - loamlab_plugin/config.rb
+  - loamlab_plugin/main.rb
+  - loamlab_plugin/updater.rb
+sql_migration: false
+
 ## TASKS
 - [MUST] **Task 1: 版本號更新與修改確認**
   - **影響檔案**: `loamlab_plugin/config.rb`

@@ -129,6 +129,49 @@ GET https://loamlab-camera-backend.vercel.app/api/fix_anomalies?key=<ADMIN_KEY>
 
 ---
 
+## Release Gate Protocol
+
+**每次 release 前 agent 必須遵循。`build_rbz.ps1` 已自動整合 `pre_release_check.ps1`。**
+
+### 上線類型判斷
+
+| 類型 | 觸發條件 | 允許的 diff 範圍 | QA 要求 |
+|------|---------|----------------|---------|
+| `hotfix` | bug 修復、文字修正、小調整 | 僅 bug 相關檔案 | 快速驗收即可 |
+| `feature` | 新功能、大幅 UI 改動、新 API | 包含多個模組 | 完整測試 + `verified_diff` 必填 |
+
+### Agent 決策樹
+
+```
+收到「上線/發佈/release」指令
+  → 1. 讀 FEATURE_FLAGS.md
+       └─ 有 wip 功能的 BLOCKED_FILES 在 git diff 中？→ STOP，詢問用戶如何隔離
+  → 2. 確認 SPRINT.md 有 ## RELEASE_GATE 區塊（release_type + verified_diff）
+       └─ 若無 → 請 Gemini 補填或人工確認
+  → 3. build_rbz.ps1（內含 pre_release_check.ps1 自動 gate，必須 PASS）
+       └─ FAIL → 依錯誤訊息修復，不得用 -Force bypass（除非用戶明確指示）
+  → 4. publish.ps1
+```
+
+### SPRINT.md RELEASE_GATE 區塊格式（每個 Sprint 必填）
+
+```markdown
+## RELEASE_GATE
+release_type: hotfix          # hotfix | feature
+verified_diff:                # 此 release 預期在 diff 中的所有檔案
+  - loamlab_plugin/main.rb
+  - loamlab_plugin/updater.rb
+sql_migration: false          # true = supabase_setup.sql 有新 Phase，需人工執行
+```
+
+### FEATURE_FLAGS.md 維護規則（見根目錄 FEATURE_FLAGS.md）
+
+- 新增 WIP 代碼時：同一 commit 更新 FEATURE_FLAGS.md（status=`wip`，填 BLOCKED_FILES）
+- 功能完成：status → `ready`，清空 BLOCKED_FILES
+- 上線後：status → `released`，Notes 記錄版本號
+
+---
+
 ## Multi-Agent 協作（模組 → 檔案速查）
 
 Commit message 格式：`feat(ui): 說明 [T07][DONE]`（`[T\d+][DONE]` 觸發 `scripts/sync_tasks.sh` 自動更新 TASKS.md）

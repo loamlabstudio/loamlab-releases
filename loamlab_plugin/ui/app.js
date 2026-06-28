@@ -408,6 +408,27 @@ function _clearStyleRef() {
     _tool1StyleRefUrl = null;
     _renderStyleRefThumbs();
 }
+async function blurImageForStyleReference(url, blurRadius = 40) {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.filter = `blur(${blurRadius}px)`;
+                ctx.drawImage(img, 0, 0);
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
+            } catch (e) {
+                resolve(url);
+            }
+        };
+        img.onerror = () => resolve(url);
+        img.src = url;
+    });
+}
 
 // ── Legacy/Nodes 模式：純後端控制 ────────────────────────────────────────────
 function _applyPromptMode() {
@@ -2082,25 +2103,31 @@ document.addEventListener("DOMContentLoaded", () => {
             const _forceStyleVal = _forceStyleEntry ? (_forceStyleEntry.value || {}) : {};
             const _t4StyleEntry = (optionsData || []).find(o => o.field_id === '_t4_force_style');
             window._t4ForceStyle = _t4StyleEntry ? (_t4StyleEntry.value || {}) : {};
-            sketchup.render_scene({
-                scenes: usingBaseImage ? [] : selectedScenes,
-                prompt: finalPrompt,
-                resolution,
-                expected_cost: totalCost,
-                tool: currentActiveTool,
-                advanced_settings,
-                render_force_style: JSON.stringify(_forceStyleVal),
-                ...(usingBaseImage && {
-                    base_image_url: _baseImageEntry.cloud_url || _baseImageEntry.file_url || '',
-                    base_image_scene: _baseImageEntry.scene || '底圖'
-                }),
-                ...(currentActiveTool === 2 && _referenceImageBase64 && {
-                    reference_image_base64: _referenceImageBase64
-                }),
-                ...(_tool1StyleRefUrl && currentActiveTool === 1 && {
-                    style_ref_url: _tool1StyleRefUrl
-                })
-            });
+            (async () => {
+                let _styleRefToSend = null;
+                if (_tool1StyleRefUrl && currentActiveTool === 1) {
+                    _styleRefToSend = await blurImageForStyleReference(_tool1StyleRefUrl);
+                }
+                sketchup.render_scene({
+                    scenes: usingBaseImage ? [] : selectedScenes,
+                    prompt: finalPrompt,
+                    resolution,
+                    expected_cost: totalCost,
+                    tool: currentActiveTool,
+                    advanced_settings,
+                    render_force_style: JSON.stringify(_forceStyleVal),
+                    ...(usingBaseImage && {
+                        base_image_url: _baseImageEntry.cloud_url || _baseImageEntry.file_url || '',
+                        base_image_scene: _baseImageEntry.scene || '底圖'
+                    }),
+                    ...(currentActiveTool === 2 && _referenceImageBase64 && {
+                        reference_image_base64: _referenceImageBase64
+                    }),
+                    ...(_styleRefToSend && {
+                        style_ref_url: _styleRefToSend
+                    })
+                });
+            })();
         } else {
             console.log('Simulating render req for:', selectedScenes, 'Prompt:', userPrompt, 'Res:', resolution, 'Cost:', totalCost);
             // 本地模擬扣款特效

@@ -1,27 +1,29 @@
-# Sprint: 預覽截圖出錯修復 (Hotfix Release)
+# Sprint Plan: 解決工具1參考圖空間結構干擾 & 工具2圖片比例變形問題
 
 ## CONTEXT_DIGEST
-- 用戶遇到 `Filename not specified` 錯誤，起因為 Windows 中文用戶名導致 `Dir.tmpdir` 產生非 UTF-8 的路徑編碼錯誤。
-- Antigravity 已完成核心修復：在 `main.rb` 引入 `LoamLab.safe_temp_dir` 並替換了所有 `Dir.tmpdir` 的呼叫（包含 `updater.rb`）。
-- **極度重要警示**：這是一個緊急補丁 (Hotfix) 上線。目前專案內可能存在正在開發中的「SaaS 訂閱扣款失敗處理機制 (Dunning Process)」相關後端或前端代碼。**絕對不能**將未開發完成的內容一起打包或部署上線。
-
-## RELEASE_GATE
-release_type: hotfix
-verified_diff:
-  - loamlab_plugin/config.rb
-  - loamlab_plugin/main.rb
-  - loamlab_plugin/updater.rb
-sql_migration: false
+1. 用戶反映使用「工具1」參考圖時，AI 會將參考圖的空間結構融合進來。解決方案是在前端對參考圖進行強烈的「高斯模糊」處理。
+2. 用戶反映「工具2」渲染輸出的比例與原圖不一致。經查為 `render.js` 中的模型適配器 (`google/nano-banana`) 強制加上 `aspect_ratio: '16:9'` 參數所致，需在工具2的情境下移除此限制，保留原圖比例。
 
 ## TASKS
-- [MUST] **Task 1: 版本號更新與修改確認**
-  - **影響檔案**: `loamlab_plugin/config.rb`
-  - **描述**: 將 `config.rb` 的 `VERSION` 推進一個小版號（如 `1.4.49` -> `1.4.50`）。快速核對 `main.rb` 與 `updater.rb` 的 `safe_temp_dir` 補丁邏輯無誤。
-- [MUST] **Task 2: 隔離未完工代碼與打包插件**
-  - **影響檔案**: `loamlab_plugin/*` (打包目標)
-  - **描述**: 將本地「尚未開發完成的 Dunning Process 代碼」進行 `git stash` 暫存隔離。接著打包最新的 `loamlab_plugin` 資料夾為 `.rbz` 安裝檔。
-- [MUST] **Task 3: 安全部署與版本發布**
-  - **影響檔案**: `loamlab_backend/api/*` (負責版本更新的 endpoint)、Vercel 部署
-  - **描述**: 僅針對「插件更新所需的版本宣告邏輯」進行更新並發布上線。部署完畢確認新版 `.rbz` 可供下載後，透過 `git stash pop` 還原原本正在開發的 Dunning Process 相關代碼。
+
+### 1. 實作影像高斯模糊處理函數 [MUST]
+- **影響檔案**: `loamlab_plugin/ui/app.js`
+- **任務描述**: 
+  1. 在 `app.js` 中新增一個非同步函數 `blurImageForStyleReference(url, blurRadius = 40)`。
+  2. 設定 `img.crossOrigin = 'Anonymous'`，將圖片繪製至 `<canvas>` 並使用 `ctx.filter = blur`。
+  3. 導出模糊後的 Base64。若載入失敗則回傳原始 URL。
+
+### 2. 工具1：渲染請求前套用模糊處理 [MUST]
+- **影響檔案**: `loamlab_plugin/ui/app.js`
+- **任務描述**: 
+  1. 在送出 Payload 前，若為 `currentActiveTool === 1` 且有 `_tool1StyleRefUrl`，則 await `blurImageForStyleReference`。
+  2. 用模糊 Base64 取代原 URL 送出給後端。
+
+### 3. 工具2：修復後端渲染比例強制 16:9 變形問題 [MUST]
+- **影響檔案**: `loamlab_backend/api/render.js`
+- **任務描述**: 
+  1. 修改 `buildAtlasReqBody` 函式簽名，接收 `activeTool` 作為參數。
+  2. 修改 `MODEL_ADAPTERS['google/nano-banana']` 適配器函式，使其能根據 `activeTool` 動態調整參數。
+  3. 當 `activeTool === 2` (Furniture Swap / 編輯模式) 時，在回傳的 payload 中 **不要** 強制加上 `aspect_ratio: '16:9'`，讓 AI 引擎能維持輸入影像的原始比例進行渲染。
 
 status: DONE

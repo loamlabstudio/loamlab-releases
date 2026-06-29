@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 
 import { processTopup, makeSupabase } from '../lib/activate.js';
+import { DODO_PRODUCTS } from '../config.js';
 
 const supabase = makeSupabase();
 
@@ -102,10 +103,27 @@ export default async function handler(req, res) {
                     }
                     const { data: existingPay, error: dedupPayErr } = await dedupPayQuery.limit(1);
                     if (!dedupPayErr && existingPay?.length > 0) {
-                        console.log(`[Dodo] payment.succeeded skipped — 本週期已有記錄: ${existingPay[0].order_id}`);
-                        if (data.subscription_id) {
-                            await supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
-                                .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
+                        // 升級偵測：新方案 tier > 現有方案 → 繞過月份去重，允許升級點數補發
+                        const PLAN_TIERS = { starter: 1, pro: 2, studio: 3 };
+                        const newPlanName = resolvePlanName(variantId, planKey);
+                        const { data: curUser } = await supabase.from('users').select('subscription_plan').eq('email', customerEmail).maybeSingle();
+                        const isUpgrade = (PLAN_TIERS[newPlanName] || 0) > (PLAN_TIERS[curUser?.subscription_plan] || 0);
+
+                        if (isUpgrade) {
+                            console.log(`[Dodo] payment.succeeded 升級 ${curUser?.subscription_plan}→${newPlanName}，繞過月份去重`);
+                            try {
+                                await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey);
+                            } catch (e) {
+                                await logWebhookError('DODO', event.type, orderId, customerEmail, e.message, data);
+                                await sendActivationFailureEmail(customerEmail, orderId);
+                                throw e;
+                            }
+                        } else {
+                            console.log(`[Dodo] payment.succeeded skipped — 本週期已有記錄: ${existingPay[0].order_id}`);
+                            if (data.subscription_id) {
+                                await supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
+                                    .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
+                            }
                         }
                     } else {
                         try {
@@ -133,8 +151,8 @@ export default async function handler(req, res) {
                 const customerEmail = data.customer?.email || data.email || data.customer_email;
                 const subProductId = data.product_id || data.plan_id || data.product_cart?.[0]?.product_id;
                 if (customerEmail && data.subscription_id) {
-                    // 先存 subscription_id，同時清除扣款失敗旗標（無論 product_id 是否存在都做）
-                    await supabase.from('users').update({ dodo_subscription_id: data.subscription_id, payment_failed: false }).eq('email', customerEmail)
+                    // 先存 subscription_id，清除扣款失敗旗標，同時清除降級待生效標記（新週期開始時降級已生效）
+                    await supabase.from('users').update({ dodo_subscription_id: data.subscription_id, payment_failed: false, next_plan: null }).eq('email', customerEmail)
                         .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
                 }
                 // 若 payload 缺 product_id，嘗試從 DB 現有訂閱方案反推（處理 Dodo 欄位缺失的情況）
@@ -182,6 +200,42 @@ export default async function handler(req, res) {
                             }
                         }
                     }
+                }
+            } else if (event.type === 'subscription.updated') {
+                // 用戶自助升降級：升級立刻生效（payment.succeeded 同步觸發處理點數），降級期末生效（標記 next_plan）
+                const data = event.data;
+                const customerEmail = data.customer?.email || data.email || data.customer_email;
+                const newProductId = data.product_id || data.plan_id;
+                const subscriptionId = data.subscription_id;
+
+                if (customerEmail && subscriptionId) {
+                    const updateFields = { dodo_subscription_id: subscriptionId };
+
+                    if (newProductId) {
+                        const newPlanName = resolvePlanName(newProductId, null);
+                        const PLAN_TIERS = { starter: 1, pro: 2, studio: 3 };
+
+                        if (newPlanName) {
+                            const { data: user } = await supabase.from('users')
+                                .select('subscription_plan').eq('email', customerEmail).maybeSingle();
+                            const currentTier = PLAN_TIERS[user?.subscription_plan] || 0;
+                            const newTier = PLAN_TIERS[newPlanName] || 0;
+
+                            if (newTier >= currentTier) {
+                                // 升級或同方案變更：立刻同步（payment.succeeded 負責點數）
+                                updateFields.subscription_plan = newPlanName;
+                                updateFields.next_plan = null;
+                                console.log(`[Dodo] subscription.updated 升級: ${customerEmail} → ${newPlanName}`);
+                            } else {
+                                // 降級（期末生效）：儲存 next_plan，下週期 subscription.renewed 清除
+                                updateFields.next_plan = newPlanName;
+                                console.log(`[Dodo] subscription.updated 降級待生效: ${customerEmail} → ${newPlanName} (期末)`);
+                            }
+                        }
+                    }
+
+                    await supabase.from('users').update(updateFields).eq('email', customerEmail)
+                        .catch(e => console.warn('[Dodo] subscription.updated update failed:', e.message));
                 }
             } else if (event.type === 'subscription.cancelled' || event.type === 'subscription.canceled' || event.type === 'subscription.expired') {
                 const data = event.data;
@@ -331,6 +385,15 @@ async function sendDunningEmail(email) {
 }
 
 // 付款失敗時寫入審計表，讓每筆付款都有記錄可追蹤與手動補償
+function resolvePlanName(variantId, planKey) {
+    const PLAN_KEY_MAP = { STARTER: 'starter', PRO: 'pro', STUDIO: 'studio' };
+    if (planKey && PLAN_KEY_MAP[planKey.toUpperCase()]) return PLAN_KEY_MAP[planKey.toUpperCase()];
+    if (variantId == DODO_PRODUCTS.STARTER) return 'starter';
+    if (variantId == DODO_PRODUCTS.PRO) return 'pro';
+    if (variantId == DODO_PRODUCTS.STUDIO) return 'studio';
+    return null;
+}
+
 async function logWebhookError(platform, eventType, orderId, customerEmail, errorMsg, rawData) {
     try {
         await supabase.from('webhook_errors').insert([{

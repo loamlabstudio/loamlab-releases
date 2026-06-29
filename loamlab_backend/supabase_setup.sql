@@ -355,3 +355,9 @@ ALTER TABLE public.webhook_errors ADD COLUMN IF NOT EXISTS email_sent BOOLEAN DE
 -- payment_failed = true 時 UI 顯示警告橫幅引導更新付款資訊
 -- ==============================================================================
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS payment_failed BOOLEAN DEFAULT false;
+
+-- ==============================================================================
+-- Phase 29: 訂閱升降級支援
+-- next_plan：降級期末生效時暫存新方案名稱，subscription.renewed 清除
+-- ==============================================================================
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS next_plan TEXT DEFAULT NULL;

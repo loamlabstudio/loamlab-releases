@@ -629,7 +629,7 @@ export default async function handler(req, res) {
         try {
             let { data, error } = await supabase
                 .from('users')
-                .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending, referral_success_count, payment_failed')
+                .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, next_plan, last_topup_at, is_kol, is_partner, cancel_pending, referral_success_count, payment_failed')
                 .eq('email', email)
                 .single();
 
@@ -730,6 +730,7 @@ export default async function handler(req, res) {
                 is_partner: data ? (data.is_partner || false) : false,
                 cancel_pending: data ? (data.cancel_pending || false) : false,
                 payment_failed: data ? (data.payment_failed || false) : false,
+                next_plan: data ? (data.next_plan || null) : null,
                 is_new_user: error && error.code === 'PGRST116' ? true : false
             });
         } catch (e) {

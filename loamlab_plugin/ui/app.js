@@ -408,6 +408,11 @@ function _clearStyleRef() {
     _tool1StyleRefUrl = null;
     _renderStyleRefThumbs();
 }
+function getNearestAspectRatio(w, h) {
+    const r = w / h;
+    const opts = { '1:1':1,'3:2':1.5,'2:3':2/3,'3:4':3/4,'4:3':4/3,'4:5':4/5,'5:4':5/4,'9:16':9/16,'16:9':16/9,'21:9':21/9 };
+    return Object.entries(opts).reduce((best,[k,v]) => Math.abs(r-v) < Math.abs(r-opts[best]) ? k : best, '16:9');
+}
 async function blurImageForStyleReference(url, blurRadius = 40) {
     return new Promise(resolve => {
         const img = new Image();
@@ -2283,6 +2288,29 @@ function updatePlanBadge(plan) {
     }
 }
 
+var DOWNGRADE_PENDING_I18N = {
+    'zh-TW': { msg: '您的方案將於本週期結束後降級至 {plan}' },
+    'en-US': { msg: 'Your plan will downgrade to {plan} at the end of this period' },
+    'zh-CN': { msg: '您的方案将于本周期结束后降级至 {plan}' },
+    'es-ES': { msg: 'Tu plan cambiará a {plan} al final del período actual' },
+    'pt-BR': { msg: 'Seu plano será rebaixado para {plan} no fim do período' },
+    'ja-JP': { msg: '今期終了後、プランが{plan}にダウングレードされます' },
+};
+
+function updateDowngradePendingBanner(nextPlan) {
+    var banner = document.getElementById('downgrade-pending-banner');
+    if (!banner) return;
+    if (nextPlan) {
+        var lang = (typeof currentLang !== 'undefined' ? currentLang : null) || localStorage.getItem('loamlab_lang') || 'en-US';
+        var ct = DOWNGRADE_PENDING_I18N[lang] || DOWNGRADE_PENDING_I18N['en-US'];
+        var planLabel = nextPlan.charAt(0).toUpperCase() + nextPlan.slice(1);
+        banner.querySelector('#dpb-msg').textContent = ct.msg.replace('{plan}', planLabel);
+        banner.classList.remove('hidden');
+    } else {
+        banner.classList.add('hidden');
+    }
+}
+
 var CANCEL_PENDING_I18N = {
     'zh-TW': { msg: '訂閱將於本週期結束後取消', btn: '撤回退訂申請', undoing: '撤回中...', undo_ok: '已恢復訂閱', undo_fail: '請前往管理頁面撤回' },
     'en-US': { msg: 'Subscription will cancel at period end', btn: 'Undo cancellation', undoing: 'Undoing...', undo_ok: 'Subscription restored', undo_fail: 'Please visit billing portal to undo' },
@@ -3530,8 +3558,10 @@ function _doFetchUserPoints(email, attempt) {
                 window.loamlabLastTopupAt = data.last_topup_at || null;
                 window.loamlabCancelPending = data.cancel_pending || false;
                 window.loamlabPaymentFailed = data.payment_failed || false;
+                window.loamlabNextPlan = data.next_plan || null;
                 updatePlanBadge(window.loamlabSubscriptionPlan);
                 updateCancelPendingBanner(window.loamlabCancelPending);
+                updateDowngradePendingBanner(window.loamlabNextPlan);
                 updatePaymentFailedBanner(window.loamlabPaymentFailed);
                 window.updateLoginUI(email, data.points, data.display_code || data.referral_code, data.referred_by, data.is_kol, data.is_partner);
 
@@ -6124,7 +6154,10 @@ async function executeSmartSwap(overrideBody = null) {
                 } catch (_) {}
             }
 
-            fetchBody = { tool: 2, parameters: { ...originalParam, base_image: compositeBase64, prompt, resolution, ...(refImages.length > 0 && { ref_images: refImages }) } };
+            const aspectRatio = (SmartCanvas.baseImg?.complete && SmartCanvas.baseImg.naturalWidth > 0)
+                ? getNearestAspectRatio(SmartCanvas.baseImg.naturalWidth, SmartCanvas.baseImg.naturalHeight)
+                : '16:9';
+            fetchBody = { tool: 2, parameters: { ...originalParam, base_image: compositeBase64, prompt, resolution, aspect_ratio: aspectRatio, ...(refImages.length > 0 && { ref_images: refImages }) } };
 
             // DEV：儲存供重測使用（資料存取與視角無關；toast 僅 DEV 視角顯示）
             if (window._isDev) {

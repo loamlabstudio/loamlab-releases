@@ -6178,7 +6178,7 @@ async function executeSmartSwap(overrideBody = null) {
                 } catch (_) {}
             }
 
-            const aspectRatio = (SmartCanvas.baseImg?.complete && SmartCanvas.baseImg.naturalWidth > 0)
+            const aspectRatio = (SmartCanvas.baseImg && SmartCanvas.baseImg.complete && SmartCanvas.baseImg.naturalWidth > 0)
                 ? getNearestAspectRatio(SmartCanvas.baseImg.naturalWidth, SmartCanvas.baseImg.naturalHeight)
                 : '16:9';
             fetchBody = { tool: 2, parameters: { ...originalParam, base_image: compositeBase64, prompt, resolution, aspect_ratio: aspectRatio, ...(refImages.length > 0 && { ref_images: refImages }) } };

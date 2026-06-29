@@ -32,15 +32,15 @@ const MODEL_ADAPTERS = {
         const qualityMap = { '1k': 'low', '2k': 'medium', '4k': 'high' };
         return { images, prompt, quality: qualityMap[res] || 'medium', size: '1536x1024' };
     },
-    'google/nano-banana': (images, prompt, res, activeTool) => ({
-        images, prompt, resolution: res, ...(activeTool !== 2 && { aspect_ratio: '16:9' }), output_format: 'jpeg'
+    'google/nano-banana': (images, prompt, res, activeTool, aspectRatio) => ({
+        images, prompt, resolution: res, aspect_ratio: activeTool === 2 ? (aspectRatio || '16:9') : '16:9', output_format: 'jpeg'
     })
 };
 
-function buildAtlasReqBody(model, images, prompt, resolution, activeTool) {
+function buildAtlasReqBody(model, images, prompt, resolution, activeTool, aspectRatio) {
     const adapterKey = Object.keys(MODEL_ADAPTERS).find(k => model.startsWith(k));
     const adapter = MODEL_ADAPTERS[adapterKey] || MODEL_ADAPTERS['google/nano-banana'];
-    return { model, ...adapter(images, prompt, resolution, activeTool) };
+    return { model, ...adapter(images, prompt, resolution, activeTool, aspectRatio) };
 }
 
 // sceneImages 為索引 0，styleRefUrl（參考圖）緊接在後，確保引擎以場景為空間主體
@@ -880,7 +880,8 @@ async function _handleRender(req, res) {
         });
 
         const normalizedRes = resolutionMap[resVal] || '2k';
-        const reqBody = buildAtlasReqBody(finalModel, atlasImages, finalPrompt, normalizedRes, activeTool);
+        const aspectRatioOverride = activeTool === 2 ? (userPayload.parameters?.aspect_ratio || null) : null;
+        const reqBody = buildAtlasReqBody(finalModel, atlasImages, finalPrompt, normalizedRes, activeTool, aspectRatioOverride);
 
         const response = await fetch('https://api.atlascloud.ai/api/v1/model/generateImage', {
             method: 'POST',

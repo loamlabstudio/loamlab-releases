@@ -1248,9 +1248,10 @@
 
             </div>
 
-            <!-- 取消訂閱入口（僅訂閱用戶可見）-->
-            <div id="cancel-subscription-row" class="hidden mt-4 text-center">
-                <button onclick="openCancelFlow()" class="text-[10px] text-white/20 hover:text-white/50 transition-colors underline underline-offset-2 tracking-wider" data-i18n="pricing_cancel_sub">取消訂閱 / Cancel Subscription</button>
+            <!-- 管理訂閱 + 取消入口（僅訂閱用戶可見）-->
+            <div id="cancel-subscription-row" class="hidden mt-4 flex flex-col items-center gap-2">
+                <button id="btn-manage-plan" onclick="openManagePlan()" class="text-[10px] font-semibold tracking-wider text-white/50 hover:text-white/80 border border-white/15 hover:border-white/35 rounded-full px-4 py-1.5 transition-all disabled:opacity-40" data-i18n="pricing_manage_sub">管理訂閱 / Manage Plan</button>
+                <button onclick="openCancelFlow()" class="text-[10px] text-white/20 hover:text-white/40 transition-colors underline underline-offset-2 tracking-wider" data-i18n="pricing_cancel_sub">取消訂閱 / Cancel Subscription</button>
             </div>
 
             <!-- 退訂待生效提示（cancel_pending = true 時顯示）-->

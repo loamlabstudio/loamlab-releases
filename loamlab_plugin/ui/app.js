@@ -2344,6 +2344,30 @@ function updatePaymentFailedBanner(isFailed) {
     }
 }
 
+function openManagePlan() {
+    var btn = document.getElementById('btn-manage-plan');
+    if (btn) { btn.disabled = true; }
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 10000);
+    fetch(API_BASE + '/api/user?action=billing_portal&email=' + encodeURIComponent(window.loamlabUserEmail || ''), { signal: ctrl.signal })
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+            clearTimeout(timer);
+            var url = data.portal_url || 'https://customer.dodopayments.com';
+            if (window.sketchup) { try { sketchup.open_browser(url); } catch(_) {} }
+            else { window.open(url, '_blank'); }
+        })
+        .catch(function(){
+            clearTimeout(timer);
+            var url = 'https://customer.dodopayments.com';
+            if (window.sketchup) { try { sketchup.open_browser(url); } catch(_) {} }
+            else { window.open(url, '_blank'); }
+        })
+        .finally(function(){
+            if (btn) { btn.disabled = false; }
+        });
+}
+
 function openBillingPortal() {
     var email = window.loamlabUserEmail || '';
     var btn = document.getElementById('pfb-portal-btn');

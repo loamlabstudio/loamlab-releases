@@ -1762,14 +1762,6 @@ module LoamLab
             begin; model.options['PageOptions']['TransitionTime'] = original_transition_time; rescue => _e; end
             dialog.execute_script("window.receiveFromRuby({status: 'export_done'})")
             LoamLab.log "[LoamLab] 批量導出排程已全部送出。"
-            # 有 style ref 時：全部截圖完成後立即 stagger 並行發送，不等 scene 0 回傳
-            if !user_style_ref_url.to_s.strip.empty? && !@@deferred_sends.empty?
-              sends_copy = @@deferred_sends.dup
-              @@deferred_sends.clear
-              sends_copy.each_with_index do |item, i|
-                UI.start_timer(i * 2.0, false) { self.fire_single_deferred(item, user_style_ref_url) }
-              end
-            end
           end
           next
         end
@@ -1880,7 +1872,8 @@ module LoamLab
                   captured_url     = "#{::LoamLab::API_BASE_URL}/api/render"
                   LoamLab.log "[LoamLab] 截圖完成: #{scene_name}"
 
-                  if index == 0 || total_count == 1
+                  has_explicit_style = !user_style_ref_url.to_s.strip.empty?
+                  if index == 0 || total_count == 1 || has_explicit_style
                     _s0_scene   = captured_scene.dup
                     _s0_channel = captured_channel_b64.dup
                     _s0_sref    = user_style_ref_url.dup

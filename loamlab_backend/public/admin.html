@@ -2239,7 +2239,7 @@ function _updateForceStyleField(key, rawVal) {
   // EdgeDisplayMode 用整數 0/1；DisplayShadows 用 boolean；其餘 boolean 或 number
   if (key === 'EdgeDisplayMode') {
     e.value[key] = (rawVal === true || rawVal === 'true') ? 1 : 0;
-  } else if (key === 'DisplayShadows' || key === 'UseSunForAllShading') {
+  } else if (key === 'DisplayShadows' || key === 'UseSunForAllShading' || key === 'DrawProfiles') {
     e.value[key] = (rawVal === true || rawVal === 'true');
   } else if (['AmbientOcclusionDistance', 'AmbientOcclusionIntensity'].includes(key)) {
     e.value[key] = parseFloat(rawVal) || 0;
@@ -2304,8 +2304,10 @@ function renderRenderForceStyleSection() {
     + sectionLabel('Edge Style')
     + edgeToggleHtml
     + toggleRow('DrawBackEdges（後側邊線）', 'DrawBackEdges', false)
-    + toggleRow('DrawSilhouettes（Profiles 輪廓線）', 'DrawSilhouettes', true)
-    + numRow('SilhouetteWidth（Profile 粗細）', 'SilhouetteWidth', 1)
+    + toggleRow('DrawSilhouettes（剪影輪廓線）', 'DrawSilhouettes', true)
+    + numRow('SilhouetteWidth（剪影粗細）', 'SilhouetteWidth', 1)
+    + toggleRow('DrawProfiles（物件輪廓線）', 'DrawProfiles', true)
+    + numRow('ProfileWidth（輪廓粗細）', 'ProfileWidth', 2)
     + toggleRow('DrawDepthQue（Depth Cue）', 'DrawDepthQue', false)
     + sectionLabel('Face / AO')
     + toggleRow('AmbientOcclusion（環境光遮蔽，僅新引擎）', 'AmbientOcclusion', true)
@@ -2331,13 +2333,14 @@ function _updateT4ForceStyleField(key, rawVal) {
   if (!e.value) e.value = {};
   if (key === 'EdgeDisplayMode') {
     e.value[key] = (rawVal === true || rawVal === 'true') ? 1 : 0;
-  } else if (['UseSunForAllShading', 'DisplayShadows', 'AmbientOcclusion'].includes(key)) {
+  } else if (['UseSunForAllShading', 'DisplayShadows', 'AmbientOcclusion', 'DrawBackEdges', 'DrawSilhouettes', 'DrawProfiles', 'DrawDepthQue', 'DisplayInstanceAxes'].includes(key)) {
     e.value[key] = (rawVal === true || rawVal === 'true');
   } else if (['AmbientOcclusionDistance', 'AmbientOcclusionIntensity'].includes(key)) {
     e.value[key] = parseFloat(rawVal) || 0;
   } else {
     e.value[key] = parseInt(rawVal, 10);
   }
+  if (key === 'DisplayInstanceAxes') e.value['DisplaySketchAxes'] = e.value[key];
   optionsDirty = true;
 }
 function renderT4ForceStyleSection() {
@@ -2374,15 +2377,35 @@ function renderT4ForceStyleSection() {
   </div>`;
   };
   const sectionLabel = (t) => `<p class="text-[10px] text-white/25 uppercase tracking-widest pt-2 pb-0.5">${t}</p>`;
+  
+  const edgeToggleOn = v['EdgeDisplayMode'] !== undefined ? (v['EdgeDisplayMode'] === 1 || v['EdgeDisplayMode'] === true) : false;
+  const edgeToggleHtml = `<div class="flex items-center justify-between py-2 border-b border-white/[0.04]">
+    <span class="text-xs text-gray-400">EdgeDisplayMode（邊線主開關 0=關 1=開）</span>
+    <button onclick="_updateT4ForceStyleField('EdgeDisplayMode', ${!edgeToggleOn}); renderT4ForceStyleSection();"
+            class="w-10 h-5 rounded-full transition-colors ${edgeToggleOn ? 'bg-cyan-600' : 'bg-white/10'} relative flex-shrink-0">
+      <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${edgeToggleOn ? 'translate-x-5' : 'translate-x-0.5'}"></span>
+    </button>
+  </div>`;
+
   area.innerHTML = sectionLabel('陰影設定')
     + numRow('Light（亮面明度 0–100）', 'Light', 80)
     + numRow('Dark（暗面明度 0–100）', 'Dark', 70)
     + toggleRow('UseSunForAllShading（陽光統一分面，消除拼接縫）', 'UseSunForAllShading', true)
     + toggleRow('DisplayShadows（投影顯示）', 'DisplayShadows', false)
+    + sectionLabel('Edge Style')
+    + edgeToggleHtml
+    + toggleRow('DrawBackEdges（後側邊線）', 'DrawBackEdges', false)
+    + toggleRow('DrawSilhouettes（剪影輪廓線）', 'DrawSilhouettes', true)
+    + numRow('SilhouetteWidth（剪影粗細）', 'SilhouetteWidth', 1)
+    + toggleRow('DrawProfiles（物件輪廓線）', 'DrawProfiles', true)
+    + numRow('ProfileWidth（輪廓粗細）', 'ProfileWidth', 2)
+    + toggleRow('DrawDepthQue（Depth Cue）', 'DrawDepthQue', false)
     + sectionLabel('環境光遮蔽（AO）')
     + toggleRow('AmbientOcclusion（開關，僅新圖形引擎）', 'AmbientOcclusion', true)
     + sliderRow('距離 AmbientOcclusionDistance（0–10）', 'AmbientOcclusionDistance', 0, 10, 0.5, 2)
-    + sliderRow('強度 AmbientOcclusionIntensity（0–1）', 'AmbientOcclusionIntensity', 0, 1, 0.05, 0.8);
+    + sliderRow('強度 AmbientOcclusionIntensity（0–1）', 'AmbientOcclusionIntensity', 0, 1, 0.05, 0.8)
+    + sectionLabel('Modeling')
+    + toggleRow('DisplayInstanceAxes / DisplaySketchAxes（模型座標軸）', 'DisplayInstanceAxes', false);
 }
 
 function addOptionToNode(fieldId) {

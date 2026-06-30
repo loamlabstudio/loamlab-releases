@@ -53,8 +53,10 @@ module LoamLab
       # Edge Style — EdgeDisplayMode 是唯一有效的邊線主開關
       'EdgeDisplayMode'     => 0,       # 全部邊線關閉（0=關, 1=開）
       'DrawBackEdges'       => false,   # 後側邊線
-      'DrawSilhouettes'     => true,    # Profiles 輪廓線保留（助 AI 辨識幾何輪廓）
-      'SilhouetteWidth'     => 1,       # Profile 粗細（像素）
+      'DrawSilhouettes'     => true,    # 剪影輪廓線保留
+      'SilhouetteWidth'     => 1,       # 剪影粗細
+      'DrawProfiles'        => true,    # 物件輪廓線保留
+      'ProfileWidth'        => 2,       # 物件輪廓粗細
       'DrawDepthQue'        => false,   # Depth Cue
       # AO（AmbientOcclusion；新圖形引擎支援，classic engine 靜默跳過）
       'AmbientOcclusion'          => true,
@@ -162,6 +164,7 @@ module LoamLab
       ro = model.rendering_options
       # rendering_options 的有效 key（EdgeDisplayMode 是主開關，DrawEdges 不存在）
       ro_keys = ['EdgeDisplayMode', 'DrawBackEdges', 'DrawSilhouettes', 'SilhouetteWidth',
+                 'DrawProfiles', 'ProfileWidth',
                  'DrawDepthQue', 'AmbientOcclusion', 'AmbientOcclusionDistance', 'AmbientOcclusionIntensity',
                  'DisplayInstanceAxes', 'DisplaySketchAxes']
       ro_keys.each do |k|
@@ -174,16 +177,15 @@ module LoamLab
           LoamLab.log "[LoamLab] render_force_style #{k}: #{e.message}"
         end
       end
-      unless skip_shadow
-        # shadow_info 的 key（DisplayShadows, Light, Dark, UseSunForAllShading）
-        si = model.shadow_info
-        bool_si_keys = ['DisplayShadows', 'UseSunForAllShading']
-        ['DisplayShadows', 'Light', 'Dark', 'UseSunForAllShading'].each do |k|
-          next unless force_style.key?(k)
-          begin
-            si[k] = bool_si_keys.include?(k) ? !!force_style[k] : force_style[k].to_i
-          rescue => e; end
-        end
+      # shadow_info 的 key（DisplayShadows, Light, Dark, UseSunForAllShading）
+      si = model.shadow_info
+      bool_si_keys = ['DisplayShadows', 'UseSunForAllShading']
+      ['DisplayShadows', 'Light', 'Dark', 'UseSunForAllShading'].each do |k|
+        next unless force_style.key?(k)
+        next if k == 'DisplayShadows' && skip_shadow
+        begin
+          si[k] = bool_si_keys.include?(k) ? !!force_style[k] : force_style[k].to_i
+        rescue => e; end
       end
     end
 
@@ -526,7 +528,7 @@ module LoamLab
           next unless model
           force_style = begin; JSON.parse(params["force_style"].to_s); rescue; {}; end
           @@t4_saved_style = {
-            ro: {}.tap { |h| %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes SilhouetteWidth DrawDepthQue AmbientOcclusion AmbientOcclusionDistance AmbientOcclusionIntensity DisplayInstanceAxes DisplaySketchAxes].each { |k| h[k] = model.rendering_options[k] rescue nil } },
+            ro: {}.tap { |h| %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes SilhouetteWidth DrawProfiles ProfileWidth DrawDepthQue AmbientOcclusion AmbientOcclusionDistance AmbientOcclusionIntensity DisplayInstanceAxes DisplaySketchAxes].each { |k| h[k] = model.rendering_options[k] rescue nil } },
             si: {}.tap { |h| %w[DisplayShadows Light Dark UseSunForAllShading].each { |k| h[k] = model.shadow_info[k] rescue nil } }
           }
           unless force_style.empty?
@@ -560,14 +562,16 @@ module LoamLab
         begin
           LoamLab.log "LoamLab: 正在擷取即時預覽故事板..."
           scenes = params["scenes"] || []
-          force_style = begin; JSON.parse(params["t4_force_style"].to_s); rescue; {}; end
+          render_force_style = begin; JSON.parse(params["render_force_style"].to_s); rescue; {}; end
+          t4_force_style = begin; JSON.parse(params["t4_force_style"].to_s); rescue; {}; end
+          force_style = scenes.empty? ? t4_force_style : render_force_style
           batch_data = []
 
           # 儲存並還原 force_style 觸及的 ro+si keys（不動相機）
           _sync_save = lambda do |mdl|
             ro = mdl.rendering_options; si = mdl.shadow_info
             saved_ro = {}; saved_si = {}
-            %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes SilhouetteWidth DrawDepthQue AmbientOcclusion AmbientOcclusionDistance AmbientOcclusionIntensity DisplayInstanceAxes DisplaySketchAxes].each { |k| saved_ro[k] = ro[k] rescue nil }
+            %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes SilhouetteWidth DrawProfiles ProfileWidth DrawDepthQue AmbientOcclusion AmbientOcclusionDistance AmbientOcclusionIntensity DisplayInstanceAxes DisplaySketchAxes].each { |k| saved_ro[k] = ro[k] rescue nil }
             %w[DisplayShadows Light Dark UseSunForAllShading].each { |k| saved_si[k] = si[k] rescue nil }
             { ro: saved_ro, si: saved_si }
           end

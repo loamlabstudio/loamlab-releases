@@ -69,6 +69,14 @@ export default async function handler(req, res) {
                     }
                 }
 
+                // 無主訂單攔截：email 缺失或為 Apple Pay 匿名信箱 → 留稽核紀錄，不丟棄金流
+                if (isAnonymousEmail(customerEmail)) {
+                    console.warn(`[🔒無主訂單] payment.succeeded 無有效 email: orderId=${orderId}`);
+                    await logWebhookError('DODO', event.type, orderId, customerEmail || 'unknown',
+                        `Unclaimed: email missing or Apple Pay anonymous (${customerEmail})`, data, 'unclaimed');
+                    return res.status(200).json({ status: 'unclaimed', reason: 'anonymous_email' });
+                }
+
                 if (customerEmail) {
                     await supabase.from('users').update({ payment_failed: false }).eq('email', customerEmail)
                         .catch(e => console.warn('[Dodo] clear payment_failed failed:', e.message));
@@ -394,7 +402,7 @@ function resolvePlanName(variantId, planKey) {
     return null;
 }
 
-async function logWebhookError(platform, eventType, orderId, customerEmail, errorMsg, rawData) {
+async function logWebhookError(platform, eventType, orderId, customerEmail, errorMsg, rawData, status = 'error') {
     try {
         await supabase.from('webhook_errors').insert([{
             platform,
@@ -404,11 +412,16 @@ async function logWebhookError(platform, eventType, orderId, customerEmail, erro
             error_message: errorMsg,
             raw_payload: JSON.stringify(rawData)?.substring(0, 8000),
             created_at: new Date().toISOString(),
+            status,
         }]);
         console.error(`[🚨WebhookError] ${platform} ${eventType} ${orderId} — ${errorMsg}`);
     } catch (_) {
         // 不讓日誌失敗影響主流程
     }
+}
+
+function isAnonymousEmail(email) {
+    return !email || email.endsWith('@privaterelay.appleid.com');
 }
 
 // 激活失敗時主動寄信通知用戶；防重複：查 webhook_errors.email_sent 欄位

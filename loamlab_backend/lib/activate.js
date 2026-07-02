@@ -115,12 +115,22 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
         (Date.now() - new Date(user.last_topup_at).getTime()) < 2 * 24 * 3600 * 1000;
     const carryOver = isSubscription && !isRecentDuplicate ? (user?.points || 0) : 0;
     const updatePayload = {
-        points: isSubscription ? pointsToAdd : (user?.points || 0),
+        points: isSubscription ? pointsToAdd : ((user?.points || 0) + pointsToAdd),
         lifetime_points: (user?.lifetime_points || 0) + carryOver + (isSubscription ? 0 : pointsToAdd) + bonusB,
         is_beta_tester: true,
         last_topup_at: new Date().toISOString(),
     };
     if (planName) updatePayload.subscription_plan = planName;
+
+    if (!isSubscription) {
+        const originalPoints = user?.points || 0;
+        if (updatePayload.points <= originalPoints) {
+            const err = new Error(`PointCalculationError: TOPUP_SINGLE expected points increase but ${originalPoints} → ${updatePayload.points}`);
+            err.code = 'POINT_CALC_ERROR';
+            throw err;
+        }
+    }
+
     await supabase.from('users').update(updatePayload).eq('email', customerEmail);
 
     const PLAN_PRICES_CENTS = { starter: 700, pro: 1500, studio: 3500, topup: 490 };
@@ -136,6 +146,17 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
     if (txInsertErr) {
         if (txInsertErr.code === '23505' || txInsertErr.message?.includes('unique')) {
             return console.log(`[processTopup] 23505 idempotent — ${fullOrderId} 已由並發請求處理`);
+        }
+        // 非冪等錯誤：點數已寫入但交易紀錄失敗 → 嘗試回滾，防止重試時重複發點
+        console.error(`[🔴ROLLBACK] transactions insert failed for ${fullOrderId}, attempting rollback`);
+        try {
+            await supabase.from('users').update({
+                points: user?.points || 0,
+                lifetime_points: user?.lifetime_points || 0,
+            }).eq('email', customerEmail);
+            console.error(`[🔴ROLLBACK] 點數已回滾: ${customerEmail}`);
+        } catch (rollbackErr) {
+            console.error(`[🚨CRITICAL] 回滾失敗，點數不一致！user=${customerEmail} order=${fullOrderId}`, rollbackErr.message);
         }
         throw txInsertErr;
     }

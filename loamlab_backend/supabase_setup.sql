@@ -361,3 +361,10 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS payment_failed BOOLEAN DEFAULT
 -- next_plan：降級期末生效時暫存新方案名稱，subscription.renewed 清除
 -- ==============================================================================
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS next_plan TEXT DEFAULT NULL;
+
+-- ==============================================================================
+-- Phase 30: webhook_errors 加 status 欄位（無主訂單追蹤）
+-- 'error' = 一般錯誤；'unclaimed' = 付款成功但 email 缺失/匿名，需人工歸戶
+-- 查詢無主訂單：SELECT * FROM webhook_errors WHERE status = 'unclaimed' ORDER BY created_at DESC;
+-- ==============================================================================
+ALTER TABLE public.webhook_errors ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'error';

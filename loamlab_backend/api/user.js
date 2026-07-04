@@ -121,7 +121,7 @@ export default async function handler(req, res) {
             }]).catch(() => {});
         }
 
-        const { data: user } = await sb.from('users').select('dodo_subscription_id, subscription_plan').eq('email', cancelEmail).maybeSingle();
+        const { data: user } = await sb.from('users').select('dodo_subscription_id, subscription_plan, subscription_period_end').eq('email', cancelEmail).maybeSingle();
         let subscriptionId = user?.dodo_subscription_id;
 
         const DODO_API_KEY = process.env.DODO_API_KEY;
@@ -142,8 +142,9 @@ export default async function handler(req, res) {
                 if (listRes.ok) {
                     const listData = await listRes.json();
                     const items = listData.items || listData.subscriptions || listData.data || [];
-                    const active = items.find(s => 
-                        (s.status === 'active' || s.status === 'trialing') && 
+                    // Dodo 官方 status 枚舉無 trialing（pending/active/on_hold/cancelled/failed/expired）
+                    const active = items.find(s =>
+                        s.status === 'active' &&
                         (s.customer?.email === cancelEmail || s.customer_email === cancelEmail)
                     );
                     if (active?.subscription_id || active?.id) {
@@ -170,9 +171,12 @@ export default async function handler(req, res) {
 
             if (apiRes.ok) {
                 // T1: 保留 dodo_subscription_id，設 cancel_pending 讓用戶可撤回
-                await sb.from('users').update({ cancel_pending: true }).eq('email', cancelEmail)
+                // PATCH 回應本身就是最新訂閱快照，直接拿 next_billing_date 當確切退訂日回傳給前端
+                const patchedSub = await apiRes.json().catch(() => null);
+                const periodEnd = patchedSub?.next_billing_date || user?.subscription_period_end || null;
+                await sb.from('users').update({ cancel_pending: true, subscription_period_end: periodEnd }).eq('email', cancelEmail)
                     .catch(e => console.warn('[cancel] db update failed:', e.message));
-                return res.json({ code: 0, msg: 'cancelled' });
+                return res.json({ code: 0, msg: 'cancelled', period_end: periodEnd });
             }
 
             // T1: PATCH 失敗不再 fallback DELETE，直接進入 portal 流程
@@ -296,10 +300,12 @@ export default async function handler(req, res) {
         }
 
         if (offer_type === 'pause') {
+            // Dodo 沒有官方的 pause/resume 端點（官方文件 PATCH /subscriptions 參數清單無此欄位），
+            // 改用已驗證可行的 next_billing_date 位移：訂閱狀態全程維持 active，只是下次扣款日往後延，
+            // 全自動、不需任何人工介入或事後重新訂閱動作。
             const months = Math.min(Math.max(parseInt(pause_months) || 1, 1), 3);
-            const resumeAt = new Date(Date.now() + months * 30 * 24 * 3600 * 1000).toISOString();
 
-            // insert-first 同樣防重複
+            // insert-first 防重複
             const { error: txErr } = await sb.from('transactions').insert([{
                 user_email: offerEmail, amount: 0,
                 transaction_type: 'RETENTION_PAUSE',
@@ -310,32 +316,31 @@ export default async function handler(req, res) {
                 return res.status(500).json({ code: -1, msg: txErr.message });
             }
 
-            const markPauseUsed = () => sb.from('users')
-                .update({ retention_offer_used: true, subscription_paused_until: resumeAt })
-                .eq('email', offerEmail);
-
             const subscriptionId = user.dodo_subscription_id;
             const DODO_API_KEY_PAUSE = process.env.DODO_API_KEY;
             if (!subscriptionId || !DODO_API_KEY_PAUSE) {
-                await markPauseUsed();
-                return res.status(200).json({ code: 0, msg: `暫停申請已收到，我們將在 24 小時內為您處理，${new Date(resumeAt).toLocaleDateString('zh-TW')} 後自動恢復`, pending: true });
+                // 不標記 retention_offer_used，讓用戶可以重試或改走其他挽留選項
+                return res.status(200).json({ code: 1, msg: '暫停請求失敗，請稍後重試或聯繫客服', fallback: true });
             }
             const dodoBasePause = DODO_API_KEY_PAUSE.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
 
+            // 以目前的 next_billing_date 為基準往後延，而非從「今天」起算，避免用戶少享受已付費的當期權益
+            const baseDate = user.subscription_period_end ? new Date(user.subscription_period_end) : new Date();
+            const newBillingDate = new Date(baseDate.getTime() + months * 30 * 24 * 3600 * 1000).toISOString();
+
             try {
-                const apiRes = await fetch(`${dodoBasePause}/subscriptions/${subscriptionId}/pause`, {
-                    method: 'POST',
+                const apiRes = await fetch(`${dodoBasePause}/subscriptions/${subscriptionId}`, {
+                    method: 'PATCH',
                     headers: { 'Authorization': `Bearer ${DODO_API_KEY_PAUSE}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ resume_at: resumeAt })
+                    body: JSON.stringify({ next_billing_date: newBillingDate })
                 });
                 if (!apiRes.ok) {
                     const errText = await apiRes.text().catch(() => '');
                     console.error('[save_offer/pause] Dodo API error:', apiRes.status, errText);
-                    // 不標記 retention_offer_used，讓用戶可以重試
                     return res.status(200).json({ code: 1, msg: '暫停請求失敗，請稍後重試或聯繫客服', fallback: true });
                 }
-                await markPauseUsed();
-                return res.status(200).json({ code: 0, msg: `訂閱已暫停 ${months} 個月，${new Date(resumeAt).toLocaleDateString('zh-TW')} 自動恢復`, resume_at: resumeAt });
+                await sb.from('users').update({ retention_offer_used: true, subscription_period_end: newBillingDate }).eq('email', offerEmail);
+                return res.status(200).json({ code: 0, msg: `訂閱已延後扣款 ${months} 個月，${new Date(newBillingDate).toLocaleDateString('zh-TW')} 才會繼續扣款`, resume_at: newBillingDate });
             } catch (e) {
                 console.error('[save_offer/pause] fetch error:', e.message);
                 return res.status(200).json({ code: 1, msg: '暫停請求失敗，請稍後重試或聯繫客服', fallback: true });
@@ -570,7 +575,7 @@ export default async function handler(req, res) {
         try {
             let { data, error } = await supabase
                 .from('users')
-                .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, next_plan, last_topup_at, is_kol, is_partner, cancel_pending, referral_success_count, payment_failed')
+                .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, next_plan, last_topup_at, is_kol, is_partner, cancel_pending, referral_success_count, payment_failed, subscription_period_end')
                 .eq('email', email)
                 .single();
 
@@ -628,7 +633,8 @@ export default async function handler(req, res) {
                             const subEmail = sub.customer?.email || sub.customer_email;
                             if (subEmail !== email) continue;
                             // Dodo API 忽略 status 查詢參數；必須手動過濾，防止重新激活已取消的訂閱
-                            if (sub.status !== 'active' && sub.status !== 'trialing') continue;
+                            // （官方 status 枚舉：pending/active/on_hold/cancelled/failed/expired，無 trialing）
+                            if (sub.status !== 'active') continue;
                             const productId = sub.product_id || sub.plan_id;
                             if (!productId) continue;
                             const orderId = `${sub.subscription_id}_auto`;
@@ -637,7 +643,7 @@ export default async function handler(req, res) {
                                 await processTopup(supabase, email, productId, orderId, 'DODO', null, sub.subscription_id);
                                 const { data: refreshed } = await supabase
                                     .from('users')
-                                    .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending')
+                                    .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending, subscription_period_end')
                                     .eq('email', email).single();
                                 if (refreshed) data = refreshed;
                                 // 標記此 email 的 webhook 錯誤為已解決
@@ -672,6 +678,7 @@ export default async function handler(req, res) {
                 cancel_pending: data ? (data.cancel_pending || false) : false,
                 payment_failed: data ? (data.payment_failed || false) : false,
                 next_plan: data ? (data.next_plan || null) : null,
+                subscription_period_end: data ? (data.subscription_period_end || null) : null,
                 is_new_user: error && error.code === 'PGRST116' ? true : false
             });
         } catch (e) {

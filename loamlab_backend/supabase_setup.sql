@@ -368,3 +368,12 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS next_plan TEXT DEFAULT NULL;
 -- 查詢無主訂單：SELECT * FROM webhook_errors WHERE status = 'unclaimed' ORDER BY created_at DESC;
 -- ==============================================================================
 ALTER TABLE public.webhook_errors ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'error';
+
+-- ==============================================================================
+-- Phase 31: 訂閱狀態單一事實來源重構
+-- subscription_period_end：直接鏡射 Dodo subscription.next_billing_date，
+-- 讓前端能顯示確切的退訂/續訂日期，取代原本只有布林值的 cancel_pending。
+-- 同時取代 subscription_paused_until 的用途（挽留暫停改為延後 next_billing_date，
+-- 不再呼叫不存在的 Dodo /pause 端點）；該舊欄位保留但不再寫入，避免非必要的破壞性 migration。
+-- ==============================================================================
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS subscription_period_end TIMESTAMP WITH TIME ZONE DEFAULT NULL;

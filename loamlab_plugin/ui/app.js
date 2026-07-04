@@ -2321,12 +2321,12 @@ function updateDowngradePendingBanner(nextPlan) {
 }
 
 var CANCEL_PENDING_I18N = {
-    'zh-TW': { msg: '訂閱將於本週期結束後取消', btn: '撤回退訂申請', undoing: '撤回中...', undo_ok: '已恢復訂閱', undo_fail: '請前往管理頁面撤回' },
-    'en-US': { msg: 'Subscription will cancel at period end', btn: 'Undo cancellation', undoing: 'Undoing...', undo_ok: 'Subscription restored', undo_fail: 'Please visit billing portal to undo' },
-    'zh-CN': { msg: '订阅将于本周期结束后取消', btn: '撤回退订申请', undoing: '撤回中...', undo_ok: '已恢复订阅', undo_fail: '请前往管理页面撤回' },
-    'es-ES': { msg: 'La suscripción se cancelará al final del período', btn: 'Deshacer cancelación', undoing: 'Deshaciendo...', undo_ok: 'Suscripción restaurada', undo_fail: 'Visita el portal para deshacer' },
-    'pt-BR': { msg: 'A assinatura será cancelada no fim do período', btn: 'Desfazer cancelamento', undoing: 'Desfazendo...', undo_ok: 'Assinatura restaurada', undo_fail: 'Acesse o portal para desfazer' },
-    'ja-JP': { msg: 'サブスクリプションは期末にキャンセルされます', btn: 'キャンセルを取り消す', undoing: '取り消し中...', undo_ok: 'サブスクリプション復元済み', undo_fail: 'ポータルで取り消してください' },
+    'zh-TW': { msg: '訂閱將於本週期結束後取消', msg_dated: '訂閱將於 {date} 取消', btn: '撤回退訂申請', undoing: '撤回中...', undo_ok: '已恢復訂閱', undo_fail: '請前往管理頁面撤回' },
+    'en-US': { msg: 'Subscription will cancel at period end', msg_dated: 'Subscription will cancel on {date}', btn: 'Undo cancellation', undoing: 'Undoing...', undo_ok: 'Subscription restored', undo_fail: 'Please visit billing portal to undo' },
+    'zh-CN': { msg: '订阅将于本周期结束后取消', msg_dated: '订阅将于 {date} 取消', btn: '撤回退订申请', undoing: '撤回中...', undo_ok: '已恢复订阅', undo_fail: '请前往管理页面撤回' },
+    'es-ES': { msg: 'La suscripción se cancelará al final del período', msg_dated: 'La suscripción se cancelará el {date}', btn: 'Deshacer cancelación', undoing: 'Deshaciendo...', undo_ok: 'Suscripción restaurada', undo_fail: 'Visita el portal para deshacer' },
+    'pt-BR': { msg: 'A assinatura será cancelada no fim do período', msg_dated: 'A assinatura será cancelada em {date}', btn: 'Desfazer cancelamento', undoing: 'Desfazendo...', undo_ok: 'Assinatura restaurada', undo_fail: 'Acesse o portal para desfazer' },
+    'ja-JP': { msg: 'サブスクリプションは期末にキャンセルされます', msg_dated: 'サブスクリプションは{date}にキャンセルされます', btn: 'キャンセルを取り消す', undoing: '取り消し中...', undo_ok: 'サブスクリプション復元済み', undo_fail: 'ポータルで取り消してください' },
 };
 
 var PAYMENT_FAILED_I18N = {
@@ -2429,14 +2429,18 @@ function verifyPaymentFromBanner() {
         });
 }
 
-function updateCancelPendingBanner(isPending) {
+function updateCancelPendingBanner(isPending, periodEnd) {
     var banner = document.getElementById('cancel-pending-banner');
     var cancelRow = document.getElementById('cancel-subscription-row');
     if (!banner) return;
     if (isPending) {
         var lang = (typeof currentLang !== 'undefined' ? currentLang : null) || localStorage.getItem('loamlab_lang') || 'en-US';
         var ct = CANCEL_PENDING_I18N[lang] || CANCEL_PENDING_I18N['en-US'];
-        banner.querySelector('#cpb-msg').textContent = ct.msg;
+        var dateObj = periodEnd ? new Date(periodEnd) : null;
+        var msg = (dateObj && !isNaN(dateObj))
+            ? ct.msg_dated.replace('{date}', dateObj.toLocaleDateString(lang))
+            : ct.msg;
+        banner.querySelector('#cpb-msg').textContent = msg;
         banner.querySelector('#cpb-btn').textContent = ct.btn;
         banner.classList.remove('hidden');
         if (cancelRow) cancelRow.classList.add('hidden');
@@ -2776,7 +2780,8 @@ function _cfConfirmCancel() {
         clearTimeout(timer);
         if (data.code === 0) {
             window.loamlabCancelPending = true;
-            updateCancelPendingBanner(true);
+            window.loamlabSubscriptionPeriodEnd = data.period_end || window.loamlabSubscriptionPeriodEnd;
+            updateCancelPendingBanner(true, window.loamlabSubscriptionPeriodEnd);
             _cfRenderStep3(true, _cfCancelDoneMsg(ct));
         } else if (data.code === 2 && data.portal_url) {
             // code:2 = API 失敗但有 portal URL → 開啟瀏覽器讓用戶手動操作
@@ -3656,9 +3661,11 @@ function _doFetchUserPoints(email, attempt) {
                 window.loamlabCancelPending = data.cancel_pending || false;
                 window.loamlabPaymentFailed = data.payment_failed || false;
                 window.loamlabNextPlan = data.next_plan || null;
+                window.loamlabSubscriptionPeriodEnd = data.subscription_period_end || null;
                 updatePlanBadge(window.loamlabSubscriptionPlan);
-                updateCancelPendingBanner(window.loamlabCancelPending);
-                updateDowngradePendingBanner(window.loamlabNextPlan);
+                updateCancelPendingBanner(window.loamlabCancelPending, window.loamlabSubscriptionPeriodEnd);
+                // 取消中就不用再顯示降級提示（反正整個訂閱都要結束了）
+                updateDowngradePendingBanner(window.loamlabCancelPending ? null : window.loamlabNextPlan);
                 updatePaymentFailedBanner(window.loamlabPaymentFailed);
                 window.updateLoginUI(email, data.points, data.display_code || data.referral_code, data.referred_by, data.is_kol, data.is_partner);
 

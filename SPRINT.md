@@ -1,22 +1,27 @@
-# SPRINT
+# SPRINT: 第一性原理重構訂閱狀態同步架構
 
 ## CONTEXT_DIGEST
-- 目標：開發「行銷貼文自動生成」小工具，消除用戶將渲染參數手動轉譯為中英雙語貼文的繁瑣步驟。
-- 現況：渲染參數存在於前端 `t1NodesData` 與對應的隱藏輸入框中，且 `optionsData` 已包含部分選項的中英雙語對照標籤。
-- 方案：基於第一性原理，最少步驟的作法是直接從當前選取狀態讀取參數，透過映射字典自動組裝成雙語模板（含 Hashtag）。依據用戶要求，此功能**僅限開發者 (DEV) 使用**，將與現有 `share-modal` 結合（或放置於 DEV 專屬區塊），實現一鍵生成。
+目前系統的 `subscription_plan` 與退訂意圖脫鉤。若用戶透過 Dodo Customer Portal 退訂，Dodo 發送的是 `subscription.updated` Webhook，但後端只處理升降級，遺漏了 `cancel_at_period_end` 狀態。這導致「已退訂但週期未滿」與「正常活躍」的帳號在 Supabase 無法區分，且若錯失最終的 `cancelled` 事件將導致永久發放免費 Pro 權限。我們需要基於第一性原理（金流平台為單一真相來源）全面接管 `subscription.updated` 的所有生命週期狀態。
 
 ## TASKS
 
-1. **[MUST][DONE] 實作核心：雙語貼文生成邏輯**
-   - **影響檔案**：`loamlab_plugin/ui/app.js`
-   - **實作**：`generateBilingualPostText()`，遍歷 `t1NodesData` 的 `meta/scene_lighting/materials/photography` 四組節點（跳過 `rendering` 精度組，對文案無意義），讀取各節點目前選取值（`#t1-node-{id}` hidden input），透過 `optionsData` 對應出 zh-TW / en-US 標籤，組成中文段落 + 英文段落 + 自動去重 Hashtags。
+### TASK 1: 重構 `subscription.updated` 狀態攔截 [MUST] [DONE]
+**影響檔案**: `loamlab_backend/api/webhook.js`
+**說明**: 
+擴充 `subscription.updated` 處理邏輯，除了升降級外，必須完整解析訂閱狀態的變化。
+1. 若 payload 中的 `status === 'canceled'` 或 `status === 'expired'`，應直接呼叫 `processCancellation(customerEmail, 'DODO')` 終止訂閱。
+2. 否則，讀取 payload 中的 `cancel_at_period_end` 或 `cancel_at_next_billing_date` 欄位（根據 Dodo API 文件）。
+3. 將該 boolean 值動態寫入 `updateFields.cancel_pending`，確保無論是退訂還是「撤回退訂」，都能與 Dodo Portal 即時同步。
 
-2. **[MUST][DONE] 介面整合：DEV 限定的一鍵生成按鈕與預覽**
-   - **影響檔案**：`loamlab_plugin/ui/index.html`, `loamlab_plugin/ui/app.js`
-   - **實作**：於 `share-customize-body` 內 `#share-input-content` 下方新增 `#btn-auto-generate-post`，沿用既有 `.dev-only-tool` class（已綁定 DEV/USER 視角切換，不需另外偵測 debug 參數）。點擊呼叫 `window.handleAutoGeneratePost()`，寫入 `#share-input-content` 並 dispatch `input` 事件，觸發既有監聽器同步刷新 `#share-text-content` 完整貼文預覽。
+### TASK 2: 防禦性狀態校正與容錯處理 [MUST] [DONE]
+**影響檔案**: `loamlab_backend/api/webhook.js`, `loamlab_backend/api/user.js`
+**說明**: 
+1. **Webhook.js**: 確保 `updateFields` 能夠一次性原子更新 `subscription_plan` (升降級)、`next_plan` 與 `cancel_pending`，避免資料庫競態。
+2. **User.js (Auto-repair)**: 檢查自動補發邏輯 (`limit=3` 查詢 Dodo 訂閱時)，確保它不會把 `cancel_pending = true` 但仍在活躍期內的訂閱誤判為需要重新激活，維持現有 `sub.status === 'active'` 的嚴格過濾。
 
-3. **[NICE][DONE] 翻譯補齊與體驗優化**
-   - **影響檔案**：`loamlab_plugin/ui/locales/*.json`（6 語言）, `i18n.js`（經 `sync_i18n.js` 重新編譯）
-   - **實作**：新增 `share_btn_auto_generate` / `share_btn_auto_generate_done` / `toast_no_render_params` 三組 key，6 語言皆補齊翻譯（非僅 zh-TW）。點擊生成後按鈕文字短暫變為「✓ 已生成」，1.5 秒後還原。
+### TASK 3: LemonSqueezy `subscription_updated` 補齊 [NICE] [DONE]
+**影響檔案**: `loamlab_backend/api/webhook.js`
+**說明**: 
+若 LemonSqueezy 也有發送 `subscription_updated`，應同步補上對 `ends_at` 或狀態變更的檢查，確保無論從哪個支付渠道退訂，狀態同步機制都能保持一致。
 
 status: DONE

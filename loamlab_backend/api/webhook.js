@@ -8,6 +8,14 @@ const supabase = makeSupabase();
 const WEB_SECRET_LS = process.env.LEMONSQUEEZY_WEBHOOK_SECRET || '';
 const WEB_SECRET_DODO = process.env.DODO_WEBHOOK_SECRET || '';
 
+// Dodo 官方訂閱生命週期事件（見 docs.dodopayments.com/developer-resources/webhooks/intents/subscription）
+// 這些事件都可能帶最新的訂閱快照，一律走 syncSubscriptionState 鏡射，不特化猜測哪個事件才會帶哪個欄位
+const SUBSCRIPTION_SYNC_EVENTS = new Set([
+    'subscription.active', 'subscription.renewed', 'subscription.updated',
+    'subscription.plan_changed', 'subscription.on_hold',
+]);
+const PLAN_TIERS = { starter: 1, pro: 2, studio: 3 };
+
 // Vercel 設定：停用自動解析 JSON 格式，以便讀取原始 HMAC 簽章
 export const config = {
     api: { bodyParser: false },
@@ -112,53 +120,19 @@ export default async function handler(req, res) {
                 }
             }
             
-            if (event.type === 'subscription.active' || event.type === 'subscription.renewed') {
-                // 點數發放唯一來源是 payment.succeeded（Dodo 續訂時必定同時觸發）；
-                // 這裡只同步中繼資料，避免與 payment.succeeded 重複發點造成競態
+            if (SUBSCRIPTION_SYNC_EVENTS.has(event.type)) {
+                // 單一事實來源：Dodo 訂閱物件本身就是真相，這裡只把它鏡射進 DB，
+                // 不管觸發的是哪個事件（Portal 取消 / 自助升降級 / 續訂 / 扣款失敗進 on_hold）
                 const data = event.data;
                 const customerEmail = data.customer?.email || data.email || data.customer_email;
-                if (customerEmail && data.subscription_id) {
-                    // 清除扣款失敗旗標，同時清除降級待生效標記（新週期開始時降級已生效）
-                    await supabase.from('users').update({ dodo_subscription_id: data.subscription_id, payment_failed: false, next_plan: null }).eq('email', customerEmail)
-                        .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
+                const isRenewal = event.type === 'subscription.active' || event.type === 'subscription.renewed';
+                if (customerEmail) {
+                    await syncSubscriptionState(customerEmail, data, {
+                        clearNextPlan: isRenewal,     // 新週期開始，降級已由 Dodo 生效
+                        allowPlanChange: !isRenewal,  // 只有用戶主動改方案的事件才做升降級判斷
+                    });
                 }
-            } else if (event.type === 'subscription.updated') {
-                // 用戶自助升降級：升級立刻生效（payment.succeeded 同步觸發處理點數），降級期末生效（標記 next_plan）
-                const data = event.data;
-                const customerEmail = data.customer?.email || data.email || data.customer_email;
-                const newProductId = data.product_id || data.plan_id;
-                const subscriptionId = data.subscription_id;
-
-                if (customerEmail && subscriptionId) {
-                    const updateFields = { dodo_subscription_id: subscriptionId };
-
-                    if (newProductId) {
-                        const newPlanName = resolvePlanName(newProductId, null);
-                        const PLAN_TIERS = { starter: 1, pro: 2, studio: 3 };
-
-                        if (newPlanName) {
-                            const { data: user } = await supabase.from('users')
-                                .select('subscription_plan').eq('email', customerEmail).maybeSingle();
-                            const currentTier = PLAN_TIERS[user?.subscription_plan] || 0;
-                            const newTier = PLAN_TIERS[newPlanName] || 0;
-
-                            if (newTier >= currentTier) {
-                                // 升級或同方案變更：立刻同步（payment.succeeded 負責點數）
-                                updateFields.subscription_plan = newPlanName;
-                                updateFields.next_plan = null;
-                                console.log(`[Dodo] subscription.updated 升級: ${customerEmail} → ${newPlanName}`);
-                            } else {
-                                // 降級（期末生效）：儲存 next_plan，下週期 subscription.renewed 清除
-                                updateFields.next_plan = newPlanName;
-                                console.log(`[Dodo] subscription.updated 降級待生效: ${customerEmail} → ${newPlanName} (期末)`);
-                            }
-                        }
-                    }
-
-                    await supabase.from('users').update(updateFields).eq('email', customerEmail)
-                        .catch(e => console.warn('[Dodo] subscription.updated update failed:', e.message));
-                }
-            } else if (event.type === 'subscription.cancelled' || event.type === 'subscription.canceled' || event.type === 'subscription.expired') {
+            } else if (event.type === 'subscription.cancelled' || event.type === 'subscription.canceled' || event.type === 'subscription.expired' || event.type === 'subscription.failed') {
                 const data = event.data;
                 const customerEmail = data.customer?.email || data.email || data.customer_email;
                 if (customerEmail) {
@@ -208,6 +182,21 @@ export default async function handler(req, res) {
                 if (customerEmail) {
                     await processCancellation(customerEmail, 'LS');
                 }
+            } else if (eventName === 'subscription_updated') {
+                // 同步 Dodo 邏輯：LS Portal 取消/撤回取消時 status 仍為 active，靠 cancelled 欄位判斷期末生效
+                const orderData = event.data.attributes;
+                const customerEmail = orderData.user_email;
+                if (customerEmail) {
+                    if (orderData.status === 'cancelled' || orderData.status === 'expired') {
+                        await processCancellation(customerEmail, 'LS');
+                    } else {
+                        await supabase.from('users').update({
+                            cancel_pending: !!orderData.cancelled,
+                            subscription_period_end: orderData.ends_at || orderData.renews_at || null,
+                        }).eq('email', customerEmail)
+                            .catch(e => console.warn('[LS] subscription_updated update failed:', e.message));
+                    }
+                }
             }
             return res.status(200).json({ status: 'success' });
         }
@@ -224,10 +213,58 @@ async function processCancellation(customerEmail, platform) {
     console.log(`[🛑取消訂閱] 處理 ${platform} 取消: ${customerEmail}`);
     await supabase.from('users').update({
         subscription_plan: null,
+        next_plan: null,
         cancel_pending: false,
         dodo_subscription_id: null,
         payment_failed: false
     }).eq('email', customerEmail);
+}
+
+// 單一事實來源：把 Dodo 回傳的訂閱物件原樣鏡射進 DB，取代過去分散在各事件裡各自猜欄位的寫法。
+// sub 直接是 Dodo API/webhook 的訂閱物件（status / subscription_id / product_id / cancel_at_next_billing_date / next_billing_date）。
+async function syncSubscriptionState(customerEmail, sub, { clearNextPlan = false, allowPlanChange = false } = {}) {
+    if (!customerEmail || !sub?.subscription_id) return;
+
+    // Dodo 官方 status 枚舉：pending/active/on_hold/cancelled/failed/expired（無 trialing、無 canceled 單L）
+    if (sub.status === 'cancelled' || sub.status === 'expired') {
+        return processCancellation(customerEmail, 'DODO');
+    }
+
+    const updateFields = {
+        dodo_subscription_id: sub.subscription_id,
+        cancel_pending: !!sub.cancel_at_next_billing_date,
+        subscription_period_end: sub.next_billing_date || null,
+    };
+    if (sub.status === 'on_hold') updateFields.payment_failed = true;
+    if (sub.status === 'active') updateFields.payment_failed = false;
+    if (clearNextPlan) updateFields.next_plan = null;
+
+    if (allowPlanChange) {
+        const newProductId = sub.product_id || sub.plan_id;
+        if (newProductId) {
+            const newPlanName = resolvePlanName(newProductId, null);
+            if (newPlanName) {
+                const { data: user } = await supabase.from('users')
+                    .select('subscription_plan').eq('email', customerEmail).maybeSingle();
+                const currentTier = PLAN_TIERS[user?.subscription_plan] || 0;
+                const newTier = PLAN_TIERS[newPlanName] || 0;
+
+                if (newTier >= currentTier) {
+                    // 升級或同方案變更：立刻同步（payment.succeeded 負責點數）
+                    updateFields.subscription_plan = newPlanName;
+                    updateFields.next_plan = null;
+                    console.log(`[Dodo] 方案升級/同級: ${customerEmail} → ${newPlanName}`);
+                } else {
+                    // 降級（期末生效）：儲存 next_plan，續訂時 clearNextPlan 清除
+                    updateFields.next_plan = newPlanName;
+                    console.log(`[Dodo] 降級待生效: ${customerEmail} → ${newPlanName} (期末)`);
+                }
+            }
+        }
+    }
+
+    await supabase.from('users').update(updateFields).eq('email', customerEmail)
+        .catch(e => console.warn('[Dodo] syncSubscriptionState update failed:', e.message));
 }
 
 // 爭議/退款防護網：扣回該筆付款發放的點數（不足則歸零）並終止訂閱，防止用戶透過爭議白嫖服務

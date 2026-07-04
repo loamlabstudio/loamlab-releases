@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { DODO_PRODUCTS, INITIAL_POINTS } from '../config.js';
-import { processTopup, makeSupabase } from '../lib/activate.js';
+import { processTopup, makeSupabase, reconcilePaymentsForEmail } from '../lib/activate.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -526,75 +526,16 @@ export default async function handler(req, res) {
             return res.status(200).json({ code: 0, activated: false, alreadyActive: true, msg: '訂閱已啟用，點數已入帳' });
         }
 
-        // 查活躍訂閱（STARTER / PRO / STUDIO）
-        try {
-            const subRes = await fetch(
-                `${dodoBase}/subscriptions?customer_email=${encodeURIComponent(vEmail)}&status=active&limit=5`,
-                { headers: { Authorization: `Bearer ${DODO_API_KEY}` } }
-            );
-            if (subRes.ok) {
-                const subs = (await subRes.json()).items || [];
-                let foundActive = false;
-                for (const sub of subs) {
-                    const subEmail = sub.customer?.email || sub.customer_email;
-                    if (subEmail !== vEmail) continue;
-                    // Dodo API 忽略 status 查詢參數；必須手動過濾，防止重新激活已取消的訂閱
-                    if (sub.status !== 'active' && sub.status !== 'trialing') continue;
-                    foundActive = true;
-                    const productId = sub.product_id || sub.plan_id;
-                    if (!productId) continue;
-                    // 使用 period-based order_id（符合 DODO_sub_*_20xx 分類），
-                    // 確保透過 verify_payment 自助補發的合法用戶不被誤認為幽靈會員
-                    const period = sub.current_period_start
-                        ? new Date(sub.current_period_start).toISOString().substring(0, 7)
-                        : new Date().toISOString().substring(0, 7);
-                    const orderId = `${sub.subscription_id}_${period}`;
-                    const { data: ex } = await sb.from('transactions').select('id').eq('order_id', `DODO_${orderId}`).maybeSingle();
-                    if (!ex) {
-                        await processTopup(sb, vEmail, productId, orderId, 'DODO', null, sub.subscription_id);
-                        sb.from('webhook_errors').update({ resolved: true })
-                            .eq('customer_email', vEmail).eq('resolved', false).catch(() => {});
-                        activated = true;
-                    }
-                }
-                // 有活躍訂閱 → 清除扣款失敗旗標（loop 外執行一次）
-                if (foundActive) {
-                    sb.from('users').update({ payment_failed: false }).eq('email', vEmail).catch(() => {});
-                }
-            }
-        } catch (e) { console.warn('[verify_payment] sub check:', e.message); }
+        // 無腦拉取（Dumb Pull）：唯一真理來源是 Dodo 的 payments 紀錄，不再另外查 subscriptions 狀態。
+        // 舊版「查活躍訂閱」用 period 合成 order_id，跟這裡的 payment_id order_id 是兩把不同的冪等鍵，
+        // 曾在補發時對同一筆扣款各自成功一次，造成雙重入帳 — 移除該路徑徹底根除。
+        const { activated: didActivate, foundSucceeded } = await reconcilePaymentsForEmail(sb, vEmail, DODO_API_KEY);
+        activated = didActivate;
 
-        // 查近期單次付款（TOPUP）
-        if (!activated) {
-            try {
-                const payRes = await fetch(
-                    `${dodoBase}/payments?customer_email=${encodeURIComponent(vEmail)}&limit=5`,
-                    { headers: { Authorization: `Bearer ${DODO_API_KEY}` } }
-                );
-                if (payRes.ok) {
-                    const pays = (await payRes.json()).items || [];
-                    for (const pay of pays) {
-                        const payEmail = pay.customer?.email || pay.email || pay.customer_email;
-                        if (payEmail !== vEmail) continue;
-                        if (pay.status !== 'succeeded') continue;
-                        const productId = pay.product_cart?.[0]?.product_id || pay.product_id;
-                        if (!productId) continue;
-                        // 對齊 webhook.js 新 orderId 格式（subscription 付款含 sub_id 前綴）
-                        const orderId = pay.subscription_id ? `${pay.subscription_id}_${pay.payment_id}` : pay.payment_id;
-                        const { data: ex } = await sb.from('transactions').select('id').eq('order_id', `DODO_${orderId}`).maybeSingle();
-                        // fallback：查舊格式（fix 前已寫入的 transaction，避免重複補發）
-                        let alreadyIssued = !!ex;
-                        if (!alreadyIssued && pay.subscription_id) {
-                            const { data: exOld } = await sb.from('transactions').select('id').eq('order_id', `DODO_${pay.payment_id}`).maybeSingle();
-                            alreadyIssued = !!exOld;
-                        }
-                        if (!alreadyIssued) {
-                            await processTopup(sb, vEmail, productId, orderId, 'DODO', null, pay.subscription_id || null);
-                            activated = true;
-                        }
-                    }
-                }
-            } catch (e) { console.warn('[verify_payment] pay check:', e.message); }
+        if (foundSucceeded) {
+            sb.from('users').update({ payment_failed: false }).eq('email', vEmail).catch(() => {});
+            sb.from('webhook_errors').update({ resolved: true })
+                .eq('customer_email', vEmail).eq('resolved', false).catch(() => {});
         }
 
         return res.status(200).json({ code: 0, activated, msg: activated ? '已成功補發' : '查無未入帳的付款記錄' });

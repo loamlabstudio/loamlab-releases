@@ -1,22 +1,35 @@
-# SPRINT
+# SPRINT: Dodo Payments 極簡高可用架構重構
 
 ## CONTEXT_DIGEST
-近期發生單次充值 (`TOPUP_SINGLE`) 點數未發放且未拋錯的嚴重 Bug，起因於 `lib/activate.js` 中三元表達式的邏輯漏洞。此外，部分 Apple Pay 產生的匿名信箱訂單因無法匹配用戶，導致 Webhook 處理失敗且未能妥善留存稽核紀錄。為了徹底杜絕此類金流異常，需優化點數計算的防禦性驗證機制，並建立無主訂單（Unclaimed Payments）的容錯與追蹤架構。
+針對近期的「詐欺 (fraudulent)」爭議，根本原因在於目前的 `webhook.js` 與 `verify_payment` 邏輯過於臃腫：包含複雜的「按月份去重 (period deduplication)」、「fallback_order_id」以及各種條件判斷。這導致程式容易在邊界條件下拋出錯誤或漏接事件，讓用戶扣了款卻沒拿到點數。
+**第一性原理**：所有交易在 Dodo 端都有一個全球唯一的 `payment_id`。我們只需要信任資料庫的 `UNIQUE(order_id)` 限制（唯一鍵約束），就能實現最完美的冪等性 (Idempotency)，徹底刪除所有多餘的狀態判斷程式碼。
+
+## 解決策略 (KISS 原則)
+1. **單一真理來源**：以 Dodo 的 `payment.succeeded` 加上 `payment_id` 為唯一標準。捨棄使用 `subscription.renewed` 來發放點數（因為續訂時 Dodo 也會發 `payment.succeeded`，處理兩次會產生競態條件與複雜的去重邏輯）。
+2. **讓 Database 處理併發**：不再用 SELECT 去檢查這個月有沒有給過點數，直接 INSERT `DODO_{payment_id}`。如果重複，Supabase 會自然報錯 (`23505`)，直接 Catch 忽略即可。
+3. **無腦拉取 (Dumb Pull) 取代智能修復**：用戶點擊「驗證付款」或登入時，不再去猜測訂閱是否為 active。直接向 Dodo 拉取該 email 的所有 `succeeded` payments，無腦全部嘗試 INSERT。
+
+---
 
 ## TASKS
 
-1. **[MUST] 強化 `processTopup` 的防禦性驗證 (Defensive Programming)**
-   - **影響檔案**：`loamlab_backend/lib/activate.js`
-   - **描述**：在計算完 `updatePayload.points` 後、實際呼叫 Supabase 寫入前，加入嚴格的斷言（Assertions）。若為 `TOPUP_SINGLE`，驗證計算後的點數必須**大於**原始點數；若點數出現不合理的下降或不變，立即拋出自定義錯誤（如 `PointCalculationError`），阻止寫入並觸發後續錯誤日誌。
+### [x] Task 1: 斬斷 Webhook 的複雜去重邏輯 (大幅刪減代碼)
+**影響檔案**: `loamlab_backend/api/webhook.js`
+**說明**: 
+- **清理 `payment.succeeded`**：刪除 `nowPeriod`、`dedupPayQuery`、`isUpgrade` 這些檢查邏輯。直接將 `orderId` 設為 `DODO_${data.payment_id}` 並呼叫 `processTopup`。利用 Supabase 的 Unique Index 防止重複發放。
+- **清理 `subscription.renewed` / `subscription.active`**：移除這些事件中的 `processTopup` 點數發放邏輯（保留更新 `dodo_subscription_id` 等中繼資料即可），避免與 `payment.succeeded` 職責重疊。
 
-2. **[MUST] 實作無主訂單 (Unclaimed Payments) 的攔截與記錄機制**
-   - **影響檔案**：`loamlab_backend/api/webhook.js`
-   - **描述**：當 `payment.succeeded` 收到成功付款，但 `customerEmail` 缺失、為 Apple Pay 匿名信箱、或無法在資料庫中關聯到實體 `users` 時，不應直接丟棄或僅拋出 500 錯誤。需將該筆金流以 `status: 'unclaimed'` 的形式強制作為特殊日誌存入 `webhook_errors`（或透過新增欄位標記），以便客服後續手動歸戶。
-   - **依賴**：無。
+### [x] Task 2: 極簡化 `verify_payment` 自助同步機制
+**影響檔案**: `loamlab_backend/api/user.js`
+**說明**: 
+- **重構 `verify_payment` API**：刪除查 `subscriptions` 並透過 period 兜底的複雜邏輯。改為：向 Dodo 請求 `payments?customer_email=...&limit=10`。篩選出 `status === 'succeeded'` 的訂單，全部呼叫 `processTopup(..., DODO_${payment_id})`。
+- **自動對帳**：只要因為 Unique Index 報錯就代表已發放過，安靜忽略；若成功寫入，代表補發成功。這樣即使訂閱已被取消 (`canceled`)，只要有成功扣款的 `payment` 紀錄就能順利補發點數。
 
-3. **[NICE] 引入原子化檢查或事務機制 (Atomic DB Operations)**
-   - **影響檔案**：`loamlab_backend/lib/activate.js`, `loamlab_backend/api/webhook.js`
-   - **描述**：目前點數更新 (`users` 表) 與交易紀錄 (`transactions` 表) 是兩次獨立的 API 呼叫。為防止 Race Condition 或中斷導致資料不一致，應優化錯誤處理區塊 (Error Boundary)，若 `transactions` insert 失敗（非 unique constraint），嘗試回滾或發送重大告警；長遠可考慮移至 Supabase RPC 處理。
-   - **依賴**：需先完成 TASK 1 確保應用層邏輯無誤。
+### [x] Task 3: 補齊「退款與爭議」防護網
+**影響檔案**: `loamlab_backend/api/webhook.js`, `loamlab_backend/lib/activate.js` (可選)
+**說明**: 
+- 在 `webhook.js` 實作對 `payment.disputed` 與 `payment.refunded` 的傾聽。
+- 當事件發生時，立刻將該用戶的 `points` 扣除（不足則歸零），並將 `subscription_plan` 設為 `null`，防止用戶透過爭議白嫖服務。
 
+---
 status: DONE

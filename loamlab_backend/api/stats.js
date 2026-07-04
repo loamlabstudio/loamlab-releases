@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import { reconcilePaymentsForEmail } from '../lib/activate.js';
 
 // ── 洞見郵件共用工具 ──────────────────────────────────────────────────────────
 function getLangKey(locale) {
@@ -835,7 +836,8 @@ export default async function handler(req, res) {
             summary.payment_sweep = { checked: (staleMembers || []).length, swept: swept.length, emails: swept };
         } catch (e) { summary.payment_sweep_error = e.message; }
 
-        // Dodo 訂閱對帳：比對 dodo_subscription_id vs Dodo active 名單，清除已取消的幽靈會員
+        // Dodo 訂閱對帳（雙向）：一次 API 呼叫，同時抓「DB 有但 Dodo 沒有」（幽靈會員，撤銷）
+        // 與「Dodo active 但 DB 沒同步到當期點數」（webhook 漏接，主動補發）
         // 用 subscription_id 比對（繞過 Dodo API 忽略 customer_email 查詢參數的 bug）
         try {
             if (process.env.DODO_API_KEY) {
@@ -850,11 +852,10 @@ export default async function handler(req, res) {
                 if (listRes.ok) {
                     const allItems = (await listRes.json()).items || [];
                     // Dodo 可能忽略 status filter，嚴格用欄位比對
-                    const activeSubIds = new Set(
-                        allItems.filter(s => s.status === 'active' || s.status === 'trialing')
-                                .map(s => s.subscription_id || s.id)
-                    );
-                    // 找出 DB 有 subscription_id 但 Dodo 已無此 active sub 的帳號
+                    const activeItems = allItems.filter(s => s.status === 'active' || s.status === 'trialing');
+                    const activeSubIds = new Set(activeItems.map(s => s.subscription_id || s.id));
+
+                    // 方向一：找出 DB 有 subscription_id 但 Dodo 已無此 active sub 的帳號 → 撤銷
                     const { data: dbSubs } = await supabase.from('users')
                         .select('email, dodo_subscription_id, subscription_plan')
                         .not('subscription_plan', 'is', null)
@@ -872,6 +873,23 @@ export default async function handler(req, res) {
                     } else {
                         summary.dodo_reconcile = { revoked: 0 };
                     }
+
+                    // 方向二：Dodo 顯示 active，但 DB 這期沒有對應的入帳紀錄 → 主動補發（catch webhook 漏接）
+                    const repaired = [];
+                    for (const sub of activeItems) {
+                        const subEmail = (sub.customer?.email || sub.customer_email || '').toLowerCase().trim();
+                        if (!subEmail || isTest(subEmail)) continue;
+                        const periodStart = sub.current_period_start ? new Date(sub.current_period_start) : null;
+                        const { data: u } = await supabase.from('users')
+                            .select('subscription_plan, last_topup_at').eq('email', subEmail).maybeSingle();
+                        // 沒有這個用戶、沒方案、或最後入帳時間早於本期開始（留 1 天緩衝防時區誤差）→ 判定可能漏接
+                        const staleTopup = periodStart && (!u?.last_topup_at || new Date(u.last_topup_at) < new Date(periodStart.getTime() - 24 * 3600 * 1000));
+                        if (u?.subscription_plan && !staleTopup) continue;
+                        const { activated } = await reconcilePaymentsForEmail(supabase, subEmail, process.env.DODO_API_KEY);
+                        if (activated) repaired.push(subEmail);
+                    }
+                    summary.dodo_missed_payment_repair = { checked: activeItems.length, repaired: repaired.length, emails: repaired };
+                    if (repaired.length) console.warn(`[cron:dodo_reconcile] 主動補發漏接 webhook: ${repaired.length} 個`, repaired);
                 }
             }
         } catch (e) { summary.dodo_reconcile_error = e.message; }

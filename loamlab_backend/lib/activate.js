@@ -166,6 +166,47 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
     console.log(`[🚀金流] 成功處理 ${platform} 充值: ${customerEmail} (+${pointsToAdd} pts)`);
 }
 
+// 無腦拉取（Dumb Pull）：向 Dodo 拉該 email 的 payments，把還沒入帳的 succeeded 付款全部補發。
+// 冪等完全交給 processTopup 的 UNIQUE(order_id) 檢查。供 verify_payment（用戶手動觸發）與
+// cron_insights 的 dodo_reconcile（主動偵測漏接 webhook）共用，避免同一套邏輯維護兩份。
+export async function reconcilePaymentsForEmail(supabase, email, dodoApiKey) {
+    if (!dodoApiKey || !email) return { activated: false, foundSucceeded: false };
+    const dodoBase = dodoApiKey.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+    let activated = false;
+    let foundSucceeded = false;
+    try {
+        const payRes = await fetch(
+            `${dodoBase}/payments?customer_email=${encodeURIComponent(email)}&limit=10`,
+            { headers: { Authorization: `Bearer ${dodoApiKey}` } }
+        );
+        if (payRes.ok) {
+            const pays = (await payRes.json()).items || [];
+            for (const pay of pays) {
+                const payEmail = pay.customer?.email || pay.email || pay.customer_email;
+                if (payEmail !== email) continue;
+                if (pay.status !== 'succeeded') continue;
+                foundSucceeded = true;
+                const productId = pay.product_cart?.[0]?.product_id || pay.product_id;
+                if (!productId) continue;
+                // 對齊 webhook.js orderId 格式（subscription 付款含 sub_id 前綴）
+                const orderId = pay.subscription_id ? `${pay.subscription_id}_${pay.payment_id}` : pay.payment_id;
+                const { data: ex } = await supabase.from('transactions').select('id').eq('order_id', `DODO_${orderId}`).maybeSingle();
+                // fallback：查舊格式（07a6772 之前寫入的 transaction，避免重複補發）
+                let alreadyIssued = !!ex;
+                if (!alreadyIssued && pay.subscription_id) {
+                    const { data: exOld } = await supabase.from('transactions').select('id').eq('order_id', `DODO_${pay.payment_id}`).maybeSingle();
+                    alreadyIssued = !!exOld;
+                }
+                if (!alreadyIssued) {
+                    await processTopup(supabase, email, productId, orderId, 'DODO', null, pay.subscription_id || null);
+                    activated = true;
+                }
+            }
+        }
+    } catch (e) { console.warn(`[reconcilePaymentsForEmail] ${email}:`, e.message); }
+    return { activated, foundSucceeded };
+}
+
 export async function writeKolCommission(supabase, buyerEmail, amountPaid, orderId) {
     try {
         const { data: buyer } = await supabase.from('users')

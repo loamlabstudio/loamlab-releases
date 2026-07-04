@@ -29,9 +29,12 @@ export default async function handler(req, res) {
             const event = JSON.parse(rawBody.toString());
             console.log('[Dodo] Event received:', event.type);
 
-            if (event.type === 'payment.refunded') {
+            if (event.type === 'payment.refunded' || event.type === 'payment.disputed') {
                 const paymentId = event.data?.payment_id;
-                if (paymentId) await cancelKolCommission(`DODO_${paymentId}`);
+                if (paymentId) {
+                    await cancelKolCommission(`DODO_${paymentId}`);
+                    await clawbackPoints(paymentId, event.type);
+                }
                 return res.status(200).json({ status: 'success' });
             }
 
@@ -49,7 +52,8 @@ export default async function handler(req, res) {
                 const data = event.data;
                 const customerEmail = data.customer?.email || data.email || data.customer_email;
                 let variantId = data.product_cart?.[0]?.product_id || data.product_id || data.plan_id;
-                // 訂閱付款帶 subscription_id：orderId 加上 sub_id 作為命名空間，防止同月不同訂閱互相阻塞
+                // orderId 含 payment_id（全域唯一），Supabase UNIQUE(order_id) 即可防止重複發放；
+                // 訂閱付款保留 subscription_id 前綴，與既有歷史交易紀錄格式一致，避免重複入帳
                 const orderId = data.subscription_id ? `${data.subscription_id}_${data.payment_id}` : data.payment_id;
                 const discountCode = data.discount?.code || data.discount_code || null;
                 const planKey = data.metadata?.planKey || null;
@@ -82,65 +86,19 @@ export default async function handler(req, res) {
                         .catch(e => console.warn('[Dodo] clear payment_failed failed:', e.message));
                 }
                 if (customerEmail && (variantId || planKey) && orderId) {
-                    // 精確比對：先查 order_id 是否已存在（最可靠的冪等鍵）
-                    const exactOrderId = `DODO_${orderId}`;
-                    const { data: exactMatch } = await supabase.from('transactions')
-                        .select('id').eq('order_id', exactOrderId).maybeSingle();
-                    if (exactMatch) {
-                        console.log(`[🔁冪等-精確] ${exactOrderId} 已處理，跳過`);
+                    // 唯一真理來源：processTopup 內部以 UNIQUE(order_id) 做冪等檢查，
+                    // 重複的 payment_id 會被自然擋下，不需要任何額外的週期/升級判斷
+                    try {
+                        await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey);
                         if (data.subscription_id) {
                             await supabase.from('users')
                                 .update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
                                 .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
                         }
-                        return res.status(200).json({ received: true, reason: 'already_processed' });
-                    }
-
-                    // 月份兜底：同週期不同 order_id 格式（例如 subscription.active 與 payment.succeeded 各自處理）
-                    const nowPeriod = new Date().toISOString().substring(0, 7); // "YYYY-MM"
-                    const periodStart = `${nowPeriod}-01T00:00:00Z`;
-                    let dedupPayQuery = supabase
-                        .from('transactions')
-                        .select('id, order_id')
-                        .eq('user_email', customerEmail)
-                        .eq('transaction_type', 'TOPUP_SUBSCRIPTION')
-                        .gte('created_at', periodStart);
-                    // 有 subscription_id 時，限縮到同一訂閱的記錄，避免同月換訂閱被誤判為重複
-                    if (data.subscription_id) {
-                        dedupPayQuery = dedupPayQuery.ilike('order_id', `%${data.subscription_id}%`);
-                    }
-                    const { data: existingPay, error: dedupPayErr } = await dedupPayQuery.limit(1);
-                    if (!dedupPayErr && existingPay?.length > 0) {
-                        // 升級偵測：新方案 tier > 現有方案 → 繞過月份去重，允許升級點數補發
-                        const PLAN_TIERS = { starter: 1, pro: 2, studio: 3 };
-                        const newPlanName = resolvePlanName(variantId, planKey);
-                        const { data: curUser } = await supabase.from('users').select('subscription_plan').eq('email', customerEmail).maybeSingle();
-                        const isUpgrade = (PLAN_TIERS[newPlanName] || 0) > (PLAN_TIERS[curUser?.subscription_plan] || 0);
-
-                        if (isUpgrade) {
-                            console.log(`[Dodo] payment.succeeded 升級 ${curUser?.subscription_plan}→${newPlanName}，繞過月份去重`);
-                            try {
-                                await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey);
-                            } catch (e) {
-                                await logWebhookError('DODO', event.type, orderId, customerEmail, e.message, data);
-                                await sendActivationFailureEmail(customerEmail, orderId);
-                                throw e;
-                            }
-                        } else {
-                            console.log(`[Dodo] payment.succeeded skipped — 本週期已有記錄: ${existingPay[0].order_id}`);
-                            if (data.subscription_id) {
-                                await supabase.from('users').update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
-                                    .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
-                            }
-                        }
-                    } else {
-                        try {
-                            await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey);
-                        } catch (e) {
-                            await logWebhookError('DODO', event.type, orderId, customerEmail, e.message, data);
-                            await sendActivationFailureEmail(customerEmail, orderId);
-                            throw e; // 讓外層回傳 500，Dodo 會重試
-                        }
+                    } catch (e) {
+                        await logWebhookError('DODO', event.type, orderId, customerEmail, e.message, data);
+                        await sendActivationFailureEmail(customerEmail, orderId);
+                        throw e; // 讓外層回傳 500，Dodo 會重試
                     }
                 } else {
                     await logWebhookError('DODO', event.type, orderId, customerEmail || 'unknown', `Missing fields: variantId=${variantId} planKey=${planKey} orderId=${orderId}`, data);
@@ -155,59 +113,14 @@ export default async function handler(req, res) {
             }
             
             if (event.type === 'subscription.active' || event.type === 'subscription.renewed') {
+                // 點數發放唯一來源是 payment.succeeded（Dodo 續訂時必定同時觸發）；
+                // 這裡只同步中繼資料，避免與 payment.succeeded 重複發點造成競態
                 const data = event.data;
                 const customerEmail = data.customer?.email || data.email || data.customer_email;
-                const subProductId = data.product_id || data.plan_id || data.product_cart?.[0]?.product_id;
                 if (customerEmail && data.subscription_id) {
-                    // 先存 subscription_id，清除扣款失敗旗標，同時清除降級待生效標記（新週期開始時降級已生效）
+                    // 清除扣款失敗旗標，同時清除降級待生效標記（新週期開始時降級已生效）
                     await supabase.from('users').update({ dodo_subscription_id: data.subscription_id, payment_failed: false, next_plan: null }).eq('email', customerEmail)
                         .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
-                }
-                // 若 payload 缺 product_id，嘗試從 DB 現有訂閱方案反推（處理 Dodo 欄位缺失的情況）
-                let resolvedProductId = subProductId;
-                if (customerEmail && data.subscription_id && !resolvedProductId) {
-                    const { data: existUser } = await supabase.from('users')
-                        .select('subscription_plan').eq('email', customerEmail).maybeSingle();
-                    if (existUser?.subscription_plan) {
-                        resolvedProductId = existUser.subscription_plan; // 'starter'/'pro'/'studio' 可被 processTopup 識別為 planKey
-                        console.log(`[Dodo] ${event.type} 缺 product_id，從 DB 反推: ${resolvedProductId}`);
-                    } else {
-                        console.warn(`[Dodo] ${event.type} 缺 product_id 且 DB 無訂閱記錄: ${customerEmail}`);
-                        await logWebhookError('DODO', event.type, data.subscription_id, customerEmail, 'Missing product_id and no DB plan fallback', data);
-                        await sendActivationFailureEmail(customerEmail, data.subscription_id);
-                    }
-                }
-
-                if (customerEmail && data.subscription_id && resolvedProductId) {
-                    // fallbackOrderId 使用 current_period_start（確保同週期冪等）
-                    const rawPeriod = data.current_period_start || new Date().toISOString();
-                    const period = rawPeriod.substring(0, 7); // "YYYY-MM"
-                    const fallbackOrderId = `${data.subscription_id}_${period}`;
-                    const periodStart = `${period}-01T00:00:00Z`;
-
-                    // 防雙發：限縮到同一訂閱 ID 的記錄，避免同月換訂閱被舊訂閱記錄阻塞
-                    const { data: existingTxRows, error: dedupErr } = await supabase
-                        .from('transactions')
-                        .select('id, order_id')
-                        .eq('user_email', customerEmail)
-                        .eq('transaction_type', 'TOPUP_SUBSCRIPTION')
-                        .gte('created_at', periodStart)
-                        .ilike('order_id', `%${data.subscription_id}%`)
-                        .limit(1);
-
-                    if (!dedupErr && existingTxRows?.length > 0) {
-                        console.log(`[Dodo] ${event.type} skipped — 已有記錄: ${existingTxRows[0].order_id}`);
-                    } else {
-                        // 真正的 fallback：本週期尚無任何激活記錄
-                        try {
-                            await processTopup(supabase, customerEmail, resolvedProductId, fallbackOrderId, 'DODO', null, data.subscription_id);
-                            console.log(`[Dodo] ${event.type} fallback processTopup OK: ${customerEmail}`);
-                        } catch (e) {
-                            if (!e.message.includes('Unknown product')) {
-                                await logWebhookError('DODO', event.type, fallbackOrderId, customerEmail, e.message, data);
-                            }
-                        }
-                    }
                 }
             } else if (event.type === 'subscription.updated') {
                 // 用戶自助升降級：升級立刻生效（payment.succeeded 同步觸發處理點數），降級期末生效（標記 next_plan）
@@ -315,6 +228,50 @@ async function processCancellation(customerEmail, platform) {
         dodo_subscription_id: null,
         payment_failed: false
     }).eq('email', customerEmail);
+}
+
+// 爭議/退款防護網：扣回該筆付款發放的點數（不足則歸零）並終止訂閱，防止用戶透過爭議白嫖服務
+async function clawbackPoints(paymentId, eventType) {
+    try {
+        const fullOrderId = `DODO_${paymentId}`;
+        const penaltyOrderId = `PENALTY_${fullOrderId}`;
+
+        // 冪等：同一筆付款可能先後收到 disputed + refunded，已扣回過就不重複扣
+        const { data: existingPenalty } = await supabase.from('transactions')
+            .select('id').eq('order_id', penaltyOrderId).maybeSingle();
+        if (existingPenalty) {
+            console.log(`[🔁冪等] ${penaltyOrderId} 已扣回過，跳過`);
+            return;
+        }
+
+        const { data: tx } = await supabase.from('transactions')
+            .select('user_email, amount').eq('order_id', fullOrderId).maybeSingle();
+        if (!tx?.user_email) {
+            console.warn(`[🚨${eventType}] 找不到對應交易紀錄，無法扣點: ${fullOrderId}`);
+            return;
+        }
+        const { data: user } = await supabase.from('users').select('points').eq('email', tx.user_email).maybeSingle();
+        if (!user) return;
+
+        const pointsToDeduct = tx.amount || 0;
+        const newPoints = Math.max(0, (user.points || 0) - pointsToDeduct);
+        await supabase.from('users').update({
+            points: newPoints,
+            subscription_plan: null,
+            dodo_subscription_id: null,
+        }).eq('email', tx.user_email);
+
+        await supabase.from('transactions').insert([{
+            user_email: tx.user_email,
+            amount: -pointsToDeduct,
+            transaction_type: eventType === 'payment.disputed' ? 'DISPUTE_PENALTY' : 'REFUND_PENALTY',
+            order_id: `PENALTY_${fullOrderId}`,
+        }]).catch(e => console.warn('[clawbackPoints] penalty tx insert failed (non-fatal):', e.message));
+
+        console.warn(`[🚨${eventType}] ${tx.user_email} 扣除 ${pointsToDeduct} 點並終止訂閱`);
+    } catch (e) {
+        console.error('[clawbackPoints] failed:', e.message);
+    }
 }
 
 async function cancelKolCommission(fullOrderId) {

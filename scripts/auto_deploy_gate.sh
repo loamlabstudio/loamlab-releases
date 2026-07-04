@@ -1,6 +1,9 @@
 #!/bin/bash
 # Commit 後自動部署安全閘門。
 #
+# 這支腳本是 .claude/settings.local.json 的 PostToolUse hook 實際呼叫的目標，
+# 修改前請先讀 CLAUDE.md「Commit 觸發的後端自動部署」章節了解完整流程。
+#
 # 目標：commit 到 main 就自動把後端部署上線，但絕不能讓開發中/未完成的功能
 # （FEATURE_FLAGS.md 標記 wip 的 BLOCKED_FILES）跟著溜上正式環境。
 #

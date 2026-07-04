@@ -83,6 +83,11 @@ powershell -ExecutionPolicy Bypass -Command "cd loamlab_backend; vercel dev"
 `.claude/settings.local.json` 本身是個人本機設定，不由 agent 編輯/commit——內容變更需要
 用戶自己在編輯器裡動手，改完要在 Claude Code 對話框輸入 `/hooks` 才會重新載入設定。
 
+> ⚠️ **2026-07-04 現狀：這個 hook 目前確認沒有實際運作**（多次真實 commit + 重啟都沒有觸發，
+> 懷疑是 hook 讀取 stdin 的方式跟 Claude Code 實際傳入格式對不上，根本原因未查出）。
+> 在查出根因並修好之前，**commit 完不會自動部署**，一律用手動流程：commit 完直接請 agent
+> 執行 `powershell -ExecutionPolicy Bypass -Command "vercel --prod"`。不要假設這個 hook 有效。
+
 ### Release New Version（三步，說「發佈更新」直接執行不再詢問）
 1. 版本號遞增（patch +1），同步 `config.rb` (`VERSION`) / `loamlab_plugin.rb` (`ext.version`) / `loamlab_backend/api/version.js` (`latest_version`) → commit
 2. `powershell -ExecutionPolicy Bypass -File ".\build_rbz.ps1"` （含 ESLint 語法檢查，失敗即中止）

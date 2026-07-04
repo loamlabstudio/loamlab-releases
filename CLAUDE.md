@@ -75,6 +75,14 @@ load 'c:/Users/qingwen/.gemini/antigravity/workspaces/土窟設計su渲染插件
 powershell -ExecutionPolicy Bypass -Command "cd loamlab_backend; vercel dev"
 ```
 
+### Commit 觸發的後端自動部署（本機 hook，非本 repo 文件所控）
+`main` 分支上每次 `git commit` 會經由 `.claude/settings.local.json` 的 PostToolUse hook 觸發
+`scripts/auto_deploy_gate.sh`：先檢查分支是不是 main、再跑 `pre_release_check.ps1`
+（WIP 外洩/版本同步檢查），都過了才真的 `vercel --prod`。結果一律寫進專案根目錄
+`auto_deploy.log`（已加入 `.gitignore`，純本機除錯用）。
+`.claude/settings.local.json` 本身是個人本機設定，不由 agent 編輯/commit——內容變更需要
+用戶自己在編輯器裡動手，改完要在 Claude Code 對話框輸入 `/hooks` 才會重新載入設定。
+
 ### Release New Version（三步，說「發佈更新」直接執行不再詢問）
 1. 版本號遞增（patch +1），同步 `config.rb` (`VERSION`) / `loamlab_plugin.rb` (`ext.version`) / `loamlab_backend/api/version.js` (`latest_version`) → commit
 2. `powershell -ExecutionPolicy Bypass -File ".\build_rbz.ps1"` （含 ESLint 語法檢查，失敗即中止）

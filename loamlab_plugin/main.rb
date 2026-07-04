@@ -1799,7 +1799,13 @@ module LoamLab
               supported_ratios = { "16:9"=>1.77, "9:16"=>0.56, "4:3"=>1.33, "3:4"=>0.75, "3:2"=>1.5, "2:3"=>0.66, "1:1"=>1.0, "21:9"=>2.33 }
               closest_ratio = supported_ratios.min_by { |k, v| (v - ratio_val).abs }[0]
 
-              self.write_image_capped(view, temp_img_path, 1280, 720)
+              # 截圖比例對齊後端 AI 輸出（3:2），畫質隨 resolution 分級提升
+              capture_w, capture_h = case resolution.to_s.downcase
+                when "4k" then [3072, 2048]
+                when "2k" then [2048, 1366]
+                else [1536, 1024]
+              end
+              self.write_image_capped(view, temp_img_path, capture_w, capture_h)
 
               # 定義發送請求的 Proc，避免代碼重複
               send_request = proc do |channel_b64|
@@ -1847,20 +1853,20 @@ module LoamLab
                       target_b64   = [4_000_000 - img_overhead, 50_000].max
                       target_raw   = (target_b64 * 3 / 4).to_i
                       estimated_q  = [[0.6 * (target_raw.to_f / img_data.bytesize), 0.55].min, 0.15].max
-                      view.write_image(temp_img_path, 1280, 720, false, estimated_q)
+                      view.write_image(temp_img_path, capture_w, capture_h, false, estimated_q)
                       img_data = File.read(temp_img_path, mode: 'rb')
                       data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
                       scene_params["image"] = [data_uri]
                       request_body = JSON.dump({ tool: tool, parameters: scene_params, "advanced_settings" => advanced_settings })
                       LoamLab.log "[LoamLab] Payload 壓縮 q#{(estimated_q * 100).round}% → #{request_body.bytesize / 1024}KB"
-                      # JPEG 非線性導致仍超：最後縮解析度（保持同 quality）
+                      # JPEG 非線性導致仍超：最後縮解析度（保持同 quality、3:2 比例）
                       if request_body.bytesize > 4_200_000
-                        view.write_image(temp_img_path, 1024, 576, false, estimated_q)
+                        view.write_image(temp_img_path, 1152, 768, false, estimated_q)
                         img_data = File.read(temp_img_path, mode: 'rb')
                         data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
                         scene_params["image"] = [data_uri]
                         request_body = JSON.dump({ tool: tool, parameters: scene_params, "advanced_settings" => advanced_settings })
-                        LoamLab.log "[LoamLab] Payload 降解析度 1024x576 → #{request_body.bytesize / 1024}KB"
+                        LoamLab.log "[LoamLab] Payload 降解析度 1152x768 → #{request_body.bytesize / 1024}KB"
                       end
                     rescue => _pg_e
                       LoamLab.log "[LoamLab] payload guard: #{_pg_e.message}"

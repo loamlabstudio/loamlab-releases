@@ -110,13 +110,9 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
         }
     }
 
-    // 防重複累加：若 last_topup_at 在 2 天內（補發/重試）不計 carryOver，避免 lifetime_points 虛增
-    const isRecentDuplicate = isSubscription && user?.last_topup_at &&
-        (Date.now() - new Date(user.last_topup_at).getTime()) < 2 * 24 * 3600 * 1000;
-    const carryOver = isSubscription && !isRecentDuplicate ? (user?.points || 0) : 0;
     const updatePayload = {
         points: isSubscription ? pointsToAdd : ((user?.points || 0) + pointsToAdd),
-        lifetime_points: (user?.lifetime_points || 0) + carryOver + (isSubscription ? 0 : pointsToAdd) + bonusB,
+        lifetime_points: (user?.lifetime_points || 0) + pointsToAdd + bonusB,
         is_beta_tester: true,
         last_topup_at: new Date().toISOString(),
     };

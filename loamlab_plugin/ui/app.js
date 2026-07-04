@@ -125,6 +125,17 @@ async function fetchOptions() {
     } catch (e) { /* 靜默降級 */ }
 }
 
+function getSyncParams(selectedScenes) {
+    const syncParams = currentActiveTool === 4 ? {} : { scenes: selectedScenes || [] };
+    const _forceStyleEntry = (optionsData || []).find(o => o.field_id === '_render_force_style');
+    const _forceStyleVal = _forceStyleEntry ? (_forceStyleEntry.value || {}) : {};
+    const _t4StyleEntry = (optionsData || []).find(o => o.field_id === '_t4_force_style');
+    const _t4ForceStyle = _t4StyleEntry ? (_t4StyleEntry.value || {}) : {};
+    syncParams.render_force_style = JSON.stringify(_forceStyleVal);
+    syncParams.t4_force_style = JSON.stringify(_t4ForceStyle);
+    return syncParams;
+}
+
 function _syncNodeDisplay(nodeId) {
     const el = document.getElementById('t1-node-' + nodeId);
     if (!el) return;
@@ -1341,7 +1352,7 @@ window.receiveFromRuby = function (data) {
 
         // 初始化時主動請求第一張預覽圖
         if (window.sketchup) {
-            setTimeout(() => { sketchup.sync_preview({}); }, 200);
+            setTimeout(() => { sketchup.sync_preview(getSyncParams([])); }, 200);
             // 靜默自動更新檢查（direct channel 才檢查，store 由 EW 管理）
             if (data.dist_channel !== 'store') {
                 window._silentUpdateCheck = true;
@@ -2204,9 +2215,7 @@ if (btnSync) {
             }
 
             setTimeout(() => {
-                // T4：只拍當前視角（樣式已持久套用），不切換場景
-                const syncParams = currentActiveTool === 4 ? {} : { scenes: selectedScenes };
-                sketchup.sync_preview(syncParams);
+                sketchup.sync_preview(getSyncParams(selectedScenes));
             }, 50);
         } else {
             console.log('Simulation: sync_preview requested', selectedScenes);
@@ -3087,6 +3096,70 @@ function generateShareTextWithReferral() {
         .replace(/{referral_code}/g, myCode)
         .replace(/{code}/g, myCode);
 }
+
+// DEV 專用：從目前選取的渲染節點自動組裝中英雙語貼文（含 Hashtags）
+function generateBilingualPostText() {
+    const GROUPS_FOR_POST = ['meta', 'scene_lighting', 'materials', 'photography'];
+    const zhLines = [];
+    const enLines = [];
+    const tagSet = new Set();
+
+    const slugTag = (str) => (str || '').toString()
+        .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+    GROUPS_FOR_POST.forEach(groupKey => {
+        const nodes = t1NodesData.filter(n => n.group === groupKey && !n.system && n.type !== 'slider');
+        if (!nodes.length) return;
+        const zhVals = [];
+        const enVals = [];
+        nodes.forEach(node => {
+            const raw = (document.getElementById('t1-node-' + node.id) || {}).value || '';
+            const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+            parts.forEach(val => {
+                const opt = optionsData.find(o => o.field_id === node.id && (o.value === val || o.label === val));
+                const zhLabel = (opt && opt.labels && (opt.labels['zh-TW'] || opt.labels['zh-CN'])) || (opt && opt.label) || val;
+                const enLabel = (opt && opt.labels && opt.labels['en-US']) || val;
+                zhVals.push(zhLabel);
+                enVals.push(enLabel);
+                if (slugTag(enLabel).length > 1) tagSet.add(slugTag(enLabel));
+            });
+        });
+        if (!zhVals.length) return;
+        const titleMap = T1_GROUP_TITLES[groupKey] || {};
+        zhLines.push(`${titleMap['zh-TW'] || groupKey}：${zhVals.join('、')}`);
+        enLines.push(`${titleMap['en-US'] || groupKey}: ${enVals.join(', ')}`);
+    });
+
+    if (!zhLines.length) return { zh: '', en: '', hashtags: [] };
+
+    const zhParagraph = `AI 渲染成果分享\n${zhLines.join('\n')}\n由 LoamLab AI 渲染插件於 SketchUp 中一鍵生成。`;
+    const enParagraph = `AI Rendering Showcase\n${enLines.join('\n')}\nGenerated in one click with the LoamLab AI Renderer for SketchUp.`;
+
+    ['sketchup', 'aiRender', 'interiordesign', 'render3d', 'archviz'].forEach(tg => tagSet.add(tg));
+    const hashtags = Array.from(tagSet).slice(0, 10).map(tg => '#' + tg);
+
+    return { zh: zhParagraph, en: enParagraph, hashtags };
+}
+
+// DEV 專用：按鈕點擊入口，寫入 #share-input-content 並觸發既有預覽刷新
+window.handleAutoGeneratePost = function(btn) {
+    const result = generateBilingualPostText();
+    if (!result.zh) {
+        showUpdateToast(t('toast_no_render_params') || '請先在工具1選擇渲染參數');
+        return;
+    }
+    const contentInput = document.getElementById('share-input-content');
+    if (contentInput) {
+        contentInput.value = [result.zh, result.en, result.hashtags.join(' ')].join('\n\n');
+        contentInput.dispatchEvent(new Event('input'));
+    }
+    if (btn) {
+        const original = btn.textContent;
+        btn.textContent = t('share_btn_auto_generate_done') || '✓ 已生成';
+        setTimeout(() => { btn.textContent = original; }, 1500);
+    }
+};
 
 // 將一張渲染圖自動加入 share pool（如已有同 URL 則跳過）
 function _autoPopulateShareImage(url) {

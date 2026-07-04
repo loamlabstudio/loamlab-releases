@@ -17,15 +17,27 @@
 | Feature | Status | BLOCKED_FILES | Release Criteria | Notes |
 |---------|--------|---------------|-----------------|-------|
 | `dunning_process` | `released` | — | — | v1.4.50 上線；supabase Phase 28 migration 需確認已執行 |
-| `loam_recipes` | `wip` | — | Plugin UI 重新實作後開放（commit 703df94 移除 UI，後端 API 已 deployed 無需 block）| 後端 API 已上線（list_recipes / create_recipe / handleRecipeRemix），Plugin UI 尚未重新建立 |
-| `system_bundles` | `wip` | — | Phase B 完整實作後（admin UI 完成 + 插件端 Bundle Bar 完成）| 尚未開始實作，無 WIP 代碼需要 block |
+| `loam_recipes` | `wip` | — | 見下方「跨分支 WIP」說明，merge 前必須重新評估 | 2026-07-04 查證：main 分支上乾淨、無殘留代碼。真正的 WIP 代碼在 **dev 分支** commit `0342c52`（"wip: Arcade Recipe System — in-progress, not for release"），涵蓋 app.js / i18n.js / index.html / render.js / user.js / supabase_setup.sql。（先前版本本表誤植 commit `703df94`，該 commit 實際是無關的截圖路徑修復，已更正）|
+| `system_bundles` | `wip` | — | 僅插件端 UI 未做；後端已上線不受影響 | 2026-07-04 查證：`loamlab_backend/api/stats.js` 的 `get_bundles`/`set_bundles` 是 main 分支 v1.4.9（commit `462087e`）就上線的穩定代碼，**非 WIP**，之前標註「尚未開始實作」不準確。`index.html:812` 的 `#bundle-bar` 是刻意留的 `hidden` placeholder，無任何 JS 綁定，無誤觸風險。只有插件端 Bundle Bar 互動與 admin UI 尚未實作，main 分支目前沒有需要 block 的檔案 |
+
+---
+
+## ⚠️ 跨分支 WIP（BLOCKED_FILES 機制管不到的情況）
+
+`pre_release_check.ps1` 的 BLOCKED_FILES 檢查只比對 **main 分支自己的 git diff**，管不到還沒 merge 進來的 `dev` 分支內容。`loam_recipes` 就是這種情況：main 現在很乾淨，風險只會在「執行 `git merge dev` 進 main」那一刻出現。
+
+另外，BLOCKED_FILES 本身也不適合拿來擋 `app.js`/`user.js`/`render.js` 這種被大量功能共用的核心檔案——如果整個檔案被列進 BLOCKED_FILES，會連帶擋下所有跟 WIP 無關、剛好也改到同一支檔案的正常 release（例如同時在修的付費 bug）。這是這個檢查機制的天生限制，不是設定錯誤，不要試圖用「列出整支檔案」硬解。
+
+**因此，任何 agent 要執行 `git checkout main; git merge dev` 之前，除了跑 `pre_release_check.ps1`，還必須額外手動確認：**
+1. 讀這份表格裡每個 `wip`/`dev-only` 項目的 Notes，逐一確認 dev 分支上對應的功能是否真的做完了
+2. 如果沒做完，用 `git cherry-pick` 只挑乾淨、已完成的 commit 進 main，不要整支 dev 分支一次 merge 進去
 
 ---
 
 ## 規則（Agent Instructions）
 
-1. **開始任何 release 流程前**：讀此檔，確認無 `wip` 功能的 BLOCKED_FILES 出現在 `git diff`
-2. **新增 WIP 功能時**：同一個 commit 必須同步更新此表（status=`wip`，填入 BLOCKED_FILES）
+1. **開始任何 release 流程前**：讀此檔，確認無 `wip` 功能的 BLOCKED_FILES 出現在 `git diff`；BLOCKED_FILES 只保護「main 自己的 diff」，跨分支風險見上方「⚠️ 跨分支 WIP」章節
+2. **新增 WIP 功能時**：同一個 commit 必須同步更新此表（status=`wip`）。只有在功能是**獨立新檔案**時才填 BLOCKED_FILES；若功能改的是共用核心檔案（app.js/user.js/render.js 等），BLOCKED_FILES 留空，改成在 Notes 寫清楚「代碼在哪個分支/commit，merge 前要人工核實」
 3. **功能開發完成**：更新 status 為 `ready`，清空 BLOCKED_FILES（填 `—`）
 4. **功能上線後**：更新 status 為 `released`，在 Notes 記錄版本號
-5. `pre_release_check.ps1` 自動機器解析本表，agent 不需要手動判斷
+5. `pre_release_check.ps1` 自動機器解析本表，agent 不需要手動判斷 BLOCKED_FILES 是否在 diff 裡；但**跨分支風險永遠需要人工確認**，機器檢查不到

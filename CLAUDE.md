@@ -146,11 +146,16 @@ GET https://loamlab-camera-backend.vercel.app/api/fix_anomalies?key=<ADMIN_KEY>
 收到「上線/發佈/release」指令
   → 1. 讀 FEATURE_FLAGS.md
        └─ 有 wip 功能的 BLOCKED_FILES 在 git diff 中？→ STOP，詢問用戶如何隔離
+       └─ ⚠️ BLOCKED_FILES 只比對 main 自己的 diff，管不到還沒 merge 進來的 dev 分支內容。
+          若這次 release 包含 `git checkout main; git merge dev`，必須額外逐一讀
+          FEATURE_FLAGS.md 每個 wip/dev-only 項目的 Notes，人工確認 dev 上對應功能真的做完了
+          （細節見 FEATURE_FLAGS.md「⚠️ 跨分支 WIP」章節）；沒做完就用 git cherry-pick 只挑
+          乾淨 commit，不要整支 dev 一次 merge
   → 2. 確認 SPRINT.md 有 ## RELEASE_GATE 區塊（release_type + verified_diff）
        └─ 若無 → 請 Gemini 補填或人工確認
   → 3. build_rbz.ps1（內含 pre_release_check.ps1 自動 gate，必須 PASS）
        └─ FAIL → 依錯誤訊息修復，不得用 -Force bypass（除非用戶明確指示）
-  → 4. publish.ps1
+  → 4. publish.ps1（第三步會自動打 git tag，維持 pre_release_check.ps1 的 diff 基準線準確）
 ```
 
 ### SPRINT.md RELEASE_GATE 區塊格式（每個 Sprint 必填）

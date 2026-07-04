@@ -14,3 +14,4 @@ loamlab_backend/poll_test.js
 *.rbz
 client_secret_*.json
 skills-lock.json
+auto_deploy.log

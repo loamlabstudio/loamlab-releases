@@ -38,7 +38,7 @@ Write-Host ""
 Write-Host "===== Publishing v$version ($releaseType) =====" -ForegroundColor Cyan
 
 # Step 1: GitHub Release
-Write-Host "[1/2] Creating GitHub Release v$version ..." -ForegroundColor Yellow
+Write-Host "[1/3] Creating GitHub Release v$version ..." -ForegroundColor Yellow
 gh release view "v$version" --repo "loamlabstudio/loamlab-releases" | Out-Null
 if ($LASTEXITCODE -eq 0) {
     Write-Host "      Already exists, deleting and recreating ..." -ForegroundColor Yellow
@@ -50,11 +50,21 @@ Write-Host "[OK] https://github.com/loamlabstudio/loamlab-releases/releases/tag/
 
 # Step 2: Vercel deploy (must run from repo root; Vercel project root is set to loamlab_backend in project settings)
 Write-Host ""
-Write-Host "[2/2] Deploying backend to Vercel ..." -ForegroundColor Yellow
+Write-Host "[2/3] Deploying backend to Vercel ..." -ForegroundColor Yellow
 Set-Location $ROOT
 vercel --prod
 if ($LASTEXITCODE -ne 0) { Write-Host "[WARN] Vercel deploy failed. Run manually: vercel --prod" -ForegroundColor Red }
 else { Write-Host "[OK] Vercel deploy complete" -ForegroundColor Green }
+
+
+# Step 3: Git tag（讓 pre_release_check.ps1 的「自上次 tag 以來的 diff」基準線保持準確，
+# 避免 tag 長期沒更新導致 WIP 洩漏檢查比對到一個過時、範圍過大的 diff）
+Write-Host ""
+Write-Host "[3/3] Tagging v$version ..." -ForegroundColor Yellow
+git tag -f "v$version" | Out-Null
+git push origin "v$version" --force 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Host "[WARN] git tag push 失敗，之後 pre_release_check.ps1 的 diff 基準線會不準確，請手動補 push" -ForegroundColor Yellow }
+else { Write-Host "[OK] tag v$version 已推送" -ForegroundColor Green }
 
 Write-Host ""
 Write-Host "===== v$version published =====" -ForegroundColor Green

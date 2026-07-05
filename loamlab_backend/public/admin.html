@@ -601,7 +601,7 @@
       <div class="flex items-center justify-between mb-3">
         <div>
           <h3 class="text-sm font-semibold text-gray-300">T4 360 專屬樣式設定</h3>
-          <p class="text-[11px] text-gray-600 mt-0.5">控制 360 全景拍攝時的所有 SketchUp 畫面樣式。可設定 <code class="text-gray-500">Light</code>、<code class="text-gray-500">Dark</code>、<code class="text-gray-500">UseSunForAllShading</code>、<code class="text-gray-500">DrawEdges</code>、<code class="text-gray-500">EdgeDisplayMode</code>、<code class="text-gray-500">DrawHorizon</code>、<code class="text-gray-500">DrawSky</code> 等任意 shadow_info 或 rendering_options 屬性。</p>
+          <p class="text-[11px] text-gray-600 mt-0.5">控制 360 全景拍攝時的所有 SketchUp 畫面樣式。可設定 <code class="text-gray-500">Light</code>、<code class="text-gray-500">Dark</code>、<code class="text-gray-500">UseSunForAllShading</code>、<code class="text-gray-500">EdgeDisplayMode</code>、<code class="text-gray-500">DrawHorizon</code>、<code class="text-gray-500">DrawSky</code> 等任意 shadow_info 或 rendering_options 屬性（注意：沒有 <code class="text-gray-500">DrawEdges</code> 這個 key，邊線主開關是 <code class="text-gray-500">EdgeDisplayMode</code>）。</p>
         </div>
         <span class="text-[9px] font-mono text-gray-700 bg-black/40 px-1.5 py-0.5 rounded">field_id: _t4_force_style</span>
       </div>
@@ -2239,7 +2239,7 @@ function _updateForceStyleField(key, rawVal) {
   // EdgeDisplayMode 用整數 0/1；DisplayShadows 用 boolean；其餘 boolean 或 number
   if (key === 'EdgeDisplayMode') {
     e.value[key] = (rawVal === true || rawVal === 'true') ? 1 : 0;
-  } else if (key === 'DisplayShadows' || key === 'UseSunForAllShading' || key === 'DrawProfiles') {
+  } else if (key === 'DisplayShadows' || key === 'UseSunForAllShading' || key === 'DrawProfilesOnly') {
     e.value[key] = (rawVal === true || rawVal === 'true');
   } else if (['AmbientOcclusionDistance', 'AmbientOcclusionIntensity'].includes(key)) {
     e.value[key] = parseFloat(rawVal) || 0;
@@ -2253,6 +2253,24 @@ function _updateForceStyleField(key, rawVal) {
   if (key === 'DisplayInstanceAxes') e.value['DisplaySketchAxes'] = e.value[key];
   optionsDirty = true;
 }
+// 依 Light/Dark/UseSunForAllShading 組合即時提示是否容易出圖偏暗（2026-07-05 事故：Light 過低 + Dark 過高 + UseSunForAllShading 導致天花板死黑）
+function _shadowHintHtml(light, dark, useSun) {
+  const warn = (light < 50) || (dark > 50);
+  if (!warn) return `<span class="text-emerald-400/70">✓ Light/Dark 落在建議範圍內</span>`;
+  const sunNote = useSun ? '；目前 UseSunForAllShading 已開啟，背光面（如天花板）會整片套用此明暗，風險更高' : '';
+  return `<span class="text-amber-400/80">⚠ Light 越高越亮、Dark 越高越暗，建議 Light ≥ 50、Dark ≤ 40；目前組合容易讓出圖整體偏暗或背光面死黑${sunNote}</span>`;
+}
+function _updateShadowHint(panel) {
+  const e = panel === 't4' ? _getT4ForceStyleEntry() : _getForceStyleEntry();
+  const v = e.value || {};
+  const lightDef = panel === 't4' ? 80 : 17;
+  const darkDef  = panel === 't4' ? 70 : 81;
+  const light = v['Light'] !== undefined ? Number(v['Light']) : lightDef;
+  const dark  = v['Dark']  !== undefined ? Number(v['Dark'])  : darkDef;
+  const useSun = v['UseSunForAllShading'] !== undefined ? v['UseSunForAllShading'] : (panel === 't4');
+  const el = document.getElementById(panel === 't4' ? 't4-shadow-hint' : 'render-shadow-hint');
+  if (el) el.innerHTML = _shadowHintHtml(light, dark, useSun);
+}
 function renderRenderForceStyleSection() {
   const area = document.getElementById('render-force-style-area');
   if (!area) return;
@@ -2261,7 +2279,7 @@ function renderRenderForceStyleSection() {
   const numRow = (label, key, def) => `<div class="flex items-center justify-between py-2 border-b border-white/[0.04]">
     <span class="text-xs text-gray-400">${label}</span>
     <input type="number" min="0" max="100" step="any" value="${v[key] !== undefined ? v[key] : def}"
-           oninput="_updateForceStyleField('${key}', this.value)"
+           oninput="_updateForceStyleField('${key}', this.value)${(key === 'Light' || key === 'Dark') ? "; _updateShadowHint('render')" : ''}"
            class="w-16 bg-black/40 text-gray-200 text-xs text-right px-2 py-1 rounded border border-white/10 focus:border-cyan-500/50 outline-none">
   </div>`;
   const toggleRow = (label, key, def) => {
@@ -2298,15 +2316,16 @@ function renderRenderForceStyleSection() {
   </div>`;
   area.innerHTML = sectionLabel('Shadows')
     + toggleRow('DisplayShadows（陰影顯示）', 'DisplayShadows', false)
-    + numRow('Light（0–100）', 'Light', 17)
-    + numRow('Dark（0–100）', 'Dark', 81)
-    + toggleRow('UseSunForAllShading（陽光統一分面，消除拼接縫）', 'UseSunForAllShading', false)
+    + numRow('Light（朝光面亮度 0–100，越高越亮）', 'Light', 17)
+    + numRow('Dark（背光面暗度 0–100，越高越暗）', 'Dark', 81)
+    + `<p id="render-shadow-hint" class="text-[10px] -mt-1 mb-1 leading-relaxed"></p>`
+    + toggleRow('UseSunForAllShading（依太陽方向統一明暗，含背光面如天花板；消除拼接縫）', 'UseSunForAllShading', false)
     + sectionLabel('Edge Style')
     + edgeToggleHtml
     + toggleRow('DrawBackEdges（後側邊線）', 'DrawBackEdges', false)
     + toggleRow('DrawSilhouettes（剪影輪廓線）', 'DrawSilhouettes', true)
     + numRow('SilhouetteWidth（剪影粗細）', 'SilhouetteWidth', 1)
-    + toggleRow('DrawProfiles（物件輪廓線）', 'DrawProfiles', true)
+    + toggleRow('DrawProfilesOnly（僅顯示輪廓線）', 'DrawProfilesOnly', true)
     + numRow('ProfileWidth（輪廓粗細）', 'ProfileWidth', 2)
     + toggleRow('DrawDepthQue（Depth Cue）', 'DrawDepthQue', false)
     + sectionLabel('Face / AO')
@@ -2315,6 +2334,7 @@ function renderRenderForceStyleSection() {
     + sliderRow('強度 AmbientOcclusionIntensity（0–1）', 'AmbientOcclusionIntensity', 0, 1, 0.05, 0.8)
     + sectionLabel('Modeling')
     + toggleRow('DisplayInstanceAxes / DisplaySketchAxes（模型座標軸）', 'DisplayInstanceAxes', false);
+  _updateShadowHint('render');
 }
 
 // ── T4 360 專屬樣式設定 ──────────────────────────────────────────────────────
@@ -2333,7 +2353,7 @@ function _updateT4ForceStyleField(key, rawVal) {
   if (!e.value) e.value = {};
   if (key === 'EdgeDisplayMode') {
     e.value[key] = (rawVal === true || rawVal === 'true') ? 1 : 0;
-  } else if (['UseSunForAllShading', 'DisplayShadows', 'AmbientOcclusion', 'DrawBackEdges', 'DrawSilhouettes', 'DrawProfiles', 'DrawDepthQue', 'DisplayInstanceAxes'].includes(key)) {
+  } else if (['UseSunForAllShading', 'DisplayShadows', 'AmbientOcclusion', 'DrawBackEdges', 'DrawSilhouettes', 'DrawProfilesOnly', 'DrawDepthQue', 'DisplayInstanceAxes'].includes(key)) {
     e.value[key] = (rawVal === true || rawVal === 'true');
   } else if (['AmbientOcclusionDistance', 'AmbientOcclusionIntensity'].includes(key)) {
     e.value[key] = parseFloat(rawVal) || 0;
@@ -2351,7 +2371,7 @@ function renderT4ForceStyleSection() {
   const numRow = (label, key, def) => `<div class="flex items-center justify-between py-2 border-b border-white/[0.04]">
     <span class="text-xs text-gray-400">${label}</span>
     <input type="number" min="0" max="100" value="${v[key] !== undefined ? v[key] : def}"
-           oninput="_updateT4ForceStyleField('${key}', this.value)"
+           oninput="_updateT4ForceStyleField('${key}', this.value)${(key === 'Light' || key === 'Dark') ? "; _updateShadowHint('t4')" : ''}"
            class="w-16 bg-black/40 text-gray-200 text-xs text-right px-2 py-1 rounded border border-white/10 focus:border-cyan-500/50 outline-none">
   </div>`;
   const toggleRow = (label, key, def) => {
@@ -2388,16 +2408,17 @@ function renderT4ForceStyleSection() {
   </div>`;
 
   area.innerHTML = sectionLabel('陰影設定')
-    + numRow('Light（亮面明度 0–100）', 'Light', 80)
-    + numRow('Dark（暗面明度 0–100）', 'Dark', 70)
-    + toggleRow('UseSunForAllShading（陽光統一分面，消除拼接縫）', 'UseSunForAllShading', true)
+    + numRow('Light（朝光面亮度 0–100，越高越亮）', 'Light', 80)
+    + numRow('Dark（背光面暗度 0–100，越高越暗）', 'Dark', 70)
+    + `<p id="t4-shadow-hint" class="text-[10px] -mt-1 mb-1 leading-relaxed"></p>`
+    + toggleRow('UseSunForAllShading（依太陽方向統一明暗，含背光面如天花板；消除拼接縫）', 'UseSunForAllShading', true)
     + toggleRow('DisplayShadows（投影顯示）', 'DisplayShadows', false)
     + sectionLabel('Edge Style')
     + edgeToggleHtml
     + toggleRow('DrawBackEdges（後側邊線）', 'DrawBackEdges', false)
     + toggleRow('DrawSilhouettes（剪影輪廓線）', 'DrawSilhouettes', true)
     + numRow('SilhouetteWidth（剪影粗細）', 'SilhouetteWidth', 1)
-    + toggleRow('DrawProfiles（物件輪廓線）', 'DrawProfiles', true)
+    + toggleRow('DrawProfilesOnly（僅顯示輪廓線）', 'DrawProfilesOnly', true)
     + numRow('ProfileWidth（輪廓粗細）', 'ProfileWidth', 2)
     + toggleRow('DrawDepthQue（Depth Cue）', 'DrawDepthQue', false)
     + sectionLabel('環境光遮蔽（AO）')
@@ -2406,6 +2427,7 @@ function renderT4ForceStyleSection() {
     + sliderRow('強度 AmbientOcclusionIntensity（0–1）', 'AmbientOcclusionIntensity', 0, 1, 0.05, 0.8)
     + sectionLabel('Modeling')
     + toggleRow('DisplayInstanceAxes / DisplaySketchAxes（模型座標軸）', 'DisplayInstanceAxes', false);
+  _updateShadowHint('t4');
 }
 
 function addOptionToNode(fieldId) {

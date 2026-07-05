@@ -628,6 +628,24 @@ function removeUserChip(nodeId, value) {
     userChips[nodeId] = userChips[nodeId].filter(c => c.value !== value);
     if (!userChips[nodeId].length) delete userChips[nodeId];
     localStorage.setItem('loamlab_user_chips', JSON.stringify(userChips));
+
+    // 若這個自訂 chip 目前正被選用，一併清掉選取值，避免刪除後留下永久存在的
+    // 孤兒選取值（該值再也對應不到任何 chip，下次開插件也無法透過快選移除）。
+    const hiddenInput = document.getElementById('t1-node-' + nodeId);
+    if (hiddenInput && hiddenInput.value) {
+        const remaining = hiddenInput.value.split(',').map(s => s.trim()).filter(s => s && s !== value);
+        hiddenInput.value = remaining.join(', ');
+    }
+    try {
+        const _nv = JSON.parse(localStorage.getItem('loamlab_node_vals') || '{}');
+        if (_nv[nodeId] !== undefined) {
+            const remaining = (_nv[nodeId] || '').split(',').map(s => s.trim()).filter(s => s && s !== value);
+            if (remaining.length) _nv[nodeId] = remaining.join(', ');
+            else delete _nv[nodeId];
+            localStorage.setItem('loamlab_node_vals', JSON.stringify(_nv));
+        }
+    } catch(_) {}
+
     renderT1Nodes();
 }
 
@@ -1583,7 +1601,8 @@ window.receiveFromRuby = function (data) {
                     url: targetUrl,
                     scene: targetScene,
                     resolution: (resEl2 ? resEl2.value : '2k'),
-                    prompt: (promptEl2 ? promptEl2.value : '')
+                    prompt: (promptEl2 ? promptEl2.value : ''),
+                    timestamp: data.timestamp || ''
                 });
             }
 
@@ -3107,54 +3126,68 @@ function generateBilingualPostText() {
     const GROUPS_FOR_POST = ['meta', 'scene_lighting', 'materials', 'photography'];
     const zhLines = [];
     const enLines = [];
-    const tagSet = new Set();
 
-    const slugTag = (str) => (str || '').toString()
-        .normalize('NFKD').replace(/[̀-ͯ]/g, '')
-        .toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const defaultLayout = "【場景分享】\n{zhLines}\n- 畫面表現：高動態範圍 + 細節豐富 + 真實自然\n- 渲染引擎：loamlab-camera（SketchUp擬真渲染、多角度生成、空間重塑）\n\n---\n\n【Setting Sharing】\n{enLines}\n- SCREEN PERFORMANCE: HDR + Rich details + natural and real\n- Renderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n#sketchup #interiordesign";
+    const defaultBullet = "- ";
 
-    GROUPS_FOR_POST.forEach(groupKey => {
-        const nodes = t1NodesData.filter(n => n.group === groupKey && !n.system && n.type !== 'slider');
-        if (!nodes.length) return;
+    let layoutConfig = defaultLayout;
+    let bulletConfig = defaultBullet;
+    
+    try {
+        const saved = localStorage.getItem('loamlab_dev_post_template_v2');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            layoutConfig = parsed.layout || defaultLayout;
+            bulletConfig = typeof parsed.bullet === 'string' ? parsed.bullet : defaultBullet;
+        }
+    } catch(e) {}
+
+    const validNodes = t1NodesData.filter(n => GROUPS_FOR_POST.includes(n.group) && !n.system && n.type !== 'slider');
+    
+    const getI18nStr = (obj, def) => {
+        if (!obj) return def;
+        if (typeof obj === 'string') return obj;
+        return obj['zh-TW'] || obj['zh-CN'] || obj['en-US'] || def;
+    };
+    
+    const getI18nEnStr = (obj, def) => {
+        if (!obj) return def;
+        if (typeof obj === 'string') return obj;
+        return obj['en-US'] || obj['en'] || def;
+    };
+
+    validNodes.forEach(node => {
+        const raw = (document.getElementById('t1-node-' + node.id) || {}).value || '';
+        if (!raw) return;
+        
         const zhVals = [];
         const enVals = [];
-        nodes.forEach(node => {
-            const raw = (document.getElementById('t1-node-' + node.id) || {}).value || '';
-            const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
-            parts.forEach(val => {
-                const opt = optionsData.find(o => o.field_id === node.id && (o.value === val || o.label === val));
-                const zhLabel = (opt && opt.labels && (opt.labels['zh-TW'] || opt.labels['zh-CN'])) || (opt && opt.label) || val;
-                const enLabel = (opt && opt.labels && opt.labels['en-US']) || val;
-                zhVals.push(zhLabel);
-                enVals.push(enLabel);
-                if (slugTag(enLabel).length > 1) tagSet.add(slugTag(enLabel));
-            });
+        const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+        if(!parts.length) return;
+        
+        parts.forEach(val => {
+            const opt = optionsData.find(o => o.field_id === node.id && (o.value === val || o.label === val));
+            const zhLabel = (opt && opt.labels && (opt.labels['zh-TW'] || opt.labels['zh-CN'])) || (opt && opt.label) || val;
+            const enLabel = (opt && opt.labels && opt.labels['en-US']) || val;
+            zhVals.push(zhLabel);
+            enVals.push(enLabel);
         });
-        if (!zhVals.length) return;
-        const titleMap = T1_GROUP_TITLES[groupKey] || {};
-        zhLines.push(`- ${titleMap['zh-TW'] || groupKey}：${zhVals.join(' + ')}`);
-        enLines.push(`- ${titleMap['en-US'] || groupKey}: ${enVals.join(' + ')}`);
+        
+        const nodeNameObj = node.name || node.title;
+        const zhTitle = getI18nStr(nodeNameObj, node.id);
+        const enTitle = getI18nEnStr(nodeNameObj, node.id);
+        
+        zhLines.push(`${bulletConfig}${zhTitle}：${zhVals.join(' + ')}`);
+        enLines.push(`${bulletConfig}${enTitle}: ${enVals.join(' + ')}`);
     });
 
-    if (!zhLines.length) return { zh: '', en: '', hashtags: [], fullText: '' };
+    if (!zhLines.length) return { fullText: '' };
 
-    ['sketchup', 'architectural', 'render3d', 'interior', 'interiordesignideas'].forEach(tg => tagSet.add(tg));
-    const hashtags = Array.from(tagSet).slice(0, 10).map(tg => '#' + tg);
-
-    const defaultTemplate = `【場景分享】\n{zhLines}\n- 畫面表現：高動態範圍 + 細節豐富 + 真實自然\n- 渲染引擎：loamlab-camera（SketchUp擬真渲染、多角度生成、空間重塑）\n\n---\n\n【Setting Sharing】\n{enLines}\n- SCREEN PERFORMANCE: HDR + Rich details + natural and real\n- Renderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n{hashtags}`;
-    
-    const savedTemplate = localStorage.getItem('loamlab_dev_post_template') || defaultTemplate;
-    
-    const finalZh = zhLines.join('\n');
-    const finalEn = enLines.join('\n');
-    const finalTags = hashtags.join(' ');
-    
-    const fullText = savedTemplate
-        .replace('{zhLines}', finalZh)
-        .replace('{enLines}', finalEn)
-        .replace('{hashtags}', finalTags);
+    const fullText = layoutConfig
+        .replace('{zhLines}', zhLines.join('\n'))
+        .replace('{enLines}', enLines.join('\n'));
         
-    return { fullText, zh: finalZh, en: finalEn, hashtags };
+    return { fullText };
 }
 
 // DEV 專用：開啟編輯版型
@@ -3163,8 +3196,26 @@ window.togglePostTemplateEdit = function() {
     if (!editor) return;
     if (editor.classList.contains('hidden')) {
         editor.classList.remove('hidden');
-        const defaultTemplate = `【場景分享】\n{zhLines}\n- 畫面表現：高動態範圍 + 細節豐富 + 真實自然\n- 渲染引擎：loamlab-camera（SketchUp擬真渲染、多角度生成、空間重塑）\n\n---\n\n【Setting Sharing】\n{enLines}\n- SCREEN PERFORMANCE: HDR + Rich details + natural and real\n- Renderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n{hashtags}`;
-        document.getElementById('dev-template-textarea').value = localStorage.getItem('loamlab_dev_post_template') || defaultTemplate;
+        
+        const defaultLayout = "【場景分享】\n{zhLines}\n- 畫面表現：高動態範圍 + 細節豐富 + 真實自然\n- 渲染引擎：loamlab-camera（SketchUp擬真渲染、多角度生成、空間重塑）\n\n---\n\n【Setting Sharing】\n{enLines}\n- SCREEN PERFORMANCE: HDR + Rich details + natural and real\n- Renderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n#sketchup #interiordesign";
+        let layoutVal = defaultLayout;
+        let bulletVal = "- ";
+        
+        try {
+            const saved = localStorage.getItem('loamlab_dev_post_template_v2');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                layoutVal = parsed.layout || defaultLayout;
+                bulletVal = typeof parsed.bullet === 'string' ? parsed.bullet : "- ";
+            }
+        } catch(e) {}
+        
+        document.getElementById('dev-template-textarea').value = layoutVal;
+        document.getElementById('dev-template-bullet').value = bulletVal;
+        
+        // Auto preview
+        if (window.previewAutoGeneratePost) window.previewAutoGeneratePost();
+        
     } else {
         editor.classList.add('hidden');
     }
@@ -3172,28 +3223,52 @@ window.togglePostTemplateEdit = function() {
 
 // DEV 專用：儲存版型
 window.savePostTemplate = function() {
-    const text = document.getElementById('dev-template-textarea').value;
-    localStorage.setItem('loamlab_dev_post_template', text);
-    document.getElementById('dev-template-editor').classList.add('hidden');
-    if (typeof showUpdateToast === 'function') showUpdateToast('✅ 版型已儲存，現在可點擊「🪄 自動生成雙語貼文」套用');
+    const layout = document.getElementById('dev-template-textarea').value;
+    const bullet = document.getElementById('dev-template-bullet').value;
+    
+    const config = { layout, bullet };
+    localStorage.setItem('loamlab_dev_post_template_v2', JSON.stringify(config));
+    
+    if (typeof showUpdateToast === 'function') showUpdateToast('✅ 版型已儲存，請點擊刷新預覽');
+    if (window.previewAutoGeneratePost) window.previewAutoGeneratePost();
 };
 
-// DEV 專用：按鈕點擊入口，寫入 #share-input-content 並觸發既有預覽刷新
-window.handleAutoGeneratePost = function(btn) {
+// DEV 專用：產生預覽
+window.previewAutoGeneratePost = function() {
     const result = generateBilingualPostText();
-    if (!result.fullText) {
-        showUpdateToast(t('toast_no_render_params') || '請先在工具1選擇渲染參數');
+    const preview = document.getElementById('dev-template-preview');
+    if (preview) {
+        if (!result.fullText) {
+            preview.value = "⚠️ 請先選擇渲染參數後再刷新";
+        } else {
+            preview.value = result.fullText;
+        }
+    }
+};
+
+// DEV 專用：複製預覽區的文字
+window.handleAutoGeneratePost = function(btn) {
+    const preview = document.getElementById('dev-template-preview');
+    if (!preview || !preview.value || preview.value.includes('請先選擇渲染參數')) {
+        showUpdateToast(t('toast_no_render_params') || '請先在工具1選擇渲染參數並刷新預覽');
         return;
     }
-    const contentInput = document.getElementById('share-input-content');
-    if (contentInput) {
-        contentInput.value = result.fullText;
-        contentInput.dispatchEvent(new Event('input'));
-    }
-    if (btn) {
-        const original = btn.textContent;
-        btn.textContent = t('share_btn_auto_generate_done') || '✓ 已套用';
-        setTimeout(() => { btn.textContent = original; }, 1500);
+    
+    const finalContent = preview.value;
+    
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(finalContent).then(() => {
+            if (typeof showUpdateToast === 'function') showUpdateToast('✅ 貼文已複製到剪貼簿');
+            if (btn) {
+                const original = btn.textContent;
+                btn.textContent = '✅ 已複製';
+                setTimeout(() => { btn.textContent = original; }, 1500);
+            }
+        }).catch(err => {
+            if (typeof showUpdateToast === 'function') showUpdateToast('⚠️ 複製失敗');
+        });
+    } else {
+        if (typeof showUpdateToast === 'function') showUpdateToast('⚠️ 瀏覽器不支援自動複製');
     }
 };
 

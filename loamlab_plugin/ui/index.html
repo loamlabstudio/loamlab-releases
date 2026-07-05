@@ -852,12 +852,55 @@
                         <button id="sc-pending-cancel" class="text-white/25 hover:text-white/70 text-[16px] leading-none ml-2 outline-none">×</button>
                     </div>
 
-                    <!-- DEV ONLY: 快速重測 -->
-                    <button id="dev-retest-btn"
-                        class="hidden w-full mb-2 py-2 rounded-xl border border-dashed border-yellow-400/30 text-[11px] text-yellow-400/60 hover:border-yellow-400/60 hover:text-yellow-400 transition-all outline-none"
-                        onclick="executeSmartSwap(window._devLastScBody)">
-                        🔁 快速重測（上次選區）
-                    </button>
+                    <!-- DEV ONLY: 開發工具區 -->
+                    <div class="dev-only-tool hidden flex-col gap-2 mb-2 w-full">
+                        <div class="flex gap-2 w-full">
+                            <button id="dev-retest-btn"
+                                class="hidden flex-1 py-2 rounded-xl border border-dashed border-yellow-400/30 text-[11px] text-yellow-400/60 hover:border-yellow-400/60 hover:text-yellow-400 transition-all outline-none"
+                                onclick="executeSmartSwap(window._devLastScBody)">
+                                🔁 快速重測
+                            </button>
+                            <button type="button" onclick="window.togglePostTemplateEdit && window.togglePostTemplateEdit()" class="flex-1 py-2 bg-white/5 hover:bg-white/10 border border-dashed border-purple-400/30 rounded-xl text-[11px] text-purple-300/70 font-semibold tracking-wider transition-colors">
+                                ⚙️ 行銷貼文生成器
+                            </button>
+                        </div>
+                        
+                        <div id="dev-template-editor" class="hidden flex-col gap-4 w-full">
+                            
+                            <!-- Template Config Card -->
+                            <div class="flex flex-col gap-3 p-3.5 border border-white/10 rounded-xl bg-black/60 shadow-inner">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-[11px] text-white/60 tracking-wider font-semibold">✨ 輸出格式設定</label>
+                                    <div class="flex items-center gap-2">
+                                        <label class="text-[10px] text-white/50">參數符號：</label>
+                                        <input id="dev-template-bullet" type="text" value="- " class="bg-black/80 border border-white/20 rounded px-2 py-1 text-[11px] text-white/90 w-12 text-center focus:border-purple-500/50 focus:outline-none">
+                                    </div>
+                                </div>
+                                
+                                <textarea id="dev-template-textarea" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-[11px] text-white/90 resize-y font-mono focus:border-purple-500/50 outline-none leading-relaxed custom-scrollbar min-h-[120px]" spellcheck="false" placeholder="在此自由編排文字，並插入 {zhLines} 與 {enLines} 標籤..."></textarea>
+                                
+                                <button type="button" onclick="window.savePostTemplate && window.savePostTemplate()" class="w-full py-2 bg-white/5 hover:bg-white/15 border border-white/10 text-white/80 rounded-lg text-[11px] font-semibold transition-all">
+                                    💾 儲存格式設定
+                                </button>
+                            </div>
+
+                            <!-- Preview Card -->
+                            <div class="flex flex-col gap-3 p-3.5 border border-indigo-500/30 rounded-xl bg-indigo-900/10 shadow-inner">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-[11px] text-indigo-300/70 tracking-wider font-semibold">👁️ 預覽與編輯 (所見即所得)</label>
+                                    <button type="button" onclick="window.previewAutoGeneratePost && window.previewAutoGeneratePost()" class="py-1 px-3 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 rounded-lg text-[10px] transition-all">
+                                        🔄 刷新預覽
+                                    </button>
+                                </div>
+                                
+                                <textarea id="dev-template-preview" class="w-full bg-indigo-900/20 border border-indigo-500/30 rounded-lg p-3 text-[11px] text-white/90 resize-y font-mono focus:border-indigo-400/60 outline-none leading-relaxed custom-scrollbar min-h-[150px]" spellcheck="false" placeholder="點擊刷新預覽即可看到結果..."></textarea>
+                                
+                                <button type="button" onclick="window.handleAutoGeneratePost && window.handleAutoGeneratePost(this)" class="w-full py-2.5 bg-purple-600/50 hover:bg-purple-600/70 border border-purple-500/50 text-purple-100 rounded-lg text-[11px] font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(147,51,234,0.3)]">
+                                    📋 複製預覽區文字
+                                </button>
+                            </div>
+                        </div>
+                    </div>
 
                     <button id="btn-render"
                         class="relative overflow-hidden w-full bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white py-4 mt-2 rounded-[14px] font-bold shadow-[0_0_20px_rgba(220,38,38,0.35)] hover:shadow-[0_0_35px_rgba(220,38,38,0.6)] transition-all duration-300 disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0 text-[15px] tracking-widest border border-red-500/40 outline-none"
@@ -1117,15 +1160,6 @@
                         <div>
                             <label class="block text-[10px] text-white/40 mb-1" data-i18n="share_input_content_label">貼文內容 (Content)</label>
                             <textarea id="share-input-content" rows="2" class="w-full bg-black/50 border border-white/10 rounded pt-1.5 pb-1.5 px-2 text-[11px] text-white resize-none focus:border-[#e1306c]/50 focus:outline-none placeholder-white/20" data-i18n="share_input_content_ph" placeholder="寫一些設計理念..."></textarea>
-                            <div class="flex gap-2 mt-1.5">
-                                <button type="button" id="btn-auto-generate-post" onclick="window.handleAutoGeneratePost(this)" class="dev-only-tool hidden flex-1 py-1.5 bg-white/5 hover:bg-white/10 border border-dashed border-white/20 rounded text-[10px] text-white/50 font-semibold tracking-wider transition-colors" data-i18n="share_btn_auto_generate">🪄 自動生成雙語貼文</button>
-                                <button type="button" onclick="window.togglePostTemplateEdit && window.togglePostTemplateEdit()" class="dev-only-tool hidden px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-dashed border-white/20 rounded text-[11px] text-white/50 transition-colors" title="編輯輸出格式">⚙️</button>
-                            </div>
-                            <div id="dev-template-editor" class="hidden mt-2 p-2 border border-white/10 rounded-lg bg-black/50">
-                                <label class="block text-[10px] text-white/40 mb-1">編輯版型 (支援 {zhLines}, {enLines}, {hashtags})</label>
-                                <textarea id="dev-template-textarea" rows="5" class="w-full bg-black/30 border border-white/10 rounded p-2 text-[10px] text-white resize-none font-mono focus:border-purple-500/50 outline-none leading-relaxed custom-scrollbar"></textarea>
-                                <button type="button" onclick="window.savePostTemplate && window.savePostTemplate()" class="w-full mt-1.5 py-1.5 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/40 text-purple-200 rounded text-[10px] transition-all">💾 儲存並套用版型</button>
-                            </div>
                         </div>
                         <!-- 圖片池 -->
                         <div>

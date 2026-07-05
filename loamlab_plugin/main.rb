@@ -665,6 +665,7 @@ module LoamLab
         url    = params["url"]
         scene  = (params["scene"]      || "render").to_s.dup.force_encoding("UTF-8")
         res    = (params["resolution"] || "2k").to_s
+        ts_in  = params["timestamp"].to_s
 
         next unless url
 
@@ -673,7 +674,9 @@ module LoamLab
         save_path    = self.get_effective_save_path(model)
         next if !File.directory?(save_path)
 
-        timestamp         = Time.now.strftime("%Y%m%d_%H%M%S")
+        # 批量匯出時沿用擷取原圖當下的時間戳，讓 _render.jpg 跟對應的 _original.jpg 檔名前綴一致，
+        # 依檔名排序時同一場景的前後圖會緊鄰在一起；沒有對應原圖的流程（如非批量單張渲染）則退回目前時間。
+        timestamp = (ts_in =~ /\A\d{8}_\d{6}\z/) ? ts_in : Time.now.strftime("%Y%m%d_%H%M%S")
         safe_project_name = project_name.gsub(/[:*?"<>|\\\/]/, "_")
         safe_scene        = scene.gsub(/[:*?"<>|\\\/]/, "_")[0, 30]
         # 檔名範例：20231027_120000_專案名稱_場景名稱_render.jpg
@@ -1937,6 +1940,7 @@ module LoamLab
                   captured_email   = user_email.dup
                   captured_version = ::LoamLab::VERSION.dup
                   captured_url     = "#{::LoamLab::API_BASE_URL}/api/render"
+                  captured_ts      = timestamp.dup
                   LoamLab.log "[LoamLab] 截圖完成: #{scene_name}"
 
                   has_explicit_style = !user_style_ref_url.to_s.strip.empty?
@@ -1944,6 +1948,7 @@ module LoamLab
                     _s0_scene   = captured_scene.dup
                     _s0_channel = captured_channel_b64.dup
                     _s0_sref    = user_style_ref_url.dup
+                    _s0_ts      = captured_ts.dup
                     @@pending_sref = _s0_sref  # Anti-Collage：供 returnStyleReference callback 使用
                     _s0_req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::POST)
                     _s0_req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => captured_email, 'x-plugin-version' => captured_version }
@@ -1959,7 +1964,7 @@ module LoamLab
                         result = (data['code'] == 0 && data['url']) ?
                           { status: 'render_success', scene_name: _s0_scene, url: data['url'],
                             points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
-                            channel_base64: _s0_channel } :
+                            channel_base64: _s0_channel, timestamp: _s0_ts } :
                           { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
                             points_refunded: data['points_refunded'], error: data['error'] }
                       rescue => e
@@ -1980,12 +1985,13 @@ module LoamLab
                     end
                   else
                     @@deferred_sends << {
-                      body:    captured_body,
-                      email:   captured_email,
-                      version: captured_version,
-                      url:     captured_url,
-                      scene:   captured_scene,
-                      channel: captured_channel_b64
+                      body:      captured_body,
+                      email:     captured_email,
+                      version:   captured_version,
+                      url:       captured_url,
+                      scene:     captured_scene,
+                      channel:   captured_channel_b64,
+                      timestamp: captured_ts
                     }
                   end
 
@@ -2074,6 +2080,7 @@ module LoamLab
       req.body = JSON.dump(body_hash)
       captured_scene   = item[:scene].dup
       captured_channel = item[:channel].dup
+      captured_ts      = item[:timestamp].to_s.dup
       @@requests << req
       req.start do |r, response|
         @@requests.delete(r)
@@ -2084,7 +2091,7 @@ module LoamLab
           result = (data['code'] == 0 && data['url']) ?
             { status: 'render_success', scene_name: captured_scene, url: data['url'],
               points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
-              channel_base64: captured_channel } :
+              channel_base64: captured_channel, timestamp: captured_ts } :
             { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
               points_refunded: data['points_refunded'], error: data['error'] }
         rescue => e
@@ -2120,6 +2127,7 @@ module LoamLab
 
       _df_scene   = captured[:scene].dup
       _df_channel = captured[:channel].dup
+      _df_ts      = captured[:timestamp].to_s.dup
       _df_req = Sketchup::Http::Request.new(captured[:url], Sketchup::Http::POST)
       _df_req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => captured[:email], 'x-plugin-version' => captured[:version] }
       _df_req.body = final_body
@@ -2136,7 +2144,7 @@ module LoamLab
           result = (data['code'] == 0 && data['url']) ?
             { status: 'render_success', scene_name: _df_scene, url: data['url'],
               points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
-              channel_base64: _df_channel } :
+              channel_base64: _df_channel, timestamp: _df_ts } :
             { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
               points_refunded: data['points_refunded'], error: data['error'] }
         rescue => e

@@ -55,7 +55,7 @@ module LoamLab
       'DrawBackEdges'       => false,   # 後側邊線
       'DrawSilhouettes'     => true,    # 剪影輪廓線保留
       'SilhouetteWidth'     => 1,       # 剪影粗細
-      'DrawProfiles'        => true,    # 物件輪廓線保留
+      'DrawProfilesOnly'    => true,    # 物件輪廓線保留
       'ProfileWidth'        => 2,       # 物件輪廓粗細
       'DrawDepthQue'        => false,   # Depth Cue
       # AO（AmbientOcclusion；新圖形引擎支援，classic engine 靜默跳過）
@@ -164,7 +164,7 @@ module LoamLab
       ro = model.rendering_options
       # rendering_options 的有效 key（EdgeDisplayMode 是主開關，DrawEdges 不存在）
       ro_keys = ['EdgeDisplayMode', 'DrawBackEdges', 'DrawSilhouettes', 'SilhouetteWidth',
-                 'DrawProfiles', 'ProfileWidth',
+                 'DrawProfilesOnly', 'ProfileWidth',
                  'DrawDepthQue', 'AmbientOcclusion', 'AmbientOcclusionDistance', 'AmbientOcclusionIntensity',
                  'DisplayInstanceAxes', 'DisplaySketchAxes']
       ro_keys.each do |k|
@@ -528,7 +528,7 @@ module LoamLab
           next unless model
           force_style = begin; JSON.parse(params["force_style"].to_s); rescue; {}; end
           @@t4_saved_style = {
-            ro: {}.tap { |h| %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes SilhouetteWidth DrawProfiles ProfileWidth DrawDepthQue AmbientOcclusion AmbientOcclusionDistance AmbientOcclusionIntensity DisplayInstanceAxes DisplaySketchAxes].each { |k| h[k] = model.rendering_options[k] rescue nil } },
+            ro: {}.tap { |h| %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes SilhouetteWidth DrawProfilesOnly ProfileWidth DrawDepthQue AmbientOcclusion AmbientOcclusionDistance AmbientOcclusionIntensity DisplayInstanceAxes DisplaySketchAxes].each { |k| h[k] = model.rendering_options[k] rescue nil } },
             si: {}.tap { |h| %w[DisplayShadows Light Dark UseSunForAllShading].each { |k| h[k] = model.shadow_info[k] rescue nil } }
           }
           unless force_style.empty?
@@ -571,7 +571,7 @@ module LoamLab
           _sync_save = lambda do |mdl|
             ro = mdl.rendering_options; si = mdl.shadow_info
             saved_ro = {}; saved_si = {}
-            %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes SilhouetteWidth DrawProfiles ProfileWidth DrawDepthQue AmbientOcclusion AmbientOcclusionDistance AmbientOcclusionIntensity DisplayInstanceAxes DisplaySketchAxes].each { |k| saved_ro[k] = ro[k] rescue nil }
+            %w[EdgeDisplayMode DrawBackEdges DrawSilhouettes SilhouetteWidth DrawProfilesOnly ProfileWidth DrawDepthQue AmbientOcclusion AmbientOcclusionDistance AmbientOcclusionIntensity DisplayInstanceAxes DisplaySketchAxes].each { |k| saved_ro[k] = ro[k] rescue nil }
             %w[DisplayShadows Light Dark UseSunForAllShading].each { |k| saved_si[k] = si[k] rescue nil }
             { ro: saved_ro, si: saved_si }
           end
@@ -910,7 +910,7 @@ module LoamLab
           # 截圖
           temp_dir  = LoamLab.safe_temp_dir
           temp_path = File.join(temp_dir, "loamlab_segmap_#{Time.now.to_i}.jpg")
-          view.write_image(temp_path, 1280, 720, true, 0.9)
+          view.write_image(temp_path, 1536, 1024, true, 0.9)
 
           # 還原原始材質
           saved_materials.each do |_, s|
@@ -1090,7 +1090,7 @@ module LoamLab
       
       begin
         # 採用最通用的參數寫法確保相容性
-        model.active_view.write_image(temp_img_path, 1280, 720, false, 0.8)
+        model.active_view.write_image(temp_img_path, 1536, 1024, false, 0.8)
         require 'base64'
         img_data = File.read(temp_img_path, mode: 'rb')
         base64_img = Base64.strict_encode64(img_data).force_encoding('UTF-8')
@@ -1522,6 +1522,66 @@ module LoamLab
       LoamLab.log "[LoamLab] 截圖超大，按比例降質 q#{(needed_q * 100).round}%"
     end
 
+    # 依目標寬高比從圖片「置中裁切」（不縮放內容、不改變構圖，純粹去掉多餘的邊）
+    # 用來取代強制 camera.aspect_ratio（那會撐開/擠壓視角，露出場景沒設計過的區域）
+    def self.crop_center_to_ratio(path, target_w, target_h)
+      ir = Sketchup::ImageRep.new
+      ir.load_file(path)
+      w, h = ir.width, ir.height
+      return [w, h] if w <= 0 || h <= 0
+
+      target_ratio = target_w.to_f / target_h
+      src_ratio    = w.to_f / h
+      if src_ratio > target_ratio
+        new_w = [(h * target_ratio).round, w].min
+        new_h = h
+      else
+        new_w = w
+        new_h = [(w / target_ratio).round, h].min
+      end
+      return [w, h] if new_w == w && new_h == h
+
+      bpp = ir.bits_per_pixel / 8
+      raw = ir.data
+      bpr = raw.bytesize / h          # 原圖每列 bytes（含 padding）
+      x_off = (w - new_w) / 2
+      y_off = (h - new_h) / 2
+      new_pbr = new_w * bpp
+
+      cropped = ''.b
+      new_h.times do |r|
+        row_start = (y_off + r) * bpr + x_off * bpp
+        cropped << raw.byteslice(row_start, new_pbr)
+      end
+      ir.set_data(new_w, new_h, bpp * 8, 0, cropped)
+      ir.save_file(path)
+      [new_w, new_h]
+    rescue => e
+      LoamLab.log "[LoamLab] crop_center_to_ratio: #{e.message}"
+      [w, h]
+    end
+
+    # 依「場景原始構圖」擷取（不鎖定/不撐開 camera.aspect_ratio），
+    # 擷取解析度依原生視窗比例放大到至少覆蓋 target_w x target_h，再置中裁切到目標比例
+    def self.capture_native_then_crop(view, path, target_w, target_h, quality: nil)
+      begin; view.camera.aspect_ratio = 0.0; rescue => _e; end
+      native_ratio = view.vpheight > 0 ? (view.vpwidth.to_f / view.vpheight) : (target_w.to_f / target_h)
+      target_ratio = target_w.to_f / target_h
+      if native_ratio >= target_ratio
+        capture_h = target_h
+        capture_w = (capture_h * native_ratio).round
+      else
+        capture_w = target_w
+        capture_h = (capture_w / native_ratio).round
+      end
+      if quality
+        view.write_image(path, capture_w, capture_h, false, quality)
+      else
+        self.write_image_capped(view, path, capture_w, capture_h)
+      end
+      self.crop_center_to_ratio(path, target_w, target_h)
+    end
+
     # T2: 讀取本地圖片，超過 3MB 時用 Sketchup::ImageRep 縮圖（SU2021+；舊版靜默 fallback 原圖）
     def self.read_and_maybe_compress(src_path, max_bytes = 3_000_000)
       return File.read(src_path, mode: 'rb') unless File.exist?(src_path)
@@ -1760,6 +1820,7 @@ module LoamLab
           UI.start_timer(0.5, false) do
             model.pages.selected_page = current_page if current_page
             begin; model.options['PageOptions']['TransitionTime'] = original_transition_time; rescue => _e; end
+            begin; model.active_view.camera.aspect_ratio = 0.0; rescue => _e; end # 解除鎖定，還原自動跟隨視窗
             dialog.execute_script("window.receiveFromRuby({status: 'export_done'})")
             LoamLab.log "[LoamLab] 批量導出排程已全部送出。"
           end
@@ -1795,17 +1856,17 @@ module LoamLab
             
             begin
               view = model.active_view
-              ratio_val = view.vpheight > 0 ? (view.vpwidth.to_f / view.vpheight) : (16.0 / 9.0)
-              supported_ratios = { "16:9"=>1.77, "9:16"=>0.56, "4:3"=>1.33, "3:4"=>0.75, "3:2"=>1.5, "2:3"=>0.66, "1:1"=>1.0, "21:9"=>2.33 }
-              closest_ratio = supported_ratios.min_by { |k, v| (v - ratio_val).abs }[0]
+              # 不鎖定 camera.aspect_ratio（那會撐開/擠壓視角，露出場景沒設計過的區域，如天花板死黑）
+              # 改成：依場景原始構圖擷取 → 事後置中裁切成 3:2，構圖與原始畫面完全一致
+              closest_ratio = "3:2"
 
-              # 截圖比例對齊後端 AI 輸出（3:2），畫質隨 resolution 分級提升
+              # 目標輸出解析度（3:2），畫質隨 resolution 分級提升
               capture_w, capture_h = case resolution.to_s.downcase
                 when "4k" then [3072, 2048]
                 when "2k" then [2048, 1366]
                 else [1536, 1024]
               end
-              self.write_image_capped(view, temp_img_path, capture_w, capture_h)
+              self.capture_native_then_crop(view, temp_img_path, capture_w, capture_h)
 
               # 定義發送請求的 Proc，避免代碼重複
               send_request = proc do |channel_b64|
@@ -1853,7 +1914,7 @@ module LoamLab
                       target_b64   = [4_000_000 - img_overhead, 50_000].max
                       target_raw   = (target_b64 * 3 / 4).to_i
                       estimated_q  = [[0.6 * (target_raw.to_f / img_data.bytesize), 0.55].min, 0.15].max
-                      view.write_image(temp_img_path, capture_w, capture_h, false, estimated_q)
+                      self.capture_native_then_crop(view, temp_img_path, capture_w, capture_h, quality: estimated_q)
                       img_data = File.read(temp_img_path, mode: 'rb')
                       data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
                       scene_params["image"] = [data_uri]
@@ -1861,7 +1922,7 @@ module LoamLab
                       LoamLab.log "[LoamLab] Payload 壓縮 q#{(estimated_q * 100).round}% → #{request_body.bytesize / 1024}KB"
                       # JPEG 非線性導致仍超：最後縮解析度（保持同 quality、3:2 比例）
                       if request_body.bytesize > 4_200_000
-                        view.write_image(temp_img_path, 1152, 768, false, estimated_q)
+                        self.capture_native_then_crop(view, temp_img_path, 1152, 768, quality: estimated_q)
                         img_data = File.read(temp_img_path, mode: 'rb')
                         data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
                         scene_params["image"] = [data_uri]
@@ -1963,7 +2024,7 @@ module LoamLab
                 UI.start_timer(0.1, false) do
                   channel_b64 = ""
                   begin
-                    view.write_image(channel_path, 1280, 720, false)
+                    self.capture_native_then_crop(view, channel_path, capture_w, capture_h)
                     if File.exist?(channel_path)
                       channel_b64 = "data:image/jpeg;base64,#{Base64.strict_encode64(File.read(channel_path, mode: 'rb'))}"
                     end

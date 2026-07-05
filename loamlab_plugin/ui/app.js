@@ -3132,36 +3132,67 @@ function generateBilingualPostText() {
         });
         if (!zhVals.length) return;
         const titleMap = T1_GROUP_TITLES[groupKey] || {};
-        zhLines.push(`${titleMap['zh-TW'] || groupKey}：${zhVals.join('、')}`);
-        enLines.push(`${titleMap['en-US'] || groupKey}: ${enVals.join(', ')}`);
+        zhLines.push(`- ${titleMap['zh-TW'] || groupKey}：${zhVals.join(' + ')}`);
+        enLines.push(`- ${titleMap['en-US'] || groupKey}: ${enVals.join(' + ')}`);
     });
 
-    if (!zhLines.length) return { zh: '', en: '', hashtags: [] };
+    if (!zhLines.length) return { zh: '', en: '', hashtags: [], fullText: '' };
 
-    const zhParagraph = `AI 渲染成果分享\n${zhLines.join('\n')}\n由 LoamLab AI 渲染插件於 SketchUp 中一鍵生成。`;
-    const enParagraph = `AI Rendering Showcase\n${enLines.join('\n')}\nGenerated in one click with the LoamLab AI Renderer for SketchUp.`;
-
-    ['sketchup', 'aiRender', 'interiordesign', 'render3d', 'archviz'].forEach(tg => tagSet.add(tg));
+    ['sketchup', 'architectural', 'render3d', 'interior', 'interiordesignideas'].forEach(tg => tagSet.add(tg));
     const hashtags = Array.from(tagSet).slice(0, 10).map(tg => '#' + tg);
 
-    return { zh: zhParagraph, en: enParagraph, hashtags };
+    const defaultTemplate = `【場景分享】\n{zhLines}\n- 畫面表現：高動態範圍 + 細節豐富 + 真實自然\n- 渲染引擎：loamlab-camera（SketchUp擬真渲染、多角度生成、空間重塑）\n\n---\n\n【Setting Sharing】\n{enLines}\n- SCREEN PERFORMANCE: HDR + Rich details + natural and real\n- Renderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n{hashtags}`;
+    
+    const savedTemplate = localStorage.getItem('loamlab_dev_post_template') || defaultTemplate;
+    
+    const finalZh = zhLines.join('\n');
+    const finalEn = enLines.join('\n');
+    const finalTags = hashtags.join(' ');
+    
+    const fullText = savedTemplate
+        .replace('{zhLines}', finalZh)
+        .replace('{enLines}', finalEn)
+        .replace('{hashtags}', finalTags);
+        
+    return { fullText, zh: finalZh, en: finalEn, hashtags };
 }
+
+// DEV 專用：開啟編輯版型
+window.togglePostTemplateEdit = function() {
+    const editor = document.getElementById('dev-template-editor');
+    if (!editor) return;
+    if (editor.classList.contains('hidden')) {
+        editor.classList.remove('hidden');
+        const defaultTemplate = `【場景分享】\n{zhLines}\n- 畫面表現：高動態範圍 + 細節豐富 + 真實自然\n- 渲染引擎：loamlab-camera（SketchUp擬真渲染、多角度生成、空間重塑）\n\n---\n\n【Setting Sharing】\n{enLines}\n- SCREEN PERFORMANCE: HDR + Rich details + natural and real\n- Renderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n{hashtags}`;
+        document.getElementById('dev-template-textarea').value = localStorage.getItem('loamlab_dev_post_template') || defaultTemplate;
+    } else {
+        editor.classList.add('hidden');
+    }
+};
+
+// DEV 專用：儲存版型
+window.savePostTemplate = function() {
+    const text = document.getElementById('dev-template-textarea').value;
+    localStorage.setItem('loamlab_dev_post_template', text);
+    document.getElementById('dev-template-editor').classList.add('hidden');
+    if (typeof showUpdateToast === 'function') showUpdateToast('✅ 版型已儲存，現在可點擊「🪄 自動生成雙語貼文」套用');
+};
 
 // DEV 專用：按鈕點擊入口，寫入 #share-input-content 並觸發既有預覽刷新
 window.handleAutoGeneratePost = function(btn) {
     const result = generateBilingualPostText();
-    if (!result.zh) {
+    if (!result.fullText) {
         showUpdateToast(t('toast_no_render_params') || '請先在工具1選擇渲染參數');
         return;
     }
     const contentInput = document.getElementById('share-input-content');
     if (contentInput) {
-        contentInput.value = [result.zh, result.en, result.hashtags.join(' ')].join('\n\n');
+        contentInput.value = result.fullText;
         contentInput.dispatchEvent(new Event('input'));
     }
     if (btn) {
         const original = btn.textContent;
-        btn.textContent = t('share_btn_auto_generate_done') || '✓ 已生成';
+        btn.textContent = t('share_btn_auto_generate_done') || '✓ 已套用';
         setTimeout(() => { btn.textContent = original; }, 1500);
     }
 };
@@ -6492,3 +6523,4 @@ function handle360CloudExport() {
 window.generateStyleReference = function(url) {
     sketchup.returnStyleReference({ style_ref: url });
 };
+

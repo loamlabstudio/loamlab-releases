@@ -34,8 +34,8 @@ const MODEL_ADAPTERS = {
     },
     'google/nano-banana': (images, prompt, res, activeTool, aspectRatio) => ({
         images, prompt, resolution: res,
-        // T1 對齊 gpt-image-2 的 3:2 固定尺寸（1536x1024），與 T2 出圖比例一致
-        aspect_ratio: activeTool === 2 ? (aspectRatio || '16:9') : (activeTool === 1 ? '3:2' : '16:9'),
+        // T1/T3 對齊 gpt-image-2 的 3:2 固定尺寸（1536x1024），三工具出圖比例一致
+        aspect_ratio: activeTool === 2 ? (aspectRatio || '16:9') : '3:2',
         output_format: 'jpeg'
     })
 };

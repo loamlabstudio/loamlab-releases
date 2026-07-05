@@ -12,9 +12,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "read -r stdin; echo \"$stdin\" | grep -q '\"git commit' && cd \"c:/Users/qingwen/.gemini/antigravity/workspaces/土窟設計su渲染插件\" && powershell -ExecutionPolicy Bypass -Command \"vercel --prod\" 2>&1 | tail -4 && powershell -ExecutionPolicy Bypass -File \".\\build_rbz.ps1\" 2>&1 | tail -3 || exit 0",
+            "command": "read -r stdin; echo \"$stdin\" | grep -q '\"git commit' && bash \"c:/Users/qingwen/.gemini/antigravity/workspaces/土窟設計su渲染插件/scripts/auto_deploy_gate.sh\"; exit 0",
             "timeout": 180,
-            "statusMessage": "🚀 偵測到 commit，自動部署中..."
+            "statusMessage": "🚀 偵測到 commit，執行部署安全檢查..."
           }
         ]
       }

@@ -3122,12 +3122,33 @@ function generateShareTextWithReferral() {
 }
 
 // DEV 專用：從目前選取的渲染節點自動組裝中英雙語貼文（含 Hashtags）
-function generateBilingualPostText() {
-    const GROUPS_FOR_POST = ['meta', 'scene_lighting', 'materials', 'photography'];
+// Helper to detect and translate Chinese to English
+const hasChinese = (str) => /[\u4e00-\u9fa5]/.test(str);
+async function translateToEnglish(text) {
+    if (!hasChinese(text)) return text;
+    try {
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-TW&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        let translated = data[0].map(x => x[0]).join('');
+        // Lowercase the first letter to match parameter style if it's just a word
+        if (translated && translated.length > 0) {
+             translated = translated.charAt(0).toLowerCase() + translated.slice(1);
+        }
+        return translated;
+    } catch(e) {
+        console.error('Auto-translate failed:', e);
+        return text;
+    }
+}
+
+// DEV 專用：從目前選取的渲染節點自動組裝中英雙語貼文（含 Hashtags）
+async function generateBilingualPostText() {
+    const GROUPS_FOR_POST = ['meta', 'scene_lighting', 'materials', 'photography', 'rendering'];
     const zhLines = [];
     const enLines = [];
 
-    const defaultLayout = "【場景分享】\n{zhLines}\n- 畫面表現：高動態範圍 + 細節豐富 + 真實自然\n- 渲染引擎：loamlab-camera（SketchUp擬真渲染、多角度生成、空間重塑）\n\n---\n\n【Setting Sharing】\n{enLines}\n- SCREEN PERFORMANCE: HDR + Rich details + natural and real\n- Renderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n#sketchup #interiordesign";
+    const defaultLayout = "【場景分享】\n{zhLines}\n{bullet}渲染引擎：loamlab-camera（SketchUp擬真渲染、多角度生成、空間重塑）\n\n---\n\n【Setting Sharing】\n{enLines}\n{bullet}Renderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n#sketchup #interiordesign";
     const defaultBullet = "- ";
 
     let layoutConfig = defaultLayout;
@@ -3156,36 +3177,43 @@ function generateBilingualPostText() {
         return obj['en-US'] || obj['en'] || def;
     };
 
-    validNodes.forEach(node => {
+    for (const node of validNodes) {
         const raw = (document.getElementById('t1-node-' + node.id) || {}).value || '';
-        if (!raw) return;
+        if (!raw) continue;
         
         const zhVals = [];
         const enVals = [];
         const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
-        if(!parts.length) return;
+        if(!parts.length) continue;
         
-        parts.forEach(val => {
+        for (const val of parts) {
             const opt = optionsData.find(o => o.field_id === node.id && (o.value === val || o.label === val));
             const zhLabel = (opt && opt.labels && (opt.labels['zh-TW'] || opt.labels['zh-CN'])) || (opt && opt.label) || val;
-            const enLabel = (opt && opt.labels && opt.labels['en-US']) || val;
+            let enLabel = (opt && opt.labels && opt.labels['en-US']) || val;
+            
+            // 若為自訂輸入或無英文翻譯，且包含中文，則自動呼叫 API 翻譯
+            if (!opt || !opt.labels || !opt.labels['en-US']) {
+                if (hasChinese(enLabel)) {
+                    enLabel = await translateToEnglish(enLabel);
+                }
+            }
+            
             zhVals.push(zhLabel);
             enVals.push(enLabel);
-        });
-        
-        const nodeNameObj = node.name || node.title;
-        const zhTitle = getI18nStr(nodeNameObj, node.id);
-        const enTitle = getI18nEnStr(nodeNameObj, node.id);
+        }
+        const zhTitle = getI18nStr(node.labels || node.title || node.name, node.id);
+        const enTitle = getI18nEnStr(node.labels || node.title || node.name, node.id);
         
         zhLines.push(`${bulletConfig}${zhTitle}：${zhVals.join(' + ')}`);
         enLines.push(`${bulletConfig}${enTitle}: ${enVals.join(' + ')}`);
-    });
+    }
 
     if (!zhLines.length) return { fullText: '' };
 
     const fullText = layoutConfig
         .replace('{zhLines}', zhLines.join('\n'))
-        .replace('{enLines}', enLines.join('\n'));
+        .replace('{enLines}', enLines.join('\n'))
+        .replace(/{bullet}/g, bulletConfig);
         
     return { fullText };
 }
@@ -3197,7 +3225,7 @@ window.togglePostTemplateEdit = function() {
     if (editor.classList.contains('hidden')) {
         editor.classList.remove('hidden');
         
-        const defaultLayout = "【場景分享】\n{zhLines}\n- 畫面表現：高動態範圍 + 細節豐富 + 真實自然\n- 渲染引擎：loamlab-camera（SketchUp擬真渲染、多角度生成、空間重塑）\n\n---\n\n【Setting Sharing】\n{enLines}\n- SCREEN PERFORMANCE: HDR + Rich details + natural and real\n- Renderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n#sketchup #interiordesign";
+        const defaultLayout = "【場景分享】\n{zhLines}\n{bullet}渲染引擎：loamlab-camera（SketchUp擬真渲染、多角度生成、空間重塑）\n\n---\n\n【Setting Sharing】\n{enLines}\n{bullet}Renderer: loamlab-camera (SU Realistic Rendering, Multi-angle Gen, Space Reform)\n\n#sketchup #interiordesign";
         let layoutVal = defaultLayout;
         let bulletVal = "- ";
         
@@ -3234,10 +3262,11 @@ window.savePostTemplate = function() {
 };
 
 // DEV 專用：產生預覽
-window.previewAutoGeneratePost = function() {
-    const result = generateBilingualPostText();
+window.previewAutoGeneratePost = async function() {
     const preview = document.getElementById('dev-template-preview');
     if (preview) {
+        preview.value = "Translating custom inputs & generating preview...";
+        const result = await generateBilingualPostText();
         if (!result.fullText) {
             preview.value = "⚠️ 請先選擇渲染參數後再刷新";
         } else {
@@ -5126,31 +5155,27 @@ function appendInpaintResultCard(url, promptText = 'Inpaint Result') {
 
 const SmartCanvas = {
     renderedUrl: '',       // 渲染結果圖 URL（用於發送 inpaint API）
-    channelImgSrc: '',     // 通道圖 base64
-    activeTool: 'wand',    // 'wand' | 'brush' | 'eraser'
-    regions: [],           // [{ id, maskCanvas, label, color }]
+    activeTool: 'brush',   // 'brush' | 'eraser'
+    regions: [],           // [{ id, strokeCanvas, label, colorHex, labelPos:{x,y}, refImageBase64 }]
     undoStack: [],         // draw-canvas 快照 ImageData[]
     redoStack: [],         // redo 快照
-    hoveredMask: null,     // 當前 wand hover 的 flood fill 遮罩 Uint8Array
-    edgeMap: null,         // Sobel 邊緣圖 Uint8Array（init 後計算一次）
-    basePixels: null,      // 底圖像素 RGBA Uint8ClampedArray（供色差 flood fill 使用）
-    lastWandX: -1, lastWandY: -1,  // 節流：上次 flood fill 座標
     focusedRegionIdx: null, // 快速標籤追加目標的 region index
     activeTagGroup: 'soft', // 當前快速標籤群組
-    _lastDrawX: null, _lastDrawY: null,  // 筆刷連線插值用
+    _lastDrawX: null, _lastDrawY: null,  // 筆刷連線插值用（canvas 座標）
+    _lastClientX: null, _lastClientY: null, // 筆刷連線插值用（viewport 座標，供 label popup 定位）
     _strokeStartX: null, _strokeStartY: null, // Shift 直線起點
     _hasDragged: false,  // 是否有實際移動
     eraserTarget: null,  // 鎖定單擦的 region index（null = 全部）
     brushColor: '#ff6432',
-    brushSize: 20,
+    brushSize: 5,
     isDrawing: false,
-    rafPending: false,
+    uiScale: 1,           // 依底圖解析度換算的標註縮放係數（見 _scInitCanvases）
 
     // Canvas & Context 快捷參考（open 時賦值）
     baseImg: null,
-    channelCanvas: null, channelCtx: null,
     highlightCanvas: null, highlightCtx: null,
     drawCanvas: null, drawCtx: null,
+    cursorCanvas: null, cursorCtx: null,
     canvasW: 0, canvasH: 0,
     pendingSwap: false,    // 已確認選取，等待渲染鍵執行
     baseScene: '',         // 底圖對應的場景名（用於存檔命名）
@@ -5180,15 +5205,15 @@ function _scHandleKey(e) {
             return;
         }
     }
-    // 工具切換：B=筆刷 E=橡皮擦 W=魔術棒 G=填充
-    const toolMap = { b: 'brush', e: 'eraser', w: 'wand', g: 'fill' };
+    // 工具切換：B=標註筆 E=橡皮擦
+    const toolMap = { b: 'brush', e: 'eraser' };
     const tool = toolMap[e.key.toLowerCase()];
     var toolBtn = document.querySelector('.sc-tool-btn[data-tool="' + tool + '"]');
     if (tool && toolBtn) { toolBtn.click(); return; }
-    // [ ] 調整筆刷大小
+    // [ ] 調整線寬
     const sizeEl = document.getElementById('sc-brush-size');
-    if (e.key === '[' && sizeEl) { sizeEl.value = Math.max(5, +sizeEl.value - 5); sizeEl.dispatchEvent(new Event('input')); }
-    if (e.key === ']' && sizeEl) { sizeEl.value = Math.min(60, +sizeEl.value + 5); sizeEl.dispatchEvent(new Event('input')); }
+    if (e.key === '[' && sizeEl) { sizeEl.value = Math.max(2, +sizeEl.value - 1); sizeEl.dispatchEvent(new Event('input')); }
+    if (e.key === ']' && sizeEl) { sizeEl.value = Math.min(20, +sizeEl.value + 1); sizeEl.dispatchEvent(new Event('input')); }
 }
 
 function _scHandlePaste(e) {
@@ -5213,14 +5238,14 @@ function _scHandlePaste(e) {
     }
 }
 
+// channelBase64 參數保留供舊呼叫點相容（曾用於魔術棒的語意選取通道圖），移除魔術棒後不再使用
 function openSmartCanvas(channelBase64, renderedUrl, sceneName, keepRegions = false) {
     SmartCanvas.renderedUrl = renderedUrl;
-    SmartCanvas.channelImgSrc = channelBase64;
     SmartCanvas.baseScene = sceneName || '';
     if (!keepRegions) { SmartCanvas.regions = []; }
     SmartCanvas.undoStack = [];
-    SmartCanvas.activeTool = 'wand';
-    SmartCanvas.hoveredColor = null;
+    SmartCanvas.redoStack = [];
+    SmartCanvas.activeTool = 'brush';
     // 重置顏色到第一個（每次開啟 SmartCanvas 都從橙色重新開始）
     SmartCanvas.brushColor = '#ff6432';
     const _picker = document.getElementById('sc-color-picker');
@@ -5243,16 +5268,9 @@ function openSmartCanvas(channelBase64, renderedUrl, sceneName, keepRegions = fa
     // 清空區域列表
     _scRenderRegionList();
 
-    // 重置工具按鈕狀態；wand 在 fallback 模式（底圖採樣）也可用
-    const wandBtn = document.querySelector('.sc-tool-btn[data-tool="wand"]');
-    if (wandBtn) {
-        wandBtn.disabled = false;
-        wandBtn.style.opacity = '';
-        wandBtn.title = channelBase64 ? '魔術棒 (Smart Select)' : '魔術棒 (顏色採樣模式)';
-    }
-    SmartCanvas.activeTool = 'wand';
     document.querySelectorAll('.sc-tool-btn').forEach(b => b.classList.remove('sc-active'));
-    document.querySelector('.sc-tool-btn[data-tool="wand"]').classList.add('sc-active');
+    const brushBtn = document.querySelector('.sc-tool-btn[data-tool="brush"]');
+    if (brushBtn) brushBtn.classList.add('sc-active');
 
     // 載入渲染圖
     SmartCanvas.baseImg = document.getElementById('sc-base-img');
@@ -5284,7 +5302,7 @@ function openSmartCanvas(channelBase64, renderedUrl, sceneName, keepRegions = fa
             SmartCanvas.canvasW = w;
             SmartCanvas.canvasH = h;
             
-            _scInitCanvases(w, h, channelBase64, dw, dh);
+            _scInitCanvases(w, h, dw, dh);
             _scBindEvents();
         });
     };
@@ -5313,18 +5331,16 @@ function retryScImageLoad() {
     SmartCanvas.baseImg.src = retryUrl;
 }
 
-function _scInitCanvases(w, h, channelBase64, dw = null, dh = null) {
+function _scInitCanvases(w, h, dw = null, dh = null) {
     const displayW = dw || w;
     const displayH = dh || h;
-    ['sc-channel-canvas', 'sc-highlight-canvas', 'sc-draw-canvas', 'sc-cursor-canvas'].forEach(id => {
+    ['sc-highlight-canvas', 'sc-draw-canvas', 'sc-cursor-canvas'].forEach(id => {
         const c = document.getElementById(id);
         if (!c) return;
         c.width = w; c.height = h;
         c.style.width = displayW + 'px'; c.style.height = displayH + 'px';
     });
 
-    SmartCanvas.channelCanvas = document.getElementById('sc-channel-canvas');
-    SmartCanvas.channelCtx    = SmartCanvas.channelCanvas.getContext('2d');
     SmartCanvas.highlightCanvas = document.getElementById('sc-highlight-canvas');
     SmartCanvas.highlightCtx    = SmartCanvas.highlightCanvas.getContext('2d');
     SmartCanvas.drawCanvas = document.getElementById('sc-draw-canvas');
@@ -5336,24 +5352,8 @@ function _scInitCanvases(w, h, channelBase64, dw = null, dh = null) {
     SmartCanvas.highlightCtx.clearRect(0, 0, w, h);
     SmartCanvas.drawCtx.clearRect(0, 0, w, h);
 
-    // 將通道圖繪入隱藏 canvas（供像素採樣）
-    if (channelBase64) {
-        const img = new Image();
-        img.onload = () => SmartCanvas.channelCtx.drawImage(img, 0, 0, w, h);
-        img.src = channelBase64;
-    }
-
-    // 預計算 Sobel 邊緣圖（供 wand flood fill 使用）
-    SmartCanvas.edgeMap = null;
-    SmartCanvas.hoveredMask = null;
-    SmartCanvas.lastWandX = -1; SmartCanvas.lastWandY = -1;
-    if (SmartCanvas.baseImg && SmartCanvas.baseImg.complete) {
-        SmartCanvas.edgeMap = _scComputeEdgeMap();
-    } else {
-        SmartCanvas.baseImg.addEventListener('load', () => {
-            SmartCanvas.edgeMap = _scComputeEdgeMap();
-        }, { once: true });
-    }
+    // 標註字級/線寬皆以 1920px 寬為基準換算，確保 1K/2K/4K 出圖時視覺比例一致
+    SmartCanvas.uiScale = Math.max(0.6, Math.min(3, w / 1920));
 }
 
 function _scGetXY(e) {
@@ -5368,204 +5368,94 @@ function _scGetXY(e) {
     };
 }
 
-function _scColorEquals(a, b, tol = 20) {
-    if (!a || !b) return false;
-    return Math.abs(a[0]-b[0]) < tol && Math.abs(a[1]-b[1]) < tol && Math.abs(a[2]-b[2]) < tol;
-}
-
-function _scHighlightByColor([r, g, b]) {
-    // 先重繪持久 region 遮罩，再將 hover highlight 疊加在上方
-    _scRenderOverlays();
-    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
-    const src = SmartCanvas.channelCtx.getImageData(0, 0, w, h);
-    const hoverCanvas = document.createElement('canvas');
-    hoverCanvas.width = w; hoverCanvas.height = h;
-    const hCtx = hoverCanvas.getContext('2d');
-    const dst = hCtx.createImageData(w, h);
-    const TOL = 18;
-    for (let i = 0; i < src.data.length; i += 4) {
-        if (Math.abs(src.data[i]-r) < TOL &&
-            Math.abs(src.data[i+1]-g) < TOL &&
-            Math.abs(src.data[i+2]-b) < TOL) {
-            dst.data[i] = 80; dst.data[i+1] = 170; dst.data[i+2] = 255; dst.data[i+3] = 110;
-        }
-    }
-    hCtx.putImageData(dst, 0, 0);
-    SmartCanvas.highlightCtx.drawImage(hoverCanvas, 0, 0);
-}
-
-function _scBuildMaskFromColor([r, g, b]) {
+// 從 draw canvas 擷取剛畫好的筆觸（保留原始顏色，非二值遮罩）
+function _scExtractDrawnStroke() {
     const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
     const canvas = document.createElement('canvas');
     canvas.width = w; canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    const src = SmartCanvas.channelCtx.getImageData(0, 0, w, h);
-    const dst = ctx.createImageData(w, h);
-    const TOL = 18;
-    for (let i = 0; i < src.data.length; i += 4) {
-        const match = Math.abs(src.data[i]-r) < TOL &&
-                      Math.abs(src.data[i+1]-g) < TOL &&
-                      Math.abs(src.data[i+2]-b) < TOL;
-        dst.data[i] = 255; dst.data[i+1] = 255; dst.data[i+2] = 255;
-        dst.data[i+3] = match ? 255 : 0;
-    }
-    ctx.putImageData(dst, 0, 0);
+    canvas.getContext('2d').drawImage(SmartCanvas.drawCanvas, 0, 0);
     return canvas;
 }
 
-function _scMergeMaskFromDraw() {
-    // 從 draw canvas 提取遮罩：有筆刷的區域 alpha=255，其餘 alpha=0（透明）
-    // 必須用 alpha=0 而非黑色像素，_scRenderOverlays 的 destination-in 才能正確裁切
-    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
-    const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    const src = SmartCanvas.drawCtx.getImageData(0, 0, w, h);
-    const dst = ctx.createImageData(w, h);
-    for (let i = 0; i < src.data.length; i += 4) {
-        const painted = src.data[i+3] > 20;
-        dst.data[i] = 255; dst.data[i+1] = 255; dst.data[i+2] = 255;
-        dst.data[i+3] = painted ? 255 : 0;
-    }
-    ctx.putImageData(dst, 0, 0);
-    return canvas;
+// 畫一個帶連接線的圓角文字標籤（專業設計標註風格），x/y 為錨點（筆觸終點）
+function _scDrawLabelPill(ctx, x, y, text, colorHex) {
+    const scale = SmartCanvas.uiScale || 1;
+    const fontSize = Math.round(16 * scale);
+    const padX = Math.round(10 * scale), padY = Math.round(7 * scale);
+    const gap = Math.round(14 * scale);
+    ctx.save();
+    ctx.font = `600 ${fontSize}px "Microsoft JhengHei", "PingFang TC", sans-serif`;
+    const textW = ctx.measureText(text).width;
+    const pillW = textW + padX * 2;
+    const pillH = fontSize + padY * 2;
+    const r = pillH / 2;
+
+    let px = Math.min(Math.max(x - pillW / 2, 4), ctx.canvas.width - pillW - 4);
+    let py = Math.max(y - pillH - gap, 4);
+
+    // 錨點圓點 + 連接線
+    ctx.strokeStyle = colorHex;
+    ctx.fillStyle = colorHex;
+    ctx.lineWidth = Math.max(1.5, 2 * scale);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(px + pillW / 2, py + pillH);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(3, 4 * scale), 0, Math.PI * 2);
+    ctx.fill();
+
+    // 圓角深色底 + 彩色描邊
+    ctx.beginPath();
+    ctx.moveTo(px + r, py);
+    ctx.arcTo(px + pillW, py, px + pillW, py + pillH, r);
+    ctx.arcTo(px + pillW, py + pillH, px, py + pillH, r);
+    ctx.arcTo(px, py + pillH, px, py, r);
+    ctx.arcTo(px, py, px + pillW, py, r);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(10,10,12,0.85)';
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, 1.5 * scale);
+    ctx.strokeStyle = colorHex;
+    ctx.stroke();
+
+    // 文字
+    ctx.fillStyle = '#ffffff';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText(text, px + padX, py + pillH / 2 + 1);
+    ctx.restore();
 }
 
-// Sobel 邊緣偵測：對底圖灰階化後計算梯度，返回 Uint8Array（255=邊緣, 0=非邊緣）
-function _scComputeEdgeMap() {
-    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
-    const tmp = document.createElement('canvas');
-    tmp.width = w; tmp.height = h;
-    const tCtx = tmp.getContext('2d');
-    tCtx.drawImage(SmartCanvas.baseImg, 0, 0, w, h);
-    const imgData = tCtx.getImageData(0, 0, w, h);
-    const data = imgData.data;
-    SmartCanvas.basePixels = data; // 供 flood fill 色差比對
-    const gray = new Float32Array(w * h);
-    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-        gray[p] = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+// 畫一個 region 的完整標註（線框筆觸 + 文字標籤），供 overlay 與 composite 共用
+function _scDrawRegionAnnotation(ctx, region) {
+    if (region.strokeCanvas) ctx.drawImage(region.strokeCanvas, 0, 0);
+    if (region.label && region.label.trim() && region.labelPos) {
+        _scDrawLabelPill(ctx, region.labelPos.x, region.labelPos.y, region.label.trim(), region.colorHex || '#ff6432');
     }
-    const THRESHOLD = 25;
-    const edges = new Uint8Array(w * h);
-    for (let y = 1; y < h - 1; y++) {
-        for (let x = 1; x < w - 1; x++) {
-            const gx = -gray[(y-1)*w+(x-1)] - 2*gray[y*w+(x-1)] - gray[(y+1)*w+(x-1)]
-                      + gray[(y-1)*w+(x+1)] + 2*gray[y*w+(x+1)] + gray[(y+1)*w+(x+1)];
-            const gy = -gray[(y-1)*w+(x-1)] - 2*gray[(y-1)*w+x] - gray[(y-1)*w+(x+1)]
-                      + gray[(y+1)*w+(x-1)] + 2*gray[(y+1)*w+x] + gray[(y+1)*w+(x+1)];
-            edges[y*w+x] = (Math.sqrt(gx*gx + gy*gy) > THRESHOLD) ? 255 : 0;
-        }
-    }
-    return edges;
 }
 
-// BFS flood fill：從 (startX, startY) 開始，遇邊緣或色差過大時停止
-// 雙重停止條件：Sobel 邊緣 + 與起始點的 RGB 歐氏距離 > 50（Photoshop Magic Wand 邏輯）
-function _scFloodFill(startX, startY) {
-    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
-    const edges = SmartCanvas.edgeMap;
-    const pixels = SmartCanvas.basePixels;
-    if (!edges) return null;
-    const mask = new Uint8Array(w * h);
-    const visited = new Uint8Array(w * h);
-    const startIdx = startY * w + startX;
-    if (startIdx < 0 || startIdx >= w * h) return mask;
-    // 點在邊線上，不直接返回空遮罩，防止邊界點擊失效，讓其僅以起點顏色限制向外擴散
-    // 採樣起始點顏色
-    const COLOR_TOL_SQ = 12000; // ~110 combined（≈63 per channel），讓光影漸層連通
-    const sr = pixels ? pixels[startIdx * 4]     : 0;
-    const sg = pixels ? pixels[startIdx * 4 + 1] : 0;
-    const sb = pixels ? pixels[startIdx * 4 + 2] : 0;
-    const stack = [startIdx];
-    visited[startIdx] = 1; mask[startIdx] = 1;
-    const dirs = [-1, 1, -w, w];
-    while (stack.length > 0) {
-        const idx = stack.pop();
-        const x = idx % w;
-        for (const d of dirs) {
-            if (d === -1 && x === 0) continue;
-            if (d ===  1 && x === w - 1) continue;
-            const nIdx = idx + d;
-            if (nIdx < 0 || nIdx >= w * h) continue;
-            if (visited[nIdx] || edges[nIdx]) continue;
-            // 色差停止：與起始點 RGB 距離超過容差則不蔓延
-            if (pixels) {
-                const dr = pixels[nIdx * 4]     - sr;
-                const dg = pixels[nIdx * 4 + 1] - sg;
-                const db = pixels[nIdx * 4 + 2] - sb;
-                if (dr * dr + dg * dg + db * db > COLOR_TOL_SQ) continue;
-            }
-            visited[nIdx] = 1; mask[nIdx] = 1;
-            stack.push(nIdx);
-        }
-    }
-    return mask;
-}
-
-// Uint8Array 遮罩 → canvas（painted 區域 alpha=255，其餘 alpha=0）
-function _scMaskArrayToCanvas(mask) {
-    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
-    const c = document.createElement('canvas');
-    c.width = w; c.height = h;
-    const ctx = c.getContext('2d');
-    const imgData = ctx.createImageData(w, h);
-    for (let i = 0; i < mask.length; i++) {
-        imgData.data[i*4] = 255; imgData.data[i*4+1] = 255; imgData.data[i*4+2] = 255;
-        imgData.data[i*4+3] = mask[i] ? 255 : 0;
-    }
-    ctx.putImageData(imgData, 0, 0);
-    return c;
-}
-
-// 產生 annotated composite：底圖 + 各區域彩色疊加層（用於送 Coze）
+// 產生 annotated composite：底圖 + 各區域線框與文字標籤（用於送 Coze）
 function _scCreateAnnotatedComposite() {
     const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     const ctx = c.getContext('2d');
     ctx.drawImage(SmartCanvas.baseImg, 0, 0, w, h);
-    for (const region of SmartCanvas.regions) {
-        const tint = document.createElement('canvas');
-        tint.width = w; tint.height = h;
-        const tCtx = tint.getContext('2d');
-        tCtx.drawImage(region.maskCanvas, 0, 0);
-        tCtx.globalCompositeOperation = 'source-in';
-        tCtx.fillStyle = region.colorHex || '#ff6432';
-        tCtx.fillRect(0, 0, w, h);
-        ctx.drawImage(tint, 0, 0);
-    }
+    SmartCanvas.regions.forEach(r => _scDrawRegionAnnotation(ctx, r));
     return c;
 }
 
-// Flood fill hover 高亮（疊加在持久 region overlays 上方）
-function _scHighlightByFloodFill(mask) {
-    _scRenderOverlays(); // 先保留持久 region 遮罩
-    if (!mask) return;
-    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
-    const hC = document.createElement('canvas');
-    hC.width = w; hC.height = h;
-    const hCtx = hC.getContext('2d');
-    const dst = hCtx.createImageData(w, h);
-    for (let i = 0; i < mask.length; i++) {
-        if (mask[i]) {
-            dst.data[i*4] = 80; dst.data[i*4+1] = 170;
-            dst.data[i*4+2] = 255; dst.data[i*4+3] = 100;
-        }
-    }
-    hCtx.putImageData(dst, 0, 0);
-    SmartCanvas.highlightCtx.drawImage(hC, 0, 0);
-}
-
 function _scSaveUndo() {
-    // 深拷貝 maskCanvas（淺拷貝會導致後續 drawImage 修改到快照）
+    // 深拷貝 strokeCanvas（淺拷貝會導致後續 drawImage 修改到快照）
     const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
     const snap = {
         canvas: SmartCanvas.drawCtx.getImageData(0, 0, w, h),
         regions: SmartCanvas.regions.map(r => {
             const c = document.createElement('canvas');
             c.width = w; c.height = h;
-            c.getContext('2d').drawImage(r.maskCanvas, 0, 0);
-            return { ...r, maskCanvas: c };
+            c.getContext('2d').drawImage(r.strokeCanvas, 0, 0);
+            return { ...r, strokeCanvas: c };
         })
     };
     SmartCanvas.undoStack.push(snap);
@@ -5573,44 +5463,11 @@ function _scSaveUndo() {
     SmartCanvas.redoStack = [];
 }
 
-// 從底圖採樣 region 的平均代表色（用於 prompt 提示 Coze/Banana2 當前顏色）
-function _scSampleBaseColor(maskCanvas) {
-    try {
-        const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
-        const tmp = document.createElement('canvas');
-        tmp.width = w; tmp.height = h;
-        tmp.getContext('2d').drawImage(SmartCanvas.baseImg, 0, 0, w, h);
-        const baseData = tmp.getContext('2d').getImageData(0, 0, w, h).data;
-        const maskData = maskCanvas.getContext('2d').getImageData(0, 0, w, h).data;
-        let rSum = 0, gSum = 0, bSum = 0, count = 0;
-        for (let i = 0; i < maskData.length; i += 4) {
-            if (maskData[i+3] > 128) {
-                rSum += baseData[i]; gSum += baseData[i+1]; bSum += baseData[i+2];
-                count++;
-            }
-        }
-        if (count === 0) return null;
-        const toHex = v => Math.round(v / count).toString(16).padStart(2, '0');
-        return `#${toHex(rSum)}${toHex(gSum)}${toHex(bSum)}`;
-    } catch (_) { return null; }
-}
-
-// 區域遮罩持久疊加層：每次 regions 變動後重繪 highlight canvas
+// 區域標註持久疊加層：每次 regions 變動後重繪 highlight canvas
 function _scRenderOverlays() {
     if (!SmartCanvas.highlightCtx) return;
     SmartCanvas.highlightCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
-    SmartCanvas.regions.forEach(r => {
-        const tmp = document.createElement('canvas');
-        tmp.width = SmartCanvas.canvasW; tmp.height = SmartCanvas.canvasH;
-        const tCtx = tmp.getContext('2d');
-        tCtx.fillStyle = r.colorHex || '#ff6432';
-        tCtx.fillRect(0, 0, tmp.width, tmp.height);
-        tCtx.globalCompositeOperation = 'destination-in';
-        tCtx.drawImage(r.maskCanvas, 0, 0, tmp.width, tmp.height);
-        SmartCanvas.highlightCtx.globalAlpha = 0.45;
-        SmartCanvas.highlightCtx.drawImage(tmp, 0, 0);
-    });
-    SmartCanvas.highlightCtx.globalAlpha = 1;
+    SmartCanvas.regions.forEach(r => _scDrawRegionAnnotation(SmartCanvas.highlightCtx, r));
 }
 
 function _scShowLabelPopup(clientX, clientY, onConfirm) {
@@ -5854,8 +5711,6 @@ function _scDrawCursorCircle(x, y) {
     const cCtx = SmartCanvas.cursorCtx;
     if (!cCtx) return;
     cCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
-    const tool = SmartCanvas.activeTool;
-    if (tool === 'wand' || tool === 'fill') return; // 這兩個工具保留預設游標
     const r = Math.max(2, SmartCanvas.brushSize / 2);
     // 外圈黑色（確保在亮色背景可見）
     cCtx.beginPath();
@@ -5871,6 +5726,27 @@ function _scDrawCursorCircle(x, y) {
     cCtx.stroke();
 }
 
+// 提交一次筆刷標註：同色已有 region 則合併筆觸；否則建立新 region 並自動彈出文字輸入框
+function _scCommitBrushStroke(endX, endY, endClientX, endClientY) {
+    const strokeCanvas = _scExtractDrawnStroke();
+    const existing = SmartCanvas.regions.find(r => r.colorHex === SmartCanvas.brushColor);
+    if (existing) {
+        existing.strokeCanvas.getContext('2d').drawImage(strokeCanvas, 0, 0);
+        _scRenderRegionList();
+        return;
+    }
+    const region = { id: Date.now(), strokeCanvas, label: '', colorHex: SmartCanvas.brushColor, labelPos: { x: endX, y: endY }, refImageBase64: null };
+    SmartCanvas.regions.push(region);
+    _scRenderRegionList();
+    requestAnimationFrame(() => {
+        _scShowLabelPopup(endClientX, endClientY, (text) => {
+            region.label = text;
+            _scRenderRegionList();
+            _scRenderOverlays();
+        });
+    });
+}
+
 function _scBindEvents() {
     const dc = SmartCanvas.drawCanvas;
     // 解除舊的 listeners（簡單起見：clone & replace）
@@ -5879,99 +5755,29 @@ function _scBindEvents() {
     SmartCanvas.drawCanvas = fresh;
     SmartCanvas.drawCtx = fresh.getContext('2d');
 
-    // --- 魔術棒：hover 邊緣感知 flood fill 高亮 ---
-    fresh.addEventListener('mousemove', (e) => {
-        if (SmartCanvas.activeTool !== 'wand') {
-            if (SmartCanvas.isDrawing) _scDraw(e);
-            return;
-        }
-        if (SmartCanvas.rafPending) return;
-        SmartCanvas.rafPending = true;
-        requestAnimationFrame(() => {
-            SmartCanvas.rafPending = false;
-            const { x, y } = _scGetXY(e);
-            // 移動 > 3px 才重算 flood fill（節流）
-            if (Math.abs(x - SmartCanvas.lastWandX) > 3 || Math.abs(y - SmartCanvas.lastWandY) > 3) {
-                SmartCanvas.lastWandX = x; SmartCanvas.lastWandY = y;
-                SmartCanvas.hoveredMask = _scFloodFill(x, y);
-                _scHighlightByFloodFill(SmartCanvas.hoveredMask);
-            }
-        });
-    });
-
-    fresh.addEventListener('mouseleave', () => {
-        SmartCanvas.hoveredMask = null;
-        SmartCanvas.lastWandX = -1; SmartCanvas.lastWandY = -1;
-        _scRenderOverlays();
-        if (SmartCanvas.cursorCtx) SmartCanvas.cursorCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
-        // 滑鼠離開時若仍在繪製，提交筆畫（防止放開滑鼠後筆刷卡住）
-        if (SmartCanvas.isDrawing) _scFinishStroke();
-    });
-
-    // --- 魔術棒 click → 選取區域 → 彈出 label ---
-    fresh.addEventListener('click', () => {
-        if (SmartCanvas.activeTool !== 'wand') return;
-        // 確認有有效遮罩（非空）
-        if (!SmartCanvas.hoveredMask || !SmartCanvas.hoveredMask.some(v => v)) return;
-        _scSaveUndo();
-        const maskCanvas = _scMaskArrayToCanvas(SmartCanvas.hoveredMask);
-        const _we = SmartCanvas.regions.find(r => r.colorHex === SmartCanvas.brushColor);
-        if (_we) { _we.maskCanvas.getContext('2d').drawImage(maskCanvas, 0, 0); }
-        else { SmartCanvas.regions.push({ id: Date.now(), maskCanvas, label: '', colorHex: SmartCanvas.brushColor }); }
-        _scRenderRegionList();
-        _scRenderOverlays();
-        // 自動 focus 最新區域的 label 輸入框（右側面板）
-        requestAnimationFrame(() => {
-            const inputs = document.querySelectorAll('#sc-region-list .sc-region-label-input');
-            if (inputs.length) inputs[inputs.length - 1].focus();
-        });
-    });
-
-    // --- 填充桶：click → flood fill ---
-    // _scFillBucketDraw 返回 true = Case A（填充了 drawCanvas，需建立新 region）
-    //                        false = Case B（已合併進現有 region，不需再建）
+    // --- 標註筆 / 橡皮擦 繪製 ---
     fresh.addEventListener('mousedown', (e) => {
-        if (SmartCanvas.activeTool !== 'fill') return;
-        _scSaveUndo();
-        const { x, y } = _scGetXY(e);
-        const needNewRegion = _scFillBucketDraw(x, y);
-        if (needNewRegion) {
-            const maskCanvas = _scMergeMaskFromDraw();
-            if (maskCanvas) {
-                const _fe = SmartCanvas.regions.find(r => r.colorHex === SmartCanvas.brushColor);
-                if (_fe) { _fe.maskCanvas.getContext('2d').drawImage(maskCanvas, 0, 0); }
-                else { SmartCanvas.regions.push({ id: Date.now(), maskCanvas, label: '', colorHex: SmartCanvas.brushColor }); }
-                _scRenderRegionList();
-            }
-            SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
-            _scRenderOverlays();
-        }
-    });
-
-    // --- 筆刷 / 橡皮擦 繪製 ---
-    fresh.addEventListener('mousedown', (e) => {
-        if (SmartCanvas.activeTool === 'wand' || SmartCanvas.activeTool === 'fill') return;
         SmartCanvas.isDrawing = true;
         SmartCanvas._hasDragged = false;  // 重置拖曳旗標
         SmartCanvas._lastDrawX = null;
         SmartCanvas._lastDrawY = null;
+        SmartCanvas._lastClientX = e.clientX;
+        SmartCanvas._lastClientY = e.clientY;
         _scSaveUndo();
         _scDraw(e);
     });
-    // 提取為函式供 mouseup / mouseleave / document.mouseup 共用
+    // 提取為函式供 mouseup / mouseleave 共用
     function _scFinishStroke() {
         if (!SmartCanvas.isDrawing) return;
         SmartCanvas.isDrawing = false;
+        const endX = SmartCanvas._lastDrawX, endY = SmartCanvas._lastDrawY;
+        const endClientX = SmartCanvas._lastClientX, endClientY = SmartCanvas._lastClientY;
         SmartCanvas._lastDrawX = null;
         SmartCanvas._lastDrawY = null;
         SmartCanvas._altResizeStartX = null;
         if (SmartCanvas.activeTool === 'brush') {
             if (SmartCanvas._hasDragged) {
-                const maskCanvas = _scMergeMaskFromDraw();
-                const _be = SmartCanvas.regions.find(r => r.colorHex === SmartCanvas.brushColor);
-                if (_be) { _be.maskCanvas.getContext('2d').drawImage(maskCanvas, 0, 0); }
-                else { SmartCanvas.regions.push({ id: Date.now(), maskCanvas, label: '', colorHex: SmartCanvas.brushColor }); }
-                _scRenderRegionList();
+                _scCommitBrushStroke(endX, endY, endClientX, endClientY);
             }
             SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
             _scRenderOverlays();
@@ -5982,14 +5788,14 @@ function _scBindEvents() {
                     ? [SmartCanvas.regions[SmartCanvas.eraserTarget]]
                     : SmartCanvas.regions;
                 targets.forEach(r => {
-                    const rCtx = r.maskCanvas.getContext('2d');
+                    const rCtx = r.strokeCanvas.getContext('2d');
                     rCtx.globalCompositeOperation = 'destination-out';
                     rCtx.drawImage(SmartCanvas.drawCtx.canvas, 0, 0);
                     rCtx.globalCompositeOperation = 'source-over';
                 });
                 // 移除已被完全擦除的空 region
                 SmartCanvas.regions = SmartCanvas.regions.filter(r => {
-                    const d = r.maskCanvas.getContext('2d').getImageData(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH).data;
+                    const d = r.strokeCanvas.getContext('2d').getImageData(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH).data;
                     return d.some((v, i) => (i % 4 === 3) && v > 0);
                 });
                 // 若目標 region 已被完全擦除，重置 eraserTarget
@@ -6003,9 +5809,16 @@ function _scBindEvents() {
         }
     }
     fresh.addEventListener('mouseup', _scFinishStroke);
+    fresh.addEventListener('mouseleave', () => {
+        if (SmartCanvas.cursorCtx) SmartCanvas.cursorCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+        // 滑鼠離開時若仍在繪製，提交筆畫（防止放開滑鼠後筆刷卡住）
+        if (SmartCanvas.isDrawing) _scFinishStroke();
+    });
     fresh.addEventListener('mousemove', (e) => {
         const { x, y } = _scGetXY(e);
-        // Alt + 拖曳：水平移動調整筆刷大小（PS 同款體驗）
+        SmartCanvas._lastClientX = e.clientX;
+        SmartCanvas._lastClientY = e.clientY;
+        // Alt + 拖曳：水平移動調整線寬（PS 同款體驗）
         // 改用 e.altKey（MouseEvent 即時狀態），防止 _altKey 卡住導致誤觸
         if (e.altKey && SmartCanvas.isDrawing) {
             SmartCanvas._altKey = true; // 同步狀態
@@ -6014,156 +5827,19 @@ function _scBindEvents() {
                 SmartCanvas._altResizeStartSize = SmartCanvas.brushSize;
             }
             const delta = e.clientX - SmartCanvas._altResizeStartX;
-            const newSize = Math.max(5, Math.min(60, SmartCanvas._altResizeStartSize + Math.round(delta * 0.4)));
+            const newSize = Math.max(2, Math.min(20, SmartCanvas._altResizeStartSize + Math.round(delta * 0.2)));
             SmartCanvas.brushSize = newSize;
             const sizeEl = document.getElementById('sc-brush-size');
             if (sizeEl) sizeEl.value = newSize;
             _scDrawCursorCircle(x, y); // Alt 調整大小時即時顯示圓圈
             return;
         }
-        if (SmartCanvas.activeTool !== 'wand' && SmartCanvas.isDrawing) {
+        if (SmartCanvas.isDrawing) {
             SmartCanvas._hasDragged = true;  // 有移動才算拖曳
             _scDraw(e);
         }
-        _scDrawCursorCircle(x, y); // 筆刷/橡皮擦工具：持續顯示游標圓圈
+        _scDrawCursorCircle(x, y); // 持續顯示游標圓圈
     });
-}
-
-// 填充桶核心：給定邊界 boundary（Uint8Array），從 (sx,sy) BFS fill
-// 返回 filled Uint8Array，或 null（滲漏）
-function _scBfsFill(sx, sy, boundary, w, h) {
-    if (boundary[sy * w + sx]) return null;
-    const filled = new Uint8Array(w * h);
-    const stack = [sy * w + sx];
-    const visited = new Uint8Array(w * h);
-    const MAX_FILL = w * h * 0.7;
-    let count = 0;
-    while (stack.length) {
-        const pos = stack.pop();
-        if (visited[pos] || boundary[pos]) continue;
-        visited[pos] = 1;
-        filled[pos] = 1;
-        if (++count > MAX_FILL) return null; // 滲漏
-        const px = pos % w, py = Math.floor(pos / w);
-        if (px > 0)     stack.push(pos - 1);
-        if (px < w - 1) stack.push(pos + 1);
-        if (py > 0)     stack.push(pos - w);
-        if (py < h - 1) stack.push(pos + w);
-    }
-    return filled;
-}
-
-// 膨脹像素集合，封閉筆觸間隙
-function _scDilateMask(sourceData, w, h, r) {
-    const boundary = new Uint8Array(w * h);
-    for (let i = 0; i < w * h; i++) {
-        if (sourceData[i * 4 + 3] > 10) {
-            const bx = i % w, by = Math.floor(i / w);
-            const x0 = Math.max(0, bx - r), x1 = Math.min(w - 1, bx + r);
-            const y0 = Math.max(0, by - r), y1 = Math.min(h - 1, by + r);
-            for (let ny = y0; ny <= y1; ny++)
-                for (let nx = x0; nx <= x1; nx++)
-                    boundary[ny * w + nx] = 1;
-        }
-    }
-    return boundary;
-}
-
-// 填充桶主函數
-// 情況A：drawCanvas 有未提交的筆觸 → 填充並建立新 region
-// 情況B：drawCanvas 為空（筆刷已建立 region）→ 以現有 region masks 為邊界填充，並擴充最近的 region
-function _scFillBucketDraw(startX, startY) {
-    const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
-    const sx = Math.floor(startX), sy = Math.floor(startY);
-    if (sx < 0 || sx >= w || sy < 0 || sy >= h) return;
-
-    const drawImgData = SmartCanvas.drawCtx.getImageData(0, 0, w, h);
-    const drawData = drawImgData.data;
-    let hasStrokes = false;
-    for (let i = 0; i < w * h && !hasStrokes; i++)
-        if (drawData[i * 4 + 3] > 10) hasStrokes = true;
-
-    if (hasStrokes) {
-        // 情況A：填充 drawCanvas 輪廓內部 → 呼叫方需建立新 region，回傳 true
-        if (drawData[(sy * w + sx) * 4 + 3] > 10) return false;
-        const boundary = _scDilateMask(drawData, w, h, 4);
-        const filled = _scBfsFill(sx, sy, boundary, w, h);
-        if (!filled) { showUpdateToast('輪廓未閉合，請確認圈圈有畫完整再填充'); return false; }
-        const hex = SmartCanvas.brushColor.replace('#', '');
-        const fr = parseInt(hex.slice(0, 2), 16), fg = parseInt(hex.slice(2, 4), 16), fb = parseInt(hex.slice(4, 6), 16);
-        for (let i = 0; i < w * h; i++) {
-            if (filled[i] && drawData[i * 4 + 3] <= 10) {
-                drawData[i*4] = fr; drawData[i*4+1] = fg; drawData[i*4+2] = fb; drawData[i*4+3] = 255;
-            }
-        }
-        SmartCanvas.drawCtx.putImageData(drawImgData, 0, 0);
-        return true; // 通知呼叫方建立新 region
-    }
-
-    // 情況B：drawCanvas 空，以現有 region masks 為邊界
-    if (!SmartCanvas.regions.length) return false;
-
-    // 合併所有 region masks 建立邊界（膨脹 4px 封閉間隙）
-    const combined = new Uint8Array(w * h * 4); // RGBA buffer
-    for (const region of SmartCanvas.regions) {
-        const rImgData = region.maskCanvas.getContext('2d').getImageData(0, 0, w, h);
-        for (let i = 0; i < w * h; i++) {
-            if (rImgData.data[i * 4 + 3] > 10) {
-                combined[i * 4 + 3] = 255; // 標記為已畫
-            }
-        }
-    }
-    const DILATE = 4;
-    const boundary = _scDilateMask(combined, w, h, DILATE);
-    const filled = _scBfsFill(sx, sy, boundary, w, h);
-    if (!filled) { showUpdateToast('輪廓未閉合，請確認圈圈有畫完整再填充'); return false; }
-
-    // 補回 dilation 空隙：把 filled 向 boundary 區擴散，填滿 stroke 與 fill 之間的 gap
-    // 使用 BFS 在 boundary 區內從 filled 邊界向外擴張
-    const gapClosed = new Uint8Array(w * h);
-    const gapStack = [];
-    for (let i = 0; i < w * h; i++) {
-        if (filled[i]) { gapClosed[i] = 1; gapStack.push(i); }
-    }
-    while (gapStack.length) {
-        const pos = gapStack.pop();
-        const px = pos % w, py = Math.floor(pos / w);
-        const neighbors = [
-            px > 0     ? pos - 1 : -1,
-            px < w - 1 ? pos + 1 : -1,
-            py > 0     ? pos - w : -1,
-            py < h - 1 ? pos + w : -1,
-        ];
-        for (const n of neighbors) {
-            if (n >= 0 && !gapClosed[n] && boundary[n]) {
-                gapClosed[n] = 1;
-                gapStack.push(n);
-            }
-        }
-    }
-
-    // 使用當前的筆刷顏色來決定填充目標，而不是猜測鄰接邊界
-    let bestRegion = SmartCanvas.regions.find(r => r.colorHex === SmartCanvas.brushColor);
-    if (!bestRegion) {
-        const c = document.createElement('canvas');
-        c.width = w; c.height = h;
-        bestRegion = { id: Date.now(), maskCanvas: c, label: '', colorHex: SmartCanvas.brushColor };
-        SmartCanvas.regions.push(bestRegion);
-        setTimeout(() => _scRenderRegionList(), 0);
-    }
-
-    // 把填充（含補回的 gap 區域）合併進 bestRegion 的 maskCanvas
-    const rCtx = bestRegion.maskCanvas.getContext('2d');
-    const rImgData = rCtx.getImageData(0, 0, w, h);
-    const rData = rImgData.data;
-    for (let i = 0; i < w * h; i++) {
-        if (gapClosed[i]) {
-            rData[i*4] = 255; rData[i*4+1] = 255; rData[i*4+2] = 255; rData[i*4+3] = 255;
-        }
-    }
-    rCtx.putImageData(rImgData, 0, 0);
-    _scRenderOverlays();
-    return false; // Case B：已合併進現有 region，不需建立新 region
 }
 
 function _scDraw(e) {
@@ -6461,7 +6137,7 @@ document.addEventListener('DOMContentLoaded', () => {
         SmartCanvas.pendingSwap = false;
         _scHidePendingPanel();
         _scUpdatePendingIndicator();
-        openSmartCanvas(SmartCanvas.channelImgSrc, SmartCanvas.renderedUrl, SmartCanvas.baseScene, /*keepRegions=*/true);
+        openSmartCanvas(null, SmartCanvas.renderedUrl, SmartCanvas.baseScene, /*keepRegions=*/true);
     });
 
     // Smart Canvas pending 取消鍵
@@ -6490,13 +6166,11 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.sc-tool-btn').forEach(b => b.classList.remove('sc-active'));
             btn.classList.add('sc-active');
             SmartCanvas.isDrawing = false;
-            // 切換工具時清空草稿層並恢復持久 region 遮罩
-            SmartCanvas.hoveredColor = null;
+            // 切換工具時清空草稿層並恢復持久 region 標註
             if (SmartCanvas.drawCtx) SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
             _scRenderOverlays();
-            // 筆刷/橡皮擦：隱藏預設游標（改用 cursor canvas 圓圈）；魔術棒/填充：恢復十字游標
-            const isBrushLike = (SmartCanvas.activeTool === 'brush' || SmartCanvas.activeTool === 'eraser');
-            if (SmartCanvas.drawCanvas) SmartCanvas.drawCanvas.style.cursor = isBrushLike ? 'none' : 'crosshair';
+            // 隱藏預設游標，改用 cursor canvas 圓圈
+            if (SmartCanvas.drawCanvas) SmartCanvas.drawCanvas.style.cursor = 'none';
             if (SmartCanvas.cursorCtx) SmartCanvas.cursorCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
         });
     });

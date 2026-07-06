@@ -849,7 +849,7 @@
                             <svg class="w-3 h-3 shrink-0 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                             <span id="sc-pending-label"></span>
                         </button>
-                        <button id="sc-pending-cancel" class="text-white/25 hover:text-white/70 text-[16px] leading-none ml-2 outline-none">×</button>
+                        <button id="sc-pending-cancel" class="text-white/25 hover:text-white/70 text-[16px] leading-none ml-2 outline-none">&times;</button>
                     </div>
 
                     <!-- DEV ONLY: 開發工具區 -->
@@ -866,7 +866,6 @@
                         </div>
                         
                         <div id="dev-template-editor" class="hidden flex-col gap-4 w-full">
-                            
                             <!-- Template Config Card -->
                             <div class="flex flex-col gap-3 p-3.5 border border-white/10 rounded-xl bg-black/60 shadow-inner">
                                 <div class="flex items-center justify-between">
@@ -876,9 +875,7 @@
                                         <input id="dev-template-bullet" type="text" value="- " class="bg-black/80 border border-white/20 rounded px-2 py-1 text-[11px] text-white/90 w-12 text-center focus:border-purple-500/50 focus:outline-none">
                                     </div>
                                 </div>
-                                
-                                <textarea id="dev-template-textarea" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-[11px] text-white/90 resize-y font-mono focus:border-purple-500/50 outline-none leading-relaxed custom-scrollbar min-h-[120px]" spellcheck="false" placeholder="在此自由編排文字，並插入 {zhLines} 與 {enLines} 標籤..."></textarea>
-                                
+                                <textarea id="dev-template-textarea" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-[11px] text-white/90 resize-y font-mono focus:border-purple-500/50 outline-none leading-relaxed custom-scrollbar min-h-[160px]" spellcheck="false" placeholder="在此自由編排文字，並插入 {zhLines} 與 {enLines} 標籤..."></textarea>
                                 <button type="button" onclick="window.savePostTemplate && window.savePostTemplate()" class="w-full py-2 bg-white/5 hover:bg-white/15 border border-white/10 text-white/80 rounded-lg text-[11px] font-semibold transition-all">
                                     💾 儲存格式設定
                                 </button>
@@ -892,9 +889,7 @@
                                         🔄 刷新預覽
                                     </button>
                                 </div>
-                                
-                                <textarea id="dev-template-preview" class="w-full bg-indigo-900/20 border border-indigo-500/30 rounded-lg p-3 text-[11px] text-white/90 resize-y font-mono focus:border-indigo-400/60 outline-none leading-relaxed custom-scrollbar min-h-[150px]" spellcheck="false" placeholder="點擊刷新預覽即可看到結果..."></textarea>
-                                
+                                <textarea id="dev-template-preview" class="w-full bg-indigo-900/20 border border-indigo-500/30 rounded-lg p-3 text-[11px] text-white/90 resize-y font-mono focus:border-indigo-400/60 outline-none leading-relaxed custom-scrollbar min-h-[220px]" spellcheck="false" placeholder="點擊刷新預覽即可看到結果..."></textarea>
                                 <button type="button" onclick="window.handleAutoGeneratePost && window.handleAutoGeneratePost(this)" class="w-full py-2.5 bg-purple-600/50 hover:bg-purple-600/70 border border-purple-500/50 text-purple-100 rounded-lg text-[11px] font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(147,51,234,0.3)]">
                                     📋 複製預覽區文字
                                 </button>
@@ -1502,7 +1497,7 @@
             <div class="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
                 <div>
                     <h2 class="text-[15px] font-bold text-white tracking-widest" data-i18n="sc_title">SMART CANVAS</h2>
-                    <p class="text-[11px] text-white/40 mt-0.5" data-i18n="sc_subtitle">懸停高亮物件，點擊選取，輸入替換指令</p>
+                    <p class="text-[11px] text-white/40 mt-0.5" data-i18n="sc_subtitle">圈選要調整的區域，放開滑鼠即可輸入描述</p>
                 </div>
                 <button id="sc-close" class="text-white/40 hover:text-white bg-white/5 hover:bg-white/10 rounded-full p-2 transition-all">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -1532,8 +1527,6 @@
                                 <p class="text-[10px] text-white/40 mb-4 max-w-[200px]">這可能是由於網路不穩定或圖片已過期導致的。</p>
                                 <button onclick="retryScImageLoad()" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[10px] font-bold tracking-widest transition-all">RETRY 重新載入</button>
                             </div>
-                            <!-- 中層：通道圖（隱藏，供像素採樣） -->
-                            <canvas id="sc-channel-canvas" class="absolute inset-0 rounded-lg" style="display:none;"></canvas>
                             <!-- 次頂：hover 高亮疊層 -->
                             <canvas id="sc-highlight-canvas" class="absolute inset-0 rounded-lg pointer-events-none" style="opacity:1;"></canvas>
                             <!-- 頂層：手繪互動層 -->
@@ -1546,19 +1539,13 @@
                     <!-- 底部膠囊工具列 -->
                     <div class="shrink-0 flex items-center justify-center pb-4 px-4">
                         <div id="sc-capsule" class="flex items-center gap-1.5 bg-black/70 backdrop-blur border border-white/15 rounded-full px-4 py-2 shadow-lg">
-                            <button class="sc-tool-btn sc-active" data-tool="wand" title="魔術棒 W" data-i18n-title="sc_tool_magic">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 9-7 2-4 7L5 3z"/></svg>
-                            </button>
-                            <button class="sc-tool-btn" data-tool="brush" title="筆刷 B  |  Shift拖曳=直線  |  [ ] 調整大小" data-i18n-title="sc_tool_brush">
+                            <button class="sc-tool-btn sc-active" data-tool="brush" title="標註筆 B  |  Shift拖曳=直線  |  [ ] 調整線寬" data-i18n-title="sc_tool_brush">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                             </button>
-                            <input type="color" id="sc-color-picker" value="#ff6432" class="w-7 h-7 rounded-full border-2 border-white/20 cursor-pointer bg-transparent" title="筆刷顏色" data-i18n-title="sc_tool_color_picker">
-                            <input type="range" id="sc-brush-size" min="5" max="60" value="20" class="w-16 accent-rose-500" title="筆刷大小" data-i18n-title="sc_tool_brush_size">
+                            <input type="color" id="sc-color-picker" value="#ff6432" class="w-7 h-7 rounded-full border-2 border-white/20 cursor-pointer bg-transparent" title="標註顏色" data-i18n-title="sc_tool_color_picker">
+                            <input type="range" id="sc-brush-size" min="2" max="20" value="5" class="w-16 accent-rose-500" title="線寬" data-i18n-title="sc_tool_brush_size">
                             <button class="sc-tool-btn" data-tool="eraser" title="橡皮擦 E" data-i18n-title="sc_tool_eraser">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 20H7L3 16l10-10 7 7-3.5 3.5M6 17l4-4"/></svg>
-                            </button>
-                            <button class="sc-tool-btn" data-tool="fill" title="填充 G" data-i18n-title="sc_tool_fill">
-                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15c-.59.56-.59 1.53 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10 10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z"/></svg>
                             </button>
                             <div class="w-px h-5 bg-white/15 mx-1"></div>
                             <button id="sc-undo" title="復原 (Undo)" class="sc-ctrl-btn" data-i18n-title="sc_tool_undo">
@@ -1572,7 +1559,7 @@
                             </button>
                         </div>
                         <div class="text-[8px] text-white/20 text-center mt-1.5 tracking-wider select-none pointer-events-none">
-                            W 魔棒 · B 筆刷 · E 橡皮擦 · G 填充 &nbsp;|&nbsp; [ ] 大小 · Shift 直線 · Alt+拖 調整大小 · Ctrl+Z/Y 復原/重做
+                            B 標註筆 · E 橡皮擦 &nbsp;|&nbsp; [ ] 線寬 · Shift 直線 · Alt+拖 調整大小 · Ctrl+Z/Y 復原/重做
                         </div>
                     </div>
                 </div>
@@ -1588,15 +1575,15 @@
                             <div class="flex items-start gap-3">
                                 <div class="w-6 h-6 shrink-0 rounded-full bg-white/8 border border-white/10 flex items-center justify-center text-[10px] font-bold text-white/40 mt-0.5">1</div>
                                 <div>
-                                    <p class="text-[11px] text-white/50 font-semibold mb-0.5" data-i18n="sc_guide_1_h">框選改造區域</p>
-                                    <p class="text-[10px] text-white/25 leading-relaxed" data-i18n="sc_guide_1_p">用魔術棒點擊自動選取，或切換筆刷手動塗抹，可框選多個不同區域。</p>
+                                    <p class="text-[11px] text-white/50 font-semibold mb-0.5" data-i18n="sc_guide_1_h">圈選要調整的區域</p>
+                                    <p class="text-[10px] text-white/25 leading-relaxed" data-i18n="sc_guide_1_p">用標註筆圈出想修改的位置，放開滑鼠後直接輸入描述文字即可。</p>
                                 </div>
                             </div>
                             <div class="flex items-start gap-3">
                                 <div class="w-6 h-6 shrink-0 rounded-full bg-white/8 border border-white/10 flex items-center justify-center text-[10px] font-bold text-white/40 mt-0.5">2</div>
                                 <div>
-                                    <p class="text-[11px] text-white/50 font-semibold mb-0.5" data-i18n="sc_guide_2_h">輸入改造指令</p>
-                                    <p class="text-[10px] text-white/25 leading-relaxed" data-i18n="sc_guide_2_p">每個區域可輸入文字描述，例如「清水模牆面」「暖木色地板」「北歐極簡」。</p>
+                                    <p class="text-[11px] text-white/50 font-semibold mb-0.5" data-i18n="sc_guide_2_h">換色新增下一個區域</p>
+                                    <p class="text-[10px] text-white/25 leading-relaxed" data-i18n="sc_guide_2_p">點擊「＋新增描述區」自動換色，再圈選下一個位置，例如「清水模牆面」「暖木色地板」。</p>
                                 </div>
                             </div>
                             <div class="flex items-start gap-3">
@@ -1688,8 +1675,8 @@
     </div>
     
     <!-- 引入外部邏輯腳本 (強制加上 ?v=1.2.0 擊破 CEF 瀏覽器快取) -->
-    <script src="i18n.js?v=1.4.0"></script>
-    <script src="app.js?v=1.4.0"></script>
+    <script src="i18n.js?v=1.4.9"></script>
+    <script src="app.js?v=1.4.9"></script>
     <script>
     // Tutorial config — single source of truth (auto-synced from docs/tutorial_config.json)
     // window.LOAMLAB_VERSION is set dynamically from Ruby init (app.js receiveInit)
@@ -1701,6 +1688,8 @@
     <div id="cancel-flow-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center" style="background:rgba(0,0,0,0.85);backdrop-filter:blur(4px)" onclick="if(event.target===this)closeCancelFlow()">
         <div id="cancel-flow-content" class="relative bg-[#0f0f12] border border-white/10 rounded-2xl w-[390px] max-w-[92vw] shadow-[0_20px_60px_rgba(0,0,0,0.8)]" style="padding:1.75rem">
         </div>
+    </div>
+
     </div>
 </body>
 

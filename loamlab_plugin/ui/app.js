@@ -5164,6 +5164,7 @@ const SmartCanvas = {
     _lastDrawX: null, _lastDrawY: null,  // 筆刷連線插值用（canvas 座標）
     _lastClientX: null, _lastClientY: null, // 筆刷連線插值用（viewport 座標，供 label popup 定位）
     _strokeStartX: null, _strokeStartY: null, // Shift 直線起點
+    _strokePoints: [],    // 本次筆觸的原始座標點，供收筆時平滑化/自動閉合使用
     _hasDragged: false,  // 是否有實際移動
     eraserTarget: null,  // 鎖定單擦的 region index（null = 全部）
     brushColor: '#ff6432',
@@ -5353,7 +5354,8 @@ function _scInitCanvases(w, h, dw = null, dh = null) {
     SmartCanvas.drawCtx.clearRect(0, 0, w, h);
 
     // 標註字級/線寬皆以 1920px 寬為基準換算，確保 1K/2K/4K 出圖時視覺比例一致
-    SmartCanvas.uiScale = Math.max(0.6, Math.min(3, w / 1920));
+    // 下限拉到 0.8：即使底圖較小，文字仍要維持 AI 可辨識的最小尺寸
+    SmartCanvas.uiScale = Math.max(0.8, Math.min(3, w / 1920));
 }
 
 function _scGetXY(e) {
@@ -5378,11 +5380,12 @@ function _scExtractDrawnStroke() {
 }
 
 // 畫一個帶連接線的圓角文字標籤（專業設計標註風格），x/y 為錨點（筆觸終點）
+// 字級刻意偏大：這張圖是送給 AI 辨識的信息圖，不是給人看的精緻小字
 function _scDrawLabelPill(ctx, x, y, text, colorHex) {
     const scale = SmartCanvas.uiScale || 1;
-    const fontSize = Math.round(16 * scale);
-    const padX = Math.round(10 * scale), padY = Math.round(7 * scale);
-    const gap = Math.round(14 * scale);
+    const fontSize = Math.round(26 * scale);
+    const padX = Math.round(16 * scale), padY = Math.round(11 * scale);
+    const gap = Math.round(22 * scale);
     ctx.save();
     ctx.font = `600 ${fontSize}px "Microsoft JhengHei", "PingFang TC", sans-serif`;
     const textW = ctx.measureText(text).width;
@@ -5396,13 +5399,13 @@ function _scDrawLabelPill(ctx, x, y, text, colorHex) {
     // 錨點圓點 + 連接線
     ctx.strokeStyle = colorHex;
     ctx.fillStyle = colorHex;
-    ctx.lineWidth = Math.max(1.5, 2 * scale);
+    ctx.lineWidth = Math.max(2, 2.5 * scale);
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(px + pillW / 2, py + pillH);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(x, y, Math.max(3, 4 * scale), 0, Math.PI * 2);
+    ctx.arc(x, y, Math.max(4, 5 * scale), 0, Math.PI * 2);
     ctx.fill();
 
     // 圓角深色底 + 彩色描邊
@@ -5427,11 +5430,26 @@ function _scDrawLabelPill(ctx, x, y, text, colorHex) {
     ctx.restore();
 }
 
+// 各 region 若有參考圖，依 SmartCanvas.regions 順序分配「image N」編號
+// 圖片順序固定：image 1 = original, image 2 = composite(base_image), image 3+ = 參考圖
+// 回傳 Map<regionId, N>，composite 標籤與 executeSmartSwap 的 prompt 都吃同一份，確保編號一致
+function _scAssignRefImageIndices() {
+    let idx = 3;
+    const map = new Map();
+    for (const r of SmartCanvas.regions) {
+        if (r.refImageBase64) { map.set(r.id, idx); idx++; }
+    }
+    return map;
+}
+
 // 畫一個 region 的完整標註（線框筆觸 + 文字標籤），供 overlay 與 composite 共用
-function _scDrawRegionAnnotation(ctx, region) {
+// refImgIdx：僅在產生送出用的 composite 時傳入，把「見圖 N」直接烘進畫面上的文字給 AI 讀；
+// 編輯中的即時預覽（_scRenderOverlays）不傳，維持側邊欄輸入框內容乾淨、不干擾使用者編輯
+function _scDrawRegionAnnotation(ctx, region, refImgIdx) {
     if (region.strokeCanvas) ctx.drawImage(region.strokeCanvas, 0, 0);
     if (region.label && region.label.trim() && region.labelPos) {
-        _scDrawLabelPill(ctx, region.labelPos.x, region.labelPos.y, region.label.trim(), region.colorHex || '#ff6432');
+        const text = refImgIdx ? `${region.label.trim()} (見圖${refImgIdx})` : region.label.trim();
+        _scDrawLabelPill(ctx, region.labelPos.x, region.labelPos.y, text, region.colorHex || '#ff6432');
     }
 }
 
@@ -5442,7 +5460,8 @@ function _scCreateAnnotatedComposite() {
     c.width = w; c.height = h;
     const ctx = c.getContext('2d');
     ctx.drawImage(SmartCanvas.baseImg, 0, 0, w, h);
-    SmartCanvas.regions.forEach(r => _scDrawRegionAnnotation(ctx, r));
+    const refIdxMap = _scAssignRefImageIndices();
+    SmartCanvas.regions.forEach(r => _scDrawRegionAnnotation(ctx, r, refIdxMap.get(r.id)));
     return c;
 }
 
@@ -5726,6 +5745,108 @@ function _scDrawCursorCircle(x, y) {
     cCtx.stroke();
 }
 
+// Chaikin corner-cutting：每輪把每段折線的兩端各切掉 1/4，反覆幾輪後線條就會變得圓滑
+// closed=true 時把最後一點與第一點也視為一段（環狀），讓整圈平滑無接縫
+function _scChaikinSmooth(points, iterations, closed) {
+    let pts = points;
+    for (let iter = 0; iter < iterations; iter++) {
+        const n = pts.length;
+        if (n < 3) break;
+        const next = [];
+        const limit = closed ? n : n - 1;
+        if (!closed) next.push(pts[0]);
+        for (let i = 0; i < limit; i++) {
+            const p0 = pts[i];
+            const p1 = pts[(i + 1) % n];
+            next.push({ x: p0.x * 0.75 + p1.x * 0.25, y: p0.y * 0.75 + p1.y * 0.25 });
+            next.push({ x: p0.x * 0.25 + p1.x * 0.75, y: p0.y * 0.25 + p1.y * 0.75 });
+        }
+        if (!closed) next.push(pts[n - 1]);
+        pts = next;
+    }
+    return pts;
+}
+
+function _scCentroid(points) {
+    let sx = 0, sy = 0;
+    for (const p of points) { sx += p.x; sy += p.y; }
+    return { x: sx / points.length, y: sy / points.length };
+}
+
+// 移動平均：把每個點換成鄰近 2*radius+1 個點的平均位置，用來消除手抖/滑鼠雜訊
+// closed=true 時視為環狀（頭尾相鄰），避免起訖點附近因為少鄰居而平滑不足
+function _scMovingAverage(points, radius, closed) {
+    const n = points.length;
+    if (n < 3) return points;
+    const result = [];
+    for (let i = 0; i < n; i++) {
+        let sx = 0, sy = 0, count = 0;
+        for (let k = -radius; k <= radius; k++) {
+            let idx = i + k;
+            if (closed) idx = ((idx % n) + n) % n;
+            else if (idx < 0 || idx >= n) continue;
+            sx += points[idx].x; sy += points[idx].y; count++;
+        }
+        result.push({ x: sx / count, y: sy / count });
+    }
+    return result;
+}
+
+// 按最小間距抽稀點陣列：抖動已被移動平均濾掉後，這一步只是減少點數量、加速 Chaikin，
+// 不再需要靠它去消滅雜訊本身
+function _scDecimatePoints(points, minSpacing) {
+    if (points.length < 3) return points;
+    const result = [points[0]];
+    let last = points[0];
+    for (let i = 1; i < points.length; i++) {
+        const p = points[i];
+        if (Math.hypot(p.x - last.x, p.y - last.y) >= minSpacing) {
+            result.push(p);
+            last = p;
+        }
+    }
+    const tail = points[points.length - 1];
+    if (result[result.length - 1] !== tail) result.push(tail);
+    return result;
+}
+
+// 收筆時：判斷終點是否繞回起點附近（自動閉合），並把手繪的原始折線抽稀＋平滑化
+// 回傳平滑後的點陣列與是否閉合，供 _scRedrawSmoothedPath 重繪、_scCommitBrushStroke 決定標籤錨點
+function _scFinalizeStrokePoints(points, brushSize, uiScale) {
+    if (points.length < 3) return { points, closed: false };
+    const scale = uiScale || 1;
+    const first = points[0], last = points[points.length - 1];
+    const dist = Math.hypot(last.x - first.x, last.y - first.y);
+    const closeThreshold = Math.max(40 * scale, brushSize * 4);
+    // 太短的筆觸（點數太少）就算頭尾距離近，也可能只是隨手一點，不強制閉合
+    const closed = dist < closeThreshold && points.length > 8;
+    let pts = closed ? points.slice(0, -1) : points; // 閉合時丟掉重複的收尾點，改用環狀連接
+    pts = _scMovingAverage(pts, 4, closed);
+    const minSpacing = Math.max(12, brushSize * 1.5) * scale;
+    pts = _scDecimatePoints(pts, minSpacing);
+    const smoothed = _scChaikinSmooth(pts, 3, closed);
+    return { points: smoothed, closed };
+}
+
+// 用平滑化後的點陣列覆蓋 drawCanvas 上的手繪痕跡，讓最終線條圓滑（閉合時首尾相連）
+function _scRedrawSmoothedPath(points, closed) {
+    const ctx = SmartCanvas.drawCtx;
+    ctx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+    if (points.length < 2) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = SmartCanvas.brushColor;
+    ctx.lineWidth = SmartCanvas.brushSize;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+    if (closed) ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+}
+
 // 提交一次筆刷標註：同色已有 region 則合併筆觸；否則建立新 region 並自動彈出文字輸入框
 function _scCommitBrushStroke(endX, endY, endClientX, endClientY) {
     const strokeCanvas = _scExtractDrawnStroke();
@@ -5763,6 +5884,7 @@ function _scBindEvents() {
         SmartCanvas._lastDrawY = null;
         SmartCanvas._lastClientX = e.clientX;
         SmartCanvas._lastClientY = e.clientY;
+        SmartCanvas._strokePoints = [];
         _scSaveUndo();
         _scDraw(e);
     });
@@ -5777,7 +5899,10 @@ function _scBindEvents() {
         SmartCanvas._altResizeStartX = null;
         if (SmartCanvas.activeTool === 'brush') {
             if (SmartCanvas._hasDragged) {
-                _scCommitBrushStroke(endX, endY, endClientX, endClientY);
+                const { points, closed } = _scFinalizeStrokePoints(SmartCanvas._strokePoints, SmartCanvas.brushSize, SmartCanvas.uiScale);
+                _scRedrawSmoothedPath(points, closed);
+                const anchor = closed ? _scCentroid(points) : { x: endX, y: endY };
+                _scCommitBrushStroke(anchor.x, anchor.y, endClientX, endClientY);
             }
             SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
             _scRenderOverlays();
@@ -5882,6 +6007,18 @@ function _scDraw(e) {
     SmartCanvas._lastDrawX = x;
     SmartCanvas._lastDrawY = y;
     ctx.globalCompositeOperation = 'source-over';
+
+    // 記錄原始座標點，供收筆時平滑化/自動閉合使用（橡皮擦不需要）
+    if (!isEraser) {
+        if (SmartCanvas._strokePoints.length === 0) {
+            SmartCanvas._strokePoints.push({ x, y });
+        } else if (e.shiftKey) {
+            // 直線模式：只保留起點與當前點
+            SmartCanvas._strokePoints = [SmartCanvas._strokePoints[0], { x, y }];
+        } else {
+            SmartCanvas._strokePoints.push({ x, y });
+        }
+    }
 }
 
 function _scUpdatePendingIndicator() {
@@ -6008,14 +6145,15 @@ async function executeSmartSwap(overrideBody = null) {
 
             // Prompt：顏色代碼 + 區域描述（後端會嵌入預設模板）
             // 圖片參考區域：image 1 = original, image 2 = composite, image 3+ = 用戶上傳的參考圖
-            let refImgIdx = 3;
+            // 編號與 composite 上烘進去的「見圖 N」共用同一份分配，兩邊一定對得上
+            const refIdxMap = _scAssignRefImageIndices();
             const prompt = SmartCanvas.regions.map(r => {
                 const hasRef = !!r.refImageBase64;
                 const hasText = !!(r.label && r.label.trim());
                 const color = r.colorHex || '#ff6432';
                 if (!hasRef && !hasText) return null;
-                if (hasRef && hasText)  return `${color}: ${r.label.trim()} (see image ${refImgIdx++} as visual reference)`;
-                if (hasRef)             return `${color}: apply or place what's shown in image ${refImgIdx++}`;
+                if (hasRef && hasText)  return `${color}: ${r.label.trim()} (see image ${refIdxMap.get(r.id)} as visual reference)`;
+                if (hasRef)             return `${color}: apply or place what's shown in image ${refIdxMap.get(r.id)}`;
                 return `${color}: ${r.label.trim()}`;
             }).filter(Boolean).join('; ');
 

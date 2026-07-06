@@ -279,5 +279,6 @@
     "sc_tool_clear": "すべてクリア",
     "sc_tool_color_picker": "ブラシカラー",
     "sc_tool_brush_size": "ブラシサイズ",
-    "sc_label_ph": "変更内容を入力..."
+    "sc_label_ph": "変更内容を入力...",
+    "sc_tool_rect": "四角形 R  |  2回クリックで対角を決定、角は自動的に丸くなります"
 }

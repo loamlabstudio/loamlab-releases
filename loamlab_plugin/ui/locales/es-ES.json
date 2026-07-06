@@ -279,5 +279,6 @@
     "sc_tool_clear": "Limpiar todo",
     "sc_tool_color_picker": "Color del pincel",
     "sc_tool_brush_size": "Tamaño del pincel",
-    "sc_label_ph": "Describe el cambio..."
+    "sc_label_ph": "Describe el cambio...",
+    "sc_tool_rect": "Rectángulo R  |  Haz clic dos veces para fijar las esquinas opuestas, se redondea automáticamente"
 }

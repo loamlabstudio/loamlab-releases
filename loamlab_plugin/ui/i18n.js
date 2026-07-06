@@ -177,7 +177,8 @@ const UI_LANG = {
         "tooltip_refresh_balance": "刷新點數餘額",
         "tooltip_save_path": "尚未設定（點擊選擇資料夾）",
         "tooltip_prompt_helper": "打上圖片上的具體材料...",
-        "sc_tool_brush": "標註筆 B  |  點擊放節點，靠近起點閉合  |  Enter 結束開放線 · Esc 取消 · Backspace 撤銷節點",
+        "sc_tool_brush": "標註筆 B  |  點擊放節點，靠近起點/雙擊/Enter 閉合  |  Esc 取消 · Backspace 撤銷節點",
+        "sc_tool_rect": "矩形 R  |  點兩下決定對角，圓角自動產生",
         "sc_tool_eraser": "橡皮擦 E",
         "sc_tool_undo": "復原 (Undo)",
         "sc_tool_redo": "重做 (Redo)",
@@ -566,7 +567,8 @@ const UI_LANG = {
         "referral_modal_desc": "When a friend enters your code and makes their <strong class=\"text-white/80\">first payment</strong>, both receive instant rewards.<br>You get <span class=\"text-amber-400 font-bold\">+300 pts</span>, your friend gets <span class=\"text-emerald-400 font-bold\">+100 pts</span> (Permanent).",
         "referral_bound_msg1": "✅ Ambassador code applied! Code: ",
         "referral_bound_msg2": "After your first payment, you'll receive <span class=\"text-emerald-400 font-bold\">+100 pts</span>, and the ambassador will receive <span class=\"text-amber-400 font-bold\">+300 pts</span>!",
-        "sc_label_ph": "Describe the change..."
+        "sc_label_ph": "Describe the change...",
+        "sc_tool_rect": "[TBD] 矩形 R  |  點兩下決定對角，圓角自動產生"
     },
     "zh-CN": {
         "title": "野人相機 (LoamLab Camera)",
@@ -849,7 +851,8 @@ const UI_LANG = {
         "sc_tool_clear": "清空 (Clear All)",
         "sc_tool_color_picker": "筆刷顏色",
         "sc_tool_brush_size": "筆刷大小",
-        "sc_label_ph": "描述替換內容..."
+        "sc_label_ph": "描述替換內容...",
+        "sc_tool_rect": "矩形 R  |  點兩下決定對角，圓角自動產生"
     },
     "es-ES": {
         "title": "LoamLab Camera",
@@ -1132,7 +1135,8 @@ const UI_LANG = {
         "sc_tool_clear": "Limpiar todo",
         "sc_tool_color_picker": "Color del pincel",
         "sc_tool_brush_size": "Tamaño del pincel",
-        "sc_label_ph": "Describe el cambio..."
+        "sc_label_ph": "Describe el cambio...",
+        "sc_tool_rect": "[TBD] 矩形 R  |  點兩下決定對角，圓角自動產生"
     },
     "pt-BR": {
         "title": "LoamLab Camera",
@@ -1415,7 +1419,8 @@ const UI_LANG = {
         "sc_tool_clear": "Limpar tudo",
         "sc_tool_color_picker": "Cor do pincel",
         "sc_tool_brush_size": "Tamanho do pincel",
-        "sc_label_ph": "Descreva a mudança..."
+        "sc_label_ph": "Descreva a mudança...",
+        "sc_tool_rect": "[TBD] 矩形 R  |  點兩下決定對角，圓角自動產生"
     },
     "ja-JP": {
         "title": "LoamLab Camera",
@@ -1698,7 +1703,8 @@ const UI_LANG = {
         "sc_tool_clear": "すべてクリア",
         "sc_tool_color_picker": "ブラシカラー",
         "sc_tool_brush_size": "ブラシサイズ",
-        "sc_label_ph": "変更内容を入力..."
+        "sc_label_ph": "変更内容を入力...",
+        "sc_tool_rect": "[TBD] 矩形 R  |  點兩下決定對角，圓角自動產生"
     }
 };
 

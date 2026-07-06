@@ -279,5 +279,6 @@
     "sc_tool_clear": "清空 (Clear All)",
     "sc_tool_color_picker": "筆刷顏色",
     "sc_tool_brush_size": "筆刷大小",
-    "sc_label_ph": "描述替換內容..."
+    "sc_label_ph": "描述替換內容...",
+    "sc_tool_rect": "矩形 R  |  點兩下決定對角，圓角自動產生"
 }

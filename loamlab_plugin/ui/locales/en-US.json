@@ -279,5 +279,6 @@
     "referral_modal_desc": "When a friend enters your code and makes their <strong class=\"text-white/80\">first payment</strong>, both receive instant rewards.<br>You get <span class=\"text-amber-400 font-bold\">+300 pts</span>, your friend gets <span class=\"text-emerald-400 font-bold\">+100 pts</span> (Permanent).",
     "referral_bound_msg1": "✅ Ambassador code applied! Code: ",
     "referral_bound_msg2": "After your first payment, you'll receive <span class=\"text-emerald-400 font-bold\">+100 pts</span>, and the ambassador will receive <span class=\"text-amber-400 font-bold\">+300 pts</span>!",
-    "sc_label_ph": "Describe the change..."
+    "sc_label_ph": "Describe the change...",
+    "sc_tool_rect": "Rectangle R  |  Click twice to set opposite corners, rounded automatically"
 }

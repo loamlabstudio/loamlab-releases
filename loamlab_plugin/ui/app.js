@@ -5254,7 +5254,7 @@ function _scHandlePaste(e) {
         if (!item.type.startsWith('image/')) continue;
         const file = item.getAsFile();
         if (!file) continue;
-        const idx = SmartCanvas.focusedRegionIdx || (SmartCanvas.regions.length - 1);
+        const idx = SmartCanvas.focusedRegionIdx ?? (SmartCanvas.regions.length - 1);
         if (idx < 0) break;
         const reader = new FileReader();
         reader.onload = (ev) => {

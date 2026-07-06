@@ -28,3 +28,20 @@
 **驗收**: 以 Playwright 對 `index.html` 進行端對端驅動測試 — 確認工具列僅剩「標註筆/橡皮擦」、拖曳畫圓後自動彈出文字框、確認後畫布出現線框＋專業風格文字標籤、`_scCreateAnnotatedComposite()` 正確產出信息圖。無新增 console 錯誤（既有 2 個錯誤與本次改動無關）。
 
 status: DONE
+
+## RELEASE_GATE
+release_type: feature
+verified_diff:
+  - loamlab_plugin/ui/app.js
+  - loamlab_plugin/ui/index.html
+  - loamlab_plugin/ui/i18n.js
+  - loamlab_plugin/ui/locales/zh-TW.json
+  - loamlab_plugin/ui/locales/en-US.json
+  - loamlab_plugin/ui/locales/zh-CN.json
+  - loamlab_plugin/ui/locales/es-ES.json
+  - loamlab_plugin/ui/locales/pt-BR.json
+  - loamlab_plugin/ui/locales/ja-JP.json
+  - loamlab_backend/public/i18n.js
+  - loamlab_backend/api/render.js
+  - FEATURE_FLAGS.md
+sql_migration: false

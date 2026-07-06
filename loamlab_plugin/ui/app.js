@@ -5735,9 +5735,10 @@ function _scDrawCursorCircle(x, y) {
     cCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
     const scale = SmartCanvas.uiScale || 1;
 
-    if (SmartCanvas.activeTool === 'rect') {
-        // 矩形是選取工具，重點是精準對位，線寬圈太細（尤其線寬設小時）幾乎看不到，
-        // 改畫固定大小的十字準星 + 中心點，跟線寬設定無關，永遠清楚可見
+    if (SmartCanvas.activeTool === 'brush' || SmartCanvas.activeTool === 'rect') {
+        // 標註筆跟矩形都是「點擊定位」型工具，精準對位比線寬預覽重要，
+        // 線寬圈太細（尤其線寬設小時）幾乎看不到，改畫固定大小的十字準星 + 中心點，
+        // 跟線寬設定無關，兩個工具用同一套、永遠清楚可見
         const len = 9 * scale, gap = 3 * scale;
         cCtx.save();
         cCtx.lineCap = 'round';
@@ -5759,6 +5760,7 @@ function _scDrawCursorCircle(x, y) {
         return;
     }
 
+    // 橡皮擦：保留線寬圓圈，才能看出實際會擦掉的範圍
     const r = Math.max(2, SmartCanvas.brushSize / 2);
     // 外圈黑色（確保在亮色背景可見）
     cCtx.beginPath();
@@ -5980,6 +5982,7 @@ function _scCommitBrushStroke(strokeCanvas, endX, endY, endClientX, endClientY) 
     if (existing) {
         existing.strokeCanvas.getContext('2d').drawImage(strokeCanvas, 0, 0);
         _scRenderRegionList();
+        _scRenderOverlays(); // 修 bug：漏了這行導致回頭編輯舊顏色時，新畫的筆觸看起來像消失了
         return;
     }
     const region = { id: Date.now(), strokeCanvas, label: '', colorHex: SmartCanvas.brushColor, labelPos: { x: endX, y: endY }, refImageBase64: null };
@@ -5990,6 +5993,7 @@ function _scCommitBrushStroke(strokeCanvas, endX, endY, endClientX, endClientY) 
             region.label = text;
             _scRenderRegionList();
             _scRenderOverlays();
+            _scPickNextColor(); // 描述完就直接換色，準備畫下一個區域，不用手動點「＋新增描述區」
         });
     });
 }

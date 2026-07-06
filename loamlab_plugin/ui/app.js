@@ -5474,18 +5474,49 @@ function _scAssignRefImageIndices() {
     return map;
 }
 
+// 把 strokeCanvas 上的線框像素全部轉成單一中性白色（保留原本的 alpha 形狀）
+// 用途：AI 讀的合成圖不能用霓虹色區分區域，模型會把顏色當成「塗色指令」直接畫回結果裡
+// （實測：粉紅/橘色線框會讓輸出圖對應區域整塊染色）。改用中性色 + 編號，讓顏色徹底退出送給 AI 的畫面
+function _scRecolorCanvasWhite(src) {
+    const w = src.width, h = src.height;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const cx = c.getContext('2d');
+    cx.drawImage(src, 0, 0);
+    cx.globalCompositeOperation = 'source-in';
+    cx.fillStyle = '#ffffff';
+    cx.fillRect(0, 0, w, h);
+    return c;
+}
+
 // 畫一個 region 的完整標註（線框筆觸 + 文字標籤），供 overlay 與 composite 共用
-// refImgIdx：僅在產生送出用的 composite 時傳入，把「見圖 N」直接烘進畫面上的文字給 AI 讀；
-// 編輯中的即時預覽（_scRenderOverlays）不傳，維持側邊欄輸入框內容乾淨、不干擾使用者編輯
-function _scDrawRegionAnnotation(ctx, region, refImgIdx) {
-    if (region.strokeCanvas) ctx.drawImage(region.strokeCanvas, 0, 0);
+// refImgIdx：僅在產生送出用的 composite 時傳入，把「見圖 N」直接烘進畫面上的文字給 AI 讀
+// neutral+number：composite（不論預覽或送出）一律用白線框+黑暈+數字編號，不用 colorHex，
+// 避免 AI 把霓虹色當成塗色指令；只有編輯中的即時預覽（_scRenderOverlays）維持彩色方便使用者辨識
+function _scDrawRegionAnnotation(ctx, region, refImgIdx, neutral, number) {
+    if (region.strokeCanvas) {
+        if (neutral) {
+            const scale = SmartCanvas.uiScale || 1;
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.9)';
+            ctx.shadowBlur = 6 * scale;
+            const whiteCanvas = _scRecolorCanvasWhite(region.strokeCanvas);
+            ctx.drawImage(whiteCanvas, 0, 0);
+            ctx.drawImage(whiteCanvas, 0, 0); // 疊兩次加強黑暈，確保線框在任何底圖上都清晰可辨
+            ctx.restore();
+        } else {
+            ctx.drawImage(region.strokeCanvas, 0, 0);
+        }
+    }
     if (region.label && region.label.trim() && region.labelPos) {
-        const text = refImgIdx ? `${region.label.trim()} (見圖${refImgIdx})` : region.label.trim();
-        _scDrawLabelPill(ctx, region.labelPos.x, region.labelPos.y, text, region.colorHex || '#ff6432');
+        let text = region.label.trim();
+        if (refImgIdx) text += ` (見圖${refImgIdx})`;
+        if (neutral && number) text = `${number}. ${text}`;
+        _scDrawLabelPill(ctx, region.labelPos.x, region.labelPos.y, text, neutral ? '#ffffff' : (region.colorHex || '#ff6432'));
     }
 }
 
-// 產生 annotated composite：底圖 + 各區域線框與文字標籤
+// 產生 annotated composite：底圖 + 各區域線框與文字標籤（一律中性白色+編號，這份是要給 AI 讀的）
 // bakeRefTags=true 時才把「見圖 N」烘進文字——只有實際送給 AI 的那份需要，
 // 使用者看得到的預覽（sc-mask-overlay-img）不能出現這種內部編號，會顯得莫名其妙
 function _scCreateAnnotatedComposite(bakeRefTags = false) {
@@ -5495,6 +5526,8 @@ function _scCreateAnnotatedComposite(bakeRefTags = false) {
     const ctx = c.getContext('2d');
     ctx.drawImage(SmartCanvas.baseImg, 0, 0, w, h);
     const refIdxMap = bakeRefTags ? _scAssignRefImageIndices() : null;
+    // 方案一測試中：composite 暫時維持彩色（不套用 neutral+編號），只讓 prompt 文字移除色碼；
+    // 若彩色線框本身仍導致 AI 把顏色當塗色指令，再切回 neutral 模式（呼叫時補回 true, i+1 兩個參數即可）
     SmartCanvas.regions.forEach(r => _scDrawRegionAnnotation(ctx, r, refIdxMap ? refIdxMap.get(r.id) : undefined));
     return c;
 }
@@ -6414,18 +6447,20 @@ async function executeSmartSwap(overrideBody = null) {
             const composite = _scCreateAnnotatedComposite(true);
             const compositeBase64 = composite.toDataURL('image/jpeg', 0.9);
 
-            // Prompt：顏色代碼 + 區域描述（後端會嵌入預設模板）
+            // Prompt：區域編號（Region N）+ 描述（後端會嵌入預設模板）
+            // 編號改用數字而非顏色代碼——霓虹色線框只是給 AI 辨識邊界用的中性標記，
+            // 若 prompt 文字再提一次色碼，模型容易把顏色誤解成塗色指令，把整塊區域染色
             // 圖片參考區域：image 1 = original, image 2 = composite, image 3+ = 用戶上傳的參考圖
             // 編號與 composite 上烘進去的「見圖 N」共用同一份分配，兩邊一定對得上
             const refIdxMap = _scAssignRefImageIndices();
-            const prompt = SmartCanvas.regions.map(r => {
+            const prompt = SmartCanvas.regions.map((r, i) => {
                 const hasRef = !!r.refImageBase64;
                 const hasText = !!(r.label && r.label.trim());
-                const color = r.colorHex || '#ff6432';
+                const region = `Region ${i + 1}`;
                 if (!hasRef && !hasText) return null;
-                if (hasRef && hasText)  return `${color}: ${r.label.trim()} (see image ${refIdxMap.get(r.id)} as visual reference)`;
-                if (hasRef)             return `${color}: apply or place what's shown in image ${refIdxMap.get(r.id)}`;
-                return `${color}: ${r.label.trim()}`;
+                if (hasRef && hasText)  return `${region}: ${r.label.trim()} (see image ${refIdxMap.get(r.id)} as visual reference)`;
+                if (hasRef)             return `${region}: apply or place what's shown in image ${refIdxMap.get(r.id)}`;
+                return `${region}: ${r.label.trim()}`;
             }).filter(Boolean).join('; ');
 
             displayLabel = SmartCanvas.regions

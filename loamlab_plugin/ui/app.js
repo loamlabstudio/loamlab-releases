@@ -5161,11 +5161,14 @@ const SmartCanvas = {
     redoStack: [],         // redo 快照
     focusedRegionIdx: null, // 快速標籤追加目標的 region index
     activeTagGroup: 'soft', // 當前快速標籤群組
-    _lastDrawX: null, _lastDrawY: null,  // 筆刷連線插值用（canvas 座標）
-    _lastClientX: null, _lastClientY: null, // 筆刷連線插值用（viewport 座標，供 label popup 定位）
-    _strokeStartX: null, _strokeStartY: null, // Shift 直線起點
-    _strokePoints: [],    // 本次筆觸的原始座標點，供收筆時平滑化/自動閉合使用
-    _hasDragged: false,  // 是否有實際移動
+    _lastDrawX: null, _lastDrawY: null,  // 橡皮擦連線插值用（canvas 座標）
+    _lastClientX: null, _lastClientY: null, // viewport 座標，供 label popup 定位
+    _strokeStartX: null, _strokeStartY: null, // 橡皮擦 Shift 直線起點
+    _hasDragged: false,  // 橡皮擦：是否有實際移動
+    _nodePoints: [],      // 標註筆：目前正在放置的節點（點擊產生），收尾後轉成平滑曲線
+    _nodeHoverPoint: null, // 節點模式下的即時游標位置，供橡皮筋預覽線使用
+    _nodeAnimFrame: null, // 節點模式下「流水」虛線動畫的 requestAnimationFrame handle
+    _dashOffset: 0,       // 流水虛線動畫的位移量
     eraserTarget: null,  // 鎖定單擦的 region index（null = 全部）
     brushColor: '#ff6432',
     brushSize: 5,
@@ -5191,6 +5194,26 @@ function _scHandleKey(e) {
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     // Alt：啟動筆刷大小調整模式
     if (e.key === 'Alt') { SmartCanvas._altKey = true; e.preventDefault(); return; }
+
+    // 節點放置中：Enter 結束為開放線段、Esc 取消整個形狀、Backspace 撤銷上一個節點
+    if (SmartCanvas.activeTool === 'brush' && SmartCanvas._nodePoints.length > 0) {
+        if (e.key === 'Enter' && SmartCanvas._nodePoints.length >= 2) {
+            e.preventDefault();
+            _scFinalizeNodeShape(false, SmartCanvas._lastClientX, SmartCanvas._lastClientY);
+            return;
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            _scCancelNodeShape();
+            return;
+        }
+        if (e.key === 'Backspace') {
+            e.preventDefault();
+            SmartCanvas._nodePoints.pop();
+            if (SmartCanvas._nodePoints.length === 0) _scCancelNodeShape();
+            return;
+        }
+    }
 
     if (e.ctrlKey) {
         if (e.key === 'z' && !e.shiftKey) {
@@ -5247,6 +5270,9 @@ function openSmartCanvas(channelBase64, renderedUrl, sceneName, keepRegions = fa
     SmartCanvas.undoStack = [];
     SmartCanvas.redoStack = [];
     SmartCanvas.activeTool = 'brush';
+    _scStopNodeAnim();
+    SmartCanvas._nodePoints = [];
+    SmartCanvas._nodeHoverPoint = null;
     // 重置顏色到第一個（每次開啟 SmartCanvas 都從橙色重新開始）
     SmartCanvas.brushColor = '#ff6432';
     const _picker = document.getElementById('sc-color-picker');
@@ -5745,90 +5771,42 @@ function _scDrawCursorCircle(x, y) {
     cCtx.stroke();
 }
 
-// Chaikin corner-cutting：每輪把每段折線的兩端各切掉 1/4，反覆幾輪後線條就會變得圓滑
-// closed=true 時把最後一點與第一點也視為一段（環狀），讓整圈平滑無接縫
-function _scChaikinSmooth(points, iterations, closed) {
-    let pts = points;
-    for (let iter = 0; iter < iterations; iter++) {
-        const n = pts.length;
-        if (n < 3) break;
-        const next = [];
-        const limit = closed ? n : n - 1;
-        if (!closed) next.push(pts[0]);
-        for (let i = 0; i < limit; i++) {
-            const p0 = pts[i];
-            const p1 = pts[(i + 1) % n];
-            next.push({ x: p0.x * 0.75 + p1.x * 0.25, y: p0.y * 0.75 + p1.y * 0.25 });
-            next.push({ x: p0.x * 0.25 + p1.x * 0.75, y: p0.y * 0.25 + p1.y * 0.75 });
-        }
-        if (!closed) next.push(pts[n - 1]);
-        pts = next;
-    }
-    return pts;
-}
-
 function _scCentroid(points) {
     let sx = 0, sy = 0;
     for (const p of points) { sx += p.x; sy += p.y; }
     return { x: sx / points.length, y: sy / points.length };
 }
 
-// 移動平均：把每個點換成鄰近 2*radius+1 個點的平均位置，用來消除手抖/滑鼠雜訊
-// closed=true 時視為環狀（頭尾相鄰），避免起訖點附近因為少鄰居而平滑不足
-function _scMovingAverage(points, radius, closed) {
+// Catmull-Rom 樣條上單一取樣點：曲線會確實穿過每個控制點（不像 Bezier 只逼近），
+// 適合「使用者點擊放置的節點」這種精確、稀疏的控制點，天生就平滑不需額外去雜訊
+function _scCatmullRomPoint(p0, p1, p2, p3, t) {
+    const t2 = t * t, t3 = t2 * t;
+    return {
+        x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x) * t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x) * t3),
+        y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y) * t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y) * t3),
+    };
+}
+
+// 把節點陣列轉成密集取樣的平滑曲線點陣列（供畫線用）。closed=true 時首尾相接成環狀
+function _scCatmullRomSpline(points, closed, samplesPerSeg = 16) {
     const n = points.length;
     if (n < 3) return points;
     const result = [];
-    for (let i = 0; i < n; i++) {
-        let sx = 0, sy = 0, count = 0;
-        for (let k = -radius; k <= radius; k++) {
-            let idx = i + k;
-            if (closed) idx = ((idx % n) + n) % n;
-            else if (idx < 0 || idx >= n) continue;
-            sx += points[idx].x; sy += points[idx].y; count++;
+    const segCount = closed ? n : n - 1;
+    for (let i = 0; i < segCount; i++) {
+        const p0 = points[closed ? (i - 1 + n) % n : Math.max(0, i - 1)];
+        const p1 = points[i];
+        const p2 = points[(i + 1) % n];
+        const p3 = points[closed ? (i + 2) % n : Math.min(n - 1, i + 2)];
+        for (let s = 0; s < samplesPerSeg; s++) {
+            result.push(_scCatmullRomPoint(p0, p1, p2, p3, s / samplesPerSeg));
         }
-        result.push({ x: sx / count, y: sy / count });
     }
+    if (!closed) result.push(points[n - 1]);
     return result;
 }
 
-// 按最小間距抽稀點陣列：抖動已被移動平均濾掉後，這一步只是減少點數量、加速 Chaikin，
-// 不再需要靠它去消滅雜訊本身
-function _scDecimatePoints(points, minSpacing) {
-    if (points.length < 3) return points;
-    const result = [points[0]];
-    let last = points[0];
-    for (let i = 1; i < points.length; i++) {
-        const p = points[i];
-        if (Math.hypot(p.x - last.x, p.y - last.y) >= minSpacing) {
-            result.push(p);
-            last = p;
-        }
-    }
-    const tail = points[points.length - 1];
-    if (result[result.length - 1] !== tail) result.push(tail);
-    return result;
-}
-
-// 收筆時：判斷終點是否繞回起點附近（自動閉合），並把手繪的原始折線抽稀＋平滑化
-// 回傳平滑後的點陣列與是否閉合，供 _scRedrawSmoothedPath 重繪、_scCommitBrushStroke 決定標籤錨點
-function _scFinalizeStrokePoints(points, brushSize, uiScale) {
-    if (points.length < 3) return { points, closed: false };
-    const scale = uiScale || 1;
-    const first = points[0], last = points[points.length - 1];
-    const dist = Math.hypot(last.x - first.x, last.y - first.y);
-    const closeThreshold = Math.max(40 * scale, brushSize * 4);
-    // 太短的筆觸（點數太少）就算頭尾距離近，也可能只是隨手一點，不強制閉合
-    const closed = dist < closeThreshold && points.length > 8;
-    let pts = closed ? points.slice(0, -1) : points; // 閉合時丟掉重複的收尾點，改用環狀連接
-    pts = _scMovingAverage(pts, 4, closed);
-    const minSpacing = Math.max(12, brushSize * 1.5) * scale;
-    pts = _scDecimatePoints(pts, minSpacing);
-    const smoothed = _scChaikinSmooth(pts, 3, closed);
-    return { points: smoothed, closed };
-}
-
-// 用平滑化後的點陣列覆蓋 drawCanvas 上的手繪痕跡，讓最終線條圓滑（閉合時首尾相連）
+// 用點陣列畫線到 drawCanvas（節點模式的最終定稿、以及動畫預覽共用）
 function _scRedrawSmoothedPath(points, closed) {
     const ctx = SmartCanvas.drawCtx;
     ctx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
@@ -5845,6 +5823,98 @@ function _scRedrawSmoothedPath(points, closed) {
     if (closed) ctx.closePath();
     ctx.stroke();
     ctx.restore();
+}
+
+// 判斷游標是否靠近起始節點（用來提示「再點一下即可閉合」，至少要 3 個節點才允許閉合）
+function _scNearFirstNode(point) {
+    const pts = SmartCanvas._nodePoints;
+    if (pts.length < 3 || !point) return false;
+    const scale = SmartCanvas.uiScale || 1;
+    const threshold = Math.max(24 * scale, SmartCanvas.brushSize * 3);
+    return Math.hypot(point.x - pts[0].x, point.y - pts[0].y) < threshold;
+}
+
+// 節點模式的「流水」動畫迴圈：虛線位移持續遞減，視覺上像流水沿著曲線往前跑
+function _scStartNodeAnim() {
+    if (SmartCanvas._nodeAnimFrame) return;
+    SmartCanvas._dashOffset = 0;
+    const tick = () => {
+        if (SmartCanvas._nodePoints.length === 0) { SmartCanvas._nodeAnimFrame = null; return; }
+        SmartCanvas._dashOffset -= 1.2;
+        _scRenderNodePreview();
+        SmartCanvas._nodeAnimFrame = requestAnimationFrame(tick);
+    };
+    SmartCanvas._nodeAnimFrame = requestAnimationFrame(tick);
+}
+
+function _scStopNodeAnim() {
+    if (SmartCanvas._nodeAnimFrame) {
+        cancelAnimationFrame(SmartCanvas._nodeAnimFrame);
+        SmartCanvas._nodeAnimFrame = null;
+    }
+}
+
+// 畫節點模式的即時預覽：已放置節點的平滑曲線（流水虛線）＋ 橡皮筋線到游標 ＋ 節點標記
+// 靠近起始節點時，該節點會放大變白，提示使用者「再點一下就會閉合」
+function _scRenderNodePreview() {
+    const ctx = SmartCanvas.drawCtx;
+    if (!ctx) return;
+    ctx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+    const pts = SmartCanvas._nodePoints;
+    if (pts.length === 0) return;
+    const scale = SmartCanvas.uiScale || 1;
+    const hover = SmartCanvas._nodeHoverPoint;
+    const nearFirst = _scNearFirstNode(hover);
+
+    ctx.save();
+    ctx.strokeStyle = SmartCanvas.brushColor;
+    ctx.lineWidth = SmartCanvas.brushSize;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([10 * scale, 8 * scale]);
+    ctx.lineDashOffset = SmartCanvas._dashOffset;
+
+    if (pts.length >= 2) {
+        const curve = _scCatmullRomSpline(pts, false);
+        ctx.beginPath();
+        ctx.moveTo(curve[0].x, curve[0].y);
+        for (let i = 1; i < curve.length; i++) ctx.lineTo(curve[i].x, curve[i].y);
+        ctx.stroke();
+    }
+    if (hover && !nearFirst) {
+        ctx.beginPath();
+        ctx.moveTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+        ctx.lineTo(hover.x, hover.y);
+        ctx.stroke();
+    } else if (hover && nearFirst) {
+        // 即將閉合：橡皮筋線改吸附到起始節點，預告閉合後的最終形狀
+        ctx.beginPath();
+        ctx.moveTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+        ctx.lineTo(pts[0].x, pts[0].y);
+        ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    pts.forEach((p, i) => {
+        const highlight = i === 0 && nearFirst;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, (highlight ? 9 : 5) * scale, 0, Math.PI * 2);
+        ctx.fillStyle = highlight ? '#ffffff' : SmartCanvas.brushColor;
+        ctx.fill();
+        ctx.lineWidth = Math.max(1.5, 2 * scale);
+        ctx.strokeStyle = highlight ? SmartCanvas.brushColor : 'rgba(0,0,0,0.5)';
+        ctx.stroke();
+    });
+    ctx.restore();
+}
+
+// 取消目前正在放置的節點形狀（Esc、切換工具、清空等情境呼叫）
+function _scCancelNodeShape() {
+    _scStopNodeAnim();
+    SmartCanvas._nodePoints = [];
+    SmartCanvas._nodeHoverPoint = null;
+    if (SmartCanvas.drawCtx) SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+    _scRenderOverlays();
 }
 
 // 提交一次筆刷標註：同色已有 region 則合併筆觸；否則建立新 region 並自動彈出文字輸入框
@@ -5868,6 +5938,38 @@ function _scCommitBrushStroke(endX, endY, endClientX, endClientY) {
     });
 }
 
+// 收尾一個節點形狀：closed=true 為靠近起點閉合的圈，false 為 Enter/雙擊結束的開放線段
+function _scFinalizeNodeShape(closed, clientX, clientY) {
+    _scStopNodeAnim();
+    const points = SmartCanvas._nodePoints;
+    const curve = _scCatmullRomSpline(points, closed);
+    _scRedrawSmoothedPath(curve, closed);
+    const anchor = closed ? _scCentroid(points) : points[points.length - 1];
+    SmartCanvas._nodePoints = [];
+    SmartCanvas._nodeHoverPoint = null;
+    _scCommitBrushStroke(anchor.x, anchor.y, clientX, clientY);
+}
+
+// 標註筆點擊：第一下開始新形狀；之後每下新增節點；靠近起始節點且已有 ≥3 節點時改為閉合收尾
+function _scHandleNodeClick(e) {
+    const { x, y } = _scGetXY(e);
+    if (SmartCanvas._nodePoints.length === 0) {
+        _scSaveUndo();
+        SmartCanvas._nodePoints = [{ x, y }];
+        SmartCanvas._lastClientX = e.clientX;
+        SmartCanvas._lastClientY = e.clientY;
+        _scStartNodeAnim();
+        return;
+    }
+    if (_scNearFirstNode({ x, y })) {
+        _scFinalizeNodeShape(true, e.clientX, e.clientY);
+        return;
+    }
+    SmartCanvas._nodePoints.push({ x, y });
+    SmartCanvas._lastClientX = e.clientX;
+    SmartCanvas._lastClientY = e.clientY;
+}
+
 function _scBindEvents() {
     const dc = SmartCanvas.drawCanvas;
     // 解除舊的 listeners（簡單起見：clone & replace）
@@ -5876,37 +5978,34 @@ function _scBindEvents() {
     SmartCanvas.drawCanvas = fresh;
     SmartCanvas.drawCtx = fresh.getContext('2d');
 
-    // --- 標註筆 / 橡皮擦 繪製 ---
+    // --- 標註筆：點擊放節點；橡皮擦：拖曳擦除 ---
     fresh.addEventListener('mousedown', (e) => {
+        if (SmartCanvas.activeTool === 'brush') {
+            _scHandleNodeClick(e);
+            return;
+        }
         SmartCanvas.isDrawing = true;
         SmartCanvas._hasDragged = false;  // 重置拖曳旗標
         SmartCanvas._lastDrawX = null;
         SmartCanvas._lastDrawY = null;
         SmartCanvas._lastClientX = e.clientX;
         SmartCanvas._lastClientY = e.clientY;
-        SmartCanvas._strokePoints = [];
         _scSaveUndo();
         _scDraw(e);
     });
-    // 提取為函式供 mouseup / mouseleave 共用
+    fresh.addEventListener('dblclick', (e) => {
+        if (SmartCanvas.activeTool === 'brush' && SmartCanvas._nodePoints.length >= 2) {
+            _scFinalizeNodeShape(false, e.clientX, e.clientY);
+        }
+    });
+    // 提取為函式供 mouseup / mouseleave 共用（僅橡皮擦使用；標註筆走點擊節點流程）
     function _scFinishStroke() {
         if (!SmartCanvas.isDrawing) return;
         SmartCanvas.isDrawing = false;
-        const endX = SmartCanvas._lastDrawX, endY = SmartCanvas._lastDrawY;
-        const endClientX = SmartCanvas._lastClientX, endClientY = SmartCanvas._lastClientY;
         SmartCanvas._lastDrawX = null;
         SmartCanvas._lastDrawY = null;
         SmartCanvas._altResizeStartX = null;
-        if (SmartCanvas.activeTool === 'brush') {
-            if (SmartCanvas._hasDragged) {
-                const { points, closed } = _scFinalizeStrokePoints(SmartCanvas._strokePoints, SmartCanvas.brushSize, SmartCanvas.uiScale);
-                _scRedrawSmoothedPath(points, closed);
-                const anchor = closed ? _scCentroid(points) : { x: endX, y: endY };
-                _scCommitBrushStroke(anchor.x, anchor.y, endClientX, endClientY);
-            }
-            SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
-            _scRenderOverlays();
-        } else if (SmartCanvas.activeTool === 'eraser') {
+        if (SmartCanvas.activeTool === 'eraser') {
             if (SmartCanvas._hasDragged) {
                 // 若有 eraserTarget 則只擦該 region，否則擦全部
                 const targets = (SmartCanvas.eraserTarget !== null && SmartCanvas.eraserTarget < SmartCanvas.regions.length)
@@ -5943,6 +6042,12 @@ function _scBindEvents() {
         const { x, y } = _scGetXY(e);
         SmartCanvas._lastClientX = e.clientX;
         SmartCanvas._lastClientY = e.clientY;
+        if (SmartCanvas.activeTool === 'brush' && SmartCanvas._nodePoints.length > 0) {
+            // 節點模式：只需更新游標位置，動畫迴圈每幀自己讀取並重繪橡皮筋預覽
+            SmartCanvas._nodeHoverPoint = { x, y };
+            _scDrawCursorCircle(x, y);
+            return;
+        }
         // Alt + 拖曳：水平移動調整線寬（PS 同款體驗）
         // 改用 e.altKey（MouseEvent 即時狀態），防止 _altKey 卡住導致誤觸
         if (e.altKey && SmartCanvas.isDrawing) {
@@ -5967,17 +6072,17 @@ function _scBindEvents() {
     });
 }
 
+// 橡皮擦專用（標註筆已改為點擊節點模式，不再呼叫這裡）
 function _scDraw(e) {
     const { x, y } = _scGetXY(e);
     const ctx = SmartCanvas.drawCtx;
-    const isEraser = SmartCanvas.activeTool === 'eraser';
     ctx.globalCompositeOperation = 'source-over';
     ctx.lineWidth = SmartCanvas.brushSize;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    // 橡皮擦用半透明白色在 drawCtx 上預覽，mouseup 時再 destination-out 到 regions
-    ctx.strokeStyle = isEraser ? 'rgba(255,255,255,0.6)' : SmartCanvas.brushColor;
-    ctx.fillStyle   = isEraser ? 'rgba(255,255,255,0.6)' : SmartCanvas.brushColor;
+    // 用半透明白色在 drawCtx 上預覽，mouseup 時再 destination-out 到 regions
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillStyle   = 'rgba(255,255,255,0.6)';
 
     if (SmartCanvas._lastDrawX === null) {
         // 第一個點：單點補全，記錄直線起點
@@ -5988,8 +6093,8 @@ function _scDraw(e) {
         ctx.fill();
     } else if (e.shiftKey) {
         // Shift 直線模式：清除預覽，從起點畫橡皮筋直線到當前點
-        // 橡皮擦必須用完整不透明白色，否則 clearRect 後每次只有 0.6 alpha → destination-out 擦不乾淨
-        if (isEraser) { ctx.fillStyle = 'rgba(255,255,255,1)'; ctx.strokeStyle = 'rgba(255,255,255,1)'; }
+        // 必須用完整不透明白色，否則 clearRect 後每次只有 0.6 alpha → destination-out 擦不乾淨
+        ctx.fillStyle = 'rgba(255,255,255,1)'; ctx.strokeStyle = 'rgba(255,255,255,1)';
         ctx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
         ctx.beginPath();
         ctx.arc(SmartCanvas._strokeStartX, SmartCanvas._strokeStartY, SmartCanvas.brushSize / 2, 0, Math.PI * 2);
@@ -6007,18 +6112,6 @@ function _scDraw(e) {
     SmartCanvas._lastDrawX = x;
     SmartCanvas._lastDrawY = y;
     ctx.globalCompositeOperation = 'source-over';
-
-    // 記錄原始座標點，供收筆時平滑化/自動閉合使用（橡皮擦不需要）
-    if (!isEraser) {
-        if (SmartCanvas._strokePoints.length === 0) {
-            SmartCanvas._strokePoints.push({ x, y });
-        } else if (e.shiftKey) {
-            // 直線模式：只保留起點與當前點
-            SmartCanvas._strokePoints = [SmartCanvas._strokePoints[0], { x, y }];
-        } else {
-            SmartCanvas._strokePoints.push({ x, y });
-        }
-    }
 }
 
 function _scUpdatePendingIndicator() {
@@ -6260,6 +6353,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 關閉按鈕
     var scCloseBtn = document.getElementById('sc-close');
     if (scCloseBtn) scCloseBtn.addEventListener('click', () => {
+        _scCancelNodeShape();
         var scModal = document.getElementById('smart-canvas-modal');
         if (scModal) {
             scModal.classList.add('hidden');
@@ -6300,6 +6394,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 工具切換
     document.querySelectorAll('.sc-tool-btn').forEach(btn => {
         btn.addEventListener('click', () => {
+            _scCancelNodeShape(); // 切換工具前先放棄尚未收尾的節點形狀
             SmartCanvas.activeTool = btn.dataset.tool;
             document.querySelectorAll('.sc-tool-btn').forEach(b => b.classList.remove('sc-active'));
             btn.classList.add('sc-active');
@@ -6358,6 +6453,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 清空
     var scClearBtn = document.getElementById('sc-clear');
     if (scClearBtn) scClearBtn.addEventListener('click', () => {
+        _scCancelNodeShape();
         if (SmartCanvas.drawCtx) SmartCanvas.drawCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
         SmartCanvas.regions = [];
         SmartCanvas.undoStack = [];

@@ -1611,11 +1611,11 @@
 
     <!-- 浮動 Label 輸入框（Magic Wand 點擊後彈出於游標旁） -->
     <div id="sc-label-popup" class="fixed z-[60] hidden">
-        <div class="flex items-center gap-1.5 bg-[#1a1a1e] border border-white/20 rounded-xl shadow-2xl px-3 py-2 backdrop-blur">
+        <div id="sc-label-popup-card" class="flex items-center gap-1.5 bg-[#1a1a1e] border border-white/20 rounded-xl shadow-2xl px-3 py-2 backdrop-blur transition-colors">
             <input type="text" id="sc-label-input" maxlength="80"
                 class="bg-transparent text-[12px] text-white/90 placeholder-white/30 outline-none w-[180px]"
                 data-i18n="sc_label_ph" placeholder="描述替換內容...">
-            <button id="sc-label-confirm" class="text-[11px] px-2 py-0.5 bg-rose-500/30 border border-rose-500/50 text-rose-300 rounded-lg hover:bg-rose-500/50 transition-all font-semibold">✓</button>
+            <button id="sc-label-confirm" class="text-[11px] px-2 py-0.5 rounded-lg transition-all font-semibold text-white">✓</button>
             <button id="sc-label-cancel" class="text-[11px] text-white/30 hover:text-white/60 transition-all">✕</button>
         </div>
     </div>

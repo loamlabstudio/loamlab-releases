@@ -5528,6 +5528,13 @@ function _scShowLabelPopup(clientX, clientY, onConfirm) {
     const input = document.getElementById('sc-label-input');
     if (!popup || !input) return;
 
+    // 輸入框跟著目前正在編輯的區域顏色走，讓使用者一眼確認在填哪一個區域
+    const color = SmartCanvas.brushColor || '#ff6432';
+    const card = document.getElementById('sc-label-popup-card');
+    const confirmBtn = document.getElementById('sc-label-confirm');
+    if (card) { card.style.borderColor = color; card.style.boxShadow = `0 0 20px ${color}55, 0 20px 40px rgba(0,0,0,0.5)`; }
+    if (confirmBtn) { confirmBtn.style.background = `${color}40`; confirmBtn.style.border = `1px solid ${color}`; }
+
     input.value = '';
     popup.style.left = Math.min(clientX, window.innerWidth - 260) + 'px';
     popup.style.top  = Math.max(clientY - 60, 10) + 'px';
@@ -5726,6 +5733,32 @@ function _scDrawCursorCircle(x, y) {
     const cCtx = SmartCanvas.cursorCtx;
     if (!cCtx) return;
     cCtx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
+    const scale = SmartCanvas.uiScale || 1;
+
+    if (SmartCanvas.activeTool === 'rect') {
+        // 矩形是選取工具，重點是精準對位，線寬圈太細（尤其線寬設小時）幾乎看不到，
+        // 改畫固定大小的十字準星 + 中心點，跟線寬設定無關，永遠清楚可見
+        const len = 9 * scale, gap = 3 * scale;
+        cCtx.save();
+        cCtx.lineCap = 'round';
+        [['rgba(0,0,0,0.7)', 2.5], ['rgba(255,255,255,0.95)', 1.2]].forEach(([color, w]) => {
+            cCtx.strokeStyle = color;
+            cCtx.lineWidth = w;
+            cCtx.beginPath();
+            cCtx.moveTo(x - len - gap, y); cCtx.lineTo(x - gap, y);
+            cCtx.moveTo(x + gap, y); cCtx.lineTo(x + len + gap, y);
+            cCtx.moveTo(x, y - len - gap); cCtx.lineTo(x, y - gap);
+            cCtx.moveTo(x, y + gap); cCtx.lineTo(x, y + len + gap);
+            cCtx.stroke();
+        });
+        cCtx.beginPath();
+        cCtx.arc(x, y, 2 * scale, 0, Math.PI * 2);
+        cCtx.fillStyle = SmartCanvas.brushColor;
+        cCtx.fill();
+        cCtx.restore();
+        return;
+    }
+
     const r = Math.max(2, SmartCanvas.brushSize / 2);
     // 外圈黑色（確保在亮色背景可見）
     cCtx.beginPath();
@@ -5961,27 +5994,54 @@ function _scCommitBrushStroke(strokeCanvas, endX, endY, endClientX, endClientY) 
     });
 }
 
-// 閉合瞬間的「發亮」慶祝特效：線條快速放大＋發光再淡回原本粗細，跑在 drawCanvas 上，
-// 純視覺效果，不影響已經擷取好、送給 AI 的乾淨版本。drawPathFn(ctx) 只需要描路徑，
-// 不要自己 stroke——樣式與動畫由這裡統一控制，才能同時支援曲線與矩形兩種形狀
-function _scPlayCloseGlow(drawPathFn, onDone) {
+// 閉合瞬間的「發亮」慶祝特效：外圈發光脈衝＋一閃而過的白光＋從錨點擴散的漣漪，
+// 跑在 drawCanvas 上，純視覺效果，不影響已經擷取好、送給 AI 的乾淨版本。
+// drawPathFn(ctx) 只需要描路徑，不要自己 stroke——樣式與動畫由這裡統一控制，
+// 才能同時支援曲線與矩形兩種形狀。anchor 給漣漪用，可傳 null 不畫漣漪
+function _scPlayCloseGlow(drawPathFn, anchor, onDone) {
     const ctx = SmartCanvas.drawCtx;
-    const duration = 380;
+    const scale = SmartCanvas.uiScale || 1;
+    const duration = 480;
     const start = performance.now();
     function frame(now) {
         const t = Math.min(1, (now - start) / duration);
-        const intensity = Math.pow(Math.sin(t * Math.PI), 0.6); // 0 → 1 → 0，先衝高再快速衰減
+        const pulse = Math.pow(Math.sin(t * Math.PI), 0.6); // 0 → 1 → 0，先衝高再快速衰減
         ctx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
         ctx.save();
-        ctx.shadowColor = SmartCanvas.brushColor;
-        ctx.shadowBlur = 26 * intensity * (SmartCanvas.uiScale || 1);
-        ctx.strokeStyle = SmartCanvas.brushColor;
-        ctx.lineWidth = SmartCanvas.brushSize * (1 + intensity * 0.9);
-        ctx.globalAlpha = 0.55 + 0.45 * intensity;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
+
+        // 外圈：加大版發光脈衝（比原本更粗更亮，製造份量感）
+        ctx.shadowColor = SmartCanvas.brushColor;
+        ctx.shadowBlur = 45 * pulse * scale;
+        ctx.strokeStyle = SmartCanvas.brushColor;
+        ctx.lineWidth = SmartCanvas.brushSize * (1 + pulse * 1.8);
+        ctx.globalAlpha = 0.5 + 0.5 * pulse;
         drawPathFn(ctx);
         ctx.stroke();
+
+        // 白光一閃：只在最開頭快速衰減，疊在線條上製造「啵」一下的驚奇感
+        const flash = Math.max(0, 1 - t * 3.2);
+        if (flash > 0) {
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = flash;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = SmartCanvas.brushSize * 1.15;
+            drawPathFn(ctx);
+            ctx.stroke();
+        }
+
+        // 從錨點向外擴散的漣漪光環
+        if (anchor) {
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = Math.max(0, 1 - t) * 0.7;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = Math.max(1.5, 3 * scale);
+            ctx.beginPath();
+            ctx.arc(anchor.x, anchor.y, t * 75 * scale, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
         ctx.restore();
         if (t < 1) {
             requestAnimationFrame(frame);
@@ -6011,7 +6071,7 @@ function _scFinalizeNodeShape(clientX, clientY) {
         ctx.moveTo(curve[0].x, curve[0].y);
         for (let i = 1; i < curve.length; i++) ctx.lineTo(curve[i].x, curve[i].y);
         if (closed) ctx.closePath();
-    }, () => {
+    }, anchor, () => {
         _scCommitBrushStroke(strokeCanvas, anchor.x, anchor.y, clientX, clientY);
     });
 }
@@ -6073,7 +6133,7 @@ function _scHandleRectClick(e) {
     const strokeCanvas = _scExtractDrawnStroke();
     const anchor = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
     const clientX = e.clientX, clientY = e.clientY;
-    _scPlayCloseGlow((glowCtx) => _scTraceRoundedRect(glowCtx, rect), () => {
+    _scPlayCloseGlow((glowCtx) => _scTraceRoundedRect(glowCtx, rect), anchor, () => {
         _scCommitBrushStroke(strokeCanvas, anchor.x, anchor.y, clientX, clientY);
     });
 }

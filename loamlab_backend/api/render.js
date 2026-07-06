@@ -741,7 +741,7 @@ async function _handleRender(req, res) {
                 const p = part.trim();
                 if (p.includes(': ')) {
                     const spl = p.split(/: (.+)/);
-                    const color = spl[0].trim();
+                    const zoneTag = spl[0].trim();
                     let content = spl[1].trim();
                     
                     // 提取可能存在的圖片參考後綴（如 see image 3 as visual reference 等）
@@ -760,7 +760,7 @@ async function _handleRender(req, res) {
                     }
                     
                     const finalContent = (translatedContent + refSuffix).trim();
-                    changes.push(`Zone Color (HEX): ${color}\n  Target Object: ${finalContent}`);
+                    changes.push(`${zoneTag}\n  Target Object: ${finalContent}`);
                 }
             }
             if (changes.length === 0) {

@@ -50,7 +50,8 @@
 
 - `id`: (UUID) 系統自動生成的唯一流水號。
 - `email`: (Text) 綁定 Google 登入帳號的信箱，作為身份認證與點數結算核心。
-- `points`: (Integer) 使用者的點數餘額，預設為 `0`。扣到小於所需點數時即阻擋渲染。
+- `points`: (Integer) 訂閱方案的當月額度，預設為 `0`。每次訂閱扣款（含續訂）會直接**覆寫**成方案點數（use-it-or-lose-it，不結轉）。
+- `lifetime_points`: (Integer) 單次購買 (Top-up) 與推薦獎勵累加而成的**永久餘額**，不會被訂閱續訂覆寫或增加。扣點順序：`deduct_render_points`／退款 `clawbackPoints` 一律先扣 `points`，不足才扣 `lifetime_points`。`processTopup`（`loamlab_backend/lib/activate.js`）嚴格區分：訂閱只動 `points`，單次購買只動 `lifetime_points`，避免雙重入帳（2026-07-08 修復過一次真實漏洞，見 `SPRINT.md` 歷史記錄與 commit `436055f`）。
 - `license_key`: (Text) （預留擴充）如果您未來發放實體序號卡或團體金鑰，可填入此處。
 - `created_at`: (Timestamp) 帳號建立的日期時間。
 

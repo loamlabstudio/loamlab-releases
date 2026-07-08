@@ -327,9 +327,16 @@ module LoamLab
       dialog.add_action_callback("save_email") do |action_context, email|
         Sketchup.write_default("LoamLabAI", "user_email", email)
       end
-      
+
+      # 登入驗證通過後，Supabase 核發的 access_token（見 lib/verifyIdentity.js）存起來，
+      # 之後每次請求優先帶這個，後端就不用單靠 x-user-email 判斷身份
+      dialog.add_action_callback("save_session_token") do |action_context, access_token|
+        Sketchup.write_default("LoamLabAI", "access_token", access_token.to_s)
+      end
+
       dialog.add_action_callback("logout_user") do |action_context|
         Sketchup.write_default("LoamLabAI", "user_email", "")
+        Sketchup.write_default("LoamLabAI", "access_token", "")
       end
 
       dialog.add_action_callback("save_ui_lang") do |action_context, params|
@@ -850,7 +857,7 @@ module LoamLab
               }
             })
             req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
-            req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
+            req.headers = self.auth_headers(user_email)
             req.body = request_body
             captured_label = scene_label
             req.start do |_, response|
@@ -1056,6 +1063,22 @@ module LoamLab
       model = Sketchup.active_model
       return [] unless model
       model.pages.map { |page| page.name }
+    end
+
+    # ─── 身份驗證 Header ──────────────────────────────────────────────
+    # 舊版做法只送 x-user-email，後端單靠這個 header 判斷「這是誰」——知道信箱就能冒充。
+    # 登入成功後 Supabase 會核發簽名過的 access_token（見 save_session_token callback），
+    # 有存到就一併帶上 Authorization: Bearer，後端會優先信任這個、忽略 header 自報的信箱。
+    # 沒有 token（例如剛升級、尚未重新登入過）就只送 x-user-email，行為與升級前完全一致。
+    def self.stored_access_token
+      Sketchup.read_default("LoamLabAI", "access_token", "").to_s.strip
+    end
+
+    def self.auth_headers(email, version = ::LoamLab::VERSION)
+      headers = { 'Content-Type' => 'application/json', 'x-user-email' => email, 'x-plugin-version' => version }
+      token = self.stored_access_token
+      headers['Authorization'] = "Bearer #{token}" unless token.empty?
+      headers
     end
 
     # ─── 跨平台路徑工具 ──────────────────────────────────────────────
@@ -1287,6 +1310,8 @@ module LoamLab
         init_req = Net::HTTP::Get.new(init_uri)
         init_req['x-user-email']     = user_email
         init_req['x-plugin-version'] = version
+        token = self.stored_access_token
+        init_req['Authorization'] = "Bearer #{token}" unless token.empty?
         init_resp = http.request(init_req)
         init_data = JSON.parse(init_resp.body.force_encoding('UTF-8'))
       rescue => e
@@ -1638,7 +1663,7 @@ module LoamLab
           }
           request_body = JSON.dump({ tool: 2, parameters: params_hash })
           req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
-          req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
+          req.headers = self.auth_headers(user_email)
           req.body = request_body
           captured_scene = base_image_scene
           req.start do |_, response|
@@ -1679,7 +1704,7 @@ module LoamLab
           params_hash["reference_image"] = reference_image_base64 unless reference_image_base64.empty?
           request_body = JSON.dump({ tool: 2, parameters: params_hash })
           req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
-          req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
+          req.headers = self.auth_headers(user_email)
           req.body = request_body
           captured_scene = base_image_scene
           req.start do |_, response|
@@ -1711,7 +1736,7 @@ module LoamLab
             "advanced_settings" => advanced_settings
           })
           req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
-          req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
+          req.headers = self.auth_headers(user_email)
           req.body = request_body
           captured_scene = base_image_scene
           req.start do |_, response|
@@ -1750,7 +1775,7 @@ module LoamLab
             "advanced_settings" => advanced_settings
           })
           req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
-          req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => user_email, 'x-plugin-version' => ::LoamLab::VERSION }
+          req.headers = self.auth_headers(user_email)
           req.body = request_body
           captured_scene = base_image_scene
           req.start do |_, response|
@@ -1951,7 +1976,7 @@ module LoamLab
                     _s0_ts      = captured_ts.dup
                     @@pending_sref = _s0_sref  # Anti-Collage：供 returnStyleReference callback 使用
                     _s0_req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::POST)
-                    _s0_req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => captured_email, 'x-plugin-version' => captured_version }
+                    _s0_req.headers = self.auth_headers(captured_email, captured_version)
                     _s0_req.body = captured_body
                     @@requests << _s0_req
                     _s0_req.start do |req, response|
@@ -2076,7 +2101,7 @@ module LoamLab
       body_hash['parameters'] ||= {}
       body_hash['parameters']['style_ref_url'] = effective_url if effective_url
       req = Sketchup::Http::Request.new(item[:url], Sketchup::Http::POST)
-      req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => item[:email], 'x-plugin-version' => item[:version] }
+      req.headers = self.auth_headers(item[:email], item[:version])
       req.body = JSON.dump(body_hash)
       captured_scene   = item[:scene].dup
       captured_channel = item[:channel].dup
@@ -2129,7 +2154,7 @@ module LoamLab
       _df_channel = captured[:channel].dup
       _df_ts      = captured[:timestamp].to_s.dup
       _df_req = Sketchup::Http::Request.new(captured[:url], Sketchup::Http::POST)
-      _df_req.headers = { 'Content-Type' => 'application/json', 'x-user-email' => captured[:email], 'x-plugin-version' => captured[:version] }
+      _df_req.headers = self.auth_headers(captured[:email], captured[:version])
       _df_req.body = final_body
       
       @@requests << _df_req

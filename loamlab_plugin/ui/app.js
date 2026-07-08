@@ -104,6 +104,12 @@ async function fetchT1Nodes() {
         if (data.code === 0) {
             t1NodesData = data.nodes || [];
             promptEngineMode = data.prompt_engine_mode || 'nodes'; // 純後端控制，無本地 override
+            // 開啟插件時，用「上一次實際送出渲染」的完整配方覆蓋逐欄位累積的 loamlab_node_vals，
+            // 避免各節點各自殘留不同時期編輯過、但從未送出的舊值，混雜成一份四不像的配方。
+            try {
+                const _lastRecipe = localStorage.getItem('loamlab_last_recipe');
+                if (_lastRecipe) localStorage.setItem('loamlab_node_vals', _lastRecipe);
+            } catch (_) {}
             renderT1Nodes();
             _applyPromptMode();
         }
@@ -239,7 +245,7 @@ function renderT1Nodes() {
                 const adminOpts = optionsData.filter(o => o.field_id === node.id);
                 const personalOpts = (userChips[node.id] || []).map(c => ({
                     label: c.label, value: c.value, _isPersonal: true,
-                    strategy: (adminOpts[0] && adminOpts[0].strategy) || 'replace', is_default: false
+                    strategy: node.custom_strategy || (adminOpts[0] && adminOpts[0].strategy) || 'replace', is_default: false
                 }));
                 const nodeOpts = [...adminOpts, ...personalOpts];
                 // 依語言決定 chip 顯示文字（如果沒有多語系設定，則回退到中文或英文值）
@@ -309,13 +315,17 @@ function renderT1Nodes() {
                             if (i >= 0) { parts.splice(i, 1); btn.classList.remove('active'); }
                         } else {
                             if (strategy === 'replace') {
-                                // 取消選擇同節點內的其他 replace chips
-                                item.querySelectorAll('.node-chip.active[data-chip-strategy="replace"]').forEach(otherBtn => {
-                                    otherBtn.classList.remove('active');
-                                    const ov = otherBtn.dataset.chipValue;
-                                    const oi = parts.indexOf(ov);
-                                    if (oi >= 0) parts.splice(oi, 1);
+                                // 徹底清空所有值（含隱藏殘留的舊值/自訂值），但保留同節點內仍 active 的 append 策略值
+                                const keepVals = [];
+                                item.querySelectorAll('.node-chip.active').forEach(otherBtn => {
+                                    if (otherBtn.dataset.chipStrategy === 'append') {
+                                        keepVals.push(otherBtn.dataset.chipValue);
+                                    } else {
+                                        otherBtn.classList.remove('active');
+                                    }
                                 });
+                                parts.length = 0;
+                                parts.push(...keepVals);
                             }
                             parts.push(val);
                             btn.classList.add('active');
@@ -2109,15 +2119,17 @@ document.addEventListener("DOMContentLoaded", () => {
             // Collect dynamic node values for Tool 1
             let advanced_settings = {};
             if (currentActiveTool === 1) {
+                const _recipeSnapshot = {};
                 t1NodesData.forEach(node => {
                     const input = document.getElementById(`t1-node-${node.id}`);
                     if (input) {
                         const userVal = input.value;
+                        _recipeSnapshot[node.id] = userVal || '';
                         const silentOpts = optionsData.filter(o => o.field_id === node.id && o.is_silent);
-                        
+
                         const forcedSilentVals = silentOpts.filter(o => o.strategy === 'append').map(o => o.value || o.label);
                         const fallbackSilentVals = silentOpts.filter(o => !o.strategy || o.strategy === 'replace').map(o => o.value || o.label);
-                        
+
                         let finalVals = [];
                         if (userVal) {
                             finalVals.push(...userVal.split(',').map(s => s.trim()).filter(Boolean));
@@ -2125,10 +2137,12 @@ document.addEventListener("DOMContentLoaded", () => {
                             finalVals.push(...fallbackSilentVals); // 用戶未選時，使用單選(替換)型靜默參數作為預設
                         }
                         finalVals.push(...forcedSilentVals); // 追加型靜默參數強制帶入
-                        
+
                         advanced_settings[node.id] = finalVals.filter(Boolean).join('"+"');
                     }
                 });
+                // 記錄這次實際送出渲染的完整配方，供下次開啟插件時整份還原（避免逐欄位累積殘留）
+                try { localStorage.setItem('loamlab_last_recipe', JSON.stringify(_recipeSnapshot)); } catch (_) {}
                 userSurfaceNodes.filter(n => n.name && n.value && n.value.trim()).forEach(n => {
                     advanced_settings['_usr_' + n.name] = n.value;
                 });
@@ -3202,10 +3216,13 @@ async function generateBilingualPostText() {
             enVals.push(enLabel);
         }
         const zhTitle = getI18nStr(node.labels || node.title || node.name, node.id);
-        const enTitle = getI18nEnStr(node.labels || node.title || node.name, node.id);
+        const rawEnTitle = getI18nEnStr(node.labels || node.title || node.name, node.id);
+        const enTitle = rawEnTitle ? rawEnTitle.toUpperCase() : '';
+        
+        const formattedEnVals = enVals.map(val => val ? val.charAt(0).toUpperCase() + val.slice(1) : '').join(' + ');
         
         zhLines.push(`${bulletConfig}${zhTitle}：${zhVals.join(' + ')}`);
-        enLines.push(`${bulletConfig}${enTitle}: ${enVals.join(' + ')}`);
+        enLines.push(`${bulletConfig}${enTitle}: ${formattedEnVals}`);
     }
 
     if (!zhLines.length) return { fullText: '' };
@@ -4605,6 +4622,11 @@ function startOAuthFlow() {
                 window.loamlabUserEmail = data.email;
                 if (window.sketchup) {
                     sketchup.save_email(data.email);
+                    // Supabase 核發的 access_token：讓後端能驗證「這真的是這個信箱的人」，
+                    // 不是單靠 x-user-email header 自報（可被冒充）
+                    if (data.session && data.session.access_token) {
+                        sketchup.save_session_token(data.session.access_token);
+                    }
                 }
                 window.fetchUserPoints(data.email);
                 syncPresetsFromServer();

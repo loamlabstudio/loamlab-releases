@@ -31,3 +31,24 @@
   - 執行結果：dry-run 確認 405 位用戶中 35 人異常，`--apply` 已於正式 Supabase 執行修正，合計下修 11,953 點，修正後複查異常數為 0。
 
 status: DONE
+
+## RELEASE_GATE
+release_type: hotfix
+verified_diff:
+  - loamlab_backend/lib/net.js
+  - loamlab_backend/lib/safeCompare.js
+  - loamlab_backend/lib/verifyIdentity.js
+  - loamlab_backend/lib/rateLimit.js
+  - loamlab_backend/api/render.js
+  - loamlab_backend/api/user.js
+  - loamlab_backend/api/stats.js
+  - loamlab_backend/api/materials.js
+  - loamlab_backend/api/inpaint.js
+  - loamlab_backend/api/auth/otp.js
+  - loamlab_backend/api/auth/poll.js
+  - loamlab_backend/public/admin.html
+  - loamlab_backend/supabase_setup.sql
+  - loamlab_plugin/main.rb
+  - loamlab_plugin/ui/app.js
+sql_migration: true
+

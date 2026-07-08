@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { PRICING_CONFIG, INITIAL_POINTS } from '../config.js';
 import { isValidAdminKey } from '../lib/safeCompare.js';
 import { getClientIp } from '../lib/net.js';
+import { resolveUserEmail } from '../lib/verifyIdentity.js';
 
 export const maxDuration = 300; // Allow Vercel to run up to 5 minutes to poll AtlasCloud
 
@@ -202,7 +203,7 @@ async function _handleRender(req, res) {
         }
 
         if (action === 'init_360_upload') {
-            const userEmail = (req.headers['x-user-email'] || '').trim();
+            const userEmail = ((await resolveUserEmail(req)).email || '').trim();
             if (!userEmail) return res.status(200).json({ code: -1, msg: '未登入' });
             // Parse scene names (URL-encoded, comma-separated)
             const sceneNamesHeader = (req.headers['x-scene-names'] || '').trim();
@@ -269,7 +270,7 @@ async function _handleRender(req, res) {
 
         // All-in-One HTML 單文件上傳：扣款 + 返回 1 個簽名 URL
         if (action === 'init_360_single_upload') {
-            const userEmail = (req.headers['x-user-email'] || '').trim();
+            const userEmail = ((await resolveUserEmail(req)).email || '').trim();
             if (!userEmail) return res.status(200).json({ code: -1, msg: '未登入' });
             const COST_360 = 5;
             const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
@@ -359,8 +360,9 @@ async function _handleRender(req, res) {
         return res.status(500).json({ code: -1, msg: sanitizeError(`伺服器設定不完整：Vercel 說他找不到這幾把鑰匙 ${missing.join(', ')}。請確認已 Redeploy 過。`) });
     }
 
-    // 從 Header 取得 SketchUp 用戶信箱與插件版本
-    const userEmail = req.headers['x-user-email'];
+    // 身份解析：優先驗證 Authorization Bearer token（登入時 Supabase 簽發，無法偽造）；
+    // 舊版插件沒有帶 token 時退回 X-User-Email + IP pinning（行為與升級前相同）
+    const { email: userEmail, verified: emailVerified } = await resolveUserEmail(req);
     if (!userEmail) {
         return res.status(401).json({ code: -1, msg: '請求被拒絕：未提供使用者信箱 (X-User-Email)' });
     }
@@ -370,10 +372,10 @@ async function _handleRender(req, res) {
     const supabaseKeyToUse = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_KEY;
     const supabase = createClient(SUPABASE_URL, supabaseKeyToUse);
 
-    // IP Pinning 驗證：防止 API 偽造 (Spoofing)
+    // IP Pinning 驗證：防止 API 偽造 (Spoofing)——僅在身份「未經 token 驗證」時才需要這道防線
     // fail-open：DB 不可達時不攔截請求（避免 DB 網路抖動導致所有用戶無法渲染）
     const clientIp = getClientIp(req);
-    if (clientIp !== 'unknown') {
+    if (!emailVerified && clientIp !== 'unknown') {
         try {
             const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
             // 僅當 last_login_ip 已記錄且與當前 IP 不符時拒絕（null 表示舊版用戶未記錄，不擋）

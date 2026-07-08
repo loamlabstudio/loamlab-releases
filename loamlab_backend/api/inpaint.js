@@ -4,6 +4,7 @@
 // Supports optional reference_image_base64 for reference-guided replacement.
 
 import { createClient } from '@supabase/supabase-js';
+import { resolveUserEmail } from '../lib/verifyIdentity.js';
 
 // Upload base64 image data to freeimage.host (fallback: ImgBB)
 async function uploadBase64(base64Data, imgbbKey) {
@@ -51,7 +52,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ code: -1, msg: `Server misconfigured: missing ${missing.join(', ')}` });
     }
 
-    const userEmail = req.headers['x-user-email'];
+    const { email: userEmail } = await resolveUserEmail(req);
     if (!userEmail) return res.status(401).json({ code: -1, msg: 'Missing X-User-Email header' });
 
     const { image_url, image_base64, mask_base64, prompt = '', reference_image_base64 = null, inpaints = null } = req.body || {};

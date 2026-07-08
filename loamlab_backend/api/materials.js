@@ -5,6 +5,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { getClientIp } from '../lib/net.js';
+import { resolveUserEmail } from '../lib/verifyIdentity.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -19,12 +20,12 @@ export default async function handler(req, res) {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const userEmail = req.headers['x-user-email'] || req.body?.email;
+    const { email: userEmail, verified: emailVerified } = await resolveUserEmail(req);
     if (!userEmail) return res.status(401).json({ code: -1, msg: 'Missing email' });
 
-    // IP Pinning 驗證
+    // IP Pinning 驗證（已用 token 驗證過身份的話，IP pinning 已無必要）
     const clientIp = getClientIp(req);
-    if (clientIp !== 'unknown') {
+    if (!emailVerified && clientIp !== 'unknown') {
         const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
         if (!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp) {
             return res.status(401).json({ code: -1, msg: '登入憑證已過期或網路變更，請重新登入' });

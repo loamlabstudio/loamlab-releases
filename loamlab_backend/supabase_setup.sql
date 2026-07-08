@@ -377,3 +377,15 @@ ALTER TABLE public.webhook_errors ADD COLUMN IF NOT EXISTS status TEXT DEFAULT '
 -- 不再呼叫不存在的 Dodo /pause 端點）；該舊欄位保留但不再寫入，避免非必要的破壞性 migration。
 -- ==============================================================================
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS subscription_period_end TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+
+-- ==============================================================================
+-- Phase 32: 輕量 Rate Limiting（供 lib/rateLimit.js 使用）
+-- Serverless function 每次呼叫都是全新 process，記憶體變數擋不住暴力請求，
+-- 改用這張表存滑動視窗計數。目前只接在 auth/otp.js 的 send/verify 動作，
+-- 防止 email 轟炸與 OTP 驗證碼暴力猜測。
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.rate_limits (
+    bucket_key TEXT PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 0,
+    window_start TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);

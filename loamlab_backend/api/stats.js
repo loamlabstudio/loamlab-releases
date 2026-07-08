@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { reconcilePaymentsForEmail } from '../lib/activate.js';
 import { isValidAdminKey } from '../lib/safeCompare.js';
+import { resolveUserEmail } from '../lib/verifyIdentity.js';
 
 // ── 洞見郵件共用工具 ──────────────────────────────────────────────────────────
 function getLangKey(locale) {
@@ -363,7 +364,7 @@ export default async function handler(req, res) {
 
     // --- 用戶預設同步（需要 X-User-Email，不需要 ADMIN_KEY）---
     if (action === 'get_presets' && req.method === 'GET') {
-        const ue = req.headers['x-user-email'];
+        const ue = (await resolveUserEmail(req)).email;
         if (!ue) return res.status(401).json({ code: -1, msg: 'Unauthorized' });
         const { data, error } = await supabase.from('user_presets')
             .select('name, preset_data, created_at')
@@ -375,7 +376,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'save_presets' && req.method === 'POST') {
-        const ue = req.headers['x-user-email'];
+        const ue = (await resolveUserEmail(req)).email;
         if (!ue) return res.status(401).json({ code: -1, msg: 'Unauthorized' });
         const { presets } = req.body || {};
         if (!Array.isArray(presets)) return res.status(400).json({ code: -1, msg: 'presets must be array' });

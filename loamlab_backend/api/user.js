@@ -3,6 +3,7 @@ import { DODO_PRODUCTS, INITIAL_POINTS } from '../config.js';
 import { processTopup, makeSupabase, reconcilePaymentsForEmail } from '../lib/activate.js';
 import { isValidAdminKey } from '../lib/safeCompare.js';
 import { getClientIp } from '../lib/net.js';
+import { resolveUserEmail } from '../lib/verifyIdentity.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -364,8 +365,10 @@ export default async function handler(req, res) {
     const adminKey = req.headers['x-admin-key'] || req.body?.admin_key;
     const isAdmin = isValidAdminKey(adminKey);
 
-    // 先行擷取 email
-    let email = req.query.email || req.headers['x-user-email'] || req.body?.email;
+    // 先行擷取 email：優先信任 Authorization Bearer token 解出的信箱（無法偽造）；
+    // 舊版插件沒有帶 token 時，退回原本的 query/header/body 判斷順序
+    const { email: tokenEmail, verified: emailVerified } = await resolveUserEmail(req);
+    let email = tokenEmail || req.query.email || req.headers['x-user-email'] || req.body?.email;
     if (email) email = email.toLowerCase().trim();
 
     // KOL dashboard (email-only, no IP auth — KOL checks own stats)
@@ -432,12 +435,12 @@ export default async function handler(req, res) {
         });
     }
 
-    // 若非管理員，必須驗證身分與 IP 指紋
+    // 若非管理員，必須驗證身分與 IP 指紋（已用 token 驗證過身份的話，IP pinning 已無必要）
     if (!isAdmin) {
         if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });
 
         const clientIp = getClientIp(req);
-        if (clientIp !== 'unknown') {
+        if (!emailVerified && clientIp !== 'unknown') {
             const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', email).maybeSingle();
             if (userRow?.last_login_ip && userRow.last_login_ip !== clientIp) {
                 return res.status(401).json({ code: -1, msg: '登入已過期或網路變更，請重新登入' });

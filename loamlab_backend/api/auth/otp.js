@@ -5,6 +5,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const { checkRateLimit } = require('../../lib/rateLimit.js');
 
 // Disable body parser so the hook action can verify Supabase's HMAC signature
 module.exports.config = { api: { bodyParser: false } };
@@ -187,6 +188,12 @@ module.exports = async function handler(req, res) {
         const { email, lang } = body;
         if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });
 
+        // 同一信箱 10 分鐘內最多發 5 次，防止被拿來當免費發信轟炸工具
+        const sendLimit = await checkRateLimit(`otp_send:${email.toLowerCase()}`, { maxCount: 5, windowSeconds: 600 });
+        if (!sendLimit.allowed) {
+            return res.status(429).json({ code: -1, msg: `請求過於頻繁，請 ${sendLimit.retryAfterSeconds} 秒後再試` });
+        }
+
         try { await admin.from('otp_lang').upsert({ email, lang: lang || 'en-US' }); } catch (_) {}
 
         const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
@@ -197,6 +204,12 @@ module.exports = async function handler(req, res) {
     if (action === 'verify') {
         const { email, token } = body;
         if (!email || !token) return res.status(400).json({ code: -1, msg: 'Missing email or token' });
+
+        // 同一信箱 10 分鐘內最多試 10 次，防止暴力猜 6 位數驗證碼
+        const verifyLimit = await checkRateLimit(`otp_verify:${email.toLowerCase()}`, { maxCount: 10, windowSeconds: 600 });
+        if (!verifyLimit.allowed) {
+            return res.status(429).json({ code: -1, msg: `嘗試次數過多，請 ${verifyLimit.retryAfterSeconds} 秒後再試` });
+        }
 
         const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
         if (error) return res.status(400).json({ code: -1, msg: 'Invalid or expired code' });

@@ -1084,21 +1084,27 @@ async function users(supabase, query = {}) {
     if (toDate)      userQ = userQ.lte('created_at', toDate);
     if (emailFilter) userQ = userQ.ilike('email', `%${emailFilter}%`);
 
-    const [{ data: userRows }, { data: recentTx }] = await Promise.all([
+    const [{ data: userRows }, { data: recentTx }, { data: allTopups }] = await Promise.all([
         userQ,
         noTestRef(supabase.from('transactions')
             .select('user_email, created_at')
             .gte('created_at', d30)
             .in('transaction_type', ['RENDER_1K', 'RENDER_2K', 'RENDER_4K', 'RENDER_360'])),
+        noTestRef(supabase.from('transactions')
+            .select('user_email, amount')
+            .in('transaction_type', ['TOPUP_SINGLE', 'TOPUP_SUBSCRIPTION'])),
     ]);
 
     const active7dSet  = new Set((recentTx || []).filter(t => t.created_at >= d7).map(t => t.user_email));
     const active30dSet = new Set((recentTx || []).map(t => t.user_email));
 
+    const purchaseTotals = {};
+    (allTopups || []).forEach(t => { purchaseTotals[t.user_email] = (purchaseTotals[t.user_email] || 0) + (t.amount || 0); });
+
     // JS 二次過濾（防漏）
     const tagged = (userRows || [])
         .filter(u => !isTest(u.email))
-        .map(u => ({ ...u, tier: getTier(u, active7dSet, active30dSet) }));
+        .map(u => ({ ...u, tier: getTier(u, active7dSet, active30dSet, purchaseTotals[u.email] || 0) }));
 
     return { users: tagged, total: tagged.length };
 }
@@ -1249,7 +1255,7 @@ async function insights(supabase) {
             .select('user_email')
             .eq('type', 'paywall_trigger')),
         noTestRef(supabase.from('transactions')
-            .select('user_email')
+            .select('user_email, amount')
             .in('transaction_type', ['TOPUP_SINGLE','TOPUP_SUBSCRIPTION'])),
         noTestRef(supabase.from('render_history')
             .select('user_email, tool_id, user_rating')
@@ -1265,6 +1271,8 @@ async function insights(supabase) {
     const renders     = (allRenders  || []).filter(r => !isTest(r.user_email));
     const prev        = (prevRenders || []).filter(r => !isTest(r.user_email));
     const paidSet     = new Set((topups     || []).map(t => t.user_email));
+    const purchaseTotals = {};
+    (topups || []).forEach(t => { purchaseTotals[t.user_email] = (purchaseTotals[t.user_email] || 0) + (t.amount || 0); });
     const hist        = (renderHist  || []).filter(r => !isTest(r.user_email));
     const refunds     = (allRefunds  || []).filter(r => !isTest(r.user_email));
 
@@ -1349,7 +1357,8 @@ async function insights(supabase) {
     });
 
     // 5. 高價值未訂閱（conversion / priority 3）
-    const highValue = users.filter(u => (u.lifetime_points || 0) > 100 && !u.subscription_plan);
+    // 用歷史累計購買點數（非會遞減的 lifetime_points 餘額）判斷是否為重度付費用戶
+    const highValue = users.filter(u => (purchaseTotals[u.email] || 0) > 100 && !u.subscription_plan);
     if (highValue.length) result.push({
         type: 'high_value_no_sub', category: 'conversion', priority: 3, severity: 'opportunity',
         count: highValue.length,
@@ -1364,7 +1373,7 @@ async function insights(supabase) {
 
     // 6. KOL 候選人（conversion / priority 3）
     const goodRatingUsers = new Set(hist.filter(r => r.user_rating != null && r.user_rating >= 4).map(r => r.user_email));
-    const kolList = users.filter(u => (u.lifetime_points || 0) > 80 && !u.subscription_plan && goodRatingUsers.has(u.email));
+    const kolList = users.filter(u => (purchaseTotals[u.email] || 0) > 80 && !u.subscription_plan && goodRatingUsers.has(u.email));
     if (kolList.length) result.push({
         type: 'kol_candidate', category: 'conversion', priority: 3, severity: 'opportunity',
         count: kolList.length,
@@ -1494,8 +1503,10 @@ function topN(obj, n) {
         .reduce((acc, [k, v]) => { acc[k] = v; return acc; }, {});
 }
 
-function getTier(user, active7dSet, active30dSet) {
-    if ((user.lifetime_points || 0) > 500) return 'whale';
+function getTier(user, active7dSet, active30dSet, totalPurchased = 0) {
+    // lifetime_points 是「尚未花完的永久餘額」，會隨消費遞減，不能拿來判斷歷史消費量；
+    // 改用 transactions 表的歷史累計購買點數（totalPurchased）判斷高價值用戶。
+    if (totalPurchased > 500) return 'whale';
     if (user.subscription_plan) return 'subscriber';
     if (active7dSet.has(user.email)) return 'active';
     if (new Date(user.created_at) > new Date(daysAgo(7))) return 'new';

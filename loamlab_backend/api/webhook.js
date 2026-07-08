@@ -287,13 +287,21 @@ async function clawbackPoints(paymentId, eventType) {
             console.warn(`[🚨${eventType}] 找不到對應交易紀錄，無法扣點: ${fullOrderId}`);
             return;
         }
-        const { data: user } = await supabase.from('users').select('points').eq('email', tx.user_email).maybeSingle();
+        const { data: user } = await supabase.from('users').select('points, lifetime_points').eq('email', tx.user_email).maybeSingle();
         if (!user) return;
 
+        // 比照 deduct_render_points（SQL）的雙層扣款：先扣 points（月額度），不足再扣 lifetime_points（永久餘額），
+        // 避免退款/爭議用戶靠 lifetime_points 白嫖服務。
         const pointsToDeduct = tx.amount || 0;
-        const newPoints = Math.max(0, (user.points || 0) - pointsToDeduct);
+        const currentPoints = user.points || 0;
+        const currentLifetime = user.lifetime_points || 0;
+        const newPoints = Math.max(0, currentPoints - pointsToDeduct);
+        const newLifetime = currentPoints >= pointsToDeduct
+            ? currentLifetime
+            : Math.max(0, currentLifetime - (pointsToDeduct - currentPoints));
         await supabase.from('users').update({
             points: newPoints,
+            lifetime_points: newLifetime,
             subscription_plan: null,
             dodo_subscription_id: null,
         }).eq('email', tx.user_email);

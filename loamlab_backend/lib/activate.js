@@ -110,18 +110,20 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
         }
     }
 
+    // points = 訂閱月額度（每月覆寫），lifetime_points = 單次購買的永久餘額（不隨訂閱續訂消失）。
+    // 訂閱只覆寫 points；單次購買只累加 lifetime_points——兩者互不重疊，避免雙重入帳。
     const updatePayload = {
-        points: isSubscription ? pointsToAdd : ((user?.points || 0) + pointsToAdd),
-        lifetime_points: (user?.lifetime_points || 0) + pointsToAdd + bonusB,
+        points: isSubscription ? pointsToAdd : (user?.points || 0),
+        lifetime_points: (user?.lifetime_points || 0) + (isSubscription ? 0 : pointsToAdd) + bonusB,
         is_beta_tester: true,
         last_topup_at: new Date().toISOString(),
     };
     if (planName) updatePayload.subscription_plan = planName;
 
     if (!isSubscription) {
-        const originalPoints = user?.points || 0;
-        if (updatePayload.points <= originalPoints) {
-            const err = new Error(`PointCalculationError: TOPUP_SINGLE expected points increase but ${originalPoints} → ${updatePayload.points}`);
+        const originalLifetime = user?.lifetime_points || 0;
+        if (updatePayload.lifetime_points <= originalLifetime) {
+            const err = new Error(`PointCalculationError: TOPUP_SINGLE expected lifetime_points increase but ${originalLifetime} → ${updatePayload.lifetime_points}`);
             err.code = 'POINT_CALC_ERROR';
             throw err;
         }

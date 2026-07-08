@@ -77,7 +77,9 @@ module.exports = async function handler(req, res) {
         }
 
         // IP Pinning: 紀錄登入成功當下的 IP
-        const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+        // 取最後一段：Vercel 邊緣網路把真實連線 IP 附加在整串最後面，前面的段落是客戶端自己可偽造塞入的
+        const xffParts = (req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
+        const clientIp = xffParts.length ? xffParts[xffParts.length - 1] : (req.socket?.remoteAddress || 'unknown');
         if (clientIp && clientIp !== 'unknown') {
             const adminClient = process.env.SUPABASE_SERVICE_ROLE_KEY ? createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY) : supabase;
             await adminClient.from('users').update({ last_login_ip: clientIp }).eq('email', data.email);

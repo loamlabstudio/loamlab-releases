@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { DODO_PRODUCTS, INITIAL_POINTS } from '../config.js';
 import { processTopup, makeSupabase, reconcilePaymentsForEmail } from '../lib/activate.js';
+import { isValidAdminKey } from '../lib/safeCompare.js';
+import { getClientIp } from '../lib/net.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -360,7 +362,7 @@ export default async function handler(req, res) {
 
     // 管理員請求豁免 IP 與 Email 驗證
     const adminKey = req.headers['x-admin-key'] || req.body?.admin_key;
-    const isAdmin = process.env.ADMIN_KEY && adminKey === process.env.ADMIN_KEY;
+    const isAdmin = isValidAdminKey(adminKey);
 
     // 先行擷取 email
     let email = req.query.email || req.headers['x-user-email'] || req.body?.email;
@@ -434,7 +436,7 @@ export default async function handler(req, res) {
     if (!isAdmin) {
         if (!email) return res.status(400).json({ code: -1, msg: 'Missing email' });
 
-        const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+        const clientIp = getClientIp(req);
         if (clientIp !== 'unknown') {
             const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', email).maybeSingle();
             if (userRow?.last_login_ip && userRow.last_login_ip !== clientIp) {
@@ -689,7 +691,7 @@ export default async function handler(req, res) {
     // --- POST: Admin reward approve/reject ---
     if (req.method === 'POST' && req.body?.action === 'approve_reward') {
         const adminKey = req.headers['x-admin-key'] || req.body?.admin_key;
-        if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
+        if (!isValidAdminKey(adminKey)) {
             return res.status(401).json({ code: -1, msg: 'Unauthorized' });
         }
         const { request_id, reviewer_note } = req.body;
@@ -711,7 +713,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST' && req.body?.action === 'reject_reward') {
         const adminKey = req.headers['x-admin-key'] || req.body?.admin_key;
-        if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
+        if (!isValidAdminKey(adminKey)) {
             return res.status(401).json({ code: -1, msg: 'Unauthorized' });
         }
         const { request_id, reviewer_note } = req.body;
@@ -831,7 +833,7 @@ export default async function handler(req, res) {
 
     // ── Admin: 補發所有 Dodo 訂閱用戶（一次性修復）────────────────────────────
     if (req.method === 'GET' && req.query.action === 'sync_dodo_subscriptions') {
-        if (req.query.key !== process.env.ADMIN_KEY) return res.status(401).json({ error: 'Unauthorized' });
+        if (!isValidAdminKey(req.query.key)) return res.status(401).json({ error: 'Unauthorized' });
 
         const DODO_API_KEY = process.env.DODO_API_KEY;
         if (!DODO_API_KEY) return res.status(500).json({ error: 'DODO_API_KEY not set' });

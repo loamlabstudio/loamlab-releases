@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { PRICING_CONFIG, INITIAL_POINTS } from '../config.js';
+import { isValidAdminKey } from '../lib/safeCompare.js';
+import { getClientIp } from '../lib/net.js';
 
 export const maxDuration = 300; // Allow Vercel to run up to 5 minutes to poll AtlasCloud
 
@@ -312,7 +314,7 @@ async function _handleRender(req, res) {
         }
 
         if (action === 'cleanup_360') {
-            if (qs.get('key') !== process.env.ADMIN_KEY) {
+            if (!isValidAdminKey(qs.get('key'))) {
                 return res.status(401).json({ code: -1, msg: 'Unauthorized' });
             }
             const supa = createClient(
@@ -370,7 +372,7 @@ async function _handleRender(req, res) {
 
     // IP Pinning 驗證：防止 API 偽造 (Spoofing)
     // fail-open：DB 不可達時不攔截請求（避免 DB 網路抖動導致所有用戶無法渲染）
-    const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+    const clientIp = getClientIp(req);
     if (clientIp !== 'unknown') {
         try {
             const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();

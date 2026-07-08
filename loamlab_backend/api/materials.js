@@ -4,6 +4,7 @@
 // DELETE /api/materials?id=xxx  — delete a material by id
 
 import { createClient } from '@supabase/supabase-js';
+import { getClientIp } from '../lib/net.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -22,7 +23,7 @@ export default async function handler(req, res) {
     if (!userEmail) return res.status(401).json({ code: -1, msg: 'Missing email' });
 
     // IP Pinning 驗證
-    const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+    const clientIp = getClientIp(req);
     if (clientIp !== 'unknown') {
         const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
         if (!userRow || !userRow.last_login_ip || userRow.last_login_ip !== clientIp) {

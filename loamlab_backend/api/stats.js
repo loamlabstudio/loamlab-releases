@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { reconcilePaymentsForEmail } from '../lib/activate.js';
+import { isValidAdminKey } from '../lib/safeCompare.js';
 
 // ── 洞見郵件共用工具 ──────────────────────────────────────────────────────────
 function getLangKey(locale) {
@@ -487,7 +488,7 @@ export default async function handler(req, res) {
 
     // --- Admin 端點（需要 ADMIN_KEY）---
     const adminKeyHeader = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (!adminKeyHeader || adminKeyHeader !== process.env.ADMIN_KEY) {
+    if (!isValidAdminKey(adminKeyHeader)) {
         return res.status(401).json({ code: -1, msg: 'Unauthorized' });
     }
 
@@ -735,7 +736,7 @@ export default async function handler(req, res) {
     // ── 每日自動洞見發信（Vercel Cron 或管理員手動觸發）────────────────────────
     if (action === 'cron_insights') {
         const isCron = req.headers['x-vercel-cron'] === '1';
-        const isAdmin = (req.headers['authorization'] || '').replace('Bearer ', '') === process.env.ADMIN_KEY;
+        const isAdmin = isValidAdminKey((req.headers['authorization'] || '').replace('Bearer ', ''));
         if (!isCron && !isAdmin) return res.status(401).json({ code: -1, msg: 'Unauthorized' });
         if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
             return res.status(503).json({ code: -1, msg: 'Gmail not configured' });

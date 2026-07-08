@@ -1787,6 +1787,11 @@ function renderT1Nodes() {
           <option value="text" ${node.type === 'text' ? 'selected' : ''}>Text</option>
           <option value="slider" ${node.type === 'slider' ? 'selected' : ''}>Slider</option>
         </select>
+        <select onchange="updateNode(${idx}, 'custom_strategy', this.value)" title="用戶自訂晶片選擇策略" class="bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-gray-400 outline-none">
+          <option value="" ${!node.custom_strategy ? 'selected' : ''}>自訂：跟隨預設</option>
+          <option value="replace" ${node.custom_strategy === 'replace' ? 'selected' : ''}>自訂單選 (replace)</option>
+          <option value="append" ${node.custom_strategy === 'append' ? 'selected' : ''}>自訂多選 (append)</option>
+        </select>
         <button onclick="removeT1Node(${idx})" class="text-gray-600 hover:text-red-400 transition-colors ml-1 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
         </button>
@@ -3077,11 +3082,11 @@ function filterUsers(tier, btn) {
   document.getElementById('user-table').innerHTML = rows.length
     ? rows.map(u=>`
       <tr class="border-b border-white/[0.04] hover:bg-white/[0.015] transition-colors">
-        <td class="py-2.5 text-gray-300 max-w-[200px] truncate font-mono">${u.email}</td>
-        <td class="py-2.5"><span class="badge badge-${u.tier}">${u.tier}</span></td>
+        <td class="py-2.5 text-gray-300 max-w-[200px] truncate font-mono">${esc(u.email)}</td>
+        <td class="py-2.5"><span class="badge badge-${u.tier}">${esc(u.tier)}</span></td>
         <td class="py-2.5 text-right text-gray-500">${fmt(u.points)}</td>
         <td class="py-2.5 text-right text-gray-500">${fmt(u.lifetime_points)}</td>
-        <td class="py-2.5 pl-4 text-gray-500">${u.subscription_plan||'—'}</td>
+        <td class="py-2.5 pl-4 text-gray-500">${esc(u.subscription_plan)||'—'}</td>
         <td class="py-2.5 text-right text-gray-600">${fmtDate(u.created_at)}</td>
       </tr>`).join('')
     : '<tr><td colspan="6" class="py-8 text-center text-gray-700 text-xs">暫無資料</td></tr>';
@@ -3100,18 +3105,18 @@ function filterFeedback(type, btn) {
       try { metaObj = JSON.parse(metaObj); } catch(e) {}
     }
     if (metaObj && typeof metaObj === 'object' && Object.keys(metaObj).length > 0) {
-      const metaEntries = Object.entries(metaObj).map(([k, v]) => `<span class="text-gray-500">${k}:</span> <span class="text-gray-300">${v}</span>`).join(' | ');
+      const metaEntries = Object.entries(metaObj).map(([k, v]) => `<span class="text-gray-500">${esc(k)}:</span> <span class="text-gray-300">${esc(v)}</span>`).join(' | ');
       metaStr = `<div class="mt-1.5 text-[10px] bg-black/30 p-1.5 rounded border border-white/5 font-mono overflow-x-auto">${metaEntries}</div>`;
     } else {
       metaStr = `<div class="text-red-500 text-[10px]">無具體數據 (Empty Metadata in DB)</div>`;
     }
     return `
     <div class="flex items-start gap-3 py-3 border-b border-white/[0.04] text-xs">
-      <div class="text-gray-600 w-36 shrink-0 font-mono truncate pt-0.5" title="${f.user_email||'—'}">${f.user_email||'—'}</div>
+      <div class="text-gray-600 w-36 shrink-0 font-mono truncate pt-0.5" title="${esc(f.user_email||'—')}">${esc(f.user_email||'—')}</div>
       <div class="shrink-0 text-yellow-400/80">${f.rating ? '★'.repeat(f.rating)+'<span class="text-gray-700">'+'★'.repeat(5-f.rating)+'</span>' : ''}</div>
-      <div class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold" style="background:#1e2440;color:#8899bb">${f.type}</div>
+      <div class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold" style="background:#1e2440;color:#8899bb">${esc(f.type)}</div>
       <div class="text-gray-400 flex-1 leading-relaxed overflow-hidden">
-        <div>${f.content||''}</div>
+        <div>${esc(f.content||'')}</div>
         ${metaStr}
       </div>
       <div class="text-gray-700 shrink-0 pt-0.5">${fmtDate(f.created_at)}</div>
@@ -3639,6 +3644,8 @@ function startAutoRefresh() {
 // ── 工具函數 ──────────────────────────────────────────────────────────────────
 const fmt = v => v!=null ? Number(v).toLocaleString() : '—';
 const setText = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=v??'—'; };
+// 用戶來源字串（feedback content、cancel_reason、email 等）進 innerHTML 前一律跳脫，防止 stored XSS
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 
 function fmtDate(s) {
   if (!s) return '—';
@@ -3876,10 +3883,10 @@ async function loadPaymentAudit() {
             : `<td class="py-2 text-right whitespace-nowrap"><button onclick="resolveWebhookError('${e.id}')" class="px-2 py-1 bg-green-600/30 hover:bg-green-600/60 text-green-300 text-xs rounded transition-colors">✓ 標記解決</button></td>`;
           return `<tr class="border-b border-white/5 hover:bg-white/3 transition-colors ${rowClass}">
           <td class="py-2 pr-3 text-gray-400 whitespace-nowrap">${new Date(e.created_at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'})}</td>
-          <td class="py-2 pr-3 text-indigo-300">${e.customer_email||'-'}</td>
-          <td class="py-2 pr-3 text-yellow-400 whitespace-nowrap">${e.platform} / ${e.event_type}</td>
-          <td class="py-2 pr-3 text-gray-400 font-mono text-xs">${e.order_id||'-'}</td>
-          <td class="py-2 pr-3 text-red-400 max-w-xs" style="word-break:break-all">${e.error_message||'-'}</td>
+          <td class="py-2 pr-3 text-indigo-300">${esc(e.customer_email)||'-'}</td>
+          <td class="py-2 pr-3 text-yellow-400 whitespace-nowrap">${esc(e.platform)} / ${esc(e.event_type)}</td>
+          <td class="py-2 pr-3 text-gray-400 font-mono text-xs">${esc(e.order_id)||'-'}</td>
+          <td class="py-2 pr-3 text-red-400 max-w-xs" style="word-break:break-all">${esc(e.error_message)||'-'}</td>
           ${actionCell}
         </tr>`;
         }).join('');
@@ -3892,8 +3899,8 @@ async function loadPaymentAudit() {
       ? '<tr><td colspan="5" class="py-6 text-center text-gray-500 text-xs">✅ 無異常用戶</td></tr>'
       : users.map(u => `
         <tr class="border-b border-white/5">
-          <td class="py-2 pr-3 text-indigo-300">${u.email}</td>
-          <td class="py-2 pr-3"><span class="badge badge-subscriber">${u.subscription_plan}</span></td>
+          <td class="py-2 pr-3 text-indigo-300">${esc(u.email)}</td>
+          <td class="py-2 pr-3"><span class="badge badge-subscriber">${esc(u.subscription_plan)}</span></td>
           <td class="py-2 pr-3 text-red-400 font-bold">${u.points}</td>
           <td class="py-2 pr-3 text-gray-400">${u.lifetime_points||0}</td>
           <td class="py-2 text-gray-500">${u.last_topup_at ? new Date(u.last_topup_at).toLocaleDateString('zh-TW') : '從未'}</td>
@@ -4007,11 +4014,11 @@ async function loadChurnStats() {
         ? new Date(u.last_sub_at).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
         : '-';
       const reason = u.cancel_reason
-        ? `<span class="text-gray-300">${u.cancel_reason}</span>`
+        ? `<span class="text-gray-300">${esc(u.cancel_reason)}</span>`
         : '<span class="text-gray-600 italic">未走取消流程</span>';
       return `<tr class="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-        <td class="py-2 pr-3 text-indigo-300">${u.email}</td>
-        <td class="py-2 pr-3 whitespace-nowrap"><span class="font-semibold" style="color:${color}">${u.plan}</span></td>
+        <td class="py-2 pr-3 text-indigo-300">${esc(u.email)}</td>
+        <td class="py-2 pr-3 whitespace-nowrap"><span class="font-semibold" style="color:${color}">${esc(u.plan)}</span></td>
         <td class="py-2 pr-3 text-gray-500 whitespace-nowrap">${dateStr}</td>
         <td class="py-2 text-xs">${reason}</td>
       </tr>`;
@@ -4032,7 +4039,7 @@ async function loadChurnStats() {
       const pct = Math.round(item.count / max * 100);
       const c = colors[i % colors.length];
       return `<div class="flex items-center gap-2">
-        <div class="w-32 shrink-0 text-gray-400 text-[11px] truncate" title="${item.reason}">${item.reason}</div>
+        <div class="w-32 shrink-0 text-gray-400 text-[11px] truncate" title="${esc(item.reason)}">${esc(item.reason)}</div>
         <div class="flex-1 bg-black/30 rounded-full h-1.5"><div class="h-full rounded-full" style="width:${pct}%;background:${c}"></div></div>
         <div class="w-5 text-right text-[11px] font-semibold shrink-0" style="color:${c}">${item.count}</div>
       </div>`;
@@ -4046,8 +4053,8 @@ async function loadChurnStats() {
   pendingEl.innerHTML = pending.length === 0
     ? '<div class="text-xs text-gray-600 text-center py-2">✅ 無待取消用戶</div>'
     : pending.map(u => `<div class="flex items-center gap-2 bg-black/20 rounded-lg px-3 py-1.5">
-        <span class="text-xs text-yellow-300 truncate flex-1">${u.email}</span>
-        <span class="text-[10px] text-gray-600 shrink-0">${u.subscription_plan || '-'}</span>
+        <span class="text-xs text-yellow-300 truncate flex-1">${esc(u.email)}</span>
+        <span class="text-[10px] text-gray-600 shrink-0">${esc(u.subscription_plan) || '-'}</span>
       </div>`).join('');
 }
 </script>

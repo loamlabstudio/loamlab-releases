@@ -202,7 +202,9 @@ module.exports = async function handler(req, res) {
         if (error) return res.status(400).json({ code: -1, msg: 'Invalid or expired code' });
         if (!data.user) return res.status(400).json({ code: -1, msg: 'Verification failed' });
 
-        const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress;
+        // 取最後一段：Vercel 邊緣網路把真實連線 IP 附加在整串最後面，前面的段落是客戶端自己可偽造塞入的
+        const xffParts = (req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
+        const clientIp = xffParts.length ? xffParts[xffParts.length - 1] : req.socket?.remoteAddress;
         if (clientIp) {
             await admin.from('users').update({ last_login_ip: clientIp }).eq('email', email);
         }

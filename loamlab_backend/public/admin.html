@@ -963,6 +963,17 @@
   <!-- ── Tab: 金流審計 ── -->
   <div id="atab-payment" class="admin-tab hidden">
 
+    <!-- Dodo 對帳快照（唯讀）-->
+    <div class="card mb-5">
+      <div class="flex items-center justify-between mb-3">
+        <div class="text-sm font-semibold text-white">Dodo 對帳快照（唯讀，不會寫入任何資料）</div>
+        <button id="dodo-diff-btn" onclick="loadDodoDiff()" class="px-3 py-1 bg-indigo-600/70 hover:bg-indigo-600 rounded-lg text-xs text-white transition-colors">🔍 查詢</button>
+      </div>
+      <p class="text-xs text-gray-500 mb-3">直接呼叫 Dodo API 抓即時訂閱狀態，跟資料庫的 subscription_plan 交叉比對，找出兩邊對不上的帳號。</p>
+      <div id="dodo-diff-summary" class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4"></div>
+      <div id="dodo-diff-body" class="text-xs text-gray-500">尚未查詢</div>
+    </div>
+
     <!-- Webhook 失敗紀錄 -->
     <div class="card mb-5">
       <div class="flex items-center justify-between mb-3">
@@ -3883,6 +3894,59 @@ switchAdminTab = function(tab) {
 };
 
 // ── 金流審計 ──────────────────────────────────────────────────────────────────
+async function loadDodoDiff() {
+  const btn = document.getElementById('dodo-diff-btn');
+  const summaryEl = document.getElementById('dodo-diff-summary');
+  const bodyEl = document.getElementById('dodo-diff-body');
+  btn.disabled = true; btn.textContent = '查詢中…';
+  bodyEl.textContent = '呼叫 Dodo API 中，請稍候…';
+  summaryEl.innerHTML = '';
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=dodo_diff`, {
+      headers: { 'Authorization': `Bearer ${adminKey}` }
+    });
+    const j = await r.json();
+    if (j.code !== 0) throw new Error(j.msg);
+    const d = j.data;
+    if (!d.configured) { bodyEl.textContent = '尚未設定 DODO_API_KEY'; return; }
+    if (d.error) { bodyEl.textContent = '查詢失敗：' + d.error; return; }
+
+    const statusLabel = { active: '啟用中', trialing: '試用中', on_hold: '付款失敗暫停', cancelled: '已取消', expired: '已過期' };
+    summaryEl.innerHTML = Object.entries(d.dodo_status_counts || {}).map(([s, c]) => `
+      <div class="bg-white/[0.03] rounded-xl p-3">
+        <div class="kpi-label mb-1">${statusLabel[s] || s}</div>
+        <div class="kpi-value text-xl">${c}</div>
+      </div>`).join('') + `
+      <div class="bg-white/[0.03] rounded-xl p-3">
+        <div class="kpi-label mb-1">DB 記錄有效方案</div>
+        <div class="kpi-value text-xl">${d.db_active_subscribers}</div>
+      </div>`;
+
+    const dbAhead = d.db_ahead_of_dodo || [];
+    const dodoAhead = d.dodo_ahead_of_db || [];
+    if (!dbAhead.length && !dodoAhead.length) {
+      bodyEl.innerHTML = '<div class="text-green-400">✅ 兩邊完全一致，沒有發現對不上的帳號</div>';
+      return;
+    }
+    let html = '';
+    if (dbAhead.length) {
+      html += `<div class="mb-3"><div class="text-gray-300 font-semibold mb-1">DB 顯示有效方案，但 Dodo 不是 active/trialing（${dbAhead.length} 筆）</div>
+        <table class="w-full text-xs"><thead><tr class="text-gray-600 border-b border-white/5"><th class="text-left pb-1">Email</th><th class="text-left pb-1">DB 方案</th><th class="text-left pb-1">Dodo 狀態</th><th class="text-left pb-1">待取消</th></tr></thead>
+        <tbody>${dbAhead.map(u => `<tr><td class="py-1">${u.email}</td><td>${u.db_plan}</td><td>${u.dodo_status}</td><td>${u.cancel_pending ? '是' : '否'}</td></tr>`).join('')}</tbody></table></div>`;
+    }
+    if (dodoAhead.length) {
+      html += `<div><div class="text-gray-300 font-semibold mb-1">Dodo 顯示啟用中，但 DB 沒有對應方案（可能漏接 webhook，${dodoAhead.length} 筆）</div>
+        <table class="w-full text-xs"><thead><tr class="text-gray-600 border-b border-white/5"><th class="text-left pb-1">Email</th><th class="text-left pb-1">狀態</th><th class="text-left pb-1">Subscription ID</th></tr></thead>
+        <tbody>${dodoAhead.map(s => `<tr><td class="py-1">${s.email || '-'}</td><td>${s.status}</td><td>${s.dodo_subscription_id}</td></tr>`).join('')}</tbody></table></div>`;
+    }
+    bodyEl.innerHTML = html;
+  } catch (e) {
+    bodyEl.textContent = '查詢失敗：' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '🔍 查詢';
+  }
+}
+
 async function loadPaymentAudit() {
   const errTbody  = document.getElementById('webhook-errors-tbody');
   const suspTbody = document.getElementById('suspicious-users-tbody');

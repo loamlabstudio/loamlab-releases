@@ -983,7 +983,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0 });
     }
 
-    const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic, mrr: mrrBreakdown };
+    const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic, mrr: mrrBreakdown, dodo_diff: dodoDiff };
     if (!actions[action]) return res.status(400).json({ code: -1, msg: `Unknown action: ${action}` });
 
     try {
@@ -1171,6 +1171,67 @@ async function mrrBreakdown(supabase) {
     Object.values(byPlan).forEach(v => { v.mrr = Math.round(v.mrr * 100) / 100; });
 
     return { total_mrr: Math.round(total * 100) / 100, by_plan: byPlan, active_subscribers: subs.length };
+}
+
+// ── Admin: Dodo 對帳快照（唯讀，不寫入任何資料，只給人看差異）──────────────
+async function dodoDiff(supabase) {
+    if (!process.env.DODO_API_KEY) return { configured: false };
+    const dodoBase = process.env.DODO_API_KEY.startsWith('test_')
+        ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+
+    let dodoItems = [];
+    try {
+        const r = await fetch(`${dodoBase}/subscriptions?limit=100`, {
+            headers: { Authorization: `Bearer ${process.env.DODO_API_KEY}` }
+        });
+        if (!r.ok) return { configured: true, error: `Dodo API 回應 ${r.status}` };
+        dodoItems = (await r.json()).items || [];
+    } catch (e) {
+        return { configured: true, error: e.message };
+    }
+
+    const statusCounts = {};
+    dodoItems.forEach(s => { statusCounts[s.status] = (statusCounts[s.status] || 0) + 1; });
+
+    const { data: dbUsers } = await supabase.from('users')
+        .select('email, subscription_plan, dodo_subscription_id, cancel_pending')
+        .not('subscription_plan', 'is', null)
+        .not('email', 'ilike', '%test%');
+    const subs = (dbUsers || []).filter(u => !isTest(u.email));
+
+    const dodoById = {};
+    dodoItems.forEach(s => { dodoById[s.subscription_id || s.id] = s; });
+
+    // DB 顯示有效方案，但 Dodo 端不是 active/trialing（可能是漏處理的取消/暫停，或 subscription_id 沒對上）
+    const dbAheadOfDodo = subs.filter(u => {
+        const d = dodoById[u.dodo_subscription_id];
+        return !d || !['active', 'trialing'].includes(d.status);
+    }).map(u => ({
+        email: u.email,
+        db_plan: u.subscription_plan,
+        dodo_status: dodoById[u.dodo_subscription_id]?.status || 'not_found_in_dodo',
+        cancel_pending: u.cancel_pending,
+    }));
+
+    // Dodo 顯示 active/trialing，但 DB 沒有對應有效方案（可能漏接 webhook）
+    const dbByDodoId = {};
+    subs.forEach(u => { if (u.dodo_subscription_id) dbByDodoId[u.dodo_subscription_id] = u; });
+    const dodoAheadOfDb = dodoItems.filter(s =>
+        ['active', 'trialing'].includes(s.status) && !dbByDodoId[s.subscription_id || s.id]
+    ).map(s => ({
+        dodo_subscription_id: s.subscription_id || s.id,
+        status: s.status,
+        email: s.customer?.email || s.customer_email || null,
+    }));
+
+    return {
+        configured: true,
+        dodo_total: dodoItems.length,
+        dodo_status_counts: statusCounts,
+        db_active_subscribers: subs.length,
+        db_ahead_of_dodo: dbAheadOfDodo,
+        dodo_ahead_of_db: dodoAheadOfDb,
+    };
 }
 
 // ── Admin: 渲染分析 ───────────────────────────────────────────────────────────

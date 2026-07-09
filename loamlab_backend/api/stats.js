@@ -49,7 +49,7 @@ async function sendBatchInsightEmails(emailList, template, supabase) {
         const { data: logs } = await supabase.from('email_logs').select('user_email')
             .eq('template_name', template).gte('sent_at', sevenDaysAgo).in('user_email', emailList);
         if (logs) logs.forEach(l => alreadySent.add(l.user_email));
-    } catch (_) {}
+    } catch (e) { console.error('[stats:dedup_check_failed]', template, e.message); }
 
     const toSend = emailList.filter(e => !alreadySent.has(e));
     if (!toSend.length) return { sent: 0, skipped: emailList.length };
@@ -59,7 +59,10 @@ async function sendBatchInsightEmails(emailList, template, supabase) {
     try {
         const { data } = await supabase.from('email_templates').select('*').eq('id', template).single();
         if (data && data.body_tw) dbTpl = data;
-    } catch (_) {}
+    } catch (e) {
+        // PGRST116 = 尚未在 DB 自訂範本，走 hardcoded fallback 是正常路徑，不算錯誤
+        if (e.code !== 'PGRST116') console.error('[stats:template_fetch_failed]', template, e.message);
+    }
 
     // 取用戶語言
     const { data: userRows } = await supabase.from('users').select('email, locale').in('email', toSend);
@@ -100,7 +103,7 @@ async function sendBatchInsightEmails(emailList, template, supabase) {
     try {
         const now = new Date().toISOString();
         await supabase.from('email_logs').insert(toSend.map(e => ({ user_email: e, template_name: template, sent_at: now })));
-    } catch (_) {}
+    } catch (e) { console.error('[stats:email_log_insert_failed]', template, e.message); }
 
     return { sent: toSend.length, skipped: emailList.length - toSend.length };
 }
@@ -290,7 +293,8 @@ export default async function handler(req, res) {
             const r = await fetch('https://freeimage.host/api/1/upload', { method: 'POST', body: form });
             const d = await r.json();
             if (d.status_code === 200 && d.image?.url) return res.status(200).json({ code: 0, url: d.image.url });
-        } catch(_) {}
+            console.error('[stats:freeimage_upload_failed]', d.status_code, d.error?.message);
+        } catch(e) { console.error('[stats:freeimage_upload_error]', e.message); }
 
         // Fallback: ImgBB
         if (IMGBB_API_KEY) {
@@ -300,9 +304,11 @@ export default async function handler(req, res) {
                 const r2 = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, { method: 'POST', body: form2 });
                 const d2 = await r2.json();
                 if (d2.success && d2.data?.url) return res.status(200).json({ code: 0, url: d2.data.url });
-            } catch(_) {}
+                console.error('[stats:imgbb_upload_failed]', d2.error?.message);
+            } catch(e) { console.error('[stats:imgbb_upload_error]', e.message); }
         }
 
+        console.error('[stats:upload_share_img_all_failed]');
         return res.status(500).json({ code: -1, msg: 'Upload failed' });
     }
 
@@ -482,7 +488,7 @@ export default async function handler(req, res) {
                     subject: tpl.subject,
                     html
                 });
-            } catch (_) {}
+            } catch (e) { console.error('[stats:capture_email_download_link_failed]', email, e.message); }
         }
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
@@ -977,7 +983,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0 });
     }
 
-    const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic };
+    const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic, mrr: mrrBreakdown };
     if (!actions[action]) return res.status(400).json({ code: -1, msg: `Unknown action: ${action}` });
 
     try {
@@ -1126,6 +1132,45 @@ async function revenue(supabase) {
     const daily = groupByDate(rows);
 
     return { revenue_30d: revenue30d, daily_revenue: daily, total_topups_90d: rows.length };
+}
+
+// ── Admin: MRR 依方案拆分（用最近一筆訂閱扣款金額代表目前月費，避免用固定價目表猜錯）──
+async function mrrBreakdown(supabase) {
+    const { data: subUsers } = await supabase.from('users')
+        .select('email, subscription_plan')
+        .not('subscription_plan', 'is', null)
+        .not('email', 'ilike', '%test%');
+
+    const subs = (subUsers || []).filter(u => !isTest(u.email));
+    if (!subs.length) return { total_mrr: 0, by_plan: {}, active_subscribers: 0 };
+
+    const emails = subs.map(u => u.email);
+    const { data: recentSubTxns } = await supabase.from('transactions')
+        .select('user_email, amount_usd_cents, created_at')
+        .eq('transaction_type', 'TOPUP_SUBSCRIPTION')
+        .gte('created_at', daysAgo(35))
+        .in('user_email', emails)
+        .order('created_at', { ascending: false });
+
+    // 每個用戶取最近一筆訂閱扣款金額，代表目前實際月費
+    const latestAmount = {};
+    (recentSubTxns || []).forEach(t => {
+        if (!(t.user_email in latestAmount)) latestAmount[t.user_email] = (t.amount_usd_cents || 0) / 100;
+    });
+
+    const byPlan = {};
+    let total = 0;
+    subs.forEach(u => {
+        const plan = u.subscription_plan;
+        const amt = latestAmount[u.email] || 0;
+        if (!byPlan[plan]) byPlan[plan] = { count: 0, mrr: 0 };
+        byPlan[plan].count += 1;
+        byPlan[plan].mrr += amt;
+        total += amt;
+    });
+    Object.values(byPlan).forEach(v => { v.mrr = Math.round(v.mrr * 100) / 100; });
+
+    return { total_mrr: Math.round(total * 100) / 100, by_plan: byPlan, active_subscribers: subs.length };
 }
 
 // ── Admin: 渲染分析 ───────────────────────────────────────────────────────────

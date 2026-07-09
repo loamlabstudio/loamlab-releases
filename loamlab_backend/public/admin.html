@@ -797,6 +797,28 @@
     </div>
   </div>
 
+  <!-- 訂閱健康度：MRR 拆分 + 流失/留存 -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+    <div class="card">
+      <div class="text-sm font-semibold text-white mb-4">MRR 依方案拆分</div>
+      <div id="mrr-breakdown" class="space-y-3"></div>
+      <div class="mt-3 pt-3 border-t border-white/5 flex items-center justify-between text-xs">
+        <span class="text-gray-500">總 MRR</span>
+        <span class="text-green-400 font-bold" id="mrr-total">$--</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="text-sm font-semibold text-white mb-4">訂閱健康度（30天）</div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><div class="kpi-label">活躍訂閱</div><div class="kpi-value text-lg" id="sub-active">--</div></div>
+        <div><div class="kpi-label">流失率</div><div class="kpi-value text-lg" id="sub-churn-rate">--</div></div>
+        <div><div class="kpi-label">挽留成功率</div><div class="kpi-value text-lg" id="sub-retention-rate">--</div></div>
+        <div><div class="kpi-label">待取消</div><div class="kpi-value text-lg" id="sub-pending">--</div></div>
+      </div>
+      <a href="#" onclick="switchAdminTab('payment');loadPaymentAudit();loadChurnStats();return false" class="mt-3 inline-block text-[10px] text-blue-400 hover:underline">查看完整流失分析 →</a>
+    </div>
+  </div>
+
   <!-- 流量行為與洞見 -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
     <!-- 轉化漏斗 -->
@@ -1189,7 +1211,7 @@ async function fetchAction(action) {
 
 async function loadAll() {
   setText('last-updated', '載入中...');
-  const actions = ['dashboard', 'renders', 'revenue', 'users', 'feedback', 'funnel', 'insights', 'vercel_traffic'];
+  const actions = ['dashboard', 'renders', 'revenue', 'users', 'feedback', 'funnel', 'insights', 'vercel_traffic', 'mrr', 'churn_stats'];
   try {
     const results = await Promise.allSettled(actions.map(a => fetchAction(a)));
     const data = {};
@@ -1228,6 +1250,8 @@ async function loadAll() {
     }
     if (data.revenue) renderRevenueChart(data.revenue.daily_revenue || {});
     renderTraffic(data.vercel_traffic || null);
+    renderMrrBreakdown(data.mrr || null);
+    renderSubscriptionHealth(data.churn_stats || null);
     
     allUsers = data.users?.users || [];
     renderTierSummary(allUsers);
@@ -2936,6 +2960,38 @@ function renderDashboard(data) {
 
   // 4. 自動洞見（委派給 renderInsights）
   renderInsights(data.insights || []);
+}
+
+function renderMrrBreakdown(data) {
+  const el = document.getElementById('mrr-breakdown');
+  if (!el) return;
+  const byPlan = data?.by_plan || {};
+  const planNames  = { starter: 'Starter', pro: 'Pro', studio: 'Studio' };
+  const planColors = { starter: '#60a5fa', pro: '#a78bfa', studio: '#f59e0b' };
+  const entries = Object.entries(byPlan).sort((a, b) => b[1].mrr - a[1].mrr);
+  const maxMrr = Math.max(...entries.map(([, v]) => v.mrr), 1);
+  el.innerHTML = entries.map(([plan, v]) => `
+    <div class="space-y-1">
+      <div class="flex items-center justify-between text-[11px]">
+        <span class="text-gray-300 font-medium">${planNames[plan] || plan}</span>
+        <span class="text-gray-500">${v.count} 人 · $${v.mrr.toFixed(2)}</span>
+      </div>
+      <div class="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+        <div class="h-full rounded-full" style="width: ${Math.round(v.mrr / maxMrr * 100)}%; background: ${planColors[plan] || '#3b82f6'}"></div>
+      </div>
+    </div>`).join('') || '<div class="text-xs text-gray-700">暫無訂閱者</div>';
+  setText('mrr-total', '$' + (data?.total_mrr || 0).toFixed(2));
+}
+
+function renderSubscriptionHealth(data) {
+  if (!data) return;
+  const active = data.active_subscribers || 0;
+  const churned30d = data.churned_30d || 0;
+  const churnRate = active > 0 ? Math.round(churned30d / active * 100) : 0;
+  setText('sub-active', fmt(active));
+  setText('sub-churn-rate', churnRate + '%');
+  setText('sub-retention-rate', (data.retention_rate_30d ?? 0) + '%');
+  setText('sub-pending', (data.cancel_pending_users || []).length);
 }
 
 function renderTierSummary(users) {

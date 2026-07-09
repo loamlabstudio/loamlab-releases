@@ -5473,7 +5473,7 @@ function _scDrawLabelPill(ctx, x, y, text, colorHex) {
     ctx.closePath();
     ctx.fillStyle = 'rgba(10,10,12,0.85)';
     ctx.fill();
-    ctx.lineWidth = Math.max(1, 1.5 * scale);
+    ctx.lineWidth = Math.max(2.5, 3 * scale);
     ctx.strokeStyle = colorHex;
     ctx.stroke();
 

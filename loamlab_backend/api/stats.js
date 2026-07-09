@@ -744,14 +744,24 @@ export default async function handler(req, res) {
             if (process.env.DODO_API_KEY) {
                 const dodoBase = process.env.DODO_API_KEY.startsWith('test_')
                     ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
-                const listRes = await Promise.race([
-                    fetch(`${dodoBase}/subscriptions?status=active&limit=100`, {
-                        headers: { Authorization: `Bearer ${process.env.DODO_API_KEY}` }
-                    }),
-                    new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 6000))
-                ]);
-                if (listRes.ok) {
-                    const allItems = (await listRes.json()).items || [];
+                // Dodo API 分頁參數是 page_size（上限100）+ page_number，不是 limit。
+                // 舊版用 limit 會被忽略，靜默退回預設 page_size=10，導致每次只看到
+                // 一小部分訂閱，下面的撤銷/補發邏輯都只在這一小部分資料上運作。
+                let allItems = [];
+                for (let page = 0; page < 5; page++) {
+                    const listRes = await Promise.race([
+                        fetch(`${dodoBase}/subscriptions?status=active&page_size=100&page_number=${page}`, {
+                            headers: { Authorization: `Bearer ${process.env.DODO_API_KEY}` }
+                        }),
+                        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 6000))
+                    ]);
+                    if (!listRes.ok) break;
+                    const items = (await listRes.json()).items || [];
+                    if (!items.length) break;
+                    allItems = allItems.concat(items);
+                    if (items.length < 100) break;
+                }
+                if (allItems.length) {
                     // Dodo 可能忽略 status filter，嚴格用欄位比對
                     const activeItems = allItems.filter(s => s.status === 'active' || s.status === 'trialing');
                     const activeSubIds = new Set(activeItems.map(s => s.subscription_id || s.id));

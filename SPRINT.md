@@ -1,54 +1,39 @@
 # CONTEXT_DIGEST
-經過深度分析，`lifetime_points` (永久點數) 暴增的根本原因在於 `lib/activate.js` 中的 `processTopup` 發放邏輯錯誤：目前無論是「訂閱」還是「單次購買」，系統都會將點數加進 `lifetime_points`。更嚴重的是，訂閱不僅會覆寫 `points` (月費額度)，還同時累加到 `lifetime_points`；單次購買也同時加到這兩個欄位。這導致用戶獲得雙倍點數，且訂閱用戶每個月都會累積大量不會過期的永久點數。此外，退款 (`clawbackPoints`) 目前只扣 `points`，未扣 `lifetime_points`，成為白嫖漏洞。
-
-# IMPLEMENTATION_PLAN
-1. **修復點數發放邏輯 (`lib/activate.js`)**：
-   區分 `isSubscription`。若是訂閱，只覆寫 `points`，不動 `lifetime_points`（除了 referral bonus）；若是單次購買，只累加 `lifetime_points`，不動 `points`。
-2. **修復退款防護網 (`api/webhook.js`)**：
-   升級 `clawbackPoints`，退款時應如同 `deduct_render_points` 般，優先扣除 `points`，若不足則繼續扣除 `lifetime_points`，確保惡意退款者無法保留永久點數。
-3. **優化數據統計 (`api/stats.js`)**：
-   過去誤將 `lifetime_points` 作為「歷史總獲取點數」來衡量高價值用戶 (Whale)，但它是會被消耗的餘額。應改用計算歷史購買總量或關聯 `transactions` 來判定。
-4. **數據修復腳本 (Migration Script)**：
-   撰寫獨立腳本，掃描所有用戶的 `transactions`，根據正確發放邏輯重新計算並修正目前溢發的 `lifetime_points`。
+SmartCanvas（T2）v2 上線後，真實測試發現 AI 輸出會出現跟圈選顏色一致的實色色塊污染。原因是
+composite 上的霓虹線框顏色本身會被模型誤解成塗色指令，即使 prompt 文字已移除色碼也一樣。
+本輪先採用折衷方案驗證：composite 視覺維持彩色（不影響使用者編輯體驗），但只有實際送給 AI
+的那份額外烘入「隱藏數字編號」（如「1. 描述」），跟文字 prompt 的「Region N」精準對應，使用者
+看到的預覽版不會出現任何編號。方案二（composite 全改中性白線框）程式碼已保留備用，未啟用。
 
 # TASKS
-- [x] TASK 1: 修正點數發放與防雙重發放漏洞
-  - **影響檔案**: `loamlab_backend/lib/activate.js`
-  - 描述: 修改 `updatePayload` 計算邏輯。訂閱時 `points = pointsToAdd` 且 `lifetime_points` 不增加 `pointsToAdd`；單次購買時 `points` 保持不變，`lifetime_points += pointsToAdd`。
+- [x] TASK 1: composite 改「彩色線框 + 送出版隱藏數字編號」混合方案
+  - **影響檔案**: `loamlab_plugin/ui/app.js`
+  - 描述: `_scDrawRegionAnnotation` 的 `neutral`（全中性白線框，方案二保留備用）與 `number`
+    （烘入序號）拆成兩個獨立參數；`_scCreateAnnotatedComposite` 只在 `bakeRefTags=true`
+    （送出版）時傳入序號，預覽版（使用者看得到）維持乾淨無編號。
 
-- [x] TASK 2: 修正退款機制 (Clawback) 的扣點邏輯
-  - **影響檔案**: `loamlab_backend/api/webhook.js`
-  - 描述: 修改 `clawbackPoints`，計算扣除時需同時從 `points` 與 `lifetime_points` 扣除。可以模擬 RPC 的雙層扣款邏輯，確保永久點數也能被正確追回並防堵漏洞。
+- [x] TASK 2: render.js prompt 組裝格式簡化
+  - **影響檔案**: `loamlab_backend/api/render.js`
+  - 描述: `changes.push` 從 `zoneTag\n  Target Object: content` 兩行式改成 `zoneTag: content`
+    單行，跟 app.js 端組裝格式一致，避免 prompt 讀起來斷行斷錯地方。
 
-- [x] TASK 3: 修正後台統計判定邏輯
-  - **影響檔案**: `loamlab_backend/api/stats.js`
-  - 描述: 修改判斷「高價值用戶 (Whale)」及 KOL 的邏輯，移除直接使用 `lifetime_points > 500` 的判斷，改用 `created_at` 排序或更合理的歷史統計邏輯，避免誤判。
-  - 實際調整：改用 `transactions` 表歷史累計購買點數（TOPUP_SINGLE + TOPUP_SUBSCRIPTION 加總）取代會隨消費遞減的 `lifetime_points`，範圍限定 `getTier`/`highValue`/`kolList` 三處判斷，未動列表排序。
+- [x] TASK 3: 資訊圖標籤框邊框加粗
+  - **影響檔案**: `loamlab_plugin/ui/app.js`
+  - 描述: `_scDrawLabelPill` 標籤框邊框從 `Math.max(1, 1.5 * scale)` 加粗到
+    `Math.max(2.5, 3 * scale)`，提升辨識度。
 
-- [x] TASK 4: 撰寫點數校正腳本
-  - **影響檔案**: `loamlab_backend/scripts/fix_lifetime_points.mjs` (新建)
-  - 描述: 寫一個 Node.js 腳本，從 `transactions` 表統計每位用戶歷史應得的永久點數 (TOPUP_SINGLE + 推薦獎勵等)，若當前 `lifetime_points` 異常大於此合理值，則安全下修，以恢復點數經濟平衡。
-  - 執行結果：dry-run 確認 405 位用戶中 35 人異常，`--apply` 已於正式 Supabase 執行修正，合計下修 11,953 點，修正後複查異常數為 0。
+**驗收**: 以 Playwright 匯出預覽版與送出版 composite 截圖人工比對——預覽版純彩色無編號，
+送出版彩色線框 + 正確序號皆已烘入。實際色塊污染是否解決待使用者實測回饋後再決定是否切換
+方案二。
 
 status: DONE
 
 ## RELEASE_GATE
 release_type: hotfix
 verified_diff:
-  - loamlab_backend/lib/net.js
-  - loamlab_backend/lib/safeCompare.js
-  - loamlab_backend/lib/verifyIdentity.js
-  - loamlab_backend/lib/rateLimit.js
-  - loamlab_backend/api/render.js
-  - loamlab_backend/api/user.js
-  - loamlab_backend/api/stats.js
-  - loamlab_backend/api/materials.js
-  - loamlab_backend/api/inpaint.js
-  - loamlab_backend/api/auth/otp.js
-  - loamlab_backend/api/auth/poll.js
-  - loamlab_backend/public/admin.html
-  - loamlab_backend/supabase_setup.sql
-  - loamlab_plugin/main.rb
   - loamlab_plugin/ui/app.js
-sql_migration: true
-
+  - loamlab_backend/api/render.js
+  - loamlab_plugin/config.rb
+  - loamlab_plugin.rb
+  - loamlab_backend/api/version.js
+sql_migration: false

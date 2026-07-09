@@ -389,3 +389,51 @@ CREATE TABLE IF NOT EXISTS public.rate_limits (
     count INTEGER NOT NULL DEFAULT 0,
     window_start TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
+
+-- ==============================================================================
+-- Phase 33: system_config 表（把系統設定從 transactions 拆分出來）
+-- 背景：SYSTEM_CONFIG / SYSTEM_PROMPTS / SYSTEM_T1_NODES / MODEL_CONFIG /
+-- SYSTEM_OPTIONS / SYSTEM_BUNDLES / SYSTEM_ENGINE_CONFIG / SYSTEM_SHARE_TEMPLATE
+-- 這 8 種系統設定原本每次存檔都是往 transactions 表 INSERT 一列新的，用
+-- created_at DESC LIMIT 1 撈「最新」，跟真正的財務流水帳（RENDER_*/TOPUP_*/
+-- REFUND_*）混在同一張表，財務稽核查詢都要額外過濾 transaction_type，這張
+-- 表也只會無限成長。改成：
+--   system_config     目前生效的設定，每個 key 一列，UPSERT，O(1) 查詢
+--   system_config_log 每次變更的歷史記錄（append-only，供之後做設定變更
+--                      歷史介面用；查詢路徑不依賴這張表，寫入失敗不影響主流程）
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.system_config (
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+CREATE TABLE IF NOT EXISTS public.system_config_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    key TEXT NOT NULL,
+    value JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+CREATE INDEX IF NOT EXISTS idx_system_config_log_key ON public.system_config_log(key, created_at DESC);
+
+ALTER TABLE public.system_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_config_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Enable all access for service role" ON public.system_config;
+CREATE POLICY "Enable all access for service role" ON public.system_config FOR ALL USING (true);
+DROP POLICY IF EXISTS "Enable all access for service role" ON public.system_config_log;
+CREATE POLICY "Enable all access for service role" ON public.system_config_log FOR ALL USING (true);
+
+-- 一次性資料遷移：把 transactions 裡目前最新的 8 種系統設定搬進 system_config。
+-- 用 ON CONFLICT DO UPDATE，可重複執行不會出錯（例如先跑過一次、之後又想重新校正）。
+INSERT INTO public.system_config (key, value, updated_at)
+SELECT DISTINCT ON (transaction_type)
+    transaction_type,
+    metadata,
+    created_at
+FROM public.transactions
+WHERE transaction_type IN (
+    'SYSTEM_CONFIG', 'SYSTEM_PROMPTS', 'SYSTEM_T1_NODES', 'MODEL_CONFIG',
+    'SYSTEM_OPTIONS', 'SYSTEM_BUNDLES', 'SYSTEM_ENGINE_CONFIG', 'SYSTEM_SHARE_TEMPLATE'
+)
+ORDER BY transaction_type, created_at DESC
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at;

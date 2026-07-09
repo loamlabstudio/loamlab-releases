@@ -3,6 +3,7 @@ import { PRICING_CONFIG, INITIAL_POINTS } from '../config.js';
 import { isValidAdminKey } from '../lib/safeCompare.js';
 import { getClientIp } from '../lib/net.js';
 import { resolveUserEmail } from '../lib/verifyIdentity.js';
+import { getConfig } from '../lib/systemConfig.js';
 
 export const maxDuration = 300; // Allow Vercel to run up to 5 minutes to poll AtlasCloud
 
@@ -682,21 +683,21 @@ async function _handleRender(req, res) {
         // ==========================================
         let systemPrompts = {};
         try {
-            const pRes = await supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_PROMPTS').order('created_at', { ascending: false }).limit(1).maybeSingle();
-            if (pRes.data) systemPrompts = pRes.data.metadata?.prompts || {};
+            const pVal = await getConfig(supabase, 'SYSTEM_PROMPTS');
+            systemPrompts = pVal?.prompts || {};
         } catch(e) {}
 
         let toolModelMap = {};
         try {
-            const mRes = await supabase.from('transactions').select('metadata').eq('transaction_type', 'MODEL_CONFIG').order('created_at', { ascending: false }).limit(1).maybeSingle();
-            if (mRes.data?.metadata?.models) toolModelMap = mRes.data.metadata.models;
+            const mVal = await getConfig(supabase, 'MODEL_CONFIG');
+            if (mVal?.models) toolModelMap = mVal.models;
         } catch(e) {}
 
         // ── Prompt Engine Mode（nodes | legacy）──
         let promptEngineMode = 'nodes';
         try {
-            const eRes = await supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_ENGINE_CONFIG').order('created_at', { ascending: false }).limit(1).maybeSingle();
-            if (eRes.data?.metadata?.config?.prompt_engine_mode) promptEngineMode = eRes.data.metadata.config.prompt_engine_mode;
+            const eVal = await getConfig(supabase, 'SYSTEM_ENGINE_CONFIG');
+            if (eVal?.config?.prompt_engine_mode) promptEngineMode = eVal.config.prompt_engine_mode;
         } catch(e) {}
 
         const defaultP1 = "SketchUp interior model (Image 1). Backend pre-generates a spatial depth map (Image 2) and a color-segmented channel map (Image 3). Using Image 1 with reference to Images 2 and 3, restore 99% of spatial depth, camera position, and material texture direction without altering geometry or materials. Convert to a realistic interior photo. Apply natural lighting with supplemental diffuse fill to eliminate pure-black shadows and overexposure. Rationalize minor spatial inconsistencies. Professional photography-grade color grading with natural tonal gradation. ultra-detailed";
@@ -727,8 +728,8 @@ async function _handleRender(req, res) {
         // ── 進階節點配置 (T1 Nodes) ──
         let t1Nodes = [];
         try {
-            const nRes = await supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_T1_NODES').order('created_at', { ascending: false }).limit(1).maybeSingle();
-            if (nRes.data?.metadata?.nodes) t1Nodes = nRes.data.metadata.nodes;
+            const nVal = await getConfig(supabase, 'SYSTEM_T1_NODES');
+            if (nVal?.nodes) t1Nodes = nVal.nodes;
         } catch(e) {}
 
         // Method B：提前取得風格參考 URL（需在 finalPrompt 組裝前宣告）

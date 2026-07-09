@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer';
 import { reconcilePaymentsForEmail } from '../lib/activate.js';
 import { isValidAdminKey } from '../lib/safeCompare.js';
 import { resolveUserEmail } from '../lib/verifyIdentity.js';
+import { getConfig, setConfig } from '../lib/systemConfig.js';
 
 // ── 洞見郵件共用工具 ──────────────────────────────────────────────────────────
 function getLangKey(locale) {
@@ -176,38 +177,21 @@ export default async function handler(req, res) {
     }
 
     if (action === 'get_announcement') {
-        const { data, error } = await supabase.from('transactions')
-            .select('metadata')
-            .eq('transaction_type', 'SYSTEM_CONFIG')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+        const value = await getConfig(supabase, 'SYSTEM_CONFIG');
         // 向下相容：舊格式為字串，新格式為多語言物件
-        const raw = data?.metadata?.announcement || '';
+        const raw = value?.announcement || '';
         const announcement = (raw && typeof raw === 'string') ? { us: raw, tw: raw, cn: raw, es: raw, br: raw, jp: raw } : (raw || {});
         return res.status(200).json({ code: 0, announcement });
     }
 
     if (req.method === 'GET' && action === 'get_share_template') {
-        const { data, error } = await supabase.from('transactions')
-            .select('metadata')
-            .eq('transaction_type', 'SYSTEM_SHARE_TEMPLATE')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        if (error) return res.status(500).json({ code: -1, msg: error.message });
-        return res.status(200).json({ code: 0, template: data?.metadata?.template || {}, config: data?.metadata?.config || {} });
+        const value = await getConfig(supabase, 'SYSTEM_SHARE_TEMPLATE');
+        return res.status(200).json({ code: 0, template: value?.template || {}, config: value?.config || {} });
     }
 
     if (req.method === 'GET' && action === 'get_prompts') {
-        const { data, error } = await supabase.from('transactions')
-            .select('metadata')
-            .eq('transaction_type', 'SYSTEM_PROMPTS')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        if (error) return res.status(500).json({ code: -1, msg: error.message });
-        return res.status(200).json({ code: 0, prompts: data?.metadata?.prompts || {} });
+        const value = await getConfig(supabase, 'SYSTEM_PROMPTS');
+        return res.status(200).json({ code: 0, prompts: value?.prompts || {} });
     }
 
     // --- Share Session (POST: 建立; GET: 讀取) — 用 transactions 表儲存，避免建新表 ---
@@ -313,59 +297,32 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET' && action === 'get_model_config') {
-        const { data, error } = await supabase.from('transactions')
-            .select('metadata')
-            .eq('transaction_type', 'MODEL_CONFIG')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        if (error) return res.status(500).json({ code: -1, msg: error.message });
-        return res.status(200).json({ code: 0, models: data?.metadata?.models || {} });
+        const value = await getConfig(supabase, 'MODEL_CONFIG');
+        return res.status(200).json({ code: 0, models: value?.models || {} });
     }
 
     if (req.method === 'GET' && action === 'get_t1_nodes') {
-        const [nodesRes, cfgRes] = await Promise.all([
-            supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_T1_NODES')
-                .order('created_at', { ascending: false }).limit(1).maybeSingle(),
-            supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_ENGINE_CONFIG')
-                .order('created_at', { ascending: false }).limit(1).maybeSingle()
+        const [nodesVal, cfgVal] = await Promise.all([
+            getConfig(supabase, 'SYSTEM_T1_NODES'),
+            getConfig(supabase, 'SYSTEM_ENGINE_CONFIG'),
         ]);
-        if (nodesRes.error) return res.status(500).json({ code: -1, msg: nodesRes.error.message });
-        const prompt_engine_mode = cfgRes.data?.metadata?.config?.prompt_engine_mode || 'nodes';
-        return res.status(200).json({ code: 0, nodes: nodesRes.data?.metadata?.nodes || [], prompt_engine_mode });
+        const prompt_engine_mode = cfgVal?.config?.prompt_engine_mode || 'nodes';
+        return res.status(200).json({ code: 0, nodes: nodesVal?.nodes || [], prompt_engine_mode });
     }
 
     if (req.method === 'GET' && action === 'get_system_config') {
-        const { data, error } = await supabase.from('transactions')
-            .select('metadata')
-            .eq('transaction_type', 'SYSTEM_ENGINE_CONFIG')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        if (error) return res.status(500).json({ code: -1, msg: error.message });
-        return res.status(200).json({ code: 0, config: data?.metadata?.config || { prompt_engine_mode: 'nodes' } });
+        const value = await getConfig(supabase, 'SYSTEM_ENGINE_CONFIG');
+        return res.status(200).json({ code: 0, config: value?.config || { prompt_engine_mode: 'nodes' } });
     }
 
     if (req.method === 'GET' && action === 'get_options') {
-        const { data, error } = await supabase.from('transactions')
-            .select('metadata')
-            .eq('transaction_type', 'SYSTEM_OPTIONS')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        if (error) return res.status(500).json({ code: -1, msg: error.message });
-        return res.status(200).json({ code: 0, options: data?.metadata?.options || [] });
+        const value = await getConfig(supabase, 'SYSTEM_OPTIONS');
+        return res.status(200).json({ code: 0, options: value?.options || [] });
     }
 
     if (req.method === 'GET' && action === 'get_bundles') {
-        const { data, error } = await supabase.from('transactions')
-            .select('metadata')
-            .eq('transaction_type', 'SYSTEM_BUNDLES')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        if (error) return res.status(500).json({ code: -1, msg: error.message });
-        return res.status(200).json({ code: 0, bundles: data?.metadata?.bundles || [] });
+        const value = await getConfig(supabase, 'SYSTEM_BUNDLES');
+        return res.status(200).json({ code: 0, bundles: value?.bundles || [] });
     }
 
     // --- 用戶預設同步（需要 X-User-Email，不需要 ADMIN_KEY）---
@@ -501,137 +458,73 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST' && action === 'set_t1_nodes') {
         const nodes = req.body?.nodes || [];
-        const { error } = await supabase.from('transactions').insert([{
-            user_email: null,
-            amount: 0,
-            transaction_type: 'SYSTEM_T1_NODES',
-            metadata: { nodes }
-        }]);
-        if (error) {
-            console.error('Save t1 nodes error:', error.message);
-            return res.status(500).json({ code: -1, msg: error.message });
-        }
+        const { error } = await setConfig(supabase, 'SYSTEM_T1_NODES', { nodes });
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
     if (req.method === 'POST' && action === 'set_announcement') {
         const announcement = req.body?.announcement || {};
-        const { error } = await supabase.from('transactions').insert([{
-            user_email: null,
-            amount: 0,
-            transaction_type: 'SYSTEM_CONFIG',
-            metadata: { announcement }
-        }]);
-        if (error) {
-            console.error('Save error:', error.message);
-            return res.status(500).json({ code: -1, msg: error.message });
-        }
+        const { error } = await setConfig(supabase, 'SYSTEM_CONFIG', { announcement });
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
     if (req.method === 'POST' && action === 'set_share_template') {
         const template = req.body?.template || {};
         const config = req.body?.config || {};
-        const { error } = await supabase.from('transactions').insert([{
-            user_email: null,
-            amount: 0,
-            transaction_type: 'SYSTEM_SHARE_TEMPLATE',
-            metadata: { template, config }
-        }]);
-        if (error) {
-            console.error('Save share template error:', error.message);
-            return res.status(500).json({ code: -1, msg: error.message });
-        }
+        const { error } = await setConfig(supabase, 'SYSTEM_SHARE_TEMPLATE', { template, config });
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
     if (req.method === 'POST' && action === 'set_prompts') {
         const prompts = req.body?.prompts || {};
-        const { error } = await supabase.from('transactions').insert([{
-            user_email: null,
-            amount: 0,
-            transaction_type: 'SYSTEM_PROMPTS',
-            metadata: { prompts }
-        }]);
-        if (error) {
-            console.error('Save prompts error:', error.message);
-            return res.status(500).json({ code: -1, msg: error.message });
-        }
+        const { error } = await setConfig(supabase, 'SYSTEM_PROMPTS', { prompts });
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
     if (req.method === 'POST' && action === 'set_model_config') {
         const models = req.body?.models || {};
-        const { error } = await supabase.from('transactions').insert([{
-            user_email: null,
-            amount: 0,
-            transaction_type: 'MODEL_CONFIG',
-            metadata: { models }
-        }]);
-        if (error) {
-            console.error('Save model config error:', error.message);
-            return res.status(500).json({ code: -1, msg: error.message });
-        }
+        const { error } = await setConfig(supabase, 'MODEL_CONFIG', { models });
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
     if (req.method === 'POST' && action === 'set_system_config') {
         const config = req.body?.config || {};
-        const { error } = await supabase.from('transactions').insert([{
-            user_email: null,
-            amount: 0,
-            transaction_type: 'SYSTEM_ENGINE_CONFIG',
-            metadata: { config }
-        }]);
-        if (error) {
-            console.error('Save engine config error:', error.message);
-            return res.status(500).json({ code: -1, msg: error.message });
-        }
+        const { error } = await setConfig(supabase, 'SYSTEM_ENGINE_CONFIG', { config });
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
     if (req.method === 'POST' && action === 'set_options') {
         const options = req.body?.options || [];
-        const { error } = await supabase.from('transactions').insert([{
-            user_email: null,
-            amount: 0,
-            transaction_type: 'SYSTEM_OPTIONS',
-            metadata: { options }
-        }]);
-        if (error) {
-            console.error('Save options error:', error.message);
-            return res.status(500).json({ code: -1, msg: error.message });
-        }
+        const { error } = await setConfig(supabase, 'SYSTEM_OPTIONS', { options });
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
     if (req.method === 'POST' && action === 'set_bundles') {
         const bundles = req.body?.bundles || [];
-        const { error } = await supabase.from('transactions').insert([{
-            user_email: null,
-            amount: 0,
-            transaction_type: 'SYSTEM_BUNDLES',
-            metadata: { bundles }
-        }]);
-        if (error) {
-            console.error('Save bundles error:', error.message);
-            return res.status(500).json({ code: -1, msg: error.message });
-        }
+        const { error } = await setConfig(supabase, 'SYSTEM_BUNDLES', { bundles });
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
     if (req.method === 'GET' && action === 'export_preset_package') {
-        const [promptsRes, nodesRes, modelsRes] = await Promise.all([
-            supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_PROMPTS').order('created_at', { ascending: false }).limit(1).maybeSingle(),
-            supabase.from('transactions').select('metadata').eq('transaction_type', 'SYSTEM_T1_NODES').order('created_at', { ascending: false }).limit(1).maybeSingle(),
-            supabase.from('transactions').select('metadata').eq('transaction_type', 'MODEL_CONFIG').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        const [promptsVal, nodesVal, modelsVal] = await Promise.all([
+            getConfig(supabase, 'SYSTEM_PROMPTS'),
+            getConfig(supabase, 'SYSTEM_T1_NODES'),
+            getConfig(supabase, 'MODEL_CONFIG'),
         ]);
         return res.status(200).json({
             code: 0,
             package: {
-                prompts: promptsRes.data?.metadata?.prompts || {},
-                t1_nodes: nodesRes.data?.metadata?.nodes || [],
-                model_config: modelsRes.data?.metadata?.models || {},
+                prompts: promptsVal?.prompts || {},
+                t1_nodes: nodesVal?.nodes || [],
+                model_config: modelsVal?.models || {},
                 exported_at: new Date().toISOString()
             }
         });
@@ -640,9 +533,9 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && action === 'import_preset_package') {
         const { prompts, t1_nodes, model_config } = req.body || {};
         const ops = [];
-        if (prompts) ops.push(supabase.from('transactions').insert([{ user_email: null, amount: 0, transaction_type: 'SYSTEM_PROMPTS', metadata: { prompts } }]));
-        if (t1_nodes) ops.push(supabase.from('transactions').insert([{ user_email: null, amount: 0, transaction_type: 'SYSTEM_T1_NODES', metadata: { nodes: t1_nodes } }]));
-        if (model_config) ops.push(supabase.from('transactions').insert([{ user_email: null, amount: 0, transaction_type: 'MODEL_CONFIG', metadata: { models: model_config } }]));
+        if (prompts) ops.push(setConfig(supabase, 'SYSTEM_PROMPTS', { prompts }));
+        if (t1_nodes) ops.push(setConfig(supabase, 'SYSTEM_T1_NODES', { nodes: t1_nodes }));
+        if (model_config) ops.push(setConfig(supabase, 'MODEL_CONFIG', { models: model_config }));
         if (!ops.length) return res.status(400).json({ code: -1, msg: 'Nothing to import' });
         const results = await Promise.all(ops);
         const failed = results.filter(r => r.error);

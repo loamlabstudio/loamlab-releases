@@ -15,9 +15,10 @@ export async function setConfig(supabase, key, value) {
     const { error } = await supabase.from('system_config')
         .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
     if (error) return { error };
-    // 歷史記錄用 best-effort 寫入，失敗不影響主要設定已經存檔成功
-    supabase.from('system_config_log').insert({ key, value }).then(({ error: logErr }) => {
-        if (logErr) console.error('[systemConfig:log_failed]', key, logErr.message);
-    });
+    // 必須 await：serverless function 一旦回應就可能被凍結，沒 await 的 promise
+    // 不保證會跑完，之前用 fire-and-forget 導致這筆歷史記錄實測從未真正寫入。
+    // 失敗只記 log、不影響主要設定已經存檔成功（不 throw、不改變回傳值）。
+    const { error: logErr } = await supabase.from('system_config_log').insert({ key, value });
+    if (logErr) console.error('[systemConfig:log_failed]', key, logErr.message);
     return { error: null };
 }

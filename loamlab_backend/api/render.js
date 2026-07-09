@@ -764,7 +764,7 @@ async function _handleRender(req, res) {
                     }
                     
                     const finalContent = (translatedContent + refSuffix).trim();
-                    changes.push(`${zoneTag}\n  Target Object: ${finalContent}`);
+                    changes.push(`${zoneTag}: ${finalContent}`);
                 }
             }
             if (changes.length === 0) {

@@ -5514,8 +5514,10 @@ function _scRecolorCanvasWhite(src) {
 
 // 畫一個 region 的完整標註（線框筆觸 + 文字標籤），供 overlay 與 composite 共用
 // refImgIdx：僅在產生送出用的 composite 時傳入，把「見圖 N」直接烘進畫面上的文字給 AI 讀
-// neutral+number：composite（不論預覽或送出）一律用白線框+黑暈+數字編號，不用 colorHex，
-// 避免 AI 把霓虹色當成塗色指令；只有編輯中的即時預覽（_scRenderOverlays）維持彩色方便使用者辨識
+// number：僅在送出用的 composite 時傳入，把區域序號烘進標籤文字（如「1. 描述」），
+//   讓文字 prompt 的「Region N」跟畫面上的區域精準對應；使用者看到的預覽不會有編號
+// neutral：composite 全部改中性白線框+黑暈，不用 colorHex（方案二，避免 AI 把霓虹色當塗色
+//   指令）——目前測試階段先保留不啟用，畫面仍維持彩色線框，只有編號是新加的
 function _scDrawRegionAnnotation(ctx, region, refImgIdx, neutral, number) {
     if (region.strokeCanvas) {
         if (neutral) {
@@ -5534,13 +5536,13 @@ function _scDrawRegionAnnotation(ctx, region, refImgIdx, neutral, number) {
     if (region.label && region.label.trim() && region.labelPos) {
         let text = region.label.trim();
         if (refImgIdx) text += ` (見圖${refImgIdx})`;
-        if (neutral && number) text = `${number}. ${text}`;
+        if (number) text = `${number}. ${text}`;
         _scDrawLabelPill(ctx, region.labelPos.x, region.labelPos.y, text, neutral ? '#ffffff' : (region.colorHex || '#ff6432'));
     }
 }
 
-// 產生 annotated composite：底圖 + 各區域線框與文字標籤（一律中性白色+編號，這份是要給 AI 讀的）
-// bakeRefTags=true 時才把「見圖 N」烘進文字——只有實際送給 AI 的那份需要，
+// 產生 annotated composite：底圖 + 各區域線框與文字標籤
+// bakeRefTags=true 時才把「見圖 N」與區域編號烘進文字——只有實際送給 AI 的那份需要，
 // 使用者看得到的預覽（sc-mask-overlay-img）不能出現這種內部編號，會顯得莫名其妙
 function _scCreateAnnotatedComposite(bakeRefTags = false) {
     const w = SmartCanvas.canvasW, h = SmartCanvas.canvasH;
@@ -5549,9 +5551,10 @@ function _scCreateAnnotatedComposite(bakeRefTags = false) {
     const ctx = c.getContext('2d');
     ctx.drawImage(SmartCanvas.baseImg, 0, 0, w, h);
     const refIdxMap = bakeRefTags ? _scAssignRefImageIndices() : null;
-    // 方案一（只移除文字色碼、composite 視覺維持彩色）不夠：render.js 的固定範本文字本來就會
-    // 提及顏色詞彙，且彩色像素本身仍餵給模型。改用方案二：composite 一律中性白線框+數字編號
-    SmartCanvas.regions.forEach((r, i) => _scDrawRegionAnnotation(ctx, r, refIdxMap ? refIdxMap.get(r.id) : undefined, true, i + 1));
+    // 目前測試版本：composite 維持彩色線框（方便使用者編輯辨識），但送給 AI 的那份額外烘入
+    // 數字編號，跟文字 prompt 的「Region N」對應；方案二（改中性白線框）程式碼保留備用，
+    // 呼叫時把第 4 個參數改成 true 即可切換，不用重寫
+    SmartCanvas.regions.forEach((r, i) => _scDrawRegionAnnotation(ctx, r, refIdxMap ? refIdxMap.get(r.id) : undefined, false, bakeRefTags ? i + 1 : undefined));
     return c;
 }
 

@@ -5549,9 +5549,9 @@ function _scCreateAnnotatedComposite(bakeRefTags = false) {
     const ctx = c.getContext('2d');
     ctx.drawImage(SmartCanvas.baseImg, 0, 0, w, h);
     const refIdxMap = bakeRefTags ? _scAssignRefImageIndices() : null;
-    // 方案一測試中：composite 暫時維持彩色（不套用 neutral+編號），只讓 prompt 文字移除色碼；
-    // 若彩色線框本身仍導致 AI 把顏色當塗色指令，再切回 neutral 模式（呼叫時補回 true, i+1 兩個參數即可）
-    SmartCanvas.regions.forEach(r => _scDrawRegionAnnotation(ctx, r, refIdxMap ? refIdxMap.get(r.id) : undefined));
+    // 方案一（只移除文字色碼、composite 視覺維持彩色）不夠：render.js 的固定範本文字本來就會
+    // 提及顏色詞彙，且彩色像素本身仍餵給模型。改用方案二：composite 一律中性白線框+數字編號
+    SmartCanvas.regions.forEach((r, i) => _scDrawRegionAnnotation(ctx, r, refIdxMap ? refIdxMap.get(r.id) : undefined, true, i + 1));
     return c;
 }
 

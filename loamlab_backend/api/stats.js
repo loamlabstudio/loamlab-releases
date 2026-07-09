@@ -1072,13 +1072,20 @@ async function dodoDiff(supabase) {
     const dodoBase = process.env.DODO_API_KEY.startsWith('test_')
         ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
 
+    // Dodo API 分頁參數是 page_size（上限 100）+ page_number，不是 limit——
+    // 用錯參數名會被忽略，靜默退回預設 page_size=10，導致只看到一小部分資料。
     let dodoItems = [];
     try {
-        const r = await fetch(`${dodoBase}/subscriptions?limit=100`, {
-            headers: { Authorization: `Bearer ${process.env.DODO_API_KEY}` }
-        });
-        if (!r.ok) return { configured: true, error: `Dodo API 回應 ${r.status}` };
-        dodoItems = (await r.json()).items || [];
+        for (let page = 0; page < 10; page++) {
+            const r = await fetch(`${dodoBase}/subscriptions?page_size=100&page_number=${page}`, {
+                headers: { Authorization: `Bearer ${process.env.DODO_API_KEY}` }
+            });
+            if (!r.ok) return { configured: true, error: `Dodo API 回應 ${r.status}` };
+            const items = (await r.json()).items || [];
+            if (!items.length) break;
+            dodoItems = dodoItems.concat(items);
+            if (items.length < 100) break;
+        }
     } catch (e) {
         return { configured: true, error: e.message };
     }

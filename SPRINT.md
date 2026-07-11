@@ -18,3 +18,16 @@
 - 說明：配置與 `google/nano-banana` 一致的長寬比邏輯：`aspect_ratio: activeTool === 2 ? (aspectRatio || '16:9') : '3:2'`，以確保切換至 Seedream 模型時，出圖比例維持不變。其餘參數如 `resolution`、`images` 及 `prompt` 亦依據 API 要求正確轉發。
 
 status: DONE
+
+## RELEASE_GATE
+release_type: feature
+verified_diff:
+  - loamlab_backend/api/render.js
+  - loamlab_backend/public/admin.html
+  - loamlab_backend/api/stats.js
+  - loamlab_plugin/ui/app.js
+  - loamlab_plugin/main.rb
+  - loamlab_plugin/config.rb
+  - loamlab_plugin.rb
+  - loamlab_backend/api/version.js
+sql_migration: false

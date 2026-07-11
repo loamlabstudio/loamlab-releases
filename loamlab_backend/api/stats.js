@@ -307,7 +307,8 @@ export default async function handler(req, res) {
             getConfig(supabase, 'SYSTEM_ENGINE_CONFIG'),
         ]);
         const prompt_engine_mode = cfgVal?.config?.prompt_engine_mode || 'nodes';
-        return res.status(200).json({ code: 0, nodes: nodesVal?.nodes || [], prompt_engine_mode });
+        const disable_batch_style_lock = !!cfgVal?.config?.disable_batch_style_lock;
+        return res.status(200).json({ code: 0, nodes: nodesVal?.nodes || [], prompt_engine_mode, disable_batch_style_lock });
     }
 
     if (req.method === 'GET' && action === 'get_system_config') {

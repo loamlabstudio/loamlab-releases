@@ -390,12 +390,13 @@ module LoamLab
         user_style_ref_url      = (params["style_ref_url"] || "").to_s.strip
         advanced_settings       = params["advanced_settings"] || {}
         render_force_style      = begin; JSON.parse((params["render_force_style"] || "{}").to_s); rescue; {}; end
+        disable_batch_style_lock = !!params["disable_batch_style_lock"]
 
         dialog.execute_script("window.receiveFromRuby({status: 'rendering'})")
 
         # 延遲一點執行，避免阻塞前端 UI 動畫
         UI.start_timer(0.1, false) do
-            self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution, tool, base_image_url, base_image_scene, reference_image_base64, advanced_settings, user_style_ref_url, render_force_style)
+            self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution, tool, base_image_url, base_image_scene, reference_image_base64, advanced_settings, user_style_ref_url, render_force_style, disable_batch_style_lock)
         end
       end
 
@@ -1646,7 +1647,7 @@ module LoamLab
     end
 
     # 批量導出指定的場景為實體檔案並上傳 Coze
-    def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1, base_image_url="", base_image_scene="底圖", reference_image_base64="", advanced_settings={}, user_style_ref_url="", render_force_style={})
+    def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1, base_image_url="", base_image_scene="底圖", reference_image_base64="", advanced_settings={}, user_style_ref_url="", render_force_style={}, disable_batch_style_lock=false)
       model = Sketchup.active_model
       return unless model
       @@polling_dialog = dialog
@@ -1968,7 +1969,8 @@ module LoamLab
                   captured_ts      = timestamp.dup
                   LoamLab.log "[LoamLab] 截圖完成: #{scene_name}"
 
-                  has_explicit_style = !user_style_ref_url.to_s.strip.empty?
+                  # 批次風格鎖定關閉時：不需要等第 1 張出圖結果當風格參考，所有場景直接平行送出
+                  has_explicit_style = !user_style_ref_url.to_s.strip.empty? || disable_batch_style_lock
                   if index == 0 || total_count == 1 || has_explicit_style
                     _s0_scene   = captured_scene.dup
                     _s0_channel = captured_channel_b64.dup

@@ -48,6 +48,7 @@ let _tool1StyleRefUrl = null;     // 工具 1：從歷史選擇的風格參考�
 let t1NodesData = []; // Store Tool 1 advanced nodes configuration
 let optionsData = []; // SYSTEM_OPTIONS from backend
 let promptEngineMode = 'nodes'; // 由後端 get_t1_nodes 回傳值決定
+let disableBatchStyleLock = false; // 由後端 get_t1_nodes 回傳值決定（關閉時批次場景可平行送出，不必等第1張）
 let userChips = JSON.parse(localStorage.getItem('loamlab_user_chips') || '{}');
 // { [nodeId]: [{label, value}] }
 let userPresets = JSON.parse(localStorage.getItem('loamlab_presets') || '[]');
@@ -104,6 +105,7 @@ async function fetchT1Nodes() {
         if (data.code === 0) {
             t1NodesData = data.nodes || [];
             promptEngineMode = data.prompt_engine_mode || 'nodes'; // 純後端控制，無本地 override
+            disableBatchStyleLock = !!data.disable_batch_style_lock;
             // 開啟插件時，用「上一次實際送出渲染」的完整配方覆蓋逐欄位累積的 loamlab_node_vals，
             // 避免各節點各自殘留不同時期編輯過、但從未送出的舊值，混雜成一份四不像的配方。
             try {
@@ -2164,6 +2166,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     expected_cost: totalCost,
                     tool: currentActiveTool,
                     advanced_settings,
+                    disable_batch_style_lock: disableBatchStyleLock,
                     render_force_style: JSON.stringify(_forceStyleVal),
                     ...(usingBaseImage && {
                         base_image_url: _baseImageEntry.cloud_url || _baseImageEntry.file_url || '',

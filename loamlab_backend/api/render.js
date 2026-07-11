@@ -42,12 +42,24 @@ const MODEL_ADAPTERS = {
         aspect_ratio: activeTool === 2 ? (aspectRatio || '16:9') : '3:2',
         output_format: 'jpeg'
     }),
-    'seedream': (images, prompt, res, activeTool, aspectRatio) => ({
-        images, prompt, resolution: res,
-        aspect_ratio: activeTool === 2 ? (aspectRatio || '16:9') : '3:2',
+    // ByteDance Seedream 用「WIDTH*HEIGHT」像素字串，不吃 resolution/aspect_ratio；
+    // 三檔像素預算對齊官方文件範例（1024x1024 / ~1536x1536 / 2048x2048）
+    'bytedance/seedream': (images, prompt, res, activeTool, aspectRatio) => ({
+        images, prompt,
+        size: seedreamSize(res, activeTool === 2 ? (aspectRatio || '16:9') : '3:2'),
         output_format: 'jpeg'
     })
 };
+
+const SEEDREAM_PIXEL_BUDGET = { '1k': 1048576, '2k': 2359296, '4k': 4194304 };
+function seedreamSize(res, ratio) {
+    const [rw, rh] = ratio.split(':').map(Number);
+    const budget = SEEDREAM_PIXEL_BUDGET[res] || SEEDREAM_PIXEL_BUDGET['2k'];
+    const r = rw / rh;
+    const h = Math.round(Math.sqrt(budget / r) / 8) * 8;
+    const w = Math.round((h * r) / 8) * 8;
+    return `${w}*${h}`;
+}
 
 function buildAtlasReqBody(model, images, prompt, resolution, activeTool, aspectRatio) {
     const adapterKey = Object.keys(MODEL_ADAPTERS).find(k => model.startsWith(k));

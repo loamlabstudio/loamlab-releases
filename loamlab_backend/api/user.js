@@ -18,6 +18,19 @@ async function findDodoCustomerId(dodoBase, apiKey, targetEmail) {
     return match?.customer_id || match?.id || null;
 }
 
+// 已知 dodo_subscription_id 時優先用它直接查訂閱拿 customer_id，比搜尋整個客戶清單更準；
+// 仍核對回傳的 customer.email 是否等於預期用戶，避免資料庫存到錯誤/過期 subscription_id 時誤傳他人資料。
+async function findDodoCustomerIdBySubscription(dodoBase, apiKey, subscriptionId, expectedEmail) {
+    const subRes = await fetch(`${dodoBase}/subscriptions/${subscriptionId}`, {
+        headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+    if (!subRes.ok) return null;
+    const subData = await subRes.json();
+    const subEmail = (subData.customer?.email || subData.customer_email || '').toLowerCase();
+    if (subEmail !== expectedEmail.toLowerCase()) return null;
+    return subData.customer?.customer_id || subData.customer?.id || subData.customer_id || null;
+}
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -296,7 +309,21 @@ export default async function handler(req, res) {
 
         const dodoBase = DODO_API_KEY.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
         try {
-            const customerId = await findDodoCustomerId(dodoBase, DODO_API_KEY, email);
+            // 1. 優先用資料庫已存的 dodo_subscription_id 直接查訂閱拿 customer_id（可靠）
+            let customerId = null;
+            const supabaseUrl = process.env.SUPABASE_URL;
+            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+            if (supabaseUrl && supabaseKey) {
+                const sb = createClient(supabaseUrl, supabaseKey);
+                const { data: u } = await sb.from('users').select('dodo_subscription_id').eq('email', email).maybeSingle();
+                if (u?.dodo_subscription_id) {
+                    customerId = await findDodoCustomerIdBySubscription(dodoBase, DODO_API_KEY, u.dodo_subscription_id, email);
+                }
+            }
+            // 2. 沒有存 subscription_id 或查不到才退回用 email 搜尋客戶清單
+            if (!customerId) {
+                customerId = await findDodoCustomerId(dodoBase, DODO_API_KEY, email);
+            }
             if (!customerId) return res.status(200).json({ code: 0, portal_url: FALLBACK_URL });
 
             const sessRes = await fetch(`${dodoBase}/customers/${customerId}/customer-portal/session`, {

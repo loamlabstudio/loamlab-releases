@@ -23,6 +23,17 @@
   - **描述**: 修改 `<head>` 中的 `window.onerror`，在跳出 `alert()` 的同時，使用 `fetch` 將錯誤訊息 (msg, line, stack) 與當前版本靜默發送至 `https://loamlab-camera.vercel.app/api/feedback`（標記 `type: "bug"`），以便未來能從後台觀測到此類用戶的客戶端崩潰狀況。
   - **實作說明**: 已確認後端 `api/feedback.js` 端點與 payload 格式相容（type/content/metadata）；fetch 包在 try/catch + .catch 中避免上報失敗造成遞迴錯誤。
 
-**驗收**: ESLint (`npm run lint`) 通過，`node -c app.js` 語法檢查通過。尚未執行 `build_rbz.ps1` 打包／未部署後端／未實機測試 SketchUp CEF，待用戶確認後續是否要發布。
+**驗收**: ESLint (`npm run lint`) 通過，`node -c app.js` 語法檢查通過。後端修復已於部署時單獨透過 `vercel --prod` 上線並經冒煙測試確認；本次為插件端 (.rbz) 正式發布。
+
+## RELEASE_GATE
+release_type: feature
+verified_diff:
+  - loamlab_plugin/ui/app.js
+  - loamlab_plugin/ui/index.html
+  - loamlab_backend/api/user.js
+  - loamlab_plugin/config.rb
+  - loamlab_plugin.rb
+  - loamlab_backend/api/version.js
+sql_migration: false
 
 status: DONE

@@ -41,6 +41,11 @@ const MODEL_ADAPTERS = {
         // T1/T3 對齊 gpt-image-2 的 3:2 固定尺寸（1536x1024），三工具出圖比例一致
         aspect_ratio: activeTool === 2 ? (aspectRatio || '16:9') : '3:2',
         output_format: 'jpeg'
+    }),
+    'seedream': (images, prompt, res, activeTool, aspectRatio) => ({
+        images, prompt, resolution: res,
+        aspect_ratio: activeTool === 2 ? (aspectRatio || '16:9') : '3:2',
+        output_format: 'jpeg'
     })
 };
 

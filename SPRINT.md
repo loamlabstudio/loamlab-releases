@@ -1,39 +1,20 @@
-# CONTEXT_DIGEST
-SmartCanvas（T2）v2 上線後，真實測試發現 AI 輸出會出現跟圈選顏色一致的實色色塊污染。原因是
-composite 上的霓虹線框顏色本身會被模型誤解成塗色指令，即使 prompt 文字已移除色碼也一樣。
-本輪先採用折衷方案驗證：composite 視覺維持彩色（不影響使用者編輯體驗），但只有實際送給 AI
-的那份額外烘入「隱藏數字編號」（如「1. 描述」），跟文字 prompt 的「Region N」精準對應，使用者
-看到的預覽版不會出現任何編號。方案二（composite 全改中性白線框）程式碼已保留備用，未啟用。
+# SPRINT: Seedream v5.0 Pro Edit Model Testing in T1
 
-# TASKS
-- [x] TASK 1: composite 改「彩色線框 + 送出版隱藏數字編號」混合方案
-  - **影響檔案**: `loamlab_plugin/ui/app.js`
-  - 描述: `_scDrawRegionAnnotation` 的 `neutral`（全中性白線框，方案二保留備用）與 `number`
-    （烘入序號）拆成兩個獨立參數；`_scCreateAnnotatedComposite` 只在 `bakeRefTags=true`
-    （送出版）時傳入序號，預覽版（使用者看得到）維持乾淨無編號。
+## CONTEXT_DIGEST
+用戶需要在 T1 測試新模型 `Seedream v5.0 Pro Edit`，並且要在 admin 後台管理切換。
+切換模型時，出圖比例必須與現有架構保持一致（T1/T3 固定為 3:2，T2 依 aspectRatio 參數決定）。
+需修改前端管理介面選項，及後端 API 的 Model Adapter 邏輯以正確映射參數。
 
-- [x] TASK 2: render.js prompt 組裝格式簡化
-  - **影響檔案**: `loamlab_backend/api/render.js`
-  - 描述: `changes.push` 從 `zoneTag\n  Target Object: content` 兩行式改成 `zoneTag: content`
-    單行，跟 app.js 端組裝格式一致，避免 prompt 讀起來斷行斷錯地方。
+## TASKS
 
-- [x] TASK 3: 資訊圖標籤框邊框加粗
-  - **影響檔案**: `loamlab_plugin/ui/app.js`
-  - 描述: `_scDrawLabelPill` 標籤框邊框從 `Math.max(1, 1.5 * scale)` 加粗到
-    `Math.max(2.5, 3 * scale)`，提升辨識度。
+### TASK 1: 在 Admin 介面新增 Seedream 模型選項 [MUST] [x]
+**影響檔案**: `loamlab_backend/public/admin.html`
+- 描述：在 `admin.html` 的 `model-t1`、`model-t2`、`model-t3` 下拉選單中，新增一個 `<option value="seedream/v5.0-pro-edit">Seedream v5.0 Pro Edit</option>`。
+- 說明：可讓管理員於後台即時切換至此新模型。為保證完整性，T1/T2/T3 下拉列表皆同步新增，但預期重點測試在 T1。
 
-**驗收**: 以 Playwright 匯出預覽版與送出版 composite 截圖人工比對——預覽版純彩色無編號，
-送出版彩色線框 + 正確序號皆已烘入。實際色塊污染是否解決待使用者實測回饋後再決定是否切換
-方案二。
+### TASK 2: 後端新增 Seedream 的 Model Adapter [MUST] [x]
+**影響檔案**: `loamlab_backend/api/render.js`
+- 描述：在 `MODEL_ADAPTERS` 物件中新增對應 `seedream` 的 key。
+- 說明：配置與 `google/nano-banana` 一致的長寬比邏輯：`aspect_ratio: activeTool === 2 ? (aspectRatio || '16:9') : '3:2'`，以確保切換至 Seedream 模型時，出圖比例維持不變。其餘參數如 `resolution`、`images` 及 `prompt` 亦依據 API 要求正確轉發。
 
 status: DONE
-
-## RELEASE_GATE
-release_type: hotfix
-verified_diff:
-  - loamlab_plugin/ui/app.js
-  - loamlab_backend/api/render.js
-  - loamlab_plugin/config.rb
-  - loamlab_plugin.rb
-  - loamlab_backend/api/version.js
-sql_migration: false

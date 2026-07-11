@@ -712,9 +712,11 @@ async function _handleRender(req, res) {
 
         // ── Prompt Engine Mode（nodes | legacy）──
         let promptEngineMode = 'nodes';
+        let disableBatchStyleLock = false;
         try {
             const eVal = await getConfig(supabase, 'SYSTEM_ENGINE_CONFIG');
             if (eVal?.config?.prompt_engine_mode) promptEngineMode = eVal.config.prompt_engine_mode;
+            disableBatchStyleLock = !!eVal?.config?.disable_batch_style_lock;
         } catch(e) {}
 
         const defaultP1 = "SketchUp interior model (Image 1). Backend pre-generates a spatial depth map (Image 2) and a color-segmented channel map (Image 3). Using Image 1 with reference to Images 2 and 3, restore 99% of spatial depth, camera position, and material texture direction without altering geometry or materials. Convert to a realistic interior photo. Apply natural lighting with supplemental diffuse fill to eliminate pure-black shadows and overexposure. Rationalize minor spatial inconsistencies. Professional photography-grade color grading with natural tonal gradation. ultra-detailed";
@@ -750,7 +752,7 @@ async function _handleRender(req, res) {
         } catch(e) {}
 
         // Method B：提前取得風格參考 URL（需在 finalPrompt 組裝前宣告）
-        const styleRefUrl = (userPayload.parameters?.style_ref_url || '').trim();
+        const styleRefUrl = disableBatchStyleLock ? '' : (userPayload.parameters?.style_ref_url || '').trim();
 
         // ── 提示詞組裝 ──
         let finalPrompt = "";

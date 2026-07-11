@@ -403,6 +403,31 @@
     <div id="engine-mode-status" class="text-xs text-green-400 mt-2 hidden"></div>
   </div>
 
+  <!-- 批次風格鎖定 (Anti-Collage) 切換 -->
+  <div class="card mb-4 border border-amber-600/30 bg-[#1a120a]/40">
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-sm font-semibold text-white flex items-center gap-2">
+        <span class="text-amber-400">🎨</span> 批次風格鎖定（Anti-Collage）
+      </div>
+      <div id="batch-style-lock-badge" class="text-xs px-2 py-0.5 rounded-full bg-cyan-600/20 text-cyan-300 border border-cyan-600/30">讀取中...</div>
+    </div>
+    <div class="text-[11px] text-gray-500 mb-3 leading-relaxed">
+      T1 多場景批次時，第 2 張起會自動帶入第 1 張的渲染結果作為風格參考（多一段 Image Roles / Style Consistency 提示詞＋一張參考圖），確保同批次光線色調一致，但會讓每張成本不一致。<br>
+      關閉後，批次內每張場景各自獨立送出，不帶額外提示詞與參考圖，成本可預測，但同批次場景間風格可能不一致。
+    </div>
+    <div class="flex gap-2">
+      <button onclick="setBatchStyleLock(false)" id="btn-style-lock-on"
+        class="flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors">
+        ● 開啟鎖定
+      </button>
+      <button onclick="setBatchStyleLock(true)" id="btn-style-lock-off"
+        class="flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors">
+        ○ 關閉鎖定
+      </button>
+    </div>
+    <div id="batch-style-lock-status" class="text-xs text-green-400 mt-2 hidden"></div>
+  </div>
+
   <!-- 渲染工作流咒語管理 -->
   <div class="card mb-5 border border-purple-600/30 bg-[#160f2e]/40">
     <div class="flex items-center justify-between mb-4">
@@ -1652,12 +1677,14 @@ async function saveModels() {
 }
 
 // ── Prompt Engine Mode ────────────────────────────────────────────────────
+let _engineConfigCache = {};
 async function loadEngineConfig() {
   try {
     const r = await fetch(`${API_BASE}/api/stats?action=get_system_config`);
     const j = await r.json();
-    const mode = j.config?.prompt_engine_mode || 'nodes';
-    applyEngineModeBadge(mode);
+    _engineConfigCache = j.config || {};
+    applyEngineModeBadge(_engineConfigCache.prompt_engine_mode || 'nodes');
+    applyBatchStyleLockBadge(!!_engineConfigCache.disable_batch_style_lock);
   } catch(e) { console.error('Failed to load engine config:', e); }
 }
 
@@ -1681,14 +1708,54 @@ function applyEngineModeBadge(mode) {
 async function setEngineMode(mode) {
   const status = document.getElementById('engine-mode-status');
   try {
+    _engineConfigCache.prompt_engine_mode = mode;
     const r = await fetch(`${API_BASE}/api/stats?action=set_system_config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
-      body: JSON.stringify({ config: { prompt_engine_mode: mode } })
+      body: JSON.stringify({ config: _engineConfigCache })
     });
     if (r.ok) {
       applyEngineModeBadge(mode);
       status.innerText = `✅ 已切換為 ${mode === 'legacy' ? 'Legacy' : 'Nodes'} Mode，即刻生效`;
+      status.classList.remove('hidden');
+      setTimeout(() => status.classList.add('hidden'), 3000);
+    } else {
+      alert('切換失敗，請確認 Admin Key 正確');
+    }
+  } catch(e) {
+    alert('切換錯誤: ' + e.message);
+  }
+}
+
+function applyBatchStyleLockBadge(disabled) {
+  const badge = document.getElementById('batch-style-lock-badge');
+  const btnOn = document.getElementById('btn-style-lock-on');
+  const btnOff = document.getElementById('btn-style-lock-off');
+  if (disabled) {
+    badge.innerText = '○ 已關閉';
+    badge.className = 'text-xs px-2 py-0.5 rounded-full bg-gray-600/20 text-gray-400 border border-gray-600/30';
+    btnOn.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-white/10 text-white/30 hover:text-white/60';
+    btnOff.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-gray-500/60 text-gray-300 bg-gray-600/20';
+  } else {
+    badge.innerText = '● 已鎖定';
+    badge.className = 'text-xs px-2 py-0.5 rounded-full bg-cyan-600/20 text-cyan-300 border border-cyan-600/30';
+    btnOn.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-cyan-500/60 text-cyan-300 bg-cyan-600/20';
+    btnOff.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-white/10 text-white/30 hover:text-white/60';
+  }
+}
+
+async function setBatchStyleLock(disabled) {
+  const status = document.getElementById('batch-style-lock-status');
+  try {
+    _engineConfigCache.disable_batch_style_lock = disabled;
+    const r = await fetch(`${API_BASE}/api/stats?action=set_system_config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+      body: JSON.stringify({ config: _engineConfigCache })
+    });
+    if (r.ok) {
+      applyBatchStyleLockBadge(disabled);
+      status.innerText = disabled ? '✅ 已關閉批次風格鎖定，即刻生效' : '✅ 已開啟批次風格鎖定，即刻生效';
       status.classList.remove('hidden');
       setTimeout(() => status.classList.add('hidden'), 3000);
     } else {

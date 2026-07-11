@@ -5,6 +5,19 @@ import { isValidAdminKey } from '../lib/safeCompare.js';
 import { getClientIp } from '../lib/net.js';
 import { resolveUserEmail } from '../lib/verifyIdentity.js';
 
+// Dodo `/customers?customer_email=` 的伺服器端過濾不可信（實測會回傳與 email 無關的帳號列表），
+// 絕不可直接取 customers[0]，一律由呼叫端拿到的 email 做二次精確比對，找不到就回 null。
+async function findDodoCustomerId(dodoBase, apiKey, targetEmail) {
+    const custRes = await fetch(`${dodoBase}/customers?customer_email=${encodeURIComponent(targetEmail)}`, {
+        headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+    if (!custRes.ok) return null;
+    const custData = await custRes.json();
+    const customers = custData.items || custData.customers || custData.data || [];
+    const match = customers.find(c => (c.email || c.customer?.email || '').toLowerCase() === targetEmail.toLowerCase());
+    return match?.customer_id || match?.id || null;
+}
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -103,125 +116,6 @@ export default async function handler(req, res) {
     }
     // ────────────────────────────────────────────────────────────────────────
 
-    // ── Cancel Subscription（用戶確認取消後直接呼叫 Dodo API）──────────────────
-    if (req.method === 'POST' && req.query.action === 'cancel_subscription') {
-        let { email: cancelEmail, reason } = req.body || {};
-        if (cancelEmail) cancelEmail = cancelEmail.toLowerCase().trim();
-        if (!cancelEmail) return res.status(400).json({ code: -1, msg: 'Missing email' });
-
-        const sbUrl = process.env.SUPABASE_URL;
-        const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-        if (!sbUrl || !sbKey) return res.status(500).json({ code: -1, msg: 'Missing SUPABASE env vars' });
-        const sb = createClient(sbUrl, sbKey);
-
-        // T2: 寫入退訂原因（await 確保 Vercel 不提早凍結進程）
-        if (reason) {
-            await sb.from('feedback').insert([{
-                user_email: cancelEmail,
-                type: 'unsubscribe_reason',
-                content: reason,
-                metadata: { recorded_at: new Date().toISOString() }
-            }]).catch(() => {});
-        }
-
-        const { data: user } = await sb.from('users').select('dodo_subscription_id, subscription_plan, subscription_period_end').eq('email', cancelEmail).maybeSingle();
-        let subscriptionId = user?.dodo_subscription_id;
-
-        const DODO_API_KEY = process.env.DODO_API_KEY;
-        const PORTAL_URL = `https://customer.dodopayments.com`;
-        const dodoBase = DODO_API_KEY?.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
-
-        if (!DODO_API_KEY) {
-            return res.status(200).json({ code: 2, portal_url: PORTAL_URL, msg: 'config_error' });
-        }
-
-        // subscription_id 未存，嘗試向 Dodo 查詢 email 找出有效訂閱
-        if (!subscriptionId) {
-            try {
-                const listRes = await fetch(
-                    `${dodoBase}/subscriptions?customer_email=${encodeURIComponent(cancelEmail)}&status=active`,
-                    { headers: { 'Authorization': `Bearer ${DODO_API_KEY}` } }
-                );
-                if (listRes.ok) {
-                    const listData = await listRes.json();
-                    const items = listData.items || listData.subscriptions || listData.data || [];
-                    // Dodo 官方 status 枚舉無 trialing（pending/active/on_hold/cancelled/failed/expired）
-                    const active = items.find(s =>
-                        s.status === 'active' &&
-                        (s.customer?.email === cancelEmail || s.customer_email === cancelEmail)
-                    );
-                    if (active?.subscription_id || active?.id) {
-                        subscriptionId = active.subscription_id || active.id;
-                        // 順便回存
-                        sb.from('users').update({ dodo_subscription_id: subscriptionId }).eq('email', cancelEmail)
-                            .catch(() => {});
-                    }
-                }
-            } catch (_) {}
-        }
-
-        if (!subscriptionId) {
-            return res.status(200).json({ code: 2, portal_url: PORTAL_URL, msg: 'no_subscription_found' });
-        }
-
-        try {
-            // 嘗試透過 API 取消
-            const apiRes = await fetch(`${dodoBase}/subscriptions/${subscriptionId}`, {
-                method: 'PATCH',
-                headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cancel_at_next_billing_date: true })
-            });
-
-            if (apiRes.ok) {
-                // T1: 保留 dodo_subscription_id，設 cancel_pending 讓用戶可撤回
-                // PATCH 回應本身就是最新訂閱快照，直接拿 next_billing_date 當確切退訂日回傳給前端
-                const patchedSub = await apiRes.json().catch(() => null);
-                const periodEnd = patchedSub?.next_billing_date || user?.subscription_period_end || null;
-                await sb.from('users').update({ cancel_pending: true, subscription_period_end: periodEnd }).eq('email', cancelEmail)
-                    .catch(e => console.warn('[cancel] db update failed:', e.message));
-                return res.json({ code: 0, msg: 'cancelled', period_end: periodEnd });
-            }
-
-            // T1: PATCH 失敗不再 fallback DELETE，直接進入 portal 流程
-            console.error('[cancel_subscription] PATCH failed:', apiRes.status, await apiRes.text().catch(() => ''));
-        } catch (e) {
-            console.error('[cancel_subscription] fetch error:', e.message);
-        }
-
-        // --- Fallback: 若 API 自動取消失敗，動態建立專屬 Customer Portal URL ---
-        let dynamicPortalUrl = PORTAL_URL;
-        try {
-            // 1. 取得 customer_id
-            const custRes = await fetch(`${dodoBase}/customers?customer_email=${encodeURIComponent(cancelEmail)}`, {
-                headers: { 'Authorization': `Bearer ${DODO_API_KEY}` }
-            });
-            if (custRes.ok) {
-                const custData = await custRes.json();
-                const customers = custData.items || custData.customers || custData.data || [];
-                const customerId = customers[0]?.customer_id || customers[0]?.id;
-
-                if (customerId) {
-                    // 2. 建立 portal session
-                    const sessRes = await fetch(`${dodoBase}/customers/${customerId}/customer-portal/session`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ send_email: false })
-                    });
-                    if (sessRes.ok) {
-                        const sessData = await sessRes.json();
-                        dynamicPortalUrl = sessData.link || sessData.url || sessData.portal_url || PORTAL_URL;
-                    }
-                }
-            }
-        } catch (portalErr) {
-            console.error('[cancel_subscription] Portal URL generation failed:', portalErr.message);
-            return res.status(200).json({ code: 3, msg: '取消請求暫時無法處理，請聯繫客服 support@loamlab.studio', support_email: 'support@loamlab.studio' });
-        }
-
-        return res.status(200).json({ code: 2, portal_url: dynamicPortalUrl, msg: 'api_error_fallback' });
-    }
-    // ────────────────────────────────────────────────────────────────────────
-
     // ── Undo Cancel（撤回退訂申請，在週期結束前可呼叫）────────────────────────────
     if (req.method === 'POST' && req.query.action === 'undo_cancel') {
         let { email: undoEmail } = req.body || {};
@@ -264,93 +158,6 @@ export default async function handler(req, res) {
         }
         // Dodo API 不支援撤回（或失敗）→ 引導 portal
         return res.status(200).json({ code: 2, portal_url: PORTAL_URL2, msg: 'undo_failed_use_portal' });
-    }
-    // ────────────────────────────────────────────────────────────────────────
-
-    // ── Save Offer（取消挽留：折扣點數 / 暫停訂閱）無需 IP 驗證，因為從 website 發起 ──
-    if (req.method === 'POST' && req.query.action === 'save_offer') {
-        let { email: offerEmail, offer_type, pause_months = 1 } = req.body || {};
-        if (offerEmail) offerEmail = offerEmail.toLowerCase().trim();
-        if (!offerEmail || !offer_type) return res.status(400).json({ code: -1, msg: 'Missing email or offer_type' });
-
-        const sbUrl = process.env.SUPABASE_URL;
-        const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-        if (!sbUrl || !sbKey) return res.status(500).json({ code: -1, msg: 'Missing SUPABASE env vars' });
-        const sb = createClient(sbUrl, sbKey);
-
-        const { data: user, error: userErr } = await sb.from('users').select('*').eq('email', offerEmail).maybeSingle();
-        if (userErr) return res.status(500).json({ code: -1, msg: userErr.message });
-        if (!user) return res.status(404).json({ code: -1, msg: 'User not found' });
-        if (!user.subscription_plan) return res.status(400).json({ code: -1, msg: 'No active subscription' });
-        if (user.retention_offer_used) return res.status(400).json({ code: -1, msg: '您已使用過此優惠，無法重複領取' });
-
-        const ALREADY_USED = { code: -1, msg: '您已使用過此優惠，無法重複領取' };
-
-        if (offer_type === 'discount') {
-            const BONUS = 100;
-            // insert-first：deterministic order_id + unique index = 原子鎖，天然防 Race Condition
-            const { error: txErr } = await sb.from('transactions').insert([{
-                user_email: offerEmail, amount: BONUS,
-                transaction_type: 'RETENTION_BONUS',
-                order_id: `retention_bonus_${offerEmail}`
-            }]);
-            if (txErr) {
-                if (txErr.code === '23505') return res.status(400).json(ALREADY_USED);
-                return res.status(500).json({ code: -1, msg: txErr.message });
-            }
-            await sb.from('users').update({ points: (user.points || 0) + BONUS, retention_offer_used: true }).eq('email', offerEmail);
-            return res.status(200).json({ code: 0, msg: '已為您補充 100 點作為回饋，感謝繼續使用 LoamLab！', points_added: BONUS });
-        }
-
-        if (offer_type === 'pause') {
-            // Dodo 沒有官方的 pause/resume 端點（官方文件 PATCH /subscriptions 參數清單無此欄位），
-            // 改用已驗證可行的 next_billing_date 位移：訂閱狀態全程維持 active，只是下次扣款日往後延，
-            // 全自動、不需任何人工介入或事後重新訂閱動作。
-            const months = Math.min(Math.max(parseInt(pause_months) || 1, 1), 3);
-
-            // insert-first 防重複
-            const { error: txErr } = await sb.from('transactions').insert([{
-                user_email: offerEmail, amount: 0,
-                transaction_type: 'RETENTION_PAUSE',
-                order_id: `retention_pause_${offerEmail}`
-            }]);
-            if (txErr) {
-                if (txErr.code === '23505') return res.status(400).json(ALREADY_USED);
-                return res.status(500).json({ code: -1, msg: txErr.message });
-            }
-
-            const subscriptionId = user.dodo_subscription_id;
-            const DODO_API_KEY_PAUSE = process.env.DODO_API_KEY;
-            if (!subscriptionId || !DODO_API_KEY_PAUSE) {
-                // 不標記 retention_offer_used，讓用戶可以重試或改走其他挽留選項
-                return res.status(200).json({ code: 1, msg: '暫停請求失敗，請稍後重試或聯繫客服', fallback: true });
-            }
-            const dodoBasePause = DODO_API_KEY_PAUSE.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
-
-            // 以目前的 next_billing_date 為基準往後延，而非從「今天」起算，避免用戶少享受已付費的當期權益
-            const baseDate = user.subscription_period_end ? new Date(user.subscription_period_end) : new Date();
-            const newBillingDate = new Date(baseDate.getTime() + months * 30 * 24 * 3600 * 1000).toISOString();
-
-            try {
-                const apiRes = await fetch(`${dodoBasePause}/subscriptions/${subscriptionId}`, {
-                    method: 'PATCH',
-                    headers: { 'Authorization': `Bearer ${DODO_API_KEY_PAUSE}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ next_billing_date: newBillingDate })
-                });
-                if (!apiRes.ok) {
-                    const errText = await apiRes.text().catch(() => '');
-                    console.error('[save_offer/pause] Dodo API error:', apiRes.status, errText);
-                    return res.status(200).json({ code: 1, msg: '暫停請求失敗，請稍後重試或聯繫客服', fallback: true });
-                }
-                await sb.from('users').update({ retention_offer_used: true, subscription_period_end: newBillingDate }).eq('email', offerEmail);
-                return res.status(200).json({ code: 0, msg: `訂閱已延後扣款 ${months} 個月，${new Date(newBillingDate).toLocaleDateString('zh-TW')} 才會繼續扣款`, resume_at: newBillingDate });
-            } catch (e) {
-                console.error('[save_offer/pause] fetch error:', e.message);
-                return res.status(200).json({ code: 1, msg: '暫停請求失敗，請稍後重試或聯繫客服', fallback: true });
-            }
-        }
-
-        return res.status(400).json({ code: -1, msg: 'Invalid offer_type' });
     }
     // ────────────────────────────────────────────────────────────────────────
 
@@ -489,14 +296,7 @@ export default async function handler(req, res) {
 
         const dodoBase = DODO_API_KEY.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
         try {
-            const custRes = await fetch(`${dodoBase}/customers?customer_email=${encodeURIComponent(email)}`, {
-                headers: { 'Authorization': `Bearer ${DODO_API_KEY}` }
-            });
-            if (!custRes.ok) return res.status(200).json({ code: 0, portal_url: FALLBACK_URL });
-
-            const custData = await custRes.json();
-            const customers = custData.items || custData.customers || custData.data || [];
-            const customerId = customers[0]?.customer_id || customers[0]?.id;
+            const customerId = await findDodoCustomerId(dodoBase, DODO_API_KEY, email);
             if (!customerId) return res.status(200).json({ code: 0, portal_url: FALLBACK_URL });
 
             const sessRes = await fetch(`${dodoBase}/customers/${customerId}/customer-portal/session`, {

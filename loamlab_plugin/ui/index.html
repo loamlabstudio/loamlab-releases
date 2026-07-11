@@ -6,6 +6,17 @@
     <meta name="color-scheme" content="only dark">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script>
+        // AbortController Polyfill — 舊版 SketchUp CEF (Chrome < 65) 無此原生物件，
+        // 缺少時 fetch({signal}) 會直接 ReferenceError 崩潰（取消訂閱等流程）。
+        if (typeof window.AbortController === 'undefined') {
+            window.AbortController = function() {
+                this.signal = { aborted: false, addEventListener: function(){}, removeEventListener: function(){} };
+            };
+            window.AbortController.prototype.abort = function() {
+                this.signal.aborted = true;
+            };
+        }
+
         // Global Error Handler — suppress non-critical errors (CDN + bundled libs), alert only for app errors
         window.onerror = function(msg, url, lineNo, columnNo, error) {
             var isExternal = url && (url.indexOf('http://') === 0 || url.indexOf('https://') === 0);
@@ -15,6 +26,21 @@
                 return true;
             }
             alert("Error: " + msg + "\nLine: " + lineNo + ":" + columnNo + "\nTrace: " + (error ? error.stack : 'No trace'));
+            try {
+                fetch('https://loamlab-camera.vercel.app/api/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'bug',
+                        content: String(msg) + ' @ ' + lineNo + ':' + columnNo,
+                        metadata: {
+                            plugin_version: (typeof window.LOAMLAB_VERSION !== 'undefined' ? window.LOAMLAB_VERSION : 'unknown'),
+                            stack: error ? String(error.stack) : null,
+                            user_agent: navigator.userAgent
+                        }
+                    })
+                }).catch(function() {});
+            } catch (_) {}
             return false;
         };
         window.addEventListener('unhandledrejection', function(event) {
@@ -942,6 +968,7 @@
 
         <!-- 彈窗內容 -->
         <div class="relative w-[360px] glass-panel rounded-2xl p-8 shadow-2xl transform scale-95 transition-transform duration-300 border border-white/10 bg-[#09090b]/90 text-center"
+            style="background-color:rgba(9,9,11,0.9)"
             id="login-modal-content">
             <button class="absolute top-4 right-4 text-white/40 hover:text-white transition-colors focus:outline-none"
                 id="btn-close-modal">
@@ -1180,6 +1207,7 @@
         class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
         <!-- Modal Content -->
         <div class="bg-[#0f0f12] border border-white/10 rounded-2xl w-[900px] max-w-[90vw] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.8)] flex flex-col relative overflow-hidden transform scale-95 transition-transform duration-300"
+            style="background-color:#0f0f12"
             id="pricing-modal-content">
 
             <button id="btn-close-pricing"
@@ -1196,7 +1224,7 @@
             <div class="text-center mb-6">
                 <h2 class="text-2xl font-bold text-white tracking-widest mb-2 px-10" data-i18n="pricing_title">LOAMLAB CAMERA UPGRADE STRATEGY</h2>
                 <p class="text-white/50 text-sm tracking-wide" data-i18n="pricing_subtitle">Choose the perfect plan for your architectural pipeline.</p>
-                <div class="flex flex-col items-center gap-1.5 mt-2.5">
+                <div class="flex flex-col items-center space-y-1.5 mt-2.5">
                     <p class="text-[#dc2626]/80 text-[11px] font-medium tracking-widest uppercase">💡 Render Costs: 1K (<span id="ui-pricing-cost-1k">15</span> pts) | 2K (<span id="ui-pricing-cost-2k">20</span> pts) | 4K (<span id="ui-pricing-cost-4k">30</span> pts)</p>
                     <p class="text-white/40 text-[10px] tracking-wide" data-i18n="pricing_pts_reset_hint">Subscription points reset monthly (Use it or lose it). Top-up points are permanent.</p>
                 </div>
@@ -1217,7 +1245,7 @@
             <div id="panel-subscription" class="grid grid-cols-3 gap-4">
 
                 <!-- 1. Starter -->
-                <div class="bg-[#18181d] border border-emerald-500/20 rounded-xl p-5 flex flex-col hover:border-emerald-400/40 transition-all relative group shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                <div class="bg-[#18181d] border border-emerald-500/20 rounded-xl p-5 flex flex-col hover:border-emerald-400/40 transition-all relative group shadow-[0_10px_30px_rgba(0,0,0,0.5)]" style="background-color:#18181d">
                     <div class="absolute top-0 right-0 bg-emerald-500/15 text-emerald-400 text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase" data-i18n="pricing_badge_best_first">Best First Plan</div>
                     <h3 class="text-white/80 font-semibold tracking-wider text-sm mb-2 uppercase">Starter</h3>
                     <div class="mb-3" data-original-price="24" data-price-period="mo">
@@ -1240,7 +1268,7 @@
                 </div>
 
                 <!-- 2. Pro (Hero) -->
-                <div class="bg-gradient-to-b from-[#2a1012] to-[#140809] border border-[#dc2626]/50 rounded-xl p-5 flex flex-col shadow-[0_0_30px_rgba(220,38,38,0.15)] relative transform md:-translate-y-2 z-10">
+                <div class="bg-gradient-to-b from-[#2a1012] to-[#140809] border border-[#dc2626]/50 rounded-xl p-5 flex flex-col shadow-[0_0_30px_rgba(220,38,38,0.15)] relative transform md:-translate-y-2 z-10" style="background-color:#1c0d0e">
                     <div class="absolute top-0 right-0 bg-[#dc2626] text-white text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase" data-i18n="pricing_badge_most_popular">Most Popular</div>
                     <h3 class="text-[#fca5a5] font-semibold tracking-wider text-sm mb-2 uppercase drop-shadow-sm">Pro</h3>
                     <div class="mb-3" data-original-price="52" data-price-period="mo">
@@ -1263,7 +1291,7 @@
                 </div>
 
                 <!-- 3. Studio -->
-                <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 flex flex-col hover:border-white/30 transition-all shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                <div class="bg-[#18181d] border border-white/10 rounded-xl p-5 flex flex-col hover:border-white/30 transition-all shadow-[0_10px_30px_rgba(0,0,0,0.5)]" style="background-color:#18181d">
                     <h3 class="text-white/80 font-semibold tracking-wider text-sm mb-2 uppercase">Studio</h3>
                     <div class="mb-3" data-original-price="139" data-price-period="mo">
                         <span class="text-3xl font-bold text-white">$139</span>
@@ -1286,10 +1314,9 @@
 
             </div>
 
-            <!-- 管理訂閱 + 取消入口（僅訂閱用戶可見）-->
-            <div id="cancel-subscription-row" class="hidden mt-4 flex flex-col items-center gap-2">
+            <!-- 管理訂閱入口（僅訂閱用戶可見；取消訂閱一律導向 Dodo Portal，避免自建取消流程的可靠性問題）-->
+            <div id="cancel-subscription-row" class="hidden mt-4 flex flex-col items-center space-y-2">
                 <button id="btn-manage-plan" onclick="openManagePlan()" class="text-[10px] font-semibold tracking-wider text-white/50 hover:text-white/80 border border-white/15 hover:border-white/35 rounded-full px-4 py-1.5 transition-all disabled:opacity-40" data-i18n="pricing_manage_sub">管理訂閱 / Manage Plan</button>
-                <button onclick="openCancelFlow()" class="text-[10px] text-white/20 hover:text-white/40 transition-colors underline underline-offset-2 tracking-wider" data-i18n="pricing_cancel_sub">取消訂閱 / Cancel Subscription</button>
             </div>
 
             <!-- 退訂待生效提示（cancel_pending = true 時顯示）-->
@@ -1314,7 +1341,7 @@
 
             <!-- Top-up Panel (hidden by default) -->
             <div id="panel-topup" class="hidden justify-center">
-                <div class="bg-[#141420] border border-blue-500/20 rounded-xl p-6 flex flex-col hover:border-blue-400/40 transition-all shadow-inner relative w-72 mx-auto">
+                <div class="bg-[#141420] border border-blue-500/20 rounded-xl p-6 flex flex-col hover:border-blue-400/40 transition-all shadow-inner relative w-72 mx-auto" style="background-color:#141420">
                     <div class="absolute top-0 right-0 bg-blue-500/20 text-blue-300 text-[8px] font-bold px-2.5 py-1 rounded-bl-lg tracking-widest uppercase" data-i18n="pricing_badge_no_commitment">No Commitment</div>
                     <h3 class="text-blue-300/80 font-semibold tracking-wider text-sm mb-2 uppercase">Top-up</h3>
                     <div class="mb-3" data-original-price="18" data-price-period="one-time">
@@ -1676,11 +1703,6 @@
     </script>
     <script src="tutorial.js?v=1.3.1"></script>
 
-    <!-- Cancel Flow Modal (internal, no external browser required) -->
-    <div id="cancel-flow-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center" style="background:rgba(0,0,0,0.85);backdrop-filter:blur(4px)" onclick="if(event.target===this)closeCancelFlow()">
-        <div id="cancel-flow-content" class="relative bg-[#0f0f12] border border-white/10 rounded-2xl w-[390px] max-w-[92vw] shadow-[0_20px_60px_rgba(0,0,0,0.8)]" style="padding:1.75rem">
-        </div>
-    </div>
 
     </div>
 </body>

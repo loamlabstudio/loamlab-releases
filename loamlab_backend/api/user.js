@@ -353,16 +353,6 @@ export default async function handler(req, res) {
         const sb = makeSupabase();
         let activated = false;
 
-        // 先查用戶現有狀態：若訂閱已生效且近期已入帳（< 35 天），不重複補發
-        const { data: curUser } = await sb.from('users')
-            .select('subscription_plan, last_topup_at').eq('email', vEmail).maybeSingle();
-        const daysSinceLast = curUser?.last_topup_at
-            ? (Date.now() - new Date(curUser.last_topup_at).getTime()) / (24 * 3600 * 1000)
-            : Infinity;
-        if (curUser?.subscription_plan && daysSinceLast < 35) {
-            return res.status(200).json({ code: 0, activated: false, alreadyActive: true, msg: '訂閱已啟用，點數已入帳' });
-        }
-
         // 無腦拉取（Dumb Pull）：唯一真理來源是 Dodo 的 payments 紀錄，不再另外查 subscriptions 狀態。
         // 舊版「查活躍訂閱」用 period 合成 order_id，跟這裡的 payment_id order_id 是兩把不同的冪等鍵，
         // 曾在補發時對同一筆扣款各自成功一次，造成雙重入帳 — 移除該路徑徹底根除。

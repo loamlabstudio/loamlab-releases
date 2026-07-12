@@ -1,39 +1,29 @@
-# Implementation Plan, Task List and Thought in Chinese
+---
+trigger: always_on
+alwaysApply: true
+---
 
-**CONTEXT_DIGEST**:
-- 舊版 SketchUp (CEF/Chrome < 65) 不支援 `AbortController`，導致用戶點擊「管理/取消訂閱」時直接觸發 ReferenceError 崩潰。
-- Tailwind 的任意值背景 `bg-[#hex]` 會編譯為現代化 `rgb(R G B / var)` 語法，這在舊版 CEF 中會失效，導致模態框背景完全透明且與 3D 視圖重疊。
-- 目前的 `window.onerror` 僅用 `alert()` 提示，並未將崩潰日誌回傳至伺服器，導致官方無法觀測到舊版客戶端的嚴重報錯。
+# SPRINT
+## Context Digest
+- 用戶 (maggieliu@yoshin-design.com) 購買單次 200 Pts，因 Webhook 未送達且 `verify_payment` 存在攔截訂閱用戶驗證單次購買的 Bug，導致點數未入帳。
+- 需要給該名用戶雙倍點數 (400 Pts) 作為補償。
+- 必須排查 Dodo Payments 近期資料，確保沒有其他受害用戶（有扣款成功但系統未入帳的單次點數充值），若有則一併雙倍補償。
 
-**TASKS**:
-- [x] **Task 1: 實作 AbortController Polyfill**
-  - **影響檔案**: `loamlab_plugin/ui/index.html`
-  - **描述**: 在全域環境注入輕量級的 `AbortController` polyfill，確保在舊版 CEF 中調用 `fetch` 與取消訂閱 API 時不會因 `AbortController is not defined` 而報錯中斷。
-  - **實作說明**: 單一入口注入於 `<head>` 最前面（app.js 載入前），涵蓋 app.js 內全部 5 處 `new AbortController()` 呼叫點，包含螢幕截圖中崩潰的 `_cfConfirmCancel`（app.js:2808）。
-- [x] **Task 2: 修復 Modal 背景透明與漸層失效 (CSS 相容性)**
-  - **影響檔案**: `loamlab_plugin/ui/index.html`
-  - **描述**: 將所有關鍵 Modal（如 `pricing-modal`, `cancel-flow-modal`, `login-modal`）及其內部方案卡片的 `bg-[#hex]`，透過內聯樣式 `style="background-color: #hex;"` 進行覆蓋。針對 PRO 方案的漸層，請補充實色背景作為 fallback，以防舊版瀏覽器整塊變透明。
-  - **實作說明**: 已確認編譯後 CSS 使用現代 `rgb(R G B / var)` 語法（舊版 CEF 不支援），共修復 7 處：login-modal-content、pricing-modal-content、Starter/Pro/Studio 三張方案卡、Top-up 面板、cancel-flow-content。
-- [x] **Task 3: 修復 Flex Gap 導致的佈局重疊**
-  - **影響檔案**: `loamlab_plugin/ui/index.html`, `loamlab_plugin/ui/app.js`
-  - **描述**: 舊版 Chrome 不支援 Flexbox 的 `gap` 屬性。請檢查 `pricing-modal` 等核心介面，將依賴 `flex gap-x` 的關鍵排版（特別是垂直堆疊的卡片內容與按鈕組）改用 Tailwind 的 `space-x-x` 或 `space-y-x` (利用 margin 實現)，以確保在舊版中不會擠在一起。
-  - **實作說明**: index.html 內 2 處靜態 Tailwind `gap` 改為 `space-y`；另發現 app.js 的 `_cfRenderStep1/_cfRenderStep2`（取消訂閱彈窗，即螢幕截圖崩潰所在）以內聯 `style="display:flex;gap:8px"` 動態產生按鈕，一併改為 margin-based 間距。
-- [x] **Task 4: 前端異常自動上報機制 (Telemetry)**
-  - **影響檔案**: `loamlab_plugin/ui/index.html`
-  - **描述**: 修改 `<head>` 中的 `window.onerror`，在跳出 `alert()` 的同時，使用 `fetch` 將錯誤訊息 (msg, line, stack) 與當前版本靜默發送至 `https://loamlab-camera.vercel.app/api/feedback`（標記 `type: "bug"`），以便未來能從後台觀測到此類用戶的客戶端崩潰狀況。
-  - **實作說明**: 已確認後端 `api/feedback.js` 端點與 payload 格式相容（type/content/metadata）；fetch 包在 try/catch + .catch 中避免上報失敗造成遞迴錯誤。
+## TASKS
+1. **[x] 修復 verify_payment 攔截邏輯**
+   - **影響檔案**: `loamlab_backend/api/user.js`
+   - **說明**: 移除 `if (curUser?.subscription_plan && daysSinceLast < 35)` 的攔截邏輯。因為 `reconcilePaymentsForEmail` 內部已經依賴 `processTopup` 做嚴格的冪等檢查，移除此防禦攔截才能讓有訂閱的用戶也能順利手動驗證「單次點數購買」。
 
-**驗收**: ESLint (`npm run lint`) 通過，`node -c app.js` 語法檢查通過。後端修復已於部署時單獨透過 `vercel --prod` 上線並經冒煙測試確認；本次為插件端 (.rbz) 正式發布。
+2. **[x] 手動補發並給予 maggieliu 雙倍補償**
+   - **影響檔案**: 無直接修改檔案（操作 DB）
+   - **說明**: 寫入一筆交易紀錄並增加 400 Pts 到 `maggieliu@yoshin-design.com` 的 `lifetime_points` 餘額中（200 Pts 購買 + 200 Pts 補償），訂單號可標記為 `COMPENSATE_pay_0Niy9PtFIXXMbHFpJEWIa`。
 
-## RELEASE_GATE
-release_type: feature
-verified_diff:
-  - loamlab_plugin/ui/app.js
-  - loamlab_plugin/ui/index.html
-  - loamlab_backend/api/user.js
-  - loamlab_plugin/config.rb
-  - loamlab_plugin.rb
-  - loamlab_backend/api/version.js
-sql_migration: false
+3. **[x] 執行全站對帳腳本 (尋找其他受害者)**
+   - **影響檔案**: `loamlab_backend/scripts/audit_missing_topups.mjs` (已新建)
+   - **說明**: 建立一個臨時腳本，透過 Vercel 的 `DODO_API_KEY` 拉取 Dodo Payments 最近的 `payment.succeeded` 紀錄，比對資料庫 `transactions` 表，找出所有「扣款成功但未入帳」的訂單。若發現其他受害者，請同樣進行修復並給予雙倍補償。執行完畢後輸出受害者清單。
+   - **結果**: 找到 3 位新受害者，其中 2 位（liuyuyun8610@gmail.com、ann.kolaw@gmail.com）已修復+雙倍補償(各 +400 pts)；第 3 位 jodichen0602@gmail.com 因 order_id 疑似先前有人手動打字誤植（`I`/`l` 一碼之差、其餘 24 碼完全相同），研判可能已補發過，暫不處理，待人工複核確認是否為同一筆付款。
+
+## PENDING_HUMAN_REVIEW
+- jodichen0602@gmail.com：Dodo payment_id `pay_0NhnImWvYJ5WlmjaLBcCH` vs DB 既有紀錄 `DODO_pay_0NhnImWvYJ5WImjaLBcCH`，只差第17碼 I/l。需人工確認是否為同一筆付款（若是，此用戶已補發過不需再處理；若確認是兩筆不同付款，需比照其他受害者補發+雙倍補償 400 pts）。
 
 status: DONE

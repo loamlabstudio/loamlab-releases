@@ -65,6 +65,7 @@ export default async function handler(req, res) {
                 const orderId = data.subscription_id ? `${data.subscription_id}_${data.payment_id}` : data.payment_id;
                 const discountCode = data.discount?.code || data.discount_code || null;
                 const planKey = data.metadata?.planKey || null;
+                const dodoCustomerId = data.customer?.customer_id || null;
 
                 // 某些訂閱的 payment.succeeded 不帶 product_id → 用 subscription_id 補查（planKey 已存在時跳過）
                 if (!variantId && !planKey && data.subscription_id && process.env.DODO_API_KEY) {
@@ -97,7 +98,7 @@ export default async function handler(req, res) {
                     // 唯一真理來源：processTopup 內部以 UNIQUE(order_id) 做冪等檢查，
                     // 重複的 payment_id 會被自然擋下，不需要任何額外的週期/升級判斷
                     try {
-                        await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey);
+                        await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey, dodoCustomerId);
                         if (data.subscription_id) {
                             await supabase.from('users')
                                 .update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)

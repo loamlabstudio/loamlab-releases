@@ -437,3 +437,57 @@ WHERE transaction_type IN (
 )
 ORDER BY transaction_type, created_at DESC
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at;
+
+-- ==============================================================================
+-- Phase 34: processTopup 原子加點 RPC（修 Webhook Race Condition）+ Dodo 對賬欄位
+-- 背景：deduct_render_points（算圖扣點）已用 FOR UPDATE 鎖列做到原子操作，但
+-- lib/activate.js 的 processTopup（webhook 發點路徑）一直是純 JS 的
+-- read-then-write：查 user.points/lifetime_points → 算新值 → update。webhook
+-- 重送、verify_payment 手動觸發、cron 對賬三條路徑都可能同時打同一個 email，
+-- 後寫的會蓋掉先寫的，點數可能悄悄流失。改成同一種 FOR UPDATE 鎖列模式的
+-- RPC，讓「加點」也變成原子操作，跟 deduct_render_points 對稱。
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION apply_points_delta(
+  p_email TEXT,
+  p_set_monthly INT DEFAULT NULL,      -- 非 NULL 時覆寫 points（訂閱 use-it-or-lose-it）
+  p_add_lifetime INT DEFAULT 0,        -- lifetime_points 增量（單次購買/推薦獎勵）
+  p_add_referral_count INT DEFAULT 0   -- referral_success_count 增量
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_prev_monthly   INT;
+  v_prev_lifetime  INT;
+  v_prev_referral  INT;
+BEGIN
+  SELECT COALESCE(points, 0), COALESCE(lifetime_points, 0), COALESCE(referral_success_count, 0)
+    INTO v_prev_monthly, v_prev_lifetime, v_prev_referral
+    FROM users
+   WHERE email = p_email
+     FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN json_build_object('success', false, 'error', 'user_not_found');
+  END IF;
+
+  UPDATE users SET
+    points = CASE WHEN p_set_monthly IS NOT NULL THEN p_set_monthly ELSE points END,
+    lifetime_points = lifetime_points + p_add_lifetime,
+    referral_success_count = referral_success_count + p_add_referral_count
+  WHERE email = p_email;
+
+  RETURN json_build_object(
+    'success', true,
+    'prev_monthly', v_prev_monthly,
+    'prev_lifetime', v_prev_lifetime,
+    'prev_referral', v_prev_referral,
+    'points', COALESCE(p_set_monthly, v_prev_monthly),
+    'lifetime_points', v_prev_lifetime + p_add_lifetime
+  );
+END;
+$$;
+
+-- Dodo 對賬用：儲存 Dodo 的 customer_id（非 email），供未來查詢 balance/回報 usage 用
+ALTER TABLE users ADD COLUMN IF NOT EXISTS dodo_customer_id TEXT DEFAULT NULL;

@@ -4,6 +4,7 @@ import { isValidAdminKey } from '../lib/safeCompare.js';
 import { getClientIp } from '../lib/net.js';
 import { resolveUserEmail } from '../lib/verifyIdentity.js';
 import { getConfig } from '../lib/systemConfig.js';
+import { reportUsageEvent } from '../lib/dodo.js';
 
 export const maxDuration = 300; // Allow Vercel to run up to 5 minutes to poll AtlasCloud
 
@@ -511,7 +512,7 @@ async function _handleRender(req, res) {
     // 2. 查詢帳戶點數與方案等級
     let { data: user, error: dbErr } = await supabase
         .from('users')
-        .select('points, lifetime_points, subscription_plan')
+        .select('points, lifetime_points, subscription_plan, dodo_customer_id')
         .eq('email', userEmail)
         .single();
 
@@ -590,6 +591,12 @@ async function _handleRender(req, res) {
         if (txData) transactionId = txData.id;
     } catch (txErr) {
         console.warn('[交易日誌] 紀錄失敗（不中斷主流程）:', txErr.message);
+    }
+
+    // 影子模式：非同步回報用量到 Dodo Meters，僅供後台可視化/未來對賬，不影響本次渲染結果
+    if (user.dodo_customer_id) {
+        reportUsageEvent(user.dodo_customer_id, 'render_compute', cost, { resolution: resVal, tool_id: activeTool || 1 })
+            .catch(() => {});
     }
 
     // 4. 解析圖片並代為上傳至 Supabase Storage（私有暫存，渲染後自動刪除）

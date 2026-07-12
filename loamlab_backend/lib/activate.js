@@ -13,7 +13,7 @@ export function makeSupabase() {
     );
 }
 
-export async function processTopup(supabase, customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null, planKey = null) {
+export async function processTopup(supabase, customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null, planKey = null, dodoCustomerId = null) {
     const fullOrderId = `${platform}_${orderId}`;
     const { data: existingTx } = await supabase.from('transactions').select('id').eq('order_id', fullOrderId).maybeSingle();
     if (existingTx) return console.log(`[🔁冪等] ${fullOrderId} 已處理過`);
@@ -81,23 +81,28 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
         console.log(`[💡KOL晚期綁定] discount_code=${discountCode}: ${customerEmail} → ${kolEmailFromCode}`);
     }
 
+    // 邀請人分潤 A：改用 apply_points_delta 原子 RPC（FOR UPDATE 鎖列），避免多筆訂單
+    // 同時對同一個邀請人做 read-then-write 互相蓋掉。
     let bonusB = 0;
+    let inviterEmail = null;
+    let REWARD_A = 0;
     if (user?.referred_by) {
         const { data: txPaid } = await supabase.from('transactions').select('id').eq('user_email', customerEmail).eq('transaction_type', 'REFERRAL_PAID_B').maybeSingle();
         if (!txPaid) {
-            const REWARD_A = PRICING_CONFIG.referral.paid_reward_a;
+            REWARD_A = PRICING_CONFIG.referral.paid_reward_a;
             const REWARD_B = PRICING_CONFIG.referral.paid_reward_b;
             bonusB = REWARD_B;
-            const { data: inviter } = await supabase.from('users').select('lifetime_points, referral_success_count').eq('email', user.referred_by).single();
-            if (inviter) {
-                await supabase.from('users').update({
-                    lifetime_points: (inviter.lifetime_points || 0) + REWARD_A,
-                    referral_success_count: (inviter.referral_success_count || 0) + 1
-                }).eq('email', user.referred_by);
+            inviterEmail = user.referred_by;
+            const { data: inviterRpc } = await supabase.rpc('apply_points_delta', {
+                p_email: inviterEmail, p_set_monthly: null, p_add_lifetime: REWARD_A, p_add_referral_count: 1
+            });
+            if (inviterRpc?.success) {
                 await supabase.from('transactions').insert([
-                    { user_email: user.referred_by, amount: REWARD_A, transaction_type: 'REFERRAL_PAID_A', order_id: `refA_${fullOrderId}` },
+                    { user_email: inviterEmail, amount: REWARD_A, transaction_type: 'REFERRAL_PAID_A', order_id: `refA_${fullOrderId}` },
                     { user_email: customerEmail, amount: REWARD_B, transaction_type: 'REFERRAL_PAID_B', order_id: `refB_${fullOrderId}` }
                 ]);
+            } else {
+                inviterEmail = null; // 邀請人不存在，rollback 時不用補償
             }
         }
     }
@@ -109,27 +114,37 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
             console.warn('[subscription_id] store failed (non-fatal):', e.message);
         }
     }
-
-    // points = 訂閱月額度（每月覆寫），lifetime_points = 單次購買的永久餘額（不隨訂閱續訂消失）。
-    // 訂閱只覆寫 points；單次購買只累加 lifetime_points——兩者互不重疊，避免雙重入帳。
-    const updatePayload = {
-        points: isSubscription ? pointsToAdd : (user?.points || 0),
-        lifetime_points: (user?.lifetime_points || 0) + (isSubscription ? 0 : pointsToAdd) + bonusB,
-        is_beta_tester: true,
-        last_topup_at: new Date().toISOString(),
-    };
-    if (planName) updatePayload.subscription_plan = planName;
-
-    if (!isSubscription) {
-        const originalLifetime = user?.lifetime_points || 0;
-        if (updatePayload.lifetime_points <= originalLifetime) {
-            const err = new Error(`PointCalculationError: TOPUP_SINGLE expected lifetime_points increase but ${originalLifetime} → ${updatePayload.lifetime_points}`);
-            err.code = 'POINT_CALC_ERROR';
-            throw err;
+    if (dodoCustomerId) {
+        try {
+            await supabase.from('users').update({ dodo_customer_id: dodoCustomerId }).eq('email', customerEmail);
+        } catch (e) {
+            console.warn('[dodo_customer_id] store failed (non-fatal):', e.message);
         }
     }
 
-    await supabase.from('users').update(updatePayload).eq('email', customerEmail);
+    // points = 訂閱月額度（每月覆寫），lifetime_points = 單次購買的永久餘額（不隨訂閱續訂消失）。
+    // 訂閱只覆寫 points；單次購買只累加 lifetime_points——兩者互不重疊，避免雙重入帳。
+    // 改用 apply_points_delta 原子 RPC：同一個 email 若被 webhook 重送 + verify_payment 手動
+    // 觸發同時打到，FOR UPDATE 鎖列保證兩者依序疊加，不會互相蓋掉（原本的 race condition）。
+    const lifetimeDelta = (isSubscription ? 0 : pointsToAdd) + bonusB;
+    const { data: mainRpc, error: mainRpcErr } = await supabase.rpc('apply_points_delta', {
+        p_email: customerEmail,
+        p_set_monthly: isSubscription ? pointsToAdd : null,
+        p_add_lifetime: lifetimeDelta,
+        p_add_referral_count: 0
+    });
+    if (mainRpcErr || !mainRpc?.success) {
+        const err = new Error(`apply_points_delta failed for ${customerEmail}: ${mainRpcErr?.message || mainRpc?.error}`);
+        err.code = 'POINT_CALC_ERROR';
+        throw err;
+    }
+
+    const otherFields = {
+        is_beta_tester: true,
+        last_topup_at: new Date().toISOString(),
+    };
+    if (planName) otherFields.subscription_plan = planName;
+    await supabase.from('users').update(otherFields).eq('email', customerEmail);
 
     const PLAN_PRICES_CENTS = { starter: 700, pro: 1500, studio: 3500, topup: 490 };
     const amountPaid = planName ? (PLAN_PRICES_CENTS[planName] || 490) : 490;
@@ -145,13 +160,21 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
         if (txInsertErr.code === '23505' || txInsertErr.message?.includes('unique')) {
             return console.log(`[processTopup] 23505 idempotent — ${fullOrderId} 已由並發請求處理`);
         }
-        // 非冪等錯誤：點數已寫入但交易紀錄失敗 → 嘗試回滾，防止重試時重複發點
+        // 非冪等錯誤：點數已寫入但交易紀錄失敗 → 補償性回滾（用同一支原子 RPC 反向操作，
+        // 只還原「這筆請求剛剛加的量」，不會動到並發寫入的其他變更）
         console.error(`[🔴ROLLBACK] transactions insert failed for ${fullOrderId}, attempting rollback`);
         try {
-            await supabase.from('users').update({
-                points: user?.points || 0,
-                lifetime_points: user?.lifetime_points || 0,
-            }).eq('email', customerEmail);
+            await supabase.rpc('apply_points_delta', {
+                p_email: customerEmail,
+                p_set_monthly: isSubscription ? mainRpc.prev_monthly : null,
+                p_add_lifetime: -lifetimeDelta,
+                p_add_referral_count: 0
+            });
+            if (inviterEmail) {
+                await supabase.rpc('apply_points_delta', {
+                    p_email: inviterEmail, p_set_monthly: null, p_add_lifetime: -REWARD_A, p_add_referral_count: -1
+                });
+            }
             console.error(`[🔴ROLLBACK] 點數已回滾: ${customerEmail}`);
         } catch (rollbackErr) {
             console.error(`[🚨CRITICAL] 回滾失敗，點數不一致！user=${customerEmail} order=${fullOrderId}`, rollbackErr.message);
@@ -196,7 +219,8 @@ export async function reconcilePaymentsForEmail(supabase, email, dodoApiKey) {
                     alreadyIssued = !!exOld;
                 }
                 if (!alreadyIssued) {
-                    await processTopup(supabase, email, productId, orderId, 'DODO', null, pay.subscription_id || null);
+                    const payCustomerId = pay.customer?.customer_id || null;
+                    await processTopup(supabase, email, productId, orderId, 'DODO', null, pay.subscription_id || null, null, payCustomerId);
                     activated = true;
                 }
             }

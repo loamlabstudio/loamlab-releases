@@ -581,6 +581,24 @@
       </div>
     </div>
 
+    <!-- 一鍵翻譯全部官方提示詞：結構標籤 + 所有節點（System + Regular）一次翻完並存檔，
+         唯一入口，不用再分別跑三顆翻譯按鈕 -->
+    <div class="flex items-center gap-2 mb-3 pb-3 border-b border-white/[0.06] bg-purple-950/10 -mx-4 px-4 py-2">
+      <span class="text-[10px] text-purple-300 uppercase tracking-widest font-bold shrink-0">🌐 全部官方提示詞</span>
+      <select id="master-target-lang" class="bg-black/40 border border-purple-500/30 rounded-lg py-1 px-2 text-xs text-purple-200 outline-none">
+        <option value="en">→ English</option>
+        <option value="zh-TW">→ 繁體中文</option>
+        <option value="zh-CN">→ 简体中文</option>
+        <option value="ja">→ 日本語</option>
+        <option value="es">→ Español</option>
+        <option value="pt">→ Português</option>
+      </select>
+      <button onclick="translateAllOfficialPrompt()" id="btn-translate-everything" class="bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/60 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors">
+        一鍵翻譯全部並儲存
+      </button>
+      <span class="text-[10px] text-gray-600">= 結構標籤 + 全部節點（含 Core Constraints 等 System 節點）一次翻完</span>
+    </div>
+
     <!-- 設定包管理列 -->
     <div class="flex items-center gap-2 mb-3 pb-3 border-b border-white/[0.06]">
       <span class="text-[10px] text-gray-600 uppercase tracking-widest font-bold shrink-0">設定包</span>
@@ -2526,6 +2544,63 @@ async function translateAllSystemNodes() {
     if (status) status.innerText = '❌ 翻譯失敗，請手動填寫';
   }
   if (btn) { btn.innerText = '🔒 一鍵翻譯系統節點並儲存'; btn.disabled = false; }
+}
+
+// 唯一入口：結構標籤（Project/Image Roles/群組標題...）+ 全部節點（System 的 value+label、
+// Regular 的 label+default）一次翻成同一個目標語言並存檔。三顆分開的翻譯按鈕還留著給
+// 只想改單一部分的情境用，這顆是「全部都要翻」時的正常路徑。
+async function translateAllOfficialPrompt() {
+  const btn = document.getElementById('btn-translate-everything');
+  const targetLang = document.getElementById('master-target-lang')?.value || 'en';
+  const status = document.getElementById('t1-nodes-status');
+  if (btn) { btn.innerText = '翻譯中...'; btn.disabled = true; }
+  if (status) status.classList.remove('hidden');
+  try {
+    // 1. 結構標籤（Project key / 前綴 / Image Roles / Style Consistency / 5 個群組標題）
+    for (const f of STRUCTURE_LABEL_FIELDS) {
+      const text = (structureLabelsData[f.key] || '').trim();
+      if (text) structureLabelsData[f.key] = (await _gtTranslate(text, 'auto', targetLang)).trim();
+    }
+    for (const f of GROUP_TITLE_FIELDS) {
+      const text = (structureLabelsData.group_titles[f.key] || '').trim();
+      if (text) structureLabelsData.group_titles[f.key] = (await _gtTranslate(text, 'auto', targetLang)).trim();
+    }
+    structureLabelsData.node_key_locale = _SHORT_TO_FULL_LOCALE[targetLang] || 'en-US';
+
+    // 2. 全部節點：System 翻 value+label，Regular 翻 label+default
+    for (let idx = 0; idx < t1NodesData.length; idx++) {
+      const node = t1NodesData[idx];
+      if (node.system) {
+        const text = (node.value || '').trim();
+        if (text) t1NodesData[idx].value = (await _gtTranslate(text, 'auto', targetLang)).trim();
+        await _translateSystemNodeLabel(idx, targetLang);
+      } else {
+        const labelSrc = _findBestSrc(node.labels, node.id);
+        if (labelSrc) {
+          const fullLocale = _SHORT_TO_FULL_LOCALE[targetLang] || 'en-US';
+          const srcShort = _GT_LANG_MAP[labelSrc.locale] || 'auto';
+          const translated = await _gtTranslate(labelSrc.text, srcShort, targetLang).catch(() => node.labels?.[fullLocale] || labelSrc.text);
+          if (!t1NodesData[idx].labels) t1NodesData[idx].labels = {};
+          t1NodesData[idx].labels[fullLocale] = translated.trim();
+        }
+        const defText = (node.default || '').toString().trim();
+        if (defText) {
+          t1NodesData[idx].default = (await _gtTranslate(defText, 'auto', targetLang)).trim();
+        }
+      }
+      if (status) status.innerText = `翻譯中... ${idx + 1} / ${t1NodesData.length}`;
+    }
+
+    renderStructureLabels();
+    renderT1Nodes();
+    _schedulePreview();
+    await saveT1Nodes();
+    await saveStructureLabels();
+    if (status) { status.innerText = '✅ 已翻譯並儲存全部官方提示詞'; status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 4000); }
+  } catch (e) {
+    if (status) status.innerText = '❌ 翻譯失敗: ' + e.message;
+  }
+  if (btn) { btn.innerText = '一鍵翻譯全部並儲存'; btn.disabled = false; }
 }
 
 let _previewTimer = null;

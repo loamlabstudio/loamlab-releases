@@ -504,17 +504,33 @@ async function _handleRender(req, res) {
         const pollInputUrl = userPayload.input_url || null;
 
         const ATLASCLOUD_API_KEY = process.env.ATLASCLOUD_API_KEY;
+        // 白名單「仍在進行中」的狀態字串；不在清單內一律視為失敗並退款——
+        // 比原本的失敗字串黑名單（僅 failed/error/canceled）更可靠：AtlasCloud 用詞
+        // 只要不在我們預期清單內，舊邏輯會讓任務卡在「processing」直到前端輪詢逾時，
+        // 用戶被扣點卻永遠拿不到退款也拿不到圖（已用真實 failed task_id 現場驗證此缺口）。
+        const IN_PROGRESS_STATES = new Set(['', 'starting', 'processing', 'queued', 'pending', 'running', 'in_progress', 'created', 'submitted']);
         try {
             const pRes = await fetch(`https://api.atlascloud.ai/api/v1/model/prediction/${taskId}`, {
                 headers: { 'Authorization': `Bearer ${ATLASCLOUD_API_KEY}` },
                 signal: AbortSignal.timeout(15000)
             });
-            if (pRes.status !== 200) {
+            if (pRes.status === 404 || pRes.status === 410) {
+                // 任務在 AtlasCloud 端已不存在/過期，不可能再有結果，視為失敗並退款
+                return res.status(200).json(await refundAndFail(supabase, userEmail, pollCost, `任務查詢不到（HTTP ${pRes.status}）`));
+            }
+            // AtlasCloud 對「已失敗」的任務有時仍用非 200（如 500）包一層外層錯誤，
+            // 但 body 內的 data.status 才是任務真實狀態（實測過：外層 500 + data.status:"failed"）。
+            // 因此非 200 不再直接當「還在處理中」，一律嘗試解析 body，解析不出來才視為暫時性錯誤。
+            let pData = null;
+            try { pData = await pRes.json(); } catch (e) { /* body 非 JSON，交由下方 fallback 處理 */ }
+            if (pRes.status !== 200 && !pData?.data) {
+                if (userPayload.debug) return res.status(200).json({ code: 0, status: 'processing', debug_http_status: pRes.status });
+                // 真的解析不出任務資料：無法判斷真實狀態，先當作仍在處理中，交由下次輪詢重試
                 return res.status(200).json({ code: 0, status: 'processing' });
             }
-            const pData = await pRes.json();
             const state = (pData?.data?.state || pData?.data?.status || '').toLowerCase();
             const finalUrl = pData?.data?.outputs?.[0] || pData?.data?.image_url || pData?.data?.images?.[0];
+            if (userPayload.debug) return res.status(200).json({ code: 0, status: 'processing', debug_http_status: pRes.status, debug_state: state, debug_raw: pData });
 
             if (finalUrl || state === 'succeeded' || state === 'completed') {
                 if (!finalUrl) return res.status(200).json({ code: 0, status: 'processing' });
@@ -530,14 +546,9 @@ async function _handleRender(req, res) {
                 } catch (e) {}
                 return res.status(200).json({ code: 0, status: 'success', url: finalUrl, points_remaining: balance, transaction_id: pollTxId });
             }
-            if (state === 'failed' || state === 'error' || state === 'canceled' || state === 'cancelled') {
-                if (pollCost > 0) {
-                    try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -pollCost }); } catch (e) {}
-                    try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: pollCost, transaction_type: 'REFUND_TASK_FAILED' }]); } catch (e) {}
-                }
-                return res.status(200).json({ code: -1, status: 'failed', msg: 'AI 渲染引擎任務失敗，點數已退回', points_refunded: pollCost > 0 });
+            if (!IN_PROGRESS_STATES.has(state)) {
+                return res.status(200).json(await refundAndFail(supabase, userEmail, pollCost, `AI 渲染引擎任務失敗（狀態: ${state || '未知'}）`));
             }
-            // starting / processing / queued 等中間狀態
             return res.status(200).json({ code: 0, status: 'processing' });
         } catch (e) {
             // 網路瞬斷或逾時：視為仍在處理中，交由前端繼續輪詢，不做退款判定
@@ -999,10 +1010,12 @@ async function _handleRender(req, res) {
         let finalUrl = data?.data?.image_url || data?.data?.images?.[0] || null;
 
         // AtlasCloud 已接受任務但尚未完成：立即回傳 task_id，不佔用 Vercel 連線 long-poll
-        // （輸入圖片已隨這次請求送出，AtlasCloud 已抓取，此刻即可安全清理暫存檔）
+        // 注意：這裡故意「不」清理暫存圖——AtlasCloud 是非同步任務，實際抓圖時機是
+        // 生成開始時而非接受任務當下，先前在此清理過暫存檔導致圖片 URL 失效、AI 端
+        // 回報「無法辨識圖片」而整批失敗（已用真實請求 payload 現場驗證）。poll_render
+        // 是無狀態的獨立請求，拿不到這裡的 tempStorageFile 等路徑變數，暫時不清理，
+        // 靠 Signed URL 1 小時後自然失效；TODO: 之後可考慮排程清理 render-temp/tmp/。
         if (!finalUrl && data?.data?.id) {
-            await cleanTemp2();
-            await cleanTemp();
             return res.status(200).json({
                 code: 0, status: 'processing', task_id: data.data.id,
                 transaction_id: transactionId, points_remaining: deductResult.balance,
@@ -1032,6 +1045,15 @@ async function _handleRender(req, res) {
         try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NETWORK_ERROR' }]); } catch(e) {}
         return res.status(500).json({ code: -1, msg: sanitizeError(apiError?.message || '渲染失敗，請稍後再試。'), points_refunded: true });
     }
+}
+
+// poll_render 判定任務失敗時的統一退款處理：金額 > 0 才退，並回傳給前端的 JSON body
+async function refundAndFail(supabase, userEmail, cost, reason) {
+    if (cost > 0) {
+        try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch (e) {}
+        try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_TASK_FAILED' }]); } catch (e) {}
+    }
+    return { code: -1, status: 'failed', msg: `${reason}，點數已退回`, points_refunded: cost > 0 };
 }
 
 // 非同步寫入渲染歷史（fire-and-forget，不阻塞回應）

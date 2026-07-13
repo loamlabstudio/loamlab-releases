@@ -74,40 +74,15 @@ function buildImagePayload(sceneImages, styleRefUrl) {
     return [...sceneImages, styleRefUrl];
 }
 
-// 官方組出的 JSON 結構（結構 key + 管理員節點值）整批翻譯一次；用戶自己輸入的內容
-// 完全不經過這裡，呼叫端翻譯完才附加。走 AtlasCloud 的 LLM endpoint（跟渲染共用同一把
-// ATLASCLOUD_API_KEY，OpenAI 相容格式），不需要另外申請 Gemini 金鑰。沒設定金鑰或目標
-// 語言為 none 時原樣直接回傳，不影響既有行為。
-async function translateWholePrompt(promptObj, targetLang = 'professional English') {
-    if (!targetLang || targetLang === 'none') return promptObj;
-    const ATLASCLOUD_API_KEY = process.env.ATLASCLOUD_API_KEY;
-    if (!ATLASCLOUD_API_KEY) return promptObj;
-    try {
-        const resp = await fetch('https://api.atlascloud.ai/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${ATLASCLOUD_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: 'google/gemini-2.5-flash',
-                temperature: 0.1,
-                max_tokens: 2048,
-                messages: [{ role: 'user', content:
-                    `Translate both the keys and values of this JSON object to ${targetLang}. Preserve the exact JSON structure (same nesting, same number of keys, no keys added or removed). Output ONLY the translated JSON object, no explanations.\n\n${JSON.stringify(promptObj)}`
-                }]
-            }),
-            signal: AbortSignal.timeout(10000)
-        });
-        const data = await resp.json();
-        const text = data?.choices?.[0]?.message?.content || '';
-        const m = text.match(/\{[\s\S]*\}/);
-        if (m) return JSON.parse(m[0]);
-    } catch (e) { /* 翻譯失敗靜默降級回原文，不阻斷渲染 */ }
-    return promptObj;
-}
+// 沒有 runtime 翻譯：官方節點文字在 admin.html 編輯階段就用免費的 Google Translate
+// 網頁版端點（瀏覽器端直接呼叫，無金鑰無費用，見 admin.html 的 _gtTranslate）翻好、
+// 存檔，render.js 只管照存好的 value 原樣送出，不再多打一次 API。
 
 // Tool 1 Nodes 模式的 JSON 提示詞組裝——唯一版本，正式渲染與 admin.html 的 Prompt Preview
 // 都呼叫這裡，避免兩邊各寫一份邏輯又不小心兜不起來（先前發生過一次）。
-async function buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv, styleRefUrl, promptTranslationLanguage, userPrompt) {
-    // 1. 只收集系統/管理員節點值——翻譯只作用在這批「官方」內容，用戶輸入完全不經過
+async function buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv, styleRefUrl, userPrompt) {
+    // 1. 收集系統/管理員節點值——admin.html 編輯階段已用免費翻譯把文字轉成想要的語言存好，
+    //    這裡直接照存好的原樣使用，不再另外翻譯
     const adminValues = {};
     t1Nodes.forEach(node => {
         const val = node.system ? (node.value || '') : (adv[node.id] || node.default || '');
@@ -157,10 +132,8 @@ async function buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv,
         if (Object.keys(section).length > 0) officialPrompt[title] = section;
     });
 
-    // 3. 官方部分整批翻譯一次（結構 key + 值），用戶內容完全不經過這一步
-    const translatedPrompt = await translateWholePrompt(officialPrompt, promptTranslationLanguage);
-
-    // 4. 用戶自訂內容翻譯後才附加，原語言原樣送出
+    // 3. 用戶自訂內容附加在官方內容之後，保持原語言原樣送出
+    const translatedPrompt = officialPrompt;
     if (userMatNodes.length > 0) {
         translatedPrompt['User Materials'] = {};
         userMatNodes.forEach(m => { translatedPrompt['User Materials'][m.label] = m.value; });
@@ -390,9 +363,9 @@ async function _handleRender(req, res) {
     }
 
     // admin.html Prompt Preview 專用：不扣點、不打 AtlasCloud，直接重用正式渲染同一套
-    // buildNodesModePrompt()，保證預覽永遠等於實際送出的內容（含翻譯後結果）。
-    // t1_nodes/batch_nodes/prompt_translation_language 全部由前端當下（可能還沒存檔）
-    // 的即時狀態帶過來，不從 Supabase 重讀——admin 編輯到一半、還沒按存檔時，預覽也要跟著動。
+    // buildNodesModePrompt()，保證預覽永遠等於實際送出的內容。
+    // t1_nodes/batch_nodes 全部由前端當下（可能還沒存檔）的即時狀態帶過來，不從 Supabase
+    // 重讀——admin 編輯到一半、還沒按存檔時，預覽也要跟著動。
     if (req.body?.action === 'preview_prompt') {
         const authHeader = req.headers['authorization'] || '';
         const adminKeyFromHeader = authHeader.replace(/^Bearer\s+/i, '');
@@ -402,7 +375,6 @@ async function _handleRender(req, res) {
         try {
             const t1Nodes = Array.isArray(req.body.t1_nodes) ? req.body.t1_nodes : [];
             const batchNodes = req.body.batch_nodes && typeof req.body.batch_nodes === 'object' ? req.body.batch_nodes : {};
-            const promptTranslationLanguage = req.body.prompt_translation_language || 'none';
             const defaultBatchNodes = {
                 img1_key: "Image 1 [PRIMARY OUTPUT BASIS]",
                 img1: "SketchUp scene — every spatial element in the output (room layout, all furniture, all objects, all surfaces, camera viewpoint, geometry, proportions) must originate exclusively from Image 1.",
@@ -417,8 +389,8 @@ async function _handleRender(req, res) {
                 never_key: "Never",
                 never: "Blend, composite, or merge spatial content from both images."
             };
-            const withRef = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, {}, 'preview-style-ref-placeholder', promptTranslationLanguage, '');
-            const withoutRef = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, {}, '', promptTranslationLanguage, '');
+            const withRef = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, {}, 'preview-style-ref-placeholder', '');
+            const withoutRef = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, {}, '', '');
             return res.status(200).json({ code: 0, with_ref: withRef, without_ref: withoutRef });
         } catch (e) {
             return res.status(500).json({ code: -1, msg: `Preview 失敗: ${e.message}` });
@@ -845,12 +817,10 @@ async function _handleRender(req, res) {
         // ── Prompt Engine Mode（nodes | legacy）──
         let promptEngineMode = 'nodes';
         let disableBatchStyleLock = false;
-        let promptTranslationLanguage = 'none';
         try {
             const eVal = await getConfig(supabase, 'SYSTEM_ENGINE_CONFIG');
             if (eVal?.config?.prompt_engine_mode) promptEngineMode = eVal.config.prompt_engine_mode;
             disableBatchStyleLock = !!eVal?.config?.disable_batch_style_lock;
-            if (eVal?.config?.prompt_translation_language) promptTranslationLanguage = eVal.config.prompt_translation_language;
         } catch(e) {}
 
         const defaultP1 = "SketchUp interior model (Image 1). Backend pre-generates a spatial depth map (Image 2) and a color-segmented channel map (Image 3). Using Image 1 with reference to Images 2 and 3, restore 99% of spatial depth, camera position, and material texture direction without altering geometry or materials. Convert to a realistic interior photo. Apply natural lighting with supplemental diffuse fill to eliminate pure-black shadows and overexposure. Rationalize minor spatial inconsistencies. Professional photography-grade color grading with natural tonal gradation. ultra-detailed";
@@ -934,7 +904,7 @@ async function _handleRender(req, res) {
             const legacyStyleNote = styleRefUrl ? ` Apply ${bn.apply || d.apply} Output must be: ${bn.output_must_be || d.output_must_be} Never: ${bn.never || d.never}` : "";
 
             if (promptEngineMode !== 'legacy' && t1Nodes.length > 0) {
-                finalPrompt = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv, styleRefUrl, promptTranslationLanguage, userPrompt);
+                finalPrompt = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv, styleRefUrl, userPrompt);
             } else {
                 // Legacy 模式 或 無節點 fallback：傳統拼接（用戶輸入原樣送出）
                 const legacyBatchPrefix = styleRefUrl ? " " + legacyImageRoles + legacyStyleNote : "";

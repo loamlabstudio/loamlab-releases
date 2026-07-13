@@ -403,33 +403,8 @@
     <div id="engine-mode-status" class="text-xs text-green-400 mt-2 hidden"></div>
   </div>
 
-  <!-- 提示詞自動翻譯語言設定 -->
-  <div class="card mb-4 border border-cyan-600/30 bg-[#0a1e2e]/40">
-    <div class="flex items-center justify-between mb-3">
-      <div class="text-sm font-semibold text-white flex items-center gap-2">
-        <span class="text-cyan-400">🌐</span> 提示詞自動翻譯語言
-      </div>
-      <div id="prompt-lang-badge" class="text-xs px-2 py-0.5 rounded-full bg-cyan-600/20 text-cyan-300 border border-cyan-600/30">讀取中...</div>
-    </div>
-    <div class="text-[11px] text-gray-500 mb-3 leading-relaxed">
-      Node Mode 下，把「結構標籤 + 管理員節點值」整批翻譯成這個語言後才送出（一次 API 呼叫）。<br>
-      <b class="text-cyan-300">注意：</b>使用者在外掛中自行輸入的內容（補充提示詞、自訂材質等）<b class="text-red-400">永遠不會被翻譯</b>，保持原語言附加在翻譯結果之後。<br>
-      走 AtlasCloud LLM（跟渲染共用同一把金鑰，不需要另外申請）。
-    </div>
-    <div class="flex gap-2 items-center">
-      <select id="prompt-translation-language" class="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-cyan-200 outline-none focus:border-cyan-500/50 transition-colors flex-1">
-        <option value="none">❌ 不翻譯 (保持原文)</option>
-        <option value="professional English">🇺🇸 專業英文 (Professional English)</option>
-        <option value="Traditional Chinese">🇹🇼 繁體中文 (Traditional Chinese)</option>
-        <option value="Simplified Chinese">🇨🇳 簡體中文 (Simplified Chinese)</option>
-        <option value="Japanese">🇯🇵 日文 (Japanese)</option>
-      </select>
-      <button onclick="setPromptTranslationLanguage()" id="btn-save-translation-lang" class="bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 border border-cyan-600/50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
-        儲存設定
-      </button>
-    </div>
-    <div id="prompt-translation-status" class="text-xs text-green-400 mt-2 hidden"></div>
-  </div>
+  <!-- 提示詞語言：不再有全域自動翻譯設定，改由「節點管理」內每個官方節點旁的
+       「↻ 免費翻譯此節點」按鈕個別處理（見 renderT1Nodes 的 system 節點區塊）。 -->
 
   <!-- 批次風格鎖定 (Anti-Collage) 切換 -->
   <div class="card mb-4 border border-amber-600/30 bg-[#1a120a]/40">
@@ -1713,7 +1688,6 @@ async function loadEngineConfig() {
     _engineConfigCache = j.config || {};
     applyEngineModeBadge(_engineConfigCache.prompt_engine_mode || 'nodes');
     applyBatchStyleLockBadge(!!_engineConfigCache.disable_batch_style_lock);
-    applyPromptLangBadge(_engineConfigCache.prompt_translation_language || 'none');
   } catch(e) { console.error('Failed to load engine config:', e); }
 }
 
@@ -1770,37 +1744,6 @@ function applyBatchStyleLockBadge(disabled) {
     badge.className = 'text-xs px-2 py-0.5 rounded-full bg-cyan-600/20 text-cyan-300 border border-cyan-600/30';
     btnOn.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-cyan-500/60 text-cyan-300 bg-cyan-600/20';
     btnOff.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-white/10 text-white/30 hover:text-white/60';
-  }
-}
-
-function applyPromptLangBadge(lang) {
-  const badge = document.getElementById('prompt-lang-badge');
-  const select = document.getElementById('prompt-translation-language');
-  const val = lang || 'none';
-  select.value = val;
-  badge.innerText = val === 'none' ? '○ 不翻譯' : `● ${val}`;
-}
-
-async function setPromptTranslationLanguage() {
-  const status = document.getElementById('prompt-translation-status');
-  const lang = document.getElementById('prompt-translation-language').value;
-  try {
-    _engineConfigCache.prompt_translation_language = lang;
-    const r = await fetch(`${API_BASE}/api/stats?action=set_system_config`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
-      body: JSON.stringify({ config: _engineConfigCache })
-    });
-    if (r.ok) {
-      applyPromptLangBadge(lang);
-      status.innerText = `✅ 已切換翻譯語言為 ${lang === 'none' ? '不翻譯' : lang}，即刻生效`;
-      status.classList.remove('hidden');
-      setTimeout(() => status.classList.add('hidden'), 3000);
-    } else {
-      alert('儲存失敗，請確認 Admin Key 正確');
-    }
-  } catch(e) {
-    alert('儲存錯誤: ' + e.message);
   }
 }
 
@@ -1926,7 +1869,20 @@ function renderT1Nodes() {
           </div>
         </div>
         <div>
-          <label class="block text-[10px] text-gray-500 uppercase mb-1">約束描述（英文，直接作為 JSON value 發送）</label>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-[10px] text-gray-500 uppercase">約束描述（直接作為 JSON value 發送，語言不限）</label>
+            <div class="flex items-center gap-1.5">
+              <select id="node-target-lang-${idx}" class="bg-black/40 border border-blue-500/30 rounded py-0.5 px-1 text-[9px] text-gray-300 outline-none">
+                <option value="en">→ English</option>
+                <option value="zh-TW">→ 繁體中文</option>
+                <option value="zh-CN">→ 简体中文</option>
+                <option value="ja">→ 日本語</option>
+                <option value="es">→ Español</option>
+                <option value="pt">→ Português</option>
+              </select>
+              <button id="btn-translate-sysnode-${idx}" type="button" onclick="translateSystemNodeValue(${idx})" class="bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded px-2 py-0.5 text-[9px] hover:bg-blue-600/40 transition-colors">↻ 免費翻譯此節點</button>
+            </div>
+          </div>
           <textarea onchange="updateNode(${idx}, 'value', this.value)" class="w-full bg-black/40 border border-amber-500/20 rounded px-2 py-2 text-xs text-amber-200 resize-y h-24 leading-relaxed outline-none focus:border-amber-500/50">${node.value || ''}</textarea>
         </div>
       </div>
@@ -2331,6 +2287,30 @@ async function translateGroupNodes(grp) {
   const btn = document.getElementById('btn-translate-grp-' + grp);
   const indices = t1NodesData.map((n, i) => (!n.system && n.group === grp ? i : -1)).filter(i => i >= 0);
   await _doTranslateNodes(indices, btn, '↻ 翻譯');
+}
+
+// System 節點的約束描述（value）沒有多語系概念，就是一段直接送給模型的文字——
+// 用免費的 Google Translate 網頁端點翻成 admin 選的目標語言，翻完存進 value，
+// 存檔後 render.js 就照這段文字原樣送出，不用再另外設定任何金鑰。
+async function translateSystemNodeValue(idx) {
+  const btn = document.getElementById(`btn-translate-sysnode-${idx}`);
+  const sel = document.getElementById(`node-target-lang-${idx}`);
+  const targetLang = sel ? sel.value : 'en';
+  const node = t1NodesData[idx];
+  const text = (node.value || '').trim();
+  if (!text) return;
+  const origText = btn ? btn.innerText : '';
+  if (btn) { btn.innerText = '翻譯中...'; btn.disabled = true; }
+  try {
+    const translated = await _gtTranslate(text, 'auto', targetLang);
+    t1NodesData[idx].value = translated.trim();
+    t1NodesDirty = true;
+    renderT1Nodes();
+    _schedulePreview();
+  } catch (e) {
+    alert('翻譯失敗: ' + e.message);
+    if (btn) { btn.innerText = origText; btn.disabled = false; }
+  }
 }
 
 let _previewTimer = null;
@@ -2959,7 +2939,7 @@ async function previewPrompt() {
   const noRefOutput = document.getElementById('prompt-preview-no-ref');
   if (!output) return;
 
-  // 直接呼叫後端真正的 buildNodesModePrompt()，保證預覽 = 實際送出內容（含翻譯）。
+  // 直接呼叫後端真正的 buildNodesModePrompt()，保證預覽 = 實際送出內容。
   // t1NodesData 與 batch 欄位都是「當下畫面狀態」，不管有沒有存檔都即時反映。
   const batchNodes = {
     img1_key: document.getElementById('batch-img1-key')?.value?.trim() || '',
@@ -2975,7 +2955,6 @@ async function previewPrompt() {
     never_key: document.getElementById('batch-never-key')?.value?.trim() || '',
     never: document.getElementById('batch-never')?.value?.trim() || ''
   };
-  const promptTranslationLanguage = document.getElementById('prompt-translation-language')?.value || 'none';
 
   const reqId = ++_previewReqId;
   output.textContent = '讀取中...';
@@ -2984,7 +2963,7 @@ async function previewPrompt() {
     const r = await fetch(`${API_BASE}/api/render`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
-      body: JSON.stringify({ action: 'preview_prompt', t1_nodes: t1NodesData, batch_nodes: batchNodes, prompt_translation_language: promptTranslationLanguage })
+      body: JSON.stringify({ action: 'preview_prompt', t1_nodes: t1NodesData, batch_nodes: batchNodes })
     });
     const j = await r.json();
     if (reqId !== _previewReqId) return; // 舊的回應，畫面已經被更新的請求取代

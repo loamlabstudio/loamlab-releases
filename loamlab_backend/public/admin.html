@@ -2953,76 +2953,50 @@ function importAdminPreset() {
   input.click();
 }
 
-function previewPrompt() {
+let _previewReqId = 0;
+async function previewPrompt() {
   const output = document.getElementById('prompt-preview-output');
+  const noRefOutput = document.getElementById('prompt-preview-no-ref');
   if (!output) return;
 
-  // 鏡像 render.js Nodes 模式 JSON 組裝邏輯（使用節點預設值模擬）
-  const GROUP_CONFIG = {
-    core_constraints: 'Core Constraints',
-    scene_lighting:   'Scene & Lighting',
-    materials:        'Material Control',
-    photography:      'Photography Settings',
-    rendering:        'Render Quality'
+  // 直接呼叫後端真正的 buildNodesModePrompt()，保證預覽 = 實際送出內容（含翻譯）。
+  // t1NodesData 與 batch 欄位都是「當下畫面狀態」，不管有沒有存檔都即時反映。
+  const batchNodes = {
+    img1_key: document.getElementById('batch-img1-key')?.value?.trim() || '',
+    img1: document.getElementById('batch-img1')?.value?.trim() || '',
+    img2_key: document.getElementById('batch-img2-key')?.value?.trim() || '',
+    img2: document.getElementById('batch-img2')?.value?.trim() || '',
+    forbidden_key: document.getElementById('batch-forbidden-key')?.value?.trim() || '',
+    forbidden: document.getElementById('batch-forbidden')?.value?.trim() || '',
+    apply_key: document.getElementById('batch-apply-key')?.value?.trim() || '',
+    apply: document.getElementById('batch-apply')?.value?.trim() || '',
+    output_must_be_key: document.getElementById('batch-output-must-be-key')?.value?.trim() || '',
+    output_must_be: document.getElementById('batch-output-must-be')?.value?.trim() || '',
+    never_key: document.getElementById('batch-never-key')?.value?.trim() || '',
+    never: document.getElementById('batch-never')?.value?.trim() || ''
   };
+  const promptTranslationLanguage = document.getElementById('prompt-translation-language')?.value || 'none';
 
-  const jsonPrompt = {};
-
-  // 批量出圖 Batch 節點：前置，最大化模型約束力（鏡像 render.js 順序）
-  const _img1k = document.getElementById('batch-img1-key')?.value?.trim() || 'Image 1 [PRIMARY OUTPUT BASIS]';
-  const _img1 = document.getElementById('batch-img1')?.value?.trim();
-  const _img2k = document.getElementById('batch-img2-key')?.value?.trim() || 'Image 2 [STYLE EXTRACTION ONLY]';
-  const _img2 = document.getElementById('batch-img2')?.value?.trim();
-  const _forbk = document.getElementById('batch-forbidden-key')?.value?.trim() || 'FORBIDDEN from Image 2';
-  const _forbidden = document.getElementById('batch-forbidden')?.value?.trim();
-  const _applyk = document.getElementById('batch-apply-key')?.value?.trim() || 'Apply';
-  const _apply = document.getElementById('batch-apply')?.value?.trim();
-  const _outk = document.getElementById('batch-output-must-be-key')?.value?.trim() || 'Output must be';
-  const _outputMustBe = document.getElementById('batch-output-must-be')?.value?.trim();
-  const _nevk = document.getElementById('batch-never-key')?.value?.trim() || 'Never';
-  const _never = document.getElementById('batch-never')?.value?.trim();
-  const _imageRoles = {};
-  if (_img1) _imageRoles[_img1k] = _img1;
-  if (_img2) _imageRoles[_img2k] = _img2;
-  if (_forbidden) _imageRoles[_forbk] = _forbidden;
-  if (Object.keys(_imageRoles).length) jsonPrompt['Image Roles'] = _imageRoles;
-  const _styleConsistency = {};
-  if (_apply) _styleConsistency[_applyk] = _apply;
-  if (_outputMustBe) _styleConsistency[_outk] = _outputMustBe;
-  if (_never) _styleConsistency[_nevk] = _never;
-  if (Object.keys(_styleConsistency).length) jsonPrompt['Style Consistency'] = _styleConsistency;
-
-  const projectTypeNode = t1NodesData.find(n => n.id === 'project_type');
-  const projectTypeVal = projectTypeNode ? (String(projectTypeNode.default || '').trim()) : '';
-  jsonPrompt['Project'] = `SU Screenshot to Realistic Photography${projectTypeVal ? ' - ' + projectTypeVal : ''}`;
-
-  const nodeValues = {};
-  t1NodesData.forEach(node => {
-    if (node.id === 'project_type') return;
-    const val = node.system ? (node.value || '') : (String(node.default || ''));
-    if (val.trim()) nodeValues[node.id] = val;
-  });
-
-  Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
-    const section = {};
-    t1NodesData.filter(n => n.group === group).forEach(node => {
-      const val = nodeValues[node.id];
-      if (val) section[node.labels?.['en-US'] || node.id] = val;
+  const reqId = ++_previewReqId;
+  output.textContent = '讀取中...';
+  if (noRefOutput) noRefOutput.textContent = '讀取中...';
+  try {
+    const r = await fetch(`${API_BASE}/api/render`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+      body: JSON.stringify({ action: 'preview_prompt', t1_nodes: t1NodesData, batch_nodes: batchNodes, prompt_translation_language: promptTranslationLanguage })
     });
-    if (Object.keys(section).length > 0) jsonPrompt[title] = section;
-  });
-
-  output.textContent = JSON.stringify(jsonPrompt, null, 2);
-
-  // 第二預覽：無參考圖版本（不含 Image Roles / Style Consistency）
-  const noRefOutput = document.getElementById('prompt-preview-no-ref');
-  if (noRefOutput) {
-    const noRefPrompt = {};
-    noRefPrompt['Project'] = jsonPrompt['Project'];
-    Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
-      if (jsonPrompt[title]) noRefPrompt[title] = jsonPrompt[title];
-    });
-    noRefOutput.textContent = JSON.stringify(noRefPrompt, null, 2);
+    const j = await r.json();
+    if (reqId !== _previewReqId) return; // 舊的回應，畫面已經被更新的請求取代
+    if (j.code === 0) {
+      output.textContent = j.with_ref;
+      if (noRefOutput) noRefOutput.textContent = j.without_ref;
+    } else {
+      output.textContent = `預覽失敗: ${j.msg || '未知錯誤'}`;
+    }
+  } catch (e) {
+    if (reqId !== _previewReqId) return;
+    output.textContent = `預覽失敗: ${e.message}`;
   }
 }
 

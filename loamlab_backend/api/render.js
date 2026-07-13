@@ -98,6 +98,72 @@ async function translateWholePrompt(promptObj, targetLang = 'professional Englis
     return promptObj;
 }
 
+// Tool 1 Nodes 模式的 JSON 提示詞組裝——唯一版本，正式渲染與 admin.html 的 Prompt Preview
+// 都呼叫這裡，避免兩邊各寫一份邏輯又不小心兜不起來（先前發生過一次）。
+async function buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv, styleRefUrl, promptTranslationLanguage, userPrompt) {
+    // 1. 只收集系統/管理員節點值——翻譯只作用在這批「官方」內容，用戶輸入完全不經過
+    const adminValues = {};
+    t1Nodes.forEach(node => {
+        const val = node.system ? (node.value || '') : (adv[node.id] || node.default || '');
+        if (val.toString().trim()) adminValues[node.id] = val.toString().trim();
+    });
+    // 用戶自訂材質節點：_usr_<名稱> = 材質值，翻譯後才附加，保持原語言
+    const userMatNodes = Object.keys(adv)
+        .filter(k => k.startsWith('_usr_'))
+        .map(k => ({ label: k.slice(5), value: adv[k] }))
+        .filter(m => m.label && m.value?.trim());
+
+    // 2. 建構「官方」JSON 結構（結構 key + 管理員節點值，不含任何用戶輸入）
+    const GROUP_CONFIG = {
+        core_constraints: 'Core Constraints',
+        scene_lighting:   'Scene & Lighting',
+        materials:        'Material Control',
+        photography:      'Photography Settings',
+        rendering:        'Render Quality'
+    };
+    const officialPrompt = {};
+    const projectType = adminValues['project_type'] || '';
+
+    // 2b. 批量出圖：Image Roles / Style Consistency 前置，最大化模型約束力
+    if (styleRefUrl) {
+        const bn = batchNodes;
+        const d = defaultBatchNodes;
+        officialPrompt['Image Roles'] = {
+            [bn.img1_key || d.img1_key]: bn.img1 || d.img1,
+            [bn.img2_key || d.img2_key]: bn.img2 || d.img2,
+            [bn.forbidden_key || d.forbidden_key]: bn.forbidden || d.forbidden
+        };
+        officialPrompt['Style Consistency'] = {
+            [bn.apply_key || d.apply_key]: bn.apply || d.apply,
+            [bn.output_must_be_key || d.output_must_be_key]: bn.output_must_be || d.output_must_be,
+            [bn.never_key || d.never_key]: bn.never || d.never
+        };
+    }
+
+    officialPrompt['Project'] = `SU Screenshot to Realistic Photography${projectType ? ' - ' + projectType : ''}`;
+
+    Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
+        const section = {};
+        t1Nodes.filter(n => n.group === group).forEach(node => {
+            const val = adminValues[node.id];
+            if (val) section[node.labels?.['en-US'] || node.id] = val;
+        });
+        if (Object.keys(section).length > 0) officialPrompt[title] = section;
+    });
+
+    // 3. 官方部分整批翻譯一次（結構 key + 值），用戶內容完全不經過這一步
+    const translatedPrompt = await translateWholePrompt(officialPrompt, promptTranslationLanguage);
+
+    // 4. 用戶自訂內容翻譯後才附加，原語言原樣送出
+    if (userMatNodes.length > 0) {
+        translatedPrompt['User Materials'] = {};
+        userMatNodes.forEach(m => { translatedPrompt['User Materials'][m.label] = m.value; });
+    }
+
+    return JSON.stringify(translatedPrompt, null, 2)
+        + ((userPrompt || '').trim() ? `\n\nUser instructions (keep as-is, do not translate): ${userPrompt.trim()}` : '');
+}
+
 export default async function handler(req, res) {
     try { return await _handleRender(req, res); }
     catch (fatal) {
@@ -315,6 +381,42 @@ async function _handleRender(req, res) {
 
     if (req.method !== 'POST') {
         return res.status(405).json({ code: -1, msg: 'Method Not Allowed' });
+    }
+
+    // admin.html Prompt Preview 專用：不扣點、不打 AtlasCloud，直接重用正式渲染同一套
+    // buildNodesModePrompt()，保證預覽永遠等於實際送出的內容（含翻譯後結果）。
+    // t1_nodes/batch_nodes/prompt_translation_language 全部由前端當下（可能還沒存檔）
+    // 的即時狀態帶過來，不從 Supabase 重讀——admin 編輯到一半、還沒按存檔時，預覽也要跟著動。
+    if (req.body?.action === 'preview_prompt') {
+        const authHeader = req.headers['authorization'] || '';
+        const adminKeyFromHeader = authHeader.replace(/^Bearer\s+/i, '');
+        if (!isValidAdminKey(adminKeyFromHeader)) {
+            return res.status(401).json({ code: -1, msg: 'Unauthorized' });
+        }
+        try {
+            const t1Nodes = Array.isArray(req.body.t1_nodes) ? req.body.t1_nodes : [];
+            const batchNodes = req.body.batch_nodes && typeof req.body.batch_nodes === 'object' ? req.body.batch_nodes : {};
+            const promptTranslationLanguage = req.body.prompt_translation_language || 'none';
+            const defaultBatchNodes = {
+                img1_key: "Image 1 [PRIMARY OUTPUT BASIS]",
+                img1: "SketchUp scene — every spatial element in the output (room layout, all furniture, all objects, all surfaces, camera viewpoint, geometry, proportions) must originate exclusively from Image 1.",
+                img2_key: "Image 2 [STYLE EXTRACTION ONLY]",
+                img2: "Lighting reference photo — extract ONLY: light direction, color temperature (Kelvin), warmth/coolness ratio, shadow softness, and highlight quality.",
+                forbidden_key: "FORBIDDEN from Image 2",
+                forbidden: "Any furniture, object, surface, wall, floor, architecture, or spatial arrangement from Image 2 must NOT appear in the output.",
+                apply_key: "Apply",
+                apply: "Image 2's photographic lighting quality and color tone onto Image 1's existing scene.",
+                output_must_be_key: "Output must be",
+                output_must_be: "A realistic photo of Image 1's exact spatial layout and objects — lit and color-graded to match Image 2's atmosphere.",
+                never_key: "Never",
+                never: "Blend, composite, or merge spatial content from both images."
+            };
+            const withRef = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, {}, 'preview-style-ref-placeholder', promptTranslationLanguage, '');
+            const withoutRef = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, {}, '', promptTranslationLanguage, '');
+            return res.status(200).json({ code: 0, with_ref: withRef, without_ref: withoutRef });
+        } catch (e) {
+            return res.status(500).json({ code: -1, msg: `Preview 失敗: ${e.message}` });
+        }
     }
 
     // 環境變數
@@ -826,68 +928,7 @@ async function _handleRender(req, res) {
             const legacyStyleNote = styleRefUrl ? ` Apply ${bn.apply || d.apply} Output must be: ${bn.output_must_be || d.output_must_be} Never: ${bn.never || d.never}` : "";
 
             if (promptEngineMode !== 'legacy' && t1Nodes.length > 0) {
-                // Nodes 模式：JSON 結構化提示詞
-                // 1. 只收集系統/管理員節點值——翻譯只作用在這批「官方」內容，用戶輸入完全不經過
-                const adminValues = {};
-                t1Nodes.forEach(node => {
-                    const val = node.system ? (node.value || '') : (adv[node.id] || node.default || '');
-                    if (val.toString().trim()) adminValues[node.id] = val.toString().trim();
-                });
-                // 用戶自訂材質節點：_usr_<名稱> = 材質值，翻譯後才附加，保持原語言
-                const userMatNodes = Object.keys(adv)
-                    .filter(k => k.startsWith('_usr_'))
-                    .map(k => ({ label: k.slice(5), value: adv[k] }))
-                    .filter(m => m.label && m.value?.trim());
-
-                // 2. 建構「官方」JSON 結構（結構 key + 管理員節點值，不含任何用戶輸入）
-                const GROUP_CONFIG = {
-                    core_constraints: 'Core Constraints',
-                    scene_lighting:   'Scene & Lighting',
-                    materials:        'Material Control',
-                    photography:      'Photography Settings',
-                    rendering:        'Render Quality'
-                };
-                const officialPrompt = {};
-                const projectType = adminValues['project_type'] || '';
-
-                // 2b. 批量出圖：Image Roles / Style Consistency 前置，最大化模型約束力
-                if (styleRefUrl) {
-                    const bn = batchNodes;
-                    const d = defaultBatchNodes;
-                    officialPrompt['Image Roles'] = {
-                        [bn.img1_key || d.img1_key]: bn.img1 || d.img1,
-                        [bn.img2_key || d.img2_key]: bn.img2 || d.img2,
-                        [bn.forbidden_key || d.forbidden_key]: bn.forbidden || d.forbidden
-                    };
-                    officialPrompt['Style Consistency'] = {
-                        [bn.apply_key || d.apply_key]: bn.apply || d.apply,
-                        [bn.output_must_be_key || d.output_must_be_key]: bn.output_must_be || d.output_must_be,
-                        [bn.never_key || d.never_key]: bn.never || d.never
-                    };
-                }
-
-                officialPrompt['Project'] = `SU Screenshot to Realistic Photography${projectType ? ' - ' + projectType : ''}`;
-
-                Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
-                    const section = {};
-                    t1Nodes.filter(n => n.group === group).forEach(node => {
-                        const val = adminValues[node.id];
-                        if (val) section[node.labels?.['en-US'] || node.id] = val;
-                    });
-                    if (Object.keys(section).length > 0) officialPrompt[title] = section;
-                });
-
-                // 3. 官方部分整批翻譯一次（結構 key + 值），用戶內容完全不經過這一步
-                const translatedPrompt = await translateWholePrompt(officialPrompt, promptTranslationLanguage);
-
-                // 4. 用戶自訂內容翻譯後才附加，原語言原樣送出
-                if (userMatNodes.length > 0) {
-                    translatedPrompt['User Materials'] = {};
-                    userMatNodes.forEach(m => { translatedPrompt['User Materials'][m.label] = m.value; });
-                }
-
-                finalPrompt = JSON.stringify(translatedPrompt, null, 2)
-                    + (userPrompt.trim() ? `\n\nUser instructions (keep as-is, do not translate): ${userPrompt.trim()}` : '');
+                finalPrompt = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv, styleRefUrl, promptTranslationLanguage, userPrompt);
             } else {
                 // Legacy 模式 或 無節點 fallback：傳統拼接（用戶輸入原樣送出）
                 const legacyBatchPrefix = styleRefUrl ? " " + legacyImageRoles + legacyStyleNote : "";

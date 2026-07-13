@@ -74,79 +74,10 @@ function buildImagePayload(sceneImages, styleRefUrl) {
     return [...sceneImages, styleRefUrl];
 }
 
-// 全域快取：存放 Promise 避免同一瞬間併發的多個相同翻譯請求重複扣除 API 額度
-const translationPromises = new Map();
-
-// ── Gemini 翻譯 helper（有 CJK 字元 + API Key 才翻，否則原值回傳）──
-async function translateValues(valuesObj, targetLang = 'professional English') {
-    if (targetLang === 'none') return valuesObj;
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) return valuesObj;
-    const hasCJK = Object.values(valuesObj).some(v => /[\u4e00-\u9fff\u3040-\u30ff]/.test(String(v)));
-    if (!hasCJK) return valuesObj;
-
-    const cacheKey = 'obj_' + targetLang + '_' + JSON.stringify(valuesObj);
-    if (translationPromises.has(cacheKey)) {
-        return await translationPromises.get(cacheKey);
-    }
-
-    const promise = (async () => {
-        try {
-            const resp = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-                { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ contents: [{ parts: [{ text:
-                    `Translate these interior design/photography descriptions to ${targetLang}. Output ONLY a valid JSON object with identical keys and ${targetLang} values. No explanations.\n\n${JSON.stringify(valuesObj)}`
-                  }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 1024 } }) }
-            );
-            const data = await resp.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-            const m = text.match(/\{[\s\S]*\}/);
-            if (m) return JSON.parse(m[0]);
-        } catch(e) { /* fallback: 回傳原值 */ }
-        return valuesObj;
-    })();
-
-    translationPromises.set(cacheKey, promise);
-    if (translationPromises.size > 100) translationPromises.delete(translationPromises.keys().next().value);
-    
-    return await promise;
-}
-
-// ── 單字串翻譯（有 CJK 才翻；失敗靜默降級返回原文）──
-async function translateToTargetLang(text, targetLang = 'professional English') {
-    if (targetLang === 'none') return text;
-    if (!text || !text.trim()) return text;
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) return text;
-    if (!/[\u4e00-\u9fff\u3040-\u30ff]/.test(text)) return text;
-
-    const cacheKey = 'str_' + targetLang + '_' + text;
-    if (translationPromises.has(cacheKey)) {
-        return await translationPromises.get(cacheKey);
-    }
-
-    const promise = (async () => {
-        try {
-            const resp = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-                { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ contents: [{ parts: [{ text:
-                    `Translate the following interior design description to ${targetLang}. Output ONLY the translated text, no explanations.\n\n${text}`
-                  }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 512 } }) }
-            );
-            const data = await resp.json();
-            const translated = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-            if (translated) return translated;
-        } catch(e) { /* 靜默降級 */ }
-        return text;
-    })();
-
-    translationPromises.set(cacheKey, promise);
-    if (translationPromises.size > 100) translationPromises.delete(translationPromises.keys().next().value);
-    
-    return await promise;
-}
+// 提示詞不做 runtime 翻譯：系統/管理員節點的文字由 admin.html 直接以目標語言填入
+// value 即可，用戶自訂內容一律原樣送出。nano-banana/seedream 等模型原生支援多語言
+// 輸入，這層 Gemini 翻譯 API 自功能上線起 GEMINI_API_KEY 就從未配置過──等於中文
+// 一直原樣進 prompt 也沒出過問題，移除以少一個外部依賴、少一個失敗點、少一次延遲。
 
 export default async function handler(req, res) {
     try { return await _handleRender(req, res); }
@@ -787,12 +718,10 @@ async function _handleRender(req, res) {
         // ── Prompt Engine Mode（nodes | legacy）──
         let promptEngineMode = 'nodes';
         let disableBatchStyleLock = false;
-        let promptTranslationLanguage = 'professional English';
         try {
             const eVal = await getConfig(supabase, 'SYSTEM_ENGINE_CONFIG');
             if (eVal?.config?.prompt_engine_mode) promptEngineMode = eVal.config.prompt_engine_mode;
             disableBatchStyleLock = !!eVal?.config?.disable_batch_style_lock;
-            if (eVal?.config?.prompt_translation_language) promptTranslationLanguage = eVal.config.prompt_translation_language;
         } catch(e) {}
 
         const defaultP1 = "SketchUp interior model (Image 1). Backend pre-generates a spatial depth map (Image 2) and a color-segmented channel map (Image 3). Using Image 1 with reference to Images 2 and 3, restore 99% of spatial depth, camera position, and material texture direction without altering geometry or materials. Convert to a realistic interior photo. Apply natural lighting with supplemental diffuse fill to eliminate pure-black shadows and overexposure. Rationalize minor spatial inconsistencies. Professional photography-grade color grading with natural tonal gradation. ultra-detailed";
@@ -853,13 +782,8 @@ async function _handleRender(req, res) {
                         content = content.replace(refMatch[0], "").trim();
                     }
                     
-                    // 只翻譯純文字描述部分
-                    let translatedContent = content;
-                    if (content && !content.toLowerCase().includes("apply or place what's shown")) {
-                        translatedContent = await translateToTargetLang(content, promptTranslationLanguage);
-                    }
-                    
-                    const finalContent = (translatedContent + refSuffix).trim();
+                    // 用戶自訂描述原樣送出，不做翻譯
+                    const finalContent = (content + refSuffix).trim();
                     changes.push(`${zoneTag}: ${finalContent}`);
                 }
             }
@@ -871,8 +795,7 @@ async function _handleRender(req, res) {
                 finalPrompt = p2.replace("{{REF_TEXT}}", refText).replace("{{CHANGES}}", changes.join('\n'));
             }
         } else if (activeTool === 3) {
-            const translatedPrompt3 = await translateToTargetLang(userPrompt, promptTranslationLanguage);
-            finalPrompt = translatedPrompt3.trim() ? p3 + ", " + translatedPrompt3 : p3;
+            finalPrompt = userPrompt.trim() ? p3 + ", " + userPrompt : p3;
         } else {
             // Tool 1: 嚴格 JSON 結構組裝（legacy mode 跳過節點直接拼接）
             const adv = userPayload.advanced_settings || {};
@@ -902,13 +825,9 @@ async function _handleRender(req, res) {
                     if (m.value?.trim()) userValues[`__umat_${i}_value`] = m.value.trim();
                 });
 
-                // 2. Gemini 翻譯（有 CJK 才翻，無 API Key 則原值）
-                // 使用者自定義內容保持原樣不翻譯，僅翻譯 adminValues
-                let translatedAdminValues = adminValues;
-                if (promptTranslationLanguage !== 'none') {
-                    translatedAdminValues = await translateValues(adminValues, promptTranslationLanguage);
-                }
-                const translatedValues = { ...translatedAdminValues, ...userValues };
+                // 2. 系統/管理員節點值直接使用（admin.html 已用目標語言填好 value）；
+                //    使用者自定義內容一律保持原樣（見上方 userValues 組裝）
+                const translatedValues = { ...adminValues, ...userValues };
                 const translatedUserPrompt = translatedValues['__userPrompt__'] || userPrompt.trim();
 
                 // 3. 建構 JSON 結構
@@ -959,10 +878,9 @@ async function _handleRender(req, res) {
 
                 finalPrompt = JSON.stringify(jsonPrompt, null, 2);
             } else {
-                // Legacy 模式 或 無節點 fallback：傳統拼接（翻譯後拼接）
-                const translatedPrompt1 = await translateToTargetLang(userPrompt, promptTranslationLanguage);
+                // Legacy 模式 或 無節點 fallback：傳統拼接（用戶輸入原樣送出）
                 const legacyBatchPrefix = styleRefUrl ? " " + legacyImageRoles + legacyStyleNote : "";
-                finalPrompt = translatedPrompt1.trim() ? p1 + legacyBatchPrefix + ", " + translatedPrompt1 : p1 + legacyBatchPrefix;
+                finalPrompt = userPrompt.trim() ? p1 + legacyBatchPrefix + ", " + userPrompt : p1 + legacyBatchPrefix;
             }
         }
 

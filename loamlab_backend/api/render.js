@@ -75,23 +75,29 @@ function buildImagePayload(sceneImages, styleRefUrl) {
 }
 
 // 官方組出的 JSON 結構（結構 key + 管理員節點值）整批翻譯一次；用戶自己輸入的內容
-// 完全不經過這裡，呼叫端翻譯完才附加。沒設定 GEMINI_API_KEY 或目標語言為 none 時
-// 原樣直接回傳，不影響既有行為。
+// 完全不經過這裡，呼叫端翻譯完才附加。走 AtlasCloud 的 LLM endpoint（跟渲染共用同一把
+// ATLASCLOUD_API_KEY，OpenAI 相容格式），不需要另外申請 Gemini 金鑰。沒設定金鑰或目標
+// 語言為 none 時原樣直接回傳，不影響既有行為。
 async function translateWholePrompt(promptObj, targetLang = 'professional English') {
     if (!targetLang || targetLang === 'none') return promptObj;
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) return promptObj;
+    const ATLASCLOUD_API_KEY = process.env.ATLASCLOUD_API_KEY;
+    if (!ATLASCLOUD_API_KEY) return promptObj;
     try {
-        const resp = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ contents: [{ parts: [{ text:
-                `Translate both the keys and values of this JSON object to ${targetLang}. Preserve the exact JSON structure (same nesting, same number of keys, no keys added or removed). Output ONLY the translated JSON object, no explanations.\n\n${JSON.stringify(promptObj)}`
-              }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 2048 } }),
-              signal: AbortSignal.timeout(10000) }
-        );
+        const resp = await fetch('https://api.atlascloud.ai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${ATLASCLOUD_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: 'google/gemini-2.5-flash',
+                temperature: 0.1,
+                max_tokens: 2048,
+                messages: [{ role: 'user', content:
+                    `Translate both the keys and values of this JSON object to ${targetLang}. Preserve the exact JSON structure (same nesting, same number of keys, no keys added or removed). Output ONLY the translated JSON object, no explanations.\n\n${JSON.stringify(promptObj)}`
+                }]
+            }),
+            signal: AbortSignal.timeout(10000)
+        });
         const data = await resp.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const text = data?.choices?.[0]?.message?.content || '';
         const m = text.match(/\{[\s\S]*\}/);
         if (m) return JSON.parse(m[0]);
     } catch (e) { /* 翻譯失敗靜默降級回原文，不阻斷渲染 */ }

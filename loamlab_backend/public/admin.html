@@ -414,7 +414,7 @@
     <div class="text-[11px] text-gray-500 mb-3 leading-relaxed">
       Node Mode 下，把「結構標籤 + 管理員節點值」整批翻譯成這個語言後才送出（一次 API 呼叫）。<br>
       <b class="text-cyan-300">注意：</b>使用者在外掛中自行輸入的內容（補充提示詞、自訂材質等）<b class="text-red-400">永遠不會被翻譯</b>，保持原語言附加在翻譯結果之後。<br>
-      需要後端設定 <code class="text-cyan-300">GEMINI_API_KEY</code> 才會實際生效，未設定時等同「不翻譯」。
+      走 AtlasCloud LLM（跟渲染共用同一把金鑰，不需要另外申請）。
     </div>
     <div class="flex gap-2 items-center">
       <select id="prompt-translation-language" class="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-cyan-200 outline-none focus:border-cyan-500/50 transition-colors flex-1">

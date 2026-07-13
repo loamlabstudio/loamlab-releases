@@ -564,6 +564,17 @@
         <button onclick="loadDefaultT1Nodes()" class="bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 px-3 py-1 rounded-lg text-xs transition-colors">
           載入預設 17 節點
         </button>
+        <select id="sysnode-target-lang" class="bg-black/40 border border-amber-500/30 rounded-lg py-1 px-2 text-xs text-amber-200 outline-none">
+          <option value="en">→ English</option>
+          <option value="zh-TW">→ 繁體中文</option>
+          <option value="zh-CN">→ 简体中文</option>
+          <option value="ja">→ 日本語</option>
+          <option value="es">→ Español</option>
+          <option value="pt">→ Português</option>
+        </select>
+        <button onclick="translateAllSystemNodes()" id="btn-translate-all-sysnodes" class="bg-amber-600/20 hover:bg-amber-600/40 text-amber-300 border border-amber-600/50 px-3 py-1 rounded-lg text-xs font-semibold transition-colors">
+          🔒 一鍵翻譯系統節點並儲存
+        </button>
         <button onclick="saveT1Nodes()" id="btn-save-t1-nodes" class="bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-600/50 px-3 py-1 rounded-lg text-xs font-semibold transition-colors">
           💾 儲存節點配置
         </button>
@@ -2396,9 +2407,9 @@ async function _doTranslateNodes(indices, btnEl, origText, explicitSrcLang = nul
       done++;
       if (status) status.innerText = `翻譯中... ${done} / ${indices.length}`;
     }
-    t1NodesDirty = true;
     renderT1Nodes();
-    if (status) { status.innerText = `✅ 已翻譯 ${done} 個節點，記得儲存`; setTimeout(() => status.classList.add('hidden'), 4000); }
+    await saveT1Nodes();
+    if (status) { status.innerText = `✅ 已翻譯並儲存 ${done} 個節點`; status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 4000); }
   } catch(e) {
     if (status) status.innerText = '❌ 翻譯失敗，請手動填寫';
   }
@@ -2438,13 +2449,44 @@ async function translateSystemNodeValue(idx) {
   try {
     const translated = await _gtTranslate(text, 'auto', targetLang);
     t1NodesData[idx].value = translated.trim();
-    t1NodesDirty = true;
     renderT1Nodes();
     _schedulePreview();
+    await saveT1Nodes();
   } catch (e) {
     alert('翻譯失敗: ' + e.message);
     if (btn) { btn.innerText = origText; btn.disabled = false; }
   }
+}
+
+// System 節點沒有群組標題列（只有 Regular 節點才有「↻ 翻譯」群組按鈕），逐一點太慢，
+// 這裡一次翻完所有 System 節點的 value 並直接存檔。
+async function translateAllSystemNodes() {
+  const btn = document.getElementById('btn-translate-all-sysnodes');
+  const sel = document.getElementById('sysnode-target-lang');
+  const targetLang = sel ? sel.value : 'en';
+  const status = document.getElementById('t1-nodes-status');
+  const indices = t1NodesData.map((n, i) => (n.system ? i : -1)).filter(i => i >= 0);
+  if (!indices.length) return;
+  if (btn) { btn.innerText = '翻譯中...'; btn.disabled = true; }
+  if (status) status.classList.remove('hidden');
+  let done = 0;
+  try {
+    for (const idx of indices) {
+      const text = (t1NodesData[idx].value || '').trim();
+      if (text) {
+        t1NodesData[idx].value = (await _gtTranslate(text, 'auto', targetLang)).trim();
+      }
+      done++;
+      if (status) status.innerText = `翻譯中... ${done} / ${indices.length}`;
+    }
+    renderT1Nodes();
+    _schedulePreview();
+    await saveT1Nodes();
+    if (status) { status.innerText = `✅ 已翻譯並儲存 ${done} 個系統節點`; status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 4000); }
+  } catch (e) {
+    if (status) status.innerText = '❌ 翻譯失敗，請手動填寫';
+  }
+  if (btn) { btn.innerText = '🔒 一鍵翻譯系統節點並儲存'; btn.disabled = false; }
 }
 
 let _previewTimer = null;

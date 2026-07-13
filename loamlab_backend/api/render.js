@@ -78,9 +78,28 @@ function buildImagePayload(sceneImages, styleRefUrl) {
 // 網頁版端點（瀏覽器端直接呼叫，無金鑰無費用，見 admin.html 的 _gtTranslate）翻好、
 // 存檔，render.js 只管照存好的 value 原樣送出，不再多打一次 API。
 
+// 結構性 JSON key 的預設值（英文）——admin.html 可在「結構標籤」區塊個別覆蓋並翻譯，
+// 未設定時 fallback 到這裡，行為與改動前一致。
+const DEFAULT_STRUCTURE_LABELS = {
+    image_roles_key: 'Image Roles',
+    style_consistency_key: 'Style Consistency',
+    project_key: 'Project',
+    project_prefix: 'SU Screenshot to Realistic Photography',
+    group_titles: {
+        core_constraints: 'Core Constraints',
+        scene_lighting:   'Scene & Lighting',
+        materials:        'Material Control',
+        photography:      'Photography Settings',
+        rendering:        'Render Quality'
+    }
+};
+
 // Tool 1 Nodes 模式的 JSON 提示詞組裝——唯一版本，正式渲染與 admin.html 的 Prompt Preview
 // 都呼叫這裡，避免兩邊各寫一份邏輯又不小心兜不起來（先前發生過一次）。
-async function buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv, styleRefUrl, userPrompt) {
+async function buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv, styleRefUrl, userPrompt, structureLabels) {
+    const sl = { ...DEFAULT_STRUCTURE_LABELS, ...(structureLabels || {}) };
+    const groupTitles = { ...DEFAULT_STRUCTURE_LABELS.group_titles, ...(sl.group_titles || {}) };
+
     // 1. 收集系統/管理員節點值——admin.html 編輯階段已用免費翻譯把文字轉成想要的語言存好，
     //    這裡直接照存好的原樣使用，不再另外翻譯
     const adminValues = {};
@@ -95,13 +114,6 @@ async function buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv,
         .filter(m => m.label && m.value?.trim());
 
     // 2. 建構「官方」JSON 結構（結構 key + 管理員節點值，不含任何用戶輸入）
-    const GROUP_CONFIG = {
-        core_constraints: 'Core Constraints',
-        scene_lighting:   'Scene & Lighting',
-        materials:        'Material Control',
-        photography:      'Photography Settings',
-        rendering:        'Render Quality'
-    };
     const officialPrompt = {};
     const projectType = adminValues['project_type'] || '';
 
@@ -109,21 +121,21 @@ async function buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv,
     if (styleRefUrl) {
         const bn = batchNodes;
         const d = defaultBatchNodes;
-        officialPrompt['Image Roles'] = {
+        officialPrompt[sl.image_roles_key] = {
             [bn.img1_key || d.img1_key]: bn.img1 || d.img1,
             [bn.img2_key || d.img2_key]: bn.img2 || d.img2,
             [bn.forbidden_key || d.forbidden_key]: bn.forbidden || d.forbidden
         };
-        officialPrompt['Style Consistency'] = {
+        officialPrompt[sl.style_consistency_key] = {
             [bn.apply_key || d.apply_key]: bn.apply || d.apply,
             [bn.output_must_be_key || d.output_must_be_key]: bn.output_must_be || d.output_must_be,
             [bn.never_key || d.never_key]: bn.never || d.never
         };
     }
 
-    officialPrompt['Project'] = `SU Screenshot to Realistic Photography${projectType ? ' - ' + projectType : ''}`;
+    officialPrompt[sl.project_key] = `${sl.project_prefix}${projectType ? ' - ' + projectType : ''}`;
 
-    Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
+    Object.entries(groupTitles).forEach(([group, title]) => {
         const section = {};
         t1Nodes.filter(n => n.group === group).forEach(node => {
             const val = adminValues[node.id];
@@ -375,6 +387,7 @@ async function _handleRender(req, res) {
         try {
             const t1Nodes = Array.isArray(req.body.t1_nodes) ? req.body.t1_nodes : [];
             const batchNodes = req.body.batch_nodes && typeof req.body.batch_nodes === 'object' ? req.body.batch_nodes : {};
+            const structureLabels = req.body.structure_labels && typeof req.body.structure_labels === 'object' ? req.body.structure_labels : {};
             const defaultBatchNodes = {
                 img1_key: "Image 1 [PRIMARY OUTPUT BASIS]",
                 img1: "SketchUp scene — every spatial element in the output (room layout, all furniture, all objects, all surfaces, camera viewpoint, geometry, proportions) must originate exclusively from Image 1.",
@@ -389,8 +402,8 @@ async function _handleRender(req, res) {
                 never_key: "Never",
                 never: "Blend, composite, or merge spatial content from both images."
             };
-            const withRef = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, {}, 'preview-style-ref-placeholder', '');
-            const withoutRef = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, {}, '', '');
+            const withRef = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, {}, 'preview-style-ref-placeholder', '', structureLabels);
+            const withoutRef = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, {}, '', '', structureLabels);
             return res.status(200).json({ code: 0, with_ref: withRef, without_ref: withoutRef });
         } catch (e) {
             return res.status(500).json({ code: -1, msg: `Preview 失敗: ${e.message}` });
@@ -817,10 +830,12 @@ async function _handleRender(req, res) {
         // ── Prompt Engine Mode（nodes | legacy）──
         let promptEngineMode = 'nodes';
         let disableBatchStyleLock = false;
+        let structureLabels = {};
         try {
             const eVal = await getConfig(supabase, 'SYSTEM_ENGINE_CONFIG');
             if (eVal?.config?.prompt_engine_mode) promptEngineMode = eVal.config.prompt_engine_mode;
             disableBatchStyleLock = !!eVal?.config?.disable_batch_style_lock;
+            if (eVal?.config?.structure_labels) structureLabels = eVal.config.structure_labels;
         } catch(e) {}
 
         const defaultP1 = "SketchUp interior model (Image 1). Backend pre-generates a spatial depth map (Image 2) and a color-segmented channel map (Image 3). Using Image 1 with reference to Images 2 and 3, restore 99% of spatial depth, camera position, and material texture direction without altering geometry or materials. Convert to a realistic interior photo. Apply natural lighting with supplemental diffuse fill to eliminate pure-black shadows and overexposure. Rationalize minor spatial inconsistencies. Professional photography-grade color grading with natural tonal gradation. ultra-detailed";
@@ -904,7 +919,7 @@ async function _handleRender(req, res) {
             const legacyStyleNote = styleRefUrl ? ` Apply ${bn.apply || d.apply} Output must be: ${bn.output_must_be || d.output_must_be} Never: ${bn.never || d.never}` : "";
 
             if (promptEngineMode !== 'legacy' && t1Nodes.length > 0) {
-                finalPrompt = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv, styleRefUrl, userPrompt);
+                finalPrompt = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv, styleRefUrl, userPrompt, structureLabels);
             } else {
                 // Legacy 模式 或 無節點 fallback：傳統拼接（用戶輸入原樣送出）
                 const legacyBatchPrefix = styleRefUrl ? " " + legacyImageRoles + legacyStyleNote : "";

@@ -578,6 +578,28 @@
       </div>
     </div>
 
+    <!-- 結構標籤：JSON 骨架用的固定 key / 前綴文字（Image Roles / Style Consistency / Project /
+         群組標題），跟節點內容分開管理，同一套免費翻譯按鈕 -->
+    <div class="mb-3 pb-3 border-b border-white/[0.06]">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[10px] text-gray-600 uppercase tracking-widest font-bold">結構標籤（JSON 骨架文字）</span>
+        <div class="flex items-center gap-1.5">
+          <select id="structure-label-target-lang" class="bg-black/40 border border-blue-500/30 rounded py-0.5 px-1 text-[9px] text-gray-300 outline-none">
+            <option value="en">→ English</option>
+            <option value="zh-TW">→ 繁體中文</option>
+            <option value="zh-CN">→ 简体中文</option>
+            <option value="ja">→ 日本語</option>
+            <option value="es">→ Español</option>
+            <option value="pt">→ Português</option>
+          </select>
+          <button onclick="translateAllStructureLabels()" id="btn-translate-structure" class="bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded px-2 py-0.5 text-[9px] hover:bg-blue-600/40 transition-colors">↻ 免費翻譯全部</button>
+          <button onclick="saveStructureLabels()" class="bg-cyan-600/20 text-cyan-300 border border-cyan-600/50 rounded px-2 py-0.5 text-[9px] hover:bg-cyan-600/40 transition-colors">儲存</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 lg:grid-cols-3 gap-2" id="structure-labels-grid"></div>
+      <div id="structure-labels-status" class="text-[10px] text-green-400 mt-1 hidden"></div>
+    </div>
+
     <!-- 雙欄：左節點清單 + 右黏性預覽 -->
     <div class="flex gap-5 items-start mt-3">
       <div id="t1-nodes-container" class="flex-1 space-y-3 min-w-0">
@@ -1688,6 +1710,12 @@ async function loadEngineConfig() {
     _engineConfigCache = j.config || {};
     applyEngineModeBadge(_engineConfigCache.prompt_engine_mode || 'nodes');
     applyBatchStyleLockBadge(!!_engineConfigCache.disable_batch_style_lock);
+    structureLabelsData = {
+      ...JSON.parse(JSON.stringify(DEFAULT_STRUCTURE_LABELS)),
+      ...(_engineConfigCache.structure_labels || {}),
+      group_titles: { ...DEFAULT_STRUCTURE_LABELS.group_titles, ...(_engineConfigCache.structure_labels?.group_titles || {}) }
+    };
+    renderStructureLabels();
   } catch(e) { console.error('Failed to load engine config:', e); }
 }
 
@@ -1775,6 +1803,109 @@ let t1NodesDirty = false;
 
 // locale 短代碼 → 完整代碼對照
 const LOCALE_MAP = { us: 'en-US', tw: 'zh-TW', cn: 'zh-CN', es: 'es-ES', br: 'pt-BR', jp: 'ja-JP' };
+
+// ── 結構標籤（JSON 骨架文字：Image Roles / Style Consistency / Project / 群組標題）──
+// 跟 render.js 的 DEFAULT_STRUCTURE_LABELS 保持一致，未設定時 fallback 到這裡
+const DEFAULT_STRUCTURE_LABELS = {
+  image_roles_key: 'Image Roles',
+  style_consistency_key: 'Style Consistency',
+  project_key: 'Project',
+  project_prefix: 'SU Screenshot to Realistic Photography',
+  group_titles: {
+    core_constraints: 'Core Constraints',
+    scene_lighting:   'Scene & Lighting',
+    materials:        'Material Control',
+    photography:      'Photography Settings',
+    rendering:        'Render Quality'
+  }
+};
+let structureLabelsData = JSON.parse(JSON.stringify(DEFAULT_STRUCTURE_LABELS));
+
+const STRUCTURE_LABEL_FIELDS = [
+  { key: 'project_key', label: 'Project (JSON key)' },
+  { key: 'project_prefix', label: 'Project 前綴文字' },
+  { key: 'image_roles_key', label: 'Image Roles (JSON key)' },
+  { key: 'style_consistency_key', label: 'Style Consistency (JSON key)' }
+];
+const GROUP_TITLE_FIELDS = [
+  { key: 'core_constraints', label: 'Core Constraints（群組標題）' },
+  { key: 'scene_lighting', label: 'Scene & Lighting（群組標題）' },
+  { key: 'materials', label: 'Material Control（群組標題）' },
+  { key: 'photography', label: 'Photography Settings（群組標題）' },
+  { key: 'rendering', label: 'Render Quality（群組標題）' }
+];
+
+function renderStructureLabels() {
+  const grid = document.getElementById('structure-labels-grid');
+  if (!grid) return;
+  const field = (val, onInput, label) => `
+    <div>
+      <label class="block text-[9px] text-gray-600 mb-0.5">${label}</label>
+      <input type="text" value="${(val || '').replace(/"/g, '&quot;')}" oninput="${onInput}" class="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-[11px] text-white outline-none">
+    </div>`;
+  let html = STRUCTURE_LABEL_FIELDS.map(f =>
+    field(structureLabelsData[f.key], `updateStructureLabel('${f.key}', this.value)`, f.label)
+  ).join('');
+  html += GROUP_TITLE_FIELDS.map(f =>
+    field(structureLabelsData.group_titles[f.key], `updateStructureGroupTitle('${f.key}', this.value)`, f.label)
+  ).join('');
+  grid.innerHTML = html;
+}
+
+function updateStructureLabel(key, val) {
+  structureLabelsData[key] = val;
+  _schedulePreview();
+}
+function updateStructureGroupTitle(key, val) {
+  structureLabelsData.group_titles[key] = val;
+  _schedulePreview();
+}
+
+// 免費翻譯全部結構標籤（重用 _gtTranslate，逐欄位翻，翻完直接反映在 Prompt Preview）
+async function translateAllStructureLabels() {
+  const btn = document.getElementById('btn-translate-structure');
+  const targetLang = document.getElementById('structure-label-target-lang')?.value || 'en';
+  if (btn) { btn.innerText = '翻譯中...'; btn.disabled = true; }
+  try {
+    for (const f of STRUCTURE_LABEL_FIELDS) {
+      const text = (structureLabelsData[f.key] || '').trim();
+      if (text) structureLabelsData[f.key] = (await _gtTranslate(text, 'auto', targetLang)).trim();
+    }
+    for (const f of GROUP_TITLE_FIELDS) {
+      const text = (structureLabelsData.group_titles[f.key] || '').trim();
+      if (text) structureLabelsData.group_titles[f.key] = (await _gtTranslate(text, 'auto', targetLang)).trim();
+    }
+    renderStructureLabels();
+    _schedulePreview();
+  } catch (e) {
+    alert('翻譯失敗: ' + e.message);
+  } finally {
+    if (btn) { btn.innerText = '↻ 免費翻譯全部'; btn.disabled = false; }
+  }
+}
+
+async function saveStructureLabels() {
+  const status = document.getElementById('structure-labels-status');
+  try {
+    _engineConfigCache.structure_labels = structureLabelsData;
+    const r = await fetch(`${API_BASE}/api/stats?action=set_system_config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+      body: JSON.stringify({ config: _engineConfigCache })
+    });
+    if (r.ok) {
+      if (status) {
+        status.innerText = '✅ 已儲存，即刻生效';
+        status.classList.remove('hidden');
+        setTimeout(() => status.classList.add('hidden'), 3000);
+      }
+    } else {
+      alert('儲存失敗，請確認 Admin Key 正確');
+    }
+  } catch (e) {
+    alert('儲存錯誤: ' + e.message);
+  }
+}
 
 async function loadT1Nodes() {
   try {
@@ -2963,7 +3094,7 @@ async function previewPrompt() {
     const r = await fetch(`${API_BASE}/api/render`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
-      body: JSON.stringify({ action: 'preview_prompt', t1_nodes: t1NodesData, batch_nodes: batchNodes })
+      body: JSON.stringify({ action: 'preview_prompt', t1_nodes: t1NodesData, batch_nodes: batchNodes, structure_labels: structureLabelsData })
     });
     const j = await r.json();
     if (reqId !== _previewReqId) return; // 舊的回應，畫面已經被更新的請求取代

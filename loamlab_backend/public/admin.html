@@ -403,6 +403,34 @@
     <div id="engine-mode-status" class="text-xs text-green-400 mt-2 hidden"></div>
   </div>
 
+  <!-- 提示詞自動翻譯語言設定 -->
+  <div class="card mb-4 border border-cyan-600/30 bg-[#0a1e2e]/40">
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-sm font-semibold text-white flex items-center gap-2">
+        <span class="text-cyan-400">🌐</span> 提示詞自動翻譯語言
+      </div>
+      <div id="prompt-lang-badge" class="text-xs px-2 py-0.5 rounded-full bg-cyan-600/20 text-cyan-300 border border-cyan-600/30">讀取中...</div>
+    </div>
+    <div class="text-[11px] text-gray-500 mb-3 leading-relaxed">
+      Node Mode 下，把「結構標籤 + 管理員節點值」整批翻譯成這個語言後才送出（一次 API 呼叫）。<br>
+      <b class="text-cyan-300">注意：</b>使用者在外掛中自行輸入的內容（補充提示詞、自訂材質等）<b class="text-red-400">永遠不會被翻譯</b>，保持原語言附加在翻譯結果之後。<br>
+      需要後端設定 <code class="text-cyan-300">GEMINI_API_KEY</code> 才會實際生效，未設定時等同「不翻譯」。
+    </div>
+    <div class="flex gap-2 items-center">
+      <select id="prompt-translation-language" class="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-cyan-200 outline-none focus:border-cyan-500/50 transition-colors flex-1">
+        <option value="none">❌ 不翻譯 (保持原文)</option>
+        <option value="professional English">🇺🇸 專業英文 (Professional English)</option>
+        <option value="Traditional Chinese">🇹🇼 繁體中文 (Traditional Chinese)</option>
+        <option value="Simplified Chinese">🇨🇳 簡體中文 (Simplified Chinese)</option>
+        <option value="Japanese">🇯🇵 日文 (Japanese)</option>
+      </select>
+      <button onclick="setPromptTranslationLanguage()" id="btn-save-translation-lang" class="bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 border border-cyan-600/50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
+        儲存設定
+      </button>
+    </div>
+    <div id="prompt-translation-status" class="text-xs text-green-400 mt-2 hidden"></div>
+  </div>
+
   <!-- 批次風格鎖定 (Anti-Collage) 切換 -->
   <div class="card mb-4 border border-amber-600/30 bg-[#1a120a]/40">
     <div class="flex items-center justify-between mb-3">
@@ -1685,6 +1713,7 @@ async function loadEngineConfig() {
     _engineConfigCache = j.config || {};
     applyEngineModeBadge(_engineConfigCache.prompt_engine_mode || 'nodes');
     applyBatchStyleLockBadge(!!_engineConfigCache.disable_batch_style_lock);
+    applyPromptLangBadge(_engineConfigCache.prompt_translation_language || 'none');
   } catch(e) { console.error('Failed to load engine config:', e); }
 }
 
@@ -1741,6 +1770,37 @@ function applyBatchStyleLockBadge(disabled) {
     badge.className = 'text-xs px-2 py-0.5 rounded-full bg-cyan-600/20 text-cyan-300 border border-cyan-600/30';
     btnOn.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-cyan-500/60 text-cyan-300 bg-cyan-600/20';
     btnOff.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-white/10 text-white/30 hover:text-white/60';
+  }
+}
+
+function applyPromptLangBadge(lang) {
+  const badge = document.getElementById('prompt-lang-badge');
+  const select = document.getElementById('prompt-translation-language');
+  const val = lang || 'none';
+  select.value = val;
+  badge.innerText = val === 'none' ? '○ 不翻譯' : `● ${val}`;
+}
+
+async function setPromptTranslationLanguage() {
+  const status = document.getElementById('prompt-translation-status');
+  const lang = document.getElementById('prompt-translation-language').value;
+  try {
+    _engineConfigCache.prompt_translation_language = lang;
+    const r = await fetch(`${API_BASE}/api/stats?action=set_system_config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+      body: JSON.stringify({ config: _engineConfigCache })
+    });
+    if (r.ok) {
+      applyPromptLangBadge(lang);
+      status.innerText = `✅ 已切換翻譯語言為 ${lang === 'none' ? '不翻譯' : lang}，即刻生效`;
+      status.classList.remove('hidden');
+      setTimeout(() => status.classList.add('hidden'), 3000);
+    } else {
+      alert('儲存失敗，請確認 Admin Key 正確');
+    }
+  } catch(e) {
+    alert('儲存錯誤: ' + e.message);
   }
 }
 

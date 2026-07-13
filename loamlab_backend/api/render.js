@@ -74,10 +74,29 @@ function buildImagePayload(sceneImages, styleRefUrl) {
     return [...sceneImages, styleRefUrl];
 }
 
-// 提示詞不做 runtime 翻譯：系統/管理員節點的文字由 admin.html 直接以目標語言填入
-// value 即可，用戶自訂內容一律原樣送出。nano-banana/seedream 等模型原生支援多語言
-// 輸入，這層 Gemini 翻譯 API 自功能上線起 GEMINI_API_KEY 就從未配置過──等於中文
-// 一直原樣進 prompt 也沒出過問題，移除以少一個外部依賴、少一個失敗點、少一次延遲。
+// 官方組出的 JSON 結構（結構 key + 管理員節點值）整批翻譯一次；用戶自己輸入的內容
+// 完全不經過這裡，呼叫端翻譯完才附加。沒設定 GEMINI_API_KEY 或目標語言為 none 時
+// 原樣直接回傳，不影響既有行為。
+async function translateWholePrompt(promptObj, targetLang = 'professional English') {
+    if (!targetLang || targetLang === 'none') return promptObj;
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    if (!GEMINI_API_KEY) return promptObj;
+    try {
+        const resp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text:
+                `Translate both the keys and values of this JSON object to ${targetLang}. Preserve the exact JSON structure (same nesting, same number of keys, no keys added or removed). Output ONLY the translated JSON object, no explanations.\n\n${JSON.stringify(promptObj)}`
+              }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 2048 } }),
+              signal: AbortSignal.timeout(10000) }
+        );
+        const data = await resp.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const m = text.match(/\{[\s\S]*\}/);
+        if (m) return JSON.parse(m[0]);
+    } catch (e) { /* 翻譯失敗靜默降級回原文，不阻斷渲染 */ }
+    return promptObj;
+}
 
 export default async function handler(req, res) {
     try { return await _handleRender(req, res); }
@@ -718,10 +737,12 @@ async function _handleRender(req, res) {
         // ── Prompt Engine Mode（nodes | legacy）──
         let promptEngineMode = 'nodes';
         let disableBatchStyleLock = false;
+        let promptTranslationLanguage = 'none';
         try {
             const eVal = await getConfig(supabase, 'SYSTEM_ENGINE_CONFIG');
             if (eVal?.config?.prompt_engine_mode) promptEngineMode = eVal.config.prompt_engine_mode;
             disableBatchStyleLock = !!eVal?.config?.disable_batch_style_lock;
+            if (eVal?.config?.prompt_translation_language) promptTranslationLanguage = eVal.config.prompt_translation_language;
         } catch(e) {}
 
         const defaultP1 = "SketchUp interior model (Image 1). Backend pre-generates a spatial depth map (Image 2) and a color-segmented channel map (Image 3). Using Image 1 with reference to Images 2 and 3, restore 99% of spatial depth, camera position, and material texture direction without altering geometry or materials. Convert to a realistic interior photo. Apply natural lighting with supplemental diffuse fill to eliminate pure-black shadows and overexposure. Rationalize minor spatial inconsistencies. Professional photography-grade color grading with natural tonal gradation. ultra-detailed";
@@ -806,31 +827,19 @@ async function _handleRender(req, res) {
 
             if (promptEngineMode !== 'legacy' && t1Nodes.length > 0) {
                 // Nodes 模式：JSON 結構化提示詞
-                // 1. 收集所有值（將系統節點與用戶節點分開收集，以避免翻譯用戶輸入）
+                // 1. 只收集系統/管理員節點值——翻譯只作用在這批「官方」內容，用戶輸入完全不經過
                 const adminValues = {};
                 t1Nodes.forEach(node => {
                     const val = node.system ? (node.value || '') : (adv[node.id] || node.default || '');
                     if (val.toString().trim()) adminValues[node.id] = val.toString().trim();
                 });
-
-                const userValues = {};
-                if (userPrompt.trim()) userValues['__userPrompt__'] = userPrompt.trim();
-                // 用戶自訂材質節點：_usr_<名稱> = 材質值，與系統節點同層 flat key
+                // 用戶自訂材質節點：_usr_<名稱> = 材質值，翻譯後才附加，保持原語言
                 const userMatNodes = Object.keys(adv)
                     .filter(k => k.startsWith('_usr_'))
                     .map(k => ({ label: k.slice(5), value: adv[k] }))
                     .filter(m => m.label && m.value?.trim());
-                userMatNodes.forEach((m, i) => {
-                    if (m.label?.trim()) userValues[`__umat_${i}_label`] = m.label.trim();
-                    if (m.value?.trim()) userValues[`__umat_${i}_value`] = m.value.trim();
-                });
 
-                // 2. 系統/管理員節點值直接使用（admin.html 已用目標語言填好 value）；
-                //    使用者自定義內容一律保持原樣（見上方 userValues 組裝）
-                const translatedValues = { ...adminValues, ...userValues };
-                const translatedUserPrompt = translatedValues['__userPrompt__'] || userPrompt.trim();
-
-                // 3. 建構 JSON 結構
+                // 2. 建構「官方」JSON 結構（結構 key + 管理員節點值，不含任何用戶輸入）
                 const GROUP_CONFIG = {
                     core_constraints: 'Core Constraints',
                     scene_lighting:   'Scene & Lighting',
@@ -838,45 +847,47 @@ async function _handleRender(req, res) {
                     photography:      'Photography Settings',
                     rendering:        'Render Quality'
                 };
-                const jsonPrompt = {};
-                const projectType = translatedValues['project_type'] || '';
+                const officialPrompt = {};
+                const projectType = adminValues['project_type'] || '';
 
-                // 3b. 批量出圖：Image Roles / Style Consistency 前置，最大化模型約束力
+                // 2b. 批量出圖：Image Roles / Style Consistency 前置，最大化模型約束力
                 if (styleRefUrl) {
                     const bn = batchNodes;
                     const d = defaultBatchNodes;
-                    jsonPrompt['Image Roles'] = {
+                    officialPrompt['Image Roles'] = {
                         [bn.img1_key || d.img1_key]: bn.img1 || d.img1,
                         [bn.img2_key || d.img2_key]: bn.img2 || d.img2,
                         [bn.forbidden_key || d.forbidden_key]: bn.forbidden || d.forbidden
                     };
-                    jsonPrompt['Style Consistency'] = {
+                    officialPrompt['Style Consistency'] = {
                         [bn.apply_key || d.apply_key]: bn.apply || d.apply,
                         [bn.output_must_be_key || d.output_must_be_key]: bn.output_must_be || d.output_must_be,
                         [bn.never_key || d.never_key]: bn.never || d.never
                     };
                 }
 
-                jsonPrompt['Project'] = `SU Screenshot to Realistic Photography${projectType ? ' - ' + projectType : ''}${translatedUserPrompt ? ' - ' + translatedUserPrompt : ''}`;
+                officialPrompt['Project'] = `SU Screenshot to Realistic Photography${projectType ? ' - ' + projectType : ''}`;
 
                 Object.entries(GROUP_CONFIG).forEach(([group, title]) => {
                     const section = {};
                     t1Nodes.filter(n => n.group === group).forEach(node => {
-                        const val = translatedValues[node.id];
+                        const val = adminValues[node.id];
                         if (val) section[node.labels?.['en-US'] || node.id] = val;
                     });
-                    // 自訂材質節點與 Material Control 同批次建構
-                    if (group === 'materials' && userMatNodes.length > 0) {
-                        userMatNodes.forEach((m, i) => {
-                            const key = translatedValues[`__umat_${i}_label`] || m.label;
-                            const val = translatedValues[`__umat_${i}_value`] || m.value;
-                            if (key && val?.trim()) section[key] = val.trim();
-                        });
-                    }
-                    if (Object.keys(section).length > 0) jsonPrompt[title] = section;
+                    if (Object.keys(section).length > 0) officialPrompt[title] = section;
                 });
 
-                finalPrompt = JSON.stringify(jsonPrompt, null, 2);
+                // 3. 官方部分整批翻譯一次（結構 key + 值），用戶內容完全不經過這一步
+                const translatedPrompt = await translateWholePrompt(officialPrompt, promptTranslationLanguage);
+
+                // 4. 用戶自訂內容翻譯後才附加，原語言原樣送出
+                if (userMatNodes.length > 0) {
+                    translatedPrompt['User Materials'] = {};
+                    userMatNodes.forEach(m => { translatedPrompt['User Materials'][m.label] = m.value; });
+                }
+
+                finalPrompt = JSON.stringify(translatedPrompt, null, 2)
+                    + (userPrompt.trim() ? `\n\nUser instructions (keep as-is, do not translate): ${userPrompt.trim()}` : '');
             } else {
                 // Legacy 模式 或 無節點 fallback：傳統拼接（用戶輸入原樣送出）
                 const legacyBatchPrefix = styleRefUrl ? " " + legacyImageRoles + legacyStyleNote : "";

@@ -1201,6 +1201,32 @@ function finalizeRenderUI() {
     }, 1000);
 }
 
+// 看門狗：360 秒內若沒收到任何 render_success/render_failed 進度，主動解鎖 UI。
+// 每收到一個場景的結果就重新武裝（而非只在 export_done 設一次），避免多場景批次渲染時
+// 單一場景輪詢時間偏長，把「總時長 > 360 秒」誤判成「卡住」而提早解鎖。
+function _armRenderWatchdog() {
+    if (renderWatchdogTimer) clearTimeout(renderWatchdogTimer);
+    renderWatchdogTimer = setTimeout(() => {
+        renderWatchdogTimer = null;
+        if (!window._isRendering) return;
+        finalizeRenderUI();
+        const wdLang = UI_LANG[currentLang] || UI_LANG['en-US'];
+        showUpdateToast('⚠️ ' + (wdLang['render_timeout_hint'] || '渲染等待超時。如已出圖請至渲染歷史查看；如未出圖點數已退還，請重試。'));
+        const stEl = document.getElementById('status-text');
+        if (stEl) {
+            stEl.textContent = wdLang['render_timeout_hint'] || '等待超時，請至渲染歷史確認';
+            stEl.classList.replace('text-amber-400', 'text-[#dc2626]');
+        }
+        // 自動刷新並開啟渲染歷史，讓用戶直接撈回可能已生成的圖
+        setTimeout(() => {
+            if (typeof openHistoryModal === 'function') {
+                if (window.sketchup) { try { sketchup.list_saved_renders({}); } catch(_) {} }
+                openHistoryModal();
+            }
+        }, 1200);
+    }, 360000);
+}
+
 function startRenderTimer() {
     if (renderTimer) clearInterval(renderTimer);
     currentPct = 0;
@@ -1505,29 +1531,11 @@ window.receiveFromRuby = function (data) {
         const langObj3 = UI_LANG[currentLang];
         statusText.textContent = langObj3['export_done'] || 'All scenes sent. Rendering in cloud...';
         statusText.classList.replace('text-red-400', 'text-amber-400');
-        // 看門狗：360 秒內若沒收到 render_success/render_failed，主動解鎖 UI
-        if (renderWatchdogTimer) clearTimeout(renderWatchdogTimer);
-        renderWatchdogTimer = setTimeout(() => {
-            renderWatchdogTimer = null;
-            if (!window._isRendering) return;
-            finalizeRenderUI();
-            const wdLang = UI_LANG[currentLang] || UI_LANG['en-US'];
-            showUpdateToast('⚠️ ' + (wdLang['render_timeout_hint'] || '渲染等待超時。如已出圖請至渲染歷史查看；如未出圖點數已退還，請重試。'));
-            if (statusText) {
-                statusText.textContent = wdLang['render_timeout_hint'] || '等待超時，請至渲染歷史確認';
-                statusText.classList.replace('text-amber-400', 'text-[#dc2626]');
-            }
-            // 自動刷新並開啟渲染歷史，讓用戶直接撈回可能已生成的圖
-            setTimeout(() => {
-                if (typeof openHistoryModal === 'function') {
-                    if (window.sketchup) { try { sketchup.list_saved_renders({}); } catch(_) {} }
-                    openHistoryModal();
-                }
-            }, 1200);
-        }, 360000);
+        _armRenderWatchdog();
     } else if (data.status === 'render_success') {
         console.log('[render_success] scene_name=', data.scene_name, 'url=', (data.url||'').slice(0,60));
         finishedScenesCount++;
+        _armRenderWatchdog(); // 收到進度，重新武裝看門狗（若這是最後一場，finalizeRenderUI 稍後會清掉它）
         // 自動更新點數餘額 (後端回傳 points_remaining)
         if (data.points_remaining !== undefined) {
             const pb = document.getElementById('point-balance');
@@ -1698,6 +1706,7 @@ window.receiveFromRuby = function (data) {
         }
     } else if (data.status === 'render_failed') {
         finishedScenesCount++;
+        _armRenderWatchdog(); // 收到進度（即使是失敗），重新武裝看門狗，避免批次中單一失敗提早誤判整批卡住
         // 解析度方案限制 → 自動開啟定價牆
         if (data.error === 'resolution_limit') {
             if (typeof openPricingModal === 'function') openPricingModal({ highlight: 'pro' });
@@ -6110,6 +6119,49 @@ function _scConfirmSelections() {
     showUpdateToast('✅ 選取已確認，點擊渲染鍵執行替換');
 }
 
+// 輪詢非同步渲染任務直到完成（每 3 秒一次，最多 6 分鐘）；每 30 秒更新一次提示，避免用戶以為卡住
+async function _pollRenderTask(initial) {
+    const maxAttempts = 120;
+    for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        if ((i + 1) % 10 === 0) {
+            showUpdateToast(`⏳ AI 生成中...已等待 ${Math.round((i + 1) * 3 / 60)} 分鐘`);
+        }
+        try {
+            const pResp = await fetch(`${API_BASE}/api/render`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Email': window.loamlabUserEmail || '',
+                    'X-Plugin-Version': window.LOAMLAB_VERSION || '0.0.0'
+                },
+                body: JSON.stringify({
+                    action: 'poll_render',
+                    task_id: initial.task_id,
+                    cost: initial.cost,
+                    resolution: initial.resolution,
+                    tool: initial.tool,
+                    transaction_id: initial.transaction_id,
+                    prompt: initial.prompt,
+                    style: initial.style,
+                    input_url: initial.input_url
+                })
+            });
+            const pData = await pResp.json();
+            if (pData.status === 'success') {
+                return { code: 0, url: pData.url, points_remaining: pData.points_remaining, transaction_id: pData.transaction_id };
+            }
+            if (pData.status === 'failed') {
+                return { code: -1, msg: pData.msg || '渲染失敗', points_refunded: pData.points_refunded };
+            }
+            // status === 'processing' → 繼續輪詢
+        } catch (e) {
+            // 網路瞬斷，繼續輪詢，不視為失敗
+        }
+    }
+    return { code: -1, msg: '渲染仍在處理中，請稍後至 Render History 查看結果', points_refunded: false };
+}
+
 async function executeSmartSwap(overrideBody = null) {
     if (SmartCanvas._executing) return;
     SmartCanvas._executing = true;
@@ -6187,13 +6239,13 @@ async function executeSmartSwap(overrideBody = null) {
             }
         }
 
-        // 60 秒後顯示「仍在處理中」提示，避免用戶以為卡住
+        // 提交任務本身（翻譯/圖片代傳/建立任務）耗時較短；真正的生成等待由 _pollRenderTask 負責提示
         const slowToastTimer = setTimeout(() => {
-            showUpdateToast('⏳ AI 仍在處理中，預計還需 1–2 分鐘...');
-        }, 60000);
+            showUpdateToast('⏳ 任務提交中，請稍候...');
+        }, 20000);
 
         const _scAbortCtrl = new AbortController();
-        const _scAbortTimer = setTimeout(() => _scAbortCtrl.abort(), 400000);
+        const _scAbortTimer = setTimeout(() => _scAbortCtrl.abort(), 90000);
         let resp;
         try {
             resp = await fetch(`${API_BASE}/api/render`, {
@@ -6210,7 +6262,17 @@ async function executeSmartSwap(overrideBody = null) {
             clearTimeout(_scAbortTimer);
             clearTimeout(slowToastTimer);
         }
-        const result = await resp.json();
+        let result = await resp.json();
+
+        if (result.code === 0 && result.status === 'processing' && result.task_id) {
+            if (result.points_remaining !== undefined) {
+                const pb = document.getElementById('point-balance');
+                if (pb) pb.textContent = result.points_remaining;
+            }
+            showUpdateToast('⏳ AI 生成中，預計 1–3 分鐘，請勿關閉視窗...');
+            result = await _pollRenderTask(result);
+        }
+
         if (result.code === 0 && result.url) {
             if (result.points_remaining !== undefined) {
                 const pb = document.getElementById('point-balance');
@@ -6237,7 +6299,7 @@ async function executeSmartSwap(overrideBody = null) {
         SmartCanvas.regions = [];
         _scUpdatePendingIndicator();
         const isTimeout = err.name === 'TimeoutError' || err.name === 'AbortError';
-        const msg = isTimeout ? '渲染超時（AI 需 4–5 分鐘），請至 Render History 查看是否已完成，勿重試' : '網路錯誤: ' + err.message;
+        const msg = isTimeout ? '任務提交逾時，請至 Render History 確認是否已扣點/出圖，勿重複提交' : '網路錯誤: ' + err.message;
         showUpdateToast('❌ ' + msg);
         if (window._isDev && window._devViewActive) (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
     } finally {

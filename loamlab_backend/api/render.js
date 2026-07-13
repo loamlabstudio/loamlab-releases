@@ -6,7 +6,7 @@ import { resolveUserEmail } from '../lib/verifyIdentity.js';
 import { getConfig } from '../lib/systemConfig.js';
 import { reportUsageEvent } from '../lib/dodo.js';
 
-export const maxDuration = 300; // Allow Vercel to run up to 5 minutes to poll AtlasCloud
+export const maxDuration = 300; // 提示詞翻譯/圖片代傳等前置作業可能耗時；AtlasCloud 生成本身已改為非同步 task_id，不在此函式內等待
 
 // Node 18+ 內建 fetch，無需 require('node-fetch')
 
@@ -78,13 +78,14 @@ function buildImagePayload(sceneImages, styleRefUrl) {
 const translationPromises = new Map();
 
 // ── Gemini 翻譯 helper（有 CJK 字元 + API Key 才翻，否則原值回傳）──
-async function translateValues(valuesObj) {
+async function translateValues(valuesObj, targetLang = 'professional English') {
+    if (targetLang === 'none') return valuesObj;
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) return valuesObj;
     const hasCJK = Object.values(valuesObj).some(v => /[\u4e00-\u9fff\u3040-\u30ff]/.test(String(v)));
     if (!hasCJK) return valuesObj;
 
-    const cacheKey = 'obj_' + JSON.stringify(valuesObj);
+    const cacheKey = 'obj_' + targetLang + '_' + JSON.stringify(valuesObj);
     if (translationPromises.has(cacheKey)) {
         return await translationPromises.get(cacheKey);
     }
@@ -95,7 +96,7 @@ async function translateValues(valuesObj) {
                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
                 { method: 'POST', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ contents: [{ parts: [{ text:
-                    `Translate these interior design/photography descriptions to professional English. Output ONLY a valid JSON object with identical keys and English values. No explanations.\n\n${JSON.stringify(valuesObj)}`
+                    `Translate these interior design/photography descriptions to ${targetLang}. Output ONLY a valid JSON object with identical keys and ${targetLang} values. No explanations.\n\n${JSON.stringify(valuesObj)}`
                   }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 1024 } }) }
             );
             const data = await resp.json();
@@ -113,13 +114,14 @@ async function translateValues(valuesObj) {
 }
 
 // ── 單字串翻譯（有 CJK 才翻；失敗靜默降級返回原文）──
-async function translateToEnglish(text) {
+async function translateToTargetLang(text, targetLang = 'professional English') {
+    if (targetLang === 'none') return text;
     if (!text || !text.trim()) return text;
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (!GEMINI_API_KEY) return text;
     if (!/[\u4e00-\u9fff\u3040-\u30ff]/.test(text)) return text;
 
-    const cacheKey = 'str_' + text;
+    const cacheKey = 'str_' + targetLang + '_' + text;
     if (translationPromises.has(cacheKey)) {
         return await translationPromises.get(cacheKey);
     }
@@ -130,7 +132,7 @@ async function translateToEnglish(text) {
                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
                 { method: 'POST', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ contents: [{ parts: [{ text:
-                    `Translate the following interior design description to professional English. Output ONLY the translated text, no explanations.\n\n${text}`
+                    `Translate the following interior design description to ${targetLang}. Output ONLY the translated text, no explanations.\n\n${text}`
                   }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 512 } }) }
             );
             const data = await resp.json();
@@ -154,7 +156,6 @@ export default async function handler(req, res) {
     }
 }
 async function _handleRender(req, res) {
-    const requestStart = Date.now(); // T2: 用於 polling timeout 計算
     // 1. 允許跨域請求 (CORS)
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -489,6 +490,61 @@ async function _handleRender(req, res) {
         return res.status(200).json({ code: 0, share_url: shareUrl, points_remaining: deductResult360.balance });
     }
 
+    // 非同步任務輪詢（配合 AtlasCloud 長任務，避免佔用 Vercel 連線）
+    // 無伺服端任務表：由前端把首次 processing 回應裡的欄位原樣帶回，這裡只負責查狀態、成功存歷史、失敗退款
+    if (userPayload.action === 'poll_render') {
+        const taskId = (userPayload.task_id || '').trim();
+        if (!taskId) return res.status(200).json({ code: -1, msg: 'task_id 缺失' });
+        const pollCost = Number(userPayload.cost) || 0;
+        const pollResVal = userPayload.resolution || '1k';
+        const pollTool = userPayload.tool || 1;
+        const pollTxId = userPayload.transaction_id || null;
+        const pollPrompt = userPayload.prompt || '';
+        const pollStyle = userPayload.style || '';
+        const pollInputUrl = userPayload.input_url || null;
+
+        const ATLASCLOUD_API_KEY = process.env.ATLASCLOUD_API_KEY;
+        try {
+            const pRes = await fetch(`https://api.atlascloud.ai/api/v1/model/prediction/${taskId}`, {
+                headers: { 'Authorization': `Bearer ${ATLASCLOUD_API_KEY}` },
+                signal: AbortSignal.timeout(15000)
+            });
+            if (pRes.status !== 200) {
+                return res.status(200).json({ code: 0, status: 'processing' });
+            }
+            const pData = await pRes.json();
+            const state = (pData?.data?.state || pData?.data?.status || '').toLowerCase();
+            const finalUrl = pData?.data?.outputs?.[0] || pData?.data?.image_url || pData?.data?.images?.[0];
+
+            if (finalUrl || state === 'succeeded' || state === 'completed') {
+                if (!finalUrl) return res.status(200).json({ code: 0, status: 'processing' });
+                saveRenderHistory(supabase, {
+                    userEmail, url: finalUrl,
+                    userPayload: { parameters: { user_prompt: pollPrompt, style: pollStyle } },
+                    resVal: pollResVal, cost: pollCost, activeTool: pollTool, inputUrl: pollInputUrl
+                });
+                let balance = null;
+                try {
+                    const { data: uRow } = await supabase.from('users').select('points').eq('email', userEmail).single();
+                    balance = uRow?.points ?? null;
+                } catch (e) {}
+                return res.status(200).json({ code: 0, status: 'success', url: finalUrl, points_remaining: balance, transaction_id: pollTxId });
+            }
+            if (state === 'failed' || state === 'error' || state === 'canceled' || state === 'cancelled') {
+                if (pollCost > 0) {
+                    try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -pollCost }); } catch (e) {}
+                    try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: pollCost, transaction_type: 'REFUND_TASK_FAILED' }]); } catch (e) {}
+                }
+                return res.status(200).json({ code: -1, status: 'failed', msg: 'AI 渲染引擎任務失敗，點數已退回', points_refunded: pollCost > 0 });
+            }
+            // starting / processing / queued 等中間狀態
+            return res.status(200).json({ code: 0, status: 'processing' });
+        } catch (e) {
+            // 網路瞬斷或逾時：視為仍在處理中，交由前端繼續輪詢，不做退款判定
+            return res.status(200).json({ code: 0, status: 'processing' });
+        }
+    }
+
     // 記錄原始輸入 URL（僅保存穩定的外部 URL，不保存 base64 或臨時簽名 URL）
     let inputUrlForHistory = null;
     const _firstInputImg = userPayload.parameters?.image?.[0];
@@ -720,10 +776,12 @@ async function _handleRender(req, res) {
         // ── Prompt Engine Mode（nodes | legacy）──
         let promptEngineMode = 'nodes';
         let disableBatchStyleLock = false;
+        let promptTranslationLanguage = 'professional English';
         try {
             const eVal = await getConfig(supabase, 'SYSTEM_ENGINE_CONFIG');
             if (eVal?.config?.prompt_engine_mode) promptEngineMode = eVal.config.prompt_engine_mode;
             disableBatchStyleLock = !!eVal?.config?.disable_batch_style_lock;
+            if (eVal?.config?.prompt_translation_language) promptTranslationLanguage = eVal.config.prompt_translation_language;
         } catch(e) {}
 
         const defaultP1 = "SketchUp interior model (Image 1). Backend pre-generates a spatial depth map (Image 2) and a color-segmented channel map (Image 3). Using Image 1 with reference to Images 2 and 3, restore 99% of spatial depth, camera position, and material texture direction without altering geometry or materials. Convert to a realistic interior photo. Apply natural lighting with supplemental diffuse fill to eliminate pure-black shadows and overexposure. Rationalize minor spatial inconsistencies. Professional photography-grade color grading with natural tonal gradation. ultra-detailed";
@@ -787,7 +845,7 @@ async function _handleRender(req, res) {
                     // 只翻譯純文字描述部分
                     let translatedContent = content;
                     if (content && !content.toLowerCase().includes("apply or place what's shown")) {
-                        translatedContent = await translateToEnglish(content);
+                        translatedContent = await translateToTargetLang(content, promptTranslationLanguage);
                     }
                     
                     const finalContent = (translatedContent + refSuffix).trim();
@@ -802,7 +860,7 @@ async function _handleRender(req, res) {
                 finalPrompt = p2.replace("{{REF_TEXT}}", refText).replace("{{CHANGES}}", changes.join('\n'));
             }
         } else if (activeTool === 3) {
-            const translatedPrompt3 = await translateToEnglish(userPrompt);
+            const translatedPrompt3 = await translateToTargetLang(userPrompt, promptTranslationLanguage);
             finalPrompt = translatedPrompt3.trim() ? p3 + ", " + translatedPrompt3 : p3;
         } else {
             // Tool 1: 嚴格 JSON 結構組裝（legacy mode 跳過節點直接拼接）
@@ -814,24 +872,32 @@ async function _handleRender(req, res) {
 
             if (promptEngineMode !== 'legacy' && t1Nodes.length > 0) {
                 // Nodes 模式：JSON 結構化提示詞
-                // 1. 收集所有值（system 節點用 node.value，用戶節點用 adv[node.id]；userPrompt 一同納入翻譯）
-                const rawValues = {};
-                if (userPrompt.trim()) rawValues['__userPrompt__'] = userPrompt.trim();
+                // 1. 收集所有值（將系統節點與用戶節點分開收集，以避免翻譯用戶輸入）
+                const adminValues = {};
                 t1Nodes.forEach(node => {
                     const val = node.system ? (node.value || '') : (adv[node.id] || node.default || '');
-                    if (val.toString().trim()) rawValues[node.id] = val.toString().trim();
+                    if (val.toString().trim()) adminValues[node.id] = val.toString().trim();
                 });
+
+                const userValues = {};
+                if (userPrompt.trim()) userValues['__userPrompt__'] = userPrompt.trim();
                 // 用戶自訂材質節點：_usr_<名稱> = 材質值，與系統節點同層 flat key
                 const userMatNodes = Object.keys(adv)
                     .filter(k => k.startsWith('_usr_'))
                     .map(k => ({ label: k.slice(5), value: adv[k] }))
                     .filter(m => m.label && m.value?.trim());
                 userMatNodes.forEach((m, i) => {
-                    if (m.label?.trim()) rawValues[`__umat_${i}_label`] = m.label.trim();
-                    if (m.value?.trim()) rawValues[`__umat_${i}_value`] = m.value.trim();
+                    if (m.label?.trim()) userValues[`__umat_${i}_label`] = m.label.trim();
+                    if (m.value?.trim()) userValues[`__umat_${i}_value`] = m.value.trim();
                 });
+
                 // 2. Gemini 翻譯（有 CJK 才翻，無 API Key 則原值）
-                const translatedValues = await translateValues(rawValues);
+                // 使用者自定義內容保持原樣不翻譯，僅翻譯 adminValues
+                let translatedAdminValues = adminValues;
+                if (promptTranslationLanguage !== 'none') {
+                    translatedAdminValues = await translateValues(adminValues, promptTranslationLanguage);
+                }
+                const translatedValues = { ...translatedAdminValues, ...userValues };
                 const translatedUserPrompt = translatedValues['__userPrompt__'] || userPrompt.trim();
 
                 // 3. 建構 JSON 結構
@@ -883,7 +949,7 @@ async function _handleRender(req, res) {
                 finalPrompt = JSON.stringify(jsonPrompt, null, 2);
             } else {
                 // Legacy 模式 或 無節點 fallback：傳統拼接（翻譯後拼接）
-                const translatedPrompt1 = await translateToEnglish(userPrompt);
+                const translatedPrompt1 = await translateToTargetLang(userPrompt, promptTranslationLanguage);
                 const legacyBatchPrefix = styleRefUrl ? " " + legacyImageRoles + legacyStyleNote : "";
                 finalPrompt = translatedPrompt1.trim() ? p1 + legacyBatchPrefix + ", " + translatedPrompt1 : p1 + legacyBatchPrefix;
             }
@@ -932,36 +998,17 @@ async function _handleRender(req, res) {
         const data = await response.json();
         let finalUrl = data?.data?.image_url || data?.data?.images?.[0] || null;
 
+        // AtlasCloud 已接受任務但尚未完成：立即回傳 task_id，不佔用 Vercel 連線 long-poll
+        // （輸入圖片已隨這次請求送出，AtlasCloud 已抓取，此刻即可安全清理暫存檔）
         if (!finalUrl && data?.data?.id) {
-            const taskId = data.data.id;
-            console.log('[AtlasCloud] Task started async, polling ID:', taskId);
-            const pollUrl = `https://api.atlascloud.ai/api/v1/model/prediction/${taskId}`;
-            
-            const pollDeadline = maxDuration * 1000 - 15000; // Vercel kill 前 15 秒截止
-            let attempts = 0;
-            let taskFailed = false;
-            while (attempts < 80 && !finalUrl && !taskFailed) {
-                if (Date.now() - requestStart > pollDeadline) throw new Error('timeout');
-                attempts++;
-                await new Promise(resolve => setTimeout(resolve, 3000));
-                try {
-                    const pRes = await fetch(pollUrl, { headers: { 'Authorization': `Bearer ${ATLASCLOUD_API_KEY}` }, signal: AbortSignal.timeout(280000) });
-                    if (pRes.status === 200) {
-                        const pData = await pRes.json();
-                        // support multiple potential finished states
-                        const state = (pData?.data?.state || pData?.data?.status || '').toLowerCase();
-                        if (state === 'succeeded' || state === 'completed' || pData?.data?.outputs) {
-                            finalUrl = pData.data.outputs?.[0] || pData.data.image_url || pData.data.images?.[0];
-                            break;
-                        } else if (state === 'failed' || state === 'error') {
-                            taskFailed = true; break;
-                        }
-                    }
-                } catch(e) {
-                    console.error('[Polling Error]', e.message);
-                }
-            }
-            if (taskFailed) throw new Error('AtlasCloud task failed');
+            await cleanTemp2();
+            await cleanTemp();
+            return res.status(200).json({
+                code: 0, status: 'processing', task_id: data.data.id,
+                transaction_id: transactionId, points_remaining: deductResult.balance,
+                cost, resolution: normalizedRes, tool: activeTool,
+                prompt: userPrompt, style: userPayload.parameters?.style || '', input_url: inputUrlForHistory
+            });
         }
 
         console.log('[AtlasCloud] finalUrl:', finalUrl);

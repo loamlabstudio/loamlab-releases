@@ -861,18 +861,11 @@ module LoamLab
             req.headers = self.auth_headers(user_email)
             req.body = request_body
             captured_label = scene_label
+            captured_headers = req.headers
             req.start do |_, response|
-              begin
-                raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
-                data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
-                result = (data['code'] == 0 && data['url']) ?
-                  { status: 'render_success', scene_name: captured_label, url: data['url'],
-                    points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
-                  { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}") }
-              rescue => e
-                result = { status: 'render_failed', message: self.sanitize_error("解析失敗: #{e.message}") }
+              self.handle_render_response(response, captured_headers, { scene_name: captured_label }) do |result|
+                UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
               end
-              UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
             end
             UI.start_timer(0.1, false) { dialog.execute_script("window.receiveFromRuby({status: 'export_done'})") }
           rescue => e
@@ -1080,6 +1073,65 @@ module LoamLab
       token = self.stored_access_token
       headers['Authorization'] = "Bearer #{token}" unless token.empty?
       headers
+    end
+
+    # ─── 非同步渲染輪詢（AtlasCloud 任務可能耗時數分鐘，後端不再 long-poll 佔用連線）──
+    # 解析 /api/render 回應：若 status == 'processing' 自動接手輪詢直到完成，否則直接組出最終 result；
+    # 透過 on_result callback 統一回傳，呼叫端不需要知道背後是否輪詢過。
+    def self.handle_render_response(response, headers, extra = {}, &on_result)
+      begin
+        raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
+        data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
+        if data['status'] == 'processing' && data['task_id']
+          meta = {
+            cost: data['cost'], resolution: data['resolution'], tool: data['tool'],
+            transaction_id: data['transaction_id'], prompt: data['prompt'],
+            style: data['style'], input_url: data['input_url']
+          }
+          self.poll_render_task(data['task_id'], headers, meta) do |final_result|
+            on_result.call(final_result.merge(extra))
+          end
+          return
+        end
+        result = (data['code'] == 0 && data['url']) ?
+          { status: 'render_success', url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
+          { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
+            points_refunded: data['points_refunded'], error: data['error'] }
+        on_result.call(result.merge(extra))
+      rescue => e
+        on_result.call({ status: 'render_failed', message: self.sanitize_error("解析失敗: #{e.message}") }.merge(extra))
+      end
+    end
+
+    # 每 3 秒問一次後端任務狀態，最多等 5 分鐘（100 次），逾時當作失敗但不擅自標記已退款
+    # （後端才是退款權威來源；逾時多半是任務真的還沒完成，交由用戶自行去 Render History 確認）
+    def self.poll_render_task(task_id, headers, meta, attempt = 0, &on_final)
+      if attempt >= 100
+        on_final.call({ status: 'render_failed', message: '渲染逾時（已等待 5 分鐘），請至 Render History 確認結果是否已完成', points_refunded: false })
+        return
+      end
+      UI.start_timer(3, false) do
+        req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
+        req.headers = headers
+        req.body = JSON.dump({ action: 'poll_render', task_id: task_id }.merge(meta))
+        @@requests << req
+        req.start do |r, response|
+          @@requests.delete(r)
+          begin
+            data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
+            case data['status']
+            when 'success'
+              on_final.call({ status: 'render_success', url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] })
+            when 'failed'
+              on_final.call({ status: 'render_failed', message: self.sanitize_error(data['msg'] || '渲染失敗'), points_refunded: data['points_refunded'] })
+            else
+              self.poll_render_task(task_id, headers, meta, attempt + 1, &on_final)
+            end
+          rescue => e
+            self.poll_render_task(task_id, headers, meta, attempt + 1, &on_final)
+          end
+        end
+      end
     end
 
     # ─── 跨平台路徑工具 ──────────────────────────────────────────────
@@ -1667,17 +1719,11 @@ module LoamLab
           req.headers = self.auth_headers(user_email)
           req.body = request_body
           captured_scene = base_image_scene
+          captured_headers = req.headers
           req.start do |_, response|
-            begin
-              raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
-              data   = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
-              result = (data['code'] == 0 && data['url']) ?
-                { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
-                { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}") }
-            rescue => e
-              result = { status: 'render_failed', message: self.sanitize_error("解析失敗: #{e.message}") }
+            self.handle_render_response(response, captured_headers, { scene_name: captured_scene }) do |result|
+              UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
             end
-            UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
           end
           UI.start_timer(0.1, false) { dialog.execute_script("window.receiveFromRuby({status: 'export_done'})") }
         rescue => e
@@ -1708,17 +1754,11 @@ module LoamLab
           req.headers = self.auth_headers(user_email)
           req.body = request_body
           captured_scene = base_image_scene
+          captured_headers = req.headers
           req.start do |_, response|
-            begin
-              raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
-              data   = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
-              result = (data['code'] == 0 && data['url']) ?
-                { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
-                { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}") }
-            rescue => e
-              result = { status: 'render_failed', message: self.sanitize_error("解析失敗: #{e.message}") }
+            self.handle_render_response(response, captured_headers, { scene_name: captured_scene }) do |result|
+              UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
             end
-            UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
           end
           UI.start_timer(0.1, false) { dialog.execute_script("window.receiveFromRuby({status: 'export_done'})") }
         rescue => e
@@ -1740,17 +1780,11 @@ module LoamLab
           req.headers = self.auth_headers(user_email)
           req.body = request_body
           captured_scene = base_image_scene
+          captured_headers = req.headers
           req.start do |_, response|
-            begin
-              raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
-              data   = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
-              result = (data['code'] == 0 && data['url']) ?
-                { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
-                { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}") }
-            rescue => e
-              result = { status: 'render_failed', message: self.sanitize_error("解析失敗: #{e.message}") }
+            self.handle_render_response(response, captured_headers, { scene_name: captured_scene }) do |result|
+              UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
             end
-            UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
           end
           UI.start_timer(0.1, false) { dialog.execute_script("window.receiveFromRuby({status: 'export_done'})") }
         rescue => e
@@ -1779,17 +1813,11 @@ module LoamLab
           req.headers = self.auth_headers(user_email)
           req.body = request_body
           captured_scene = base_image_scene
+          captured_headers = req.headers
           req.start do |_, response|
-            begin
-              raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
-              data   = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
-              result = (data['code'] == 0 && data['url']) ?
-                { status: 'render_success', scene_name: captured_scene, url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
-                { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}") }
-            rescue => e
-              result = { status: 'render_failed', message: self.sanitize_error("解析失敗: #{e.message}") }
+            self.handle_render_response(response, captured_headers, { scene_name: captured_scene }) do |result|
+              UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
             end
-            UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
           end
           UI.start_timer(0.1, false) { dialog.execute_script("window.receiveFromRuby({status: 'export_done'})") }
         rescue => e
@@ -1980,33 +2008,21 @@ module LoamLab
                     _s0_req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::POST)
                     _s0_req.headers = self.auth_headers(captured_email, captured_version)
                     _s0_req.body = captured_body
+                    _s0_headers = _s0_req.headers
                     @@requests << _s0_req
                     _s0_req.start do |req, response|
                       @@requests.delete(req)
-                      result = nil
-                      begin
-                        raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
-                        body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
-                        data   = JSON.parse(body_str)
-                        result = (data['code'] == 0 && data['url']) ?
-                          { status: 'render_success', scene_name: _s0_scene, url: data['url'],
-                            points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
-                            channel_base64: _s0_channel, timestamp: _s0_ts } :
-                          { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
-                            points_refunded: data['points_refunded'], error: data['error'] }
-                      rescue => e
-                        LoamLab.log "[LoamLab] 渲染失敗: #{_s0_scene}"
-                        result = { status: 'render_failed', message: self.sanitize_error(e.message) }
-                      end
-                      @@pending_results << result if result
-                      # 若 deferred_sends 已被 style ref 並行模式提前清空，不重複 fire
-                      unless @@deferred_sends.empty? && !_s0_sref.to_s.strip.empty?
-                        style_url = (result && result[:status] == 'render_success') ? result[:url] : nil
-                        if style_url && !@@deferred_sends.empty?
-                          safe_url = style_url.gsub("'", "\\'")
-                          dialog.execute_script("window.generateStyleReference('#{safe_url}')")
-                        elsif !@@deferred_sends.empty?
-                          self.fire_deferred_renders(style_url, _s0_sref)
+                      self.handle_render_response(response, _s0_headers, { scene_name: _s0_scene, channel_base64: _s0_channel, timestamp: _s0_ts }) do |result|
+                        @@pending_results << result if result
+                        # 若 deferred_sends 已被 style ref 並行模式提前清空，不重複 fire
+                        unless @@deferred_sends.empty? && !_s0_sref.to_s.strip.empty?
+                          style_url = (result && result[:status] == 'render_success') ? result[:url] : nil
+                          if style_url && !@@deferred_sends.empty?
+                            safe_url = style_url.gsub("'", "\\'")
+                            dialog.execute_script("window.generateStyleReference('#{safe_url}')")
+                          elsif !@@deferred_sends.empty?
+                            self.fire_deferred_renders(style_url, _s0_sref)
+                          end
                         end
                       end
                     end
@@ -2108,23 +2124,13 @@ module LoamLab
       captured_scene   = item[:scene].dup
       captured_channel = item[:channel].dup
       captured_ts      = item[:timestamp].to_s.dup
+      captured_headers = req.headers
       @@requests << req
       req.start do |r, response|
         @@requests.delete(r)
-        result = nil
-        begin
-          raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
-          data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
-          result = (data['code'] == 0 && data['url']) ?
-            { status: 'render_success', scene_name: captured_scene, url: data['url'],
-              points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
-              channel_base64: captured_channel, timestamp: captured_ts } :
-            { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
-              points_refunded: data['points_refunded'], error: data['error'] }
-        rescue => e
-          result = { status: 'render_failed', message: self.sanitize_error(e.message) }
+        self.handle_render_response(response, captured_headers, { scene_name: captured_scene, channel_base64: captured_channel, timestamp: captured_ts }) do |result|
+          @@pending_results << result if result
         end
-        @@pending_results << result if result
       end
     end
 
@@ -2158,29 +2164,16 @@ module LoamLab
       _df_req = Sketchup::Http::Request.new(captured[:url], Sketchup::Http::POST)
       _df_req.headers = self.auth_headers(captured[:email], captured[:version])
       _df_req.body = final_body
-      
+      _df_headers = _df_req.headers
+
       @@requests << _df_req
-      
+
       _df_req.start do |req, response|
         @@requests.delete(req)
-        result = nil
-        begin
-          raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
-          body_str = response.body.to_s.force_encoding("UTF-8").scrub("?")
-          data = JSON.parse(body_str)
-          result = (data['code'] == 0 && data['url']) ?
-            { status: 'render_success', scene_name: _df_scene, url: data['url'],
-              points_remaining: data['points_remaining'], transaction_id: data['transaction_id'],
-              channel_base64: _df_channel, timestamp: _df_ts } :
-            { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
-              points_refunded: data['points_refunded'], error: data['error'] }
-        rescue => e
-          LoamLab.log "[LoamLab] 渲染失敗"
-          result = { status: 'render_failed', message: self.sanitize_error(e.message) }
+        self.handle_render_response(response, _df_headers, { scene_name: _df_scene, channel_base64: _df_channel, timestamp: _df_ts }) do |result|
+          @@pending_results << result if result
+          self.process_next_deferred(sends, effective_url)
         end
-        @@pending_results << result if result
-        
-        self.process_next_deferred(sends, effective_url)
       end
     end
     

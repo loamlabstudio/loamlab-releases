@@ -45,11 +45,16 @@ const MODEL_ADAPTERS = {
     }),
     // ByteDance Seedream 用「WIDTH*HEIGHT」像素字串，不吃 resolution/aspect_ratio；
     // 三檔像素預算對齊官方文件範例（1024x1024 / ~1536x1536 / 2048x2048）
-    'bytedance/seedream': (images, prompt, res, activeTool, aspectRatio) => ({
-        images, prompt,
-        size: seedreamSize(res, activeTool === 2 ? (aspectRatio || '16:9') : '3:2'),
-        output_format: 'jpeg'
-    })
+    'bytedance/seedream': (images, prompt, res, activeTool, aspectRatio) => {
+        const ratio = activeTool === 2 ? (aspectRatio || '16:9') : '3:2';
+        const sizeStr = seedreamSize(res, ratio);
+        const [w, h] = sizeStr.split('*').map(Number);
+        return {
+            images, prompt,
+            image_size: { width: w, height: h },
+            output_format: 'jpeg'
+        };
+    }
 };
 
 const SEEDREAM_PIXEL_BUDGET = { '1k': 1048576, '2k': 2359296, '4k': 4194304 };

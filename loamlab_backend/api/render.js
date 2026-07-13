@@ -85,6 +85,7 @@ const DEFAULT_STRUCTURE_LABELS = {
     style_consistency_key: 'Style Consistency',
     project_key: 'Project',
     project_prefix: 'SU Screenshot to Realistic Photography',
+    node_key_locale: 'en-US', // 每個節點 JSON key 要用 node.labels 裡的哪個語系
     group_titles: {
         core_constraints: 'Core Constraints',
         scene_lighting:   'Scene & Lighting',
@@ -135,11 +136,12 @@ async function buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv,
 
     officialPrompt[sl.project_key] = `${sl.project_prefix}${projectType ? ' - ' + projectType : ''}`;
 
+    const keyLocale = sl.node_key_locale || 'en-US';
     Object.entries(groupTitles).forEach(([group, title]) => {
         const section = {};
         t1Nodes.filter(n => n.group === group).forEach(node => {
             const val = adminValues[node.id];
-            if (val) section[node.labels?.['en-US'] || node.id] = val;
+            if (val) section[node.labels?.[keyLocale] || node.labels?.['en-US'] || node.id] = val;
         });
         if (Object.keys(section).length > 0) officialPrompt[title] = section;
     });

@@ -564,17 +564,6 @@
         <button onclick="loadDefaultT1Nodes()" class="bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 px-3 py-1 rounded-lg text-xs transition-colors">
           載入預設 17 節點
         </button>
-        <select id="sysnode-target-lang" class="bg-black/40 border border-amber-500/30 rounded-lg py-1 px-2 text-xs text-amber-200 outline-none">
-          <option value="en">→ English</option>
-          <option value="zh-TW">→ 繁體中文</option>
-          <option value="zh-CN">→ 简体中文</option>
-          <option value="ja">→ 日本語</option>
-          <option value="es">→ Español</option>
-          <option value="pt">→ Português</option>
-        </select>
-        <button onclick="translateAllSystemNodes()" id="btn-translate-all-sysnodes" class="bg-amber-600/20 hover:bg-amber-600/40 text-amber-300 border border-amber-600/50 px-3 py-1 rounded-lg text-xs font-semibold transition-colors">
-          🔒 一鍵翻譯系統節點並儲存
-        </button>
         <button onclick="saveT1Nodes()" id="btn-save-t1-nodes" class="bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-600/50 px-3 py-1 rounded-lg text-xs font-semibold transition-colors">
           💾 儲存節點配置
         </button>
@@ -611,20 +600,11 @@
     </div>
 
     <!-- 結構標籤：JSON 骨架用的固定 key / 前綴文字（Image Roles / Style Consistency / Project /
-         群組標題），跟節點內容分開管理，同一套免費翻譯按鈕 -->
+         群組標題），跟節點內容分開管理；翻譯統一走上方「一鍵翻譯全部並儲存」全域入口 -->
     <div class="mb-3 pb-3 border-b border-white/[0.06]">
       <div class="flex items-center justify-between mb-2">
         <span class="text-[10px] text-gray-600 uppercase tracking-widest font-bold">結構標籤（JSON 骨架文字）</span>
         <div class="flex items-center gap-1.5">
-          <select id="structure-label-target-lang" class="bg-black/40 border border-blue-500/30 rounded py-0.5 px-1 text-[9px] text-gray-300 outline-none">
-            <option value="en">→ English</option>
-            <option value="zh-TW">→ 繁體中文</option>
-            <option value="zh-CN">→ 简体中文</option>
-            <option value="ja">→ 日本語</option>
-            <option value="es">→ Español</option>
-            <option value="pt">→ Português</option>
-          </select>
-          <button onclick="translateAllStructureLabels()" id="btn-translate-structure" class="bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded px-2 py-0.5 text-[9px] hover:bg-blue-600/40 transition-colors">↻ 免費翻譯全部</button>
           <button onclick="saveStructureLabels()" class="bg-cyan-600/20 text-cyan-300 border border-cyan-600/50 rounded px-2 py-0.5 text-[9px] hover:bg-cyan-600/40 transition-colors">儲存</button>
         </div>
       </div>
@@ -1907,29 +1887,6 @@ function updateStructureGroupTitle(key, val) {
   _schedulePreview();
 }
 
-// 免費翻譯全部結構標籤（重用 _gtTranslate，逐欄位翻，翻完直接反映在 Prompt Preview）
-async function translateAllStructureLabels() {
-  const btn = document.getElementById('btn-translate-structure');
-  const targetLang = document.getElementById('structure-label-target-lang')?.value || 'en';
-  if (btn) { btn.innerText = '翻譯中...'; btn.disabled = true; }
-  try {
-    for (const f of STRUCTURE_LABEL_FIELDS) {
-      const text = (structureLabelsData[f.key] || '').trim();
-      if (text) structureLabelsData[f.key] = (await _gtTranslate(text, 'auto', targetLang)).trim();
-    }
-    for (const f of GROUP_TITLE_FIELDS) {
-      const text = (structureLabelsData.group_titles[f.key] || '').trim();
-      if (text) structureLabelsData.group_titles[f.key] = (await _gtTranslate(text, 'auto', targetLang)).trim();
-    }
-    renderStructureLabels();
-    _schedulePreview();
-  } catch (e) {
-    alert('翻譯失敗: ' + e.message);
-  } finally {
-    if (btn) { btn.innerText = '↻ 免費翻譯全部'; btn.disabled = false; }
-  }
-}
-
 async function saveStructureLabels() {
   const status = document.getElementById('structure-labels-status');
   try {
@@ -2023,7 +1980,6 @@ function renderT1Nodes() {
       pieces.push(`<div class="flex items-center gap-2 mt-4 mb-1">
         <div class="h-px flex-1 bg-white/[0.06]"></div>
         <span class="text-[9px] uppercase tracking-widest text-gray-600 font-bold shrink-0">${label}</span>
-        <button id="btn-translate-grp-${grp}" onclick="translateGroupNodes('${grp}')" class="text-[9px] text-blue-700 hover:text-blue-400 transition-colors shrink-0 px-1" title="翻譯此版塊所有節點">↻ 翻譯</button>
         <button onclick="addT1Node('${grp}')" class="text-[9px] text-cyan-700 hover:text-cyan-400 transition-colors font-semibold shrink-0 px-1">+ 新增</button>
         <div class="h-px flex-1 bg-white/[0.06]"></div>
       </div>`);
@@ -2048,17 +2004,6 @@ function renderT1Nodes() {
         <div>
           <div class="flex items-center justify-between mb-1">
             <label class="block text-[10px] text-gray-500 uppercase">約束描述（直接作為 JSON value 發送，語言不限）</label>
-            <div class="flex items-center gap-1.5">
-              <select id="node-target-lang-${idx}" class="bg-black/40 border border-blue-500/30 rounded py-0.5 px-1 text-[9px] text-gray-300 outline-none">
-                <option value="en">→ English</option>
-                <option value="zh-TW">→ 繁體中文</option>
-                <option value="zh-CN">→ 简体中文</option>
-                <option value="ja">→ 日本語</option>
-                <option value="es">→ Español</option>
-                <option value="pt">→ Português</option>
-              </select>
-              <button id="btn-translate-sysnode-${idx}" type="button" onclick="translateSystemNodeValue(${idx})" class="bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded px-2 py-0.5 text-[9px] hover:bg-blue-600/40 transition-colors">↻ 免費翻譯此節點</button>
-            </div>
           </div>
           <textarea onchange="updateNode(${idx}, 'value', this.value)" class="w-full bg-black/40 border border-amber-500/20 rounded px-2 py-2 text-xs text-amber-200 resize-y h-24 leading-relaxed outline-none focus:border-amber-500/50">${node.value || ''}</textarea>
         </div>
@@ -2189,20 +2134,6 @@ function renderT1Nodes() {
       <details class="border-t border-white/5 pt-2">
         <summary class="text-[10px] text-gray-600 cursor-pointer hover:text-gray-400 transition-colors select-none flex items-center justify-between">
           <span>▶ 多語系設定 (Labels / Placeholders)</span>
-          <div class="flex items-center gap-2">
-            <select id="node-source-lang-${idx}" onclick="event.stopPropagation()" class="bg-black/40 border border-blue-500/30 rounded py-0.5 px-1 text-[9px] text-gray-300 outline-none">
-              <optgroup label="翻譯基準語言">
-                <option value="auto">自動偵測</option>
-                <option value="zh-TW">TW (繁中)</option>
-                <option value="zh-CN">CN (簡中)</option>
-                <option value="en-US">US (英文)</option>
-                <option value="ja-JP">JP (日文)</option>
-                <option value="es-ES">ES (西文)</option>
-                <option value="pt-BR">BR (葡文)</option>
-              </optgroup>
-            </select>
-            <button id="btn-translate-node-${idx}" type="button" onclick="event.preventDefault(); translateSingleNode(${idx})" class="bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded px-2 py-0.5 text-[9px] hover:bg-blue-600/40 transition-colors">↻ 一鍵翻譯此節點</button>
-          </div>
         </summary>
         <div class="grid grid-cols-2 gap-4 mt-2">
           <div class="space-y-1">
@@ -2399,75 +2330,6 @@ function _findBestSrc(obj, fallbackId) {
   return null;
 }
 
-async function _doTranslateNodes(indices, btnEl, origText, explicitSrcLang = null) {
-  const status = document.getElementById('t1-nodes-status');
-  if (btnEl) { btnEl.innerText = '翻譯中...'; btnEl.disabled = true; }
-  if (status) status.classList.remove('hidden');
-  let done = 0;
-  try {
-    for (const idx of indices) {
-      const node = t1NodesData[idx];
-      // labels（首選 explicitSrcLang，失敗則 fallbcak，再 fallback 到 node.id）
-      let labelSrc = explicitSrcLang && explicitSrcLang !== 'auto' && node.labels?.[explicitSrcLang]?.trim()
-        ? { locale: explicitSrcLang, text: node.labels[explicitSrcLang].trim() }
-        : _findBestSrc(node.labels, node.id);
-      if (labelSrc) {
-        const sl = _GT_LANG_MAP[labelSrc.locale];
-        const results = await Promise.all(_ALL_LOCALES.map(l =>
-          l === labelSrc.locale ? Promise.resolve(labelSrc.text)
-            : _gtTranslate(labelSrc.text, sl, _GT_LANG_MAP[l]).catch(() => node.labels?.[l] || '')
-        ));
-        if (!t1NodesData[idx].labels) t1NodesData[idx].labels = {};
-        _ALL_LOCALES.forEach((l, i) => { t1NodesData[idx].labels[l] = results[i]; });
-      }
-      // placeholders（不強制 fallback，空 placeholder 可接受）
-      let phSrc = explicitSrcLang && explicitSrcLang !== 'auto' && node.placeholders?.[explicitSrcLang]?.trim()
-        ? { locale: explicitSrcLang, text: node.placeholders[explicitSrcLang].trim() }
-        : _findBestSrc(node.placeholders, null);
-      if (phSrc) {
-        const sl = _GT_LANG_MAP[phSrc.locale];
-        const results = await Promise.all(_ALL_LOCALES.map(l =>
-          l === phSrc.locale ? Promise.resolve(phSrc.text)
-            : _gtTranslate(phSrc.text, sl, _GT_LANG_MAP[l]).catch(() => node.placeholders?.[l] || '')
-        ));
-        if (!t1NodesData[idx].placeholders) t1NodesData[idx].placeholders = {};
-        _ALL_LOCALES.forEach((l, i) => { t1NodesData[idx].placeholders[l] = results[i]; });
-      }
-      // default → EN（含中日文時自動英譯）
-      if (node.default && /[\u4e00-\u9fff\u3040-\u30ff]/.test(String(node.default))) {
-        const translated = await _gtTranslate(String(node.default), 'auto', 'en').catch(() => String(node.default));
-        t1NodesData[idx].default = translated.trim();
-      }
-      done++;
-      if (status) status.innerText = `翻譯中... ${done} / ${indices.length}`;
-    }
-    renderT1Nodes();
-    await saveT1Nodes();
-    if (status) { status.innerText = `✅ 已翻譯並儲存 ${done} 個節點`; status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 4000); }
-  } catch(e) {
-    if (status) status.innerText = '❌ 翻譯失敗，請手動填寫';
-  }
-  if (btnEl) { btnEl.innerText = origText; btnEl.disabled = false; }
-}
-
-async function translateAllT1Nodes() {
-  const indices = t1NodesData.map((n, i) => (!n.system ? i : -1)).filter(i => i >= 0);
-  await _doTranslateNodes(indices, null, '');
-}
-
-async function translateSingleNode(idx) {
-  const btn = document.getElementById(`btn-translate-node-${idx}`);
-  const sel = document.getElementById(`node-source-lang-${idx}`);
-  const explicitLang = sel ? sel.value : null;
-  await _doTranslateNodes([idx], btn, '↻ 一鍵翻譯此節點', explicitLang);
-}
-
-async function translateGroupNodes(grp) {
-  const btn = document.getElementById('btn-translate-grp-' + grp);
-  const indices = t1NodesData.map((n, i) => (!n.system && n.group === grp ? i : -1)).filter(i => i >= 0);
-  await _doTranslateNodes(indices, btn, '↻ 翻譯');
-}
-
 // System 節點的 JSON key 只有單一 en-US label（沒有像 Regular 節點那樣的 6 語系管理），
 // 翻譯 value 的同時把 label 也翻成同一個目標語言，存進對應完整語系代碼，render.js 才能
 // 依「節點小標題語言」設定選到正確翻譯（見 buildNodesModePrompt 的 node_key_locale）。
@@ -2484,71 +2346,8 @@ async function _translateSystemNodeLabel(idx, targetLang) {
   } catch (e) { /* label 翻譯失敗不影響 value，靜默忽略 */ }
 }
 
-// System 節點的約束描述（value）沒有多語系概念，就是一段直接送給模型的文字——
-// 用免費的 Google Translate 網頁端點翻成 admin 選的目標語言，翻完存進 value，
-// 存檔後 render.js 就照這段文字原樣送出，不用再另外設定任何金鑰。
-async function translateSystemNodeValue(idx) {
-  const btn = document.getElementById(`btn-translate-sysnode-${idx}`);
-  const sel = document.getElementById(`node-target-lang-${idx}`);
-  const targetLang = sel ? sel.value : 'en';
-  const node = t1NodesData[idx];
-  const text = (node.value || '').trim();
-  if (!text) return;
-  const origText = btn ? btn.innerText : '';
-  if (btn) { btn.innerText = '翻譯中...'; btn.disabled = true; }
-  try {
-    const translated = await _gtTranslate(text, 'auto', targetLang);
-    t1NodesData[idx].value = translated.trim();
-    await _translateSystemNodeLabel(idx, targetLang);
-    renderT1Nodes();
-    _schedulePreview();
-    await saveT1Nodes();
-  } catch (e) {
-    alert('翻譯失敗: ' + e.message);
-    if (btn) { btn.innerText = origText; btn.disabled = false; }
-  }
-}
-
-// System 節點沒有群組標題列（只有 Regular 節點才有「↻ 翻譯」群組按鈕），逐一點太慢，
-// 這裡一次翻完所有 System 節點的 value + label 並直接存檔。
-async function translateAllSystemNodes() {
-  const btn = document.getElementById('btn-translate-all-sysnodes');
-  const sel = document.getElementById('sysnode-target-lang');
-  const targetLang = sel ? sel.value : 'en';
-  const status = document.getElementById('t1-nodes-status');
-  const indices = t1NodesData.map((n, i) => (n.system ? i : -1)).filter(i => i >= 0);
-  if (!indices.length) return;
-  if (btn) { btn.innerText = '翻譯中...'; btn.disabled = true; }
-  if (status) status.classList.remove('hidden');
-  let done = 0;
-  try {
-    for (const idx of indices) {
-      const text = (t1NodesData[idx].value || '').trim();
-      if (text) {
-        t1NodesData[idx].value = (await _gtTranslate(text, 'auto', targetLang)).trim();
-      }
-      await _translateSystemNodeLabel(idx, targetLang);
-      done++;
-      if (status) status.innerText = `翻譯中... ${done} / ${indices.length}`;
-    }
-    renderT1Nodes();
-    // 全部系統節點都翻完了，順便把「節點小標題語言」設定同步成這次的目標語言並存檔，
-    // 不然 render.js 的 JSON key 還是會照舊選 en-US，前面翻的 value 語言就對不上 key 了
-    structureLabelsData.node_key_locale = _SHORT_TO_FULL_LOCALE[targetLang] || 'en-US';
-    renderStructureLabels();
-    _schedulePreview();
-    await saveT1Nodes();
-    await saveStructureLabels();
-    if (status) { status.innerText = `✅ 已翻譯並儲存 ${done} 個系統節點`; status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 4000); }
-  } catch (e) {
-    if (status) status.innerText = '❌ 翻譯失敗，請手動填寫';
-  }
-  if (btn) { btn.innerText = '🔒 一鍵翻譯系統節點並儲存'; btn.disabled = false; }
-}
-
 // 唯一入口：結構標籤（Project/Image Roles/群組標題...）+ 全部節點（System 的 value+label、
-// Regular 的 label+default）一次翻成同一個目標語言並存檔。三顆分開的翻譯按鈕還留著給
-// 只想改單一部分的情境用，這顆是「全部都要翻」時的正常路徑。
+// Regular 的 label+default）+ Batch Layer + Tool 1/2/3 備用咒語，一次翻成同一個目標語言並存檔。
 async function translateAllOfficialPrompt() {
   const btn = document.getElementById('btn-translate-everything');
   const targetLang = document.getElementById('master-target-lang')?.value || 'en';
@@ -2583,7 +2382,9 @@ async function translateAllOfficialPrompt() {
           if (!t1NodesData[idx].labels) t1NodesData[idx].labels = {};
           t1NodesData[idx].labels[fullLocale] = translated.trim();
         }
-        const defText = (node.default || '').toString().trim();
+        // Slider 節點的 default 是數字，不是文字內容，跳過（翻譯數字既浪費又可能把值變成
+        // 非數字字串，之後 parseFloat 會壞掉）
+        const defText = node.type !== 'slider' ? (node.default || '').toString().trim() : '';
         if (defText) {
           t1NodesData[idx].default = (await _gtTranslate(defText, 'auto', targetLang)).trim();
         }
@@ -2591,11 +2392,29 @@ async function translateAllOfficialPrompt() {
       if (status) status.innerText = `翻譯中... ${idx + 1} / ${t1NodesData.length}`;
     }
 
+    // 3. Batch Layer（Style Consistency 批量鎖定光線色調）key + value
+    const BATCH_NODE_FIELDS = ['batch-img1-key', 'batch-img1', 'batch-img2-key', 'batch-img2',
+      'batch-forbidden-key', 'batch-forbidden', 'batch-apply-key', 'batch-apply',
+      'batch-output-must-be-key', 'batch-output-must-be', 'batch-never-key', 'batch-never'];
+    for (const id of BATCH_NODE_FIELDS) {
+      const el = document.getElementById(id);
+      const text = el?.value.trim();
+      if (text) el.value = (await _gtTranslate(text, 'auto', targetLang)).trim();
+    }
+
+    // 4. Tool 1/2/3 備用文字咒語（{{REF_TEXT}}/{{CHANGES}} 等佔位符交給 Google 翻譯保留原樣）
+    for (const id of ['prompt-t1', 'prompt-t2', 'prompt-t3']) {
+      const el = document.getElementById(id);
+      const text = el?.value.trim();
+      if (text) el.value = (await _gtTranslate(text, 'auto', targetLang)).trim();
+    }
+
     renderStructureLabels();
     renderT1Nodes();
     _schedulePreview();
     await saveT1Nodes();
     await saveStructureLabels();
+    await savePrompts();
     if (status) { status.innerText = '✅ 已翻譯並儲存全部官方提示詞'; status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 4000); }
   } catch (e) {
     if (status) status.innerText = '❌ 翻譯失敗: ' + e.message;

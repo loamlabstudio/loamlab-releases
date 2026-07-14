@@ -2347,7 +2347,8 @@ async function _translateSystemNodeLabel(idx, targetLang) {
 }
 
 // 唯一入口：結構標籤（Project/Image Roles/群組標題...）+ 全部節點（System 的 value+label、
-// Regular 的 label+default）+ Batch Layer + Tool 1/2/3 備用咒語，一次翻成同一個目標語言並存檔。
+// Regular 的 label+default）+ Batch Layer + Tool 1 備用咒語，一次翻成同一個目標語言並存檔。
+// 只翻 T1：這個入口是給 T1 節點式 prompt builder 用的，T2/T3 提示詞不在範圍內。
 async function translateAllOfficialPrompt() {
   const btn = document.getElementById('btn-translate-everything');
   const targetLang = document.getElementById('master-target-lang')?.value || 'en';
@@ -2402,8 +2403,9 @@ async function translateAllOfficialPrompt() {
       if (text) el.value = (await _gtTranslate(text, 'auto', targetLang)).trim();
     }
 
-    // 4. Tool 1/2/3 備用文字咒語（{{REF_TEXT}}/{{CHANGES}} 等佔位符交給 Google 翻譯保留原樣）
-    for (const id of ['prompt-t1', 'prompt-t2', 'prompt-t3']) {
+    // 4. Tool 1 備用文字咒語（{{REF_TEXT}}/{{CHANGES}} 等佔位符交給 Google 翻譯保留原樣）
+    // 只翻 T1——T2/T3 的提示詞不該被這個統一入口動到，需要翻譯請個別處理
+    for (const id of ['prompt-t1']) {
       const el = document.getElementById(id);
       const text = el?.value.trim();
       if (text) el.value = (await _gtTranslate(text, 'auto', targetLang)).trim();

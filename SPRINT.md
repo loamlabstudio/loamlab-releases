@@ -1,46 +1,27 @@
-# 升級 Dodo Payments Meters 計量器
+# Sprint Plan: Admin Prompt Translation Simplification
 
 ## CONTEXT_DIGEST
-目前系統已使用 Dodo Payments 處理金流與訂閱，但「點數餘額 (points/lifetime_points)」與「扣點邏輯 (deduct_render_points)」仍由 Supabase 手動維護。
-為簡化 Admin 管理與解決 Webhook Race Condition 痛點，需將核心計費引擎 (Ledger) 遷移至 Dodo Meters，實現用量自動計費與預付額度託管，讓 Dodo 成為餘額的唯一真實來源 (Single Source of Truth)。
+當前 `admin.html` 中存在多個零散的翻譯按鈕，導致維護與操作繁瑣。基於第一性原理，官方提示詞只需一份統一語言版本即可送往渲染引擎（引擎具備多語意圖理解能力，能接受官方中文 Prompt 混搭用戶英文選項）。本計畫旨在收斂所有提示詞翻譯為單一控制鍵，自動處理所有系統節點與舊版咒語，並略過用戶自定義選項，確保渲染順暢。
 
-## ⚠️ 執行調整說明（Claude，2026-07-12）
-執行前用 WebFetch 查證 docs.dodopayments.com，發現 SPRINT 假設的端點與實際 API 不符
-（`POST /meters/events` 實際是 `POST /usage-events/ingest`；`POST /customers/{id}/credits`
-根本不存在，實際要先在 Dodo 後台建 Credit Entitlement 資源才有 `POST /credit-entitlements/{id}/ledger`）。
-且進一步查程式碼發現：`deduct_render_points`（算圖扣點）已經是 `FOR UPDATE` 鎖列的原子操作，
-真正的 race condition 其實在 `processTopup`（webhook 發點路徑）的 read-then-write，跟 Task 2/3
-假設的完全不同。跟用戶確認後，執行範圍改為**風險對稱的版本**（已完成）：
+## TASKS
 
-1. **[DONE] 修正真正的 race condition**：新增 `apply_points_delta` 原子 RPC（`FOR UPDATE`
-   鎖列，對稱於既有的 `deduct_render_points`），改寫 `lib/activate.js` 的 `processTopup`
-   主帳號加點、邀請人分潤 A、回滾補償全部改用此 RPC，徹底消除 webhook 重送/手動驗證/cron
-   對賬三條路徑同時打同一 email 時互相蓋掉點數的風險。**需要人工在 Supabase SQL Editor
-   執行 `supabase_setup.sql` 的 Phase 34 區塊**（新函式 + `dodo_customer_id` 欄位），程式碼才會生效。
-2. **[DONE] Dodo Meters 影子回報（非權威）**：新建 `lib/dodo.js`封裝 `usage-events/ingest`
-   與 `customers` 查詢；`render.js` 在扣點成功後非同步回報用量到 Dodo（僅供後台可視化，
-   不影響扣款/放行邏輯，失敗不拋出）。`webhook.js`/`activate.js` 開始儲存 `dodo_customer_id`。
-   **Dodo 尚未 gate 算圖、Supabase 仍是唯一權威來源**——這是刻意的，避免把熱路徑綁死在
-   未驗證過的外部依賴上。
-3. **[DONE] 對賬腳本整理**：`loamlab_backend/` 根目錄 6 支散落腳本（`audit_vs_dodo.mjs` 等）
-   全部搬進 `scripts/`，新增共用 `scripts/_env.mjs` 消除 9+ 支腳本重複的 env-loading 樣板。
-   **意外發現並修復**：`check_user.mjs`、`backfill_referral_codes.mjs` 兩支腳本原本把 Supabase
-   Service Role Key 明碼寫死在原始碼裡（同一把 key）。已改成從 `.env.local` 讀取，
-   **建議評估是否需要在 Supabase 後台輪替這把 key**（未進 git 歷史，但曾以明碼存在檔案系統）。
-4. **[跳過] Task 1 的 Dodo Customer Balance 前端顯示、Task 4 遷移腳本**：兩者都建立在
-   「Dodo 是唯一真實來源」這個前提上，本次刻意不做，等影子回報跑一段時間、確認 Dodo
-   Meters 資料可信後再評估要不要往下走。
+### 1. [MUST][DONE] 移除零散翻譯按鈕並實作單一全局翻譯入口
+- **目標**：清理 `admin.html` 中繁雜的單一節點、版塊、Value 翻譯按鈕，保留唯一的「全局提示詞語言切換」按鍵。
+- **影響檔案**：`loamlab_backend/public/admin.html`
+- **任務描述**：
+  1. 移除結構標籤區塊、選項設定包區塊、節點清單中所有的單一翻譯按鈕（如 `btn-translate-structure`, `btn-translate-all-sysnodes`, `translateSingleNode` 等）。
+  2. 將現有 `translateAllOfficialPrompt()` 升級為單一入口，支援選擇目標語言（預設提供簡體中文/英文切換）。
+  3. 擴充該函數，使其除了處理 `t1NodesData` 與 `structureLabelsData` 外，也要翻譯 `TOOL_1_BATCH_NODES` (Batch Layer 的 key 與 value) 以及 `TOOL_1/2/3` 的備用文字咒語（`prompt-t1/t2/t3`），並在翻譯完成後一併呼叫所有對應的 save 函數保存至資料庫。
 
-## 驗收結果
-- `node --check` 全數通過（activate.js / webhook.js / render.js / dodo.js / scripts/*.mjs）
-- `scripts/audit_vs_dodo.mjs`、`scripts/revoke_fake_members.mjs` 對 production DB 實跑 dry-run，
-  行為與重構前一致（僅搬檔+抽共用函式，未改邏輯）
-- **附帶發現（非本次任務範圍，供人工複核）**：`audit_vs_dodo.mjs` 顯示 DB 有 33 個標記為會員的
-  帳號，Dodo 目前僅回報 10 個 active 訂閱，其餘 23 個需要人工核實是否為已取消/漏同步。
+### 2. [MUST][進行中] 保留用戶自定義內容並驗證渲染流程
+- **目標**：確保全域翻譯只影響官方架構與預設值，不污染用戶前端傳入的自定義選項，並確認後端能正確處理中英混搭 JSON。
+- **影響檔案**：`loamlab_backend/public/admin.html`, `loamlab_backend/api/render.js`
+- **任務描述**：
+  1. [DONE] 檢視 `translateAllOfficialPrompt` 邏輯，確認**不翻譯** `node.type === 'slider'` 的 `default` 數值，且**不強制翻譯**用戶選項 (`options` 的 value，若要翻譯僅處理 option 的 label)。
+  2. [DONE] 確認 `render.js` 中的 `buildNodesModePrompt` 能在結構 key 變更為中文時，無縫地將用戶從插件選取的英文 `adv` 參數拼接上去——本來就是純 JS 物件 + `JSON.stringify`，天生支援 Unicode key/value，不需改動。
+  3. [待人工執行] 執行測試：在 Admin 面板將提示詞一鍵切換為簡體中文後，發起一次渲染請求，驗證混搭語言的 Prompt 能夠正確送達引擎並完成渲染。**此步驟會真的把 production 官方提示詞切成簡中並燒真實渲染點數，Claude 無瀏覽器工具可操作，需使用者本人在 admin 面板手動點擊驗證。**
 
-## 尚待人工執行
-- [x] Supabase SQL Editor 執行 `supabase_setup.sql` Phase 34（`apply_points_delta` 函式 + `dodo_customer_id` 欄位）— 2026-07-12 用戶已執行，並以零增量呼叫驗證 RPC 正常運作
-- [ ] 評估是否輪替 Supabase Service Role Key（曾明碼寫死在已刪除的舊腳本檔案中）
-- [ ] 確認後 commit + 部署（本次未自動 commit）
+## 調整說明（Claude 執行時的判斷）
+- 任務1原文列出的「Value 翻譯按鈕」（optionsData 一鍵翻譯 Value + 單選項多語系）**未併入全域入口，維持獨立**：它是生成下拉選項的 6 語系 UI 顯示標籤，跟官方提示詞的單一目標語言邏輯是不同性質的功能，直接刪除會造成純粹的功能減損，且任務1.2的擴充清單本身也未將 optionsData 納入。已與用戶確認此判斷。
 
-status: DONE
+status: READY_FOR_CLAUDE（Task 1 已完成並部署 production；Task 2.3 實測待人工執行）

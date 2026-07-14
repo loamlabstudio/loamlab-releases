@@ -2328,6 +2328,9 @@ module LoamLab
            .gsub(/nano-banana/i, 'AI-Engine')
            .gsub(/https?:\/\/api\.[a-z0-9\-\.]+\/[^\s]*/i, '[API_ENDPOINT]')
            .gsub(/google/i, 'AI')
+           .gsub(/supabase/i, '資料庫服務')
+           .gsub(/dodopayments?/i, '金流服務商')
+           .gsub(/\bvercel\b/i, '伺服器')
       end
 
       file_loaded(__FILE__)

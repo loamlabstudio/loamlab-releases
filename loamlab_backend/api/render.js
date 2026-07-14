@@ -27,7 +27,10 @@ function sanitizeError(msg) {
         .replace(/google\/nano-banana-2\/edit/gi, 'AI-Renderer-Pro')
         .replace(/google/gi, 'AI')
         .replace(/Bearer\s+[A-Za-z0-9\-._~+/]+=*/g, '[TOKEN]')
-        .replace(/https?:\/\/api\.[^\s"']+/g, '[API_ENDPOINT]');
+        .replace(/https?:\/\/api\.[^\s"']+/g, '[API_ENDPOINT]')
+        .replace(/supabase/gi, '資料庫服務')
+        .replace(/dodopayments?/gi, '金流服務商')
+        .replace(/\bvercel\b/gi, '伺服器');
 }
 
 // ── 模型適配器登錄表：新增模型只需加一條 entry ──

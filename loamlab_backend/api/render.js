@@ -552,6 +552,7 @@ async function _handleRender(req, res) {
         const pollPrompt = userPayload.prompt || '';
         const pollStyle = userPayload.style || '';
         const pollInputUrl = userPayload.input_url || null;
+        const pollStartedAt = Number(userPayload.started_at) || null;
 
         const ATLASCLOUD_API_KEY = process.env.ATLASCLOUD_API_KEY;
         // 白名單「仍在進行中」的狀態字串；不在清單內一律視為失敗並退款——
@@ -579,12 +580,25 @@ async function _handleRender(req, res) {
                 return res.status(200).json({ code: 0, status: 'processing' });
             }
             const state = (pData?.data?.state || pData?.data?.status || '').toLowerCase();
-            const finalUrl = pData?.data?.outputs?.[0] || pData?.data?.image_url || pData?.data?.images?.[0];
+            let finalUrl = pData?.data?.outputs?.[0] || pData?.data?.image_url || pData?.data?.images?.[0] || pData?.data?.output;
+            if (!finalUrl && Array.isArray(pData?.data?.images)) finalUrl = pData.data.images[0]?.url || pData.data.images[0];
+            if (!finalUrl && Array.isArray(pData?.data?.outputs)) finalUrl = pData.data.outputs[0]?.url || pData.data.outputs[0]?.image_url;
+            if (typeof finalUrl === 'object' && finalUrl) finalUrl = finalUrl.url || finalUrl.image_url;
+
             if (userPayload.debug) return res.status(200).json({ code: 0, status: 'processing', debug_http_status: pRes.status, debug_state: state, debug_raw: pData });
 
             if (finalUrl || state === 'succeeded' || state === 'completed') {
-                if (!finalUrl) return res.status(200).json({ code: 0, status: 'processing' });
-                saveRenderHistory(supabase, {
+                if (!finalUrl) {
+                    // 優先用前端帶回的輪詢起始時間；AtlasCloud 的 created_at 欄位不保證存在（未在文件中證實），
+                    // 只當備援，避免該欄位缺失時這個安全網永遠不觸發、退回原本無限 processing 的問題
+                    const createdAt = pData?.data?.created_at;
+                    const refStart = pollStartedAt || (createdAt ? new Date(createdAt).getTime() : null);
+                    if (refStart && (Date.now() - refStart > 240000)) {
+                        return res.status(200).json(await refundAndFail(supabase, userEmail, pollCost, '任務已成功但圖檔遺失，自動退款'));
+                    }
+                    return res.status(200).json({ code: 0, status: 'processing' });
+                }
+                await saveRenderHistory(supabase, {
                     userEmail, url: finalUrl,
                     userPayload: { parameters: { user_prompt: pollPrompt, style: pollStyle } },
                     resVal: pollResVal, cost: pollCost, activeTool: pollTool, inputUrl: pollInputUrl
@@ -975,7 +989,12 @@ async function _handleRender(req, res) {
         }
 
         const data = await response.json();
-        let finalUrl = data?.data?.image_url || data?.data?.images?.[0] || null;
+        // 與 poll_render（約 583-586 行）保持一致的解析邏輯，避免這裡漏抓 outputs/output
+        // 或把 images[0]/outputs[0] 的物件形式誤當字串存進 render_history
+        let finalUrl = data?.data?.outputs?.[0] || data?.data?.image_url || data?.data?.images?.[0] || data?.data?.output || null;
+        if (!finalUrl && Array.isArray(data?.data?.images)) finalUrl = data.data.images[0]?.url || data.data.images[0];
+        if (!finalUrl && Array.isArray(data?.data?.outputs)) finalUrl = data.data.outputs[0]?.url || data.data.outputs[0]?.image_url;
+        if (typeof finalUrl === 'object' && finalUrl) finalUrl = finalUrl.url || finalUrl.image_url;
 
         // AtlasCloud 已接受任務但尚未完成：立即回傳 task_id，不佔用 Vercel 連線 long-poll
         // 注意：這裡故意「不」清理暫存圖——AtlasCloud 是非同步任務，實際抓圖時機是
@@ -998,7 +1017,7 @@ async function _handleRender(req, res) {
         await cleanTemp();
 
         if (finalUrl) {
-            saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool, inputUrl: inputUrlForHistory });
+            await saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool, inputUrl: inputUrlForHistory });
             return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: deductResult.balance, transaction_id: transactionId });
         } else {
             try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch(e) {}
@@ -1024,21 +1043,27 @@ async function refundAndFail(supabase, userEmail, cost, reason) {
     return { code: -1, status: 'failed', msg: `${reason}，點數已退回`, points_refunded: cost > 0 };
 }
 
-// 非同步寫入渲染歷史（fire-and-forget，不阻塞回應）
-function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal, cost, activeTool, inputUrl }) {
+// 寫入渲染歷史。改為 await（原本 fire-and-forget）：Vercel serverless 函式回應送出後
+// 執行環境可能立刻被凍結/回收，沒 await 的 insert promise 有機會根本來不及打進資料庫，
+// 導致「明明出圖成功但 render_history 完全沒記錄」——這個表後續也要當異常掃描的成功判斷
+// 依據，記錄不可靠會直接讓自動退款誤判，所以這裡必須是可靠的寫入。失敗只 log，不影響回應。
+async function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal, cost, activeTool, inputUrl }) {
     const prompt = userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '';
     const style  = userPayload.parameters?.style || '';
-    supabase.from('render_history').insert([{
-        user_email:    userEmail,
-        input_url:     inputUrl || null,
-        full_url:      url,
-        thumbnail_url: url,
-        prompt,
-        style,
-        resolution:    resVal || '1k',
-        tool_id:       activeTool || 1,
-        points_cost:   cost
-    }]).then(({ error }) => {
+    try {
+        const { error } = await supabase.from('render_history').insert([{
+            user_email:    userEmail,
+            input_url:     inputUrl || null,
+            full_url:      url,
+            thumbnail_url: url,
+            prompt,
+            style,
+            resolution:    resVal || '1k',
+            tool_id:       activeTool || 1,
+            points_cost:   cost
+        }]);
         if (error) console.error('[render_history] save failed:', error.message);
-    });
+    } catch (e) {
+        console.error('[render_history] save exception:', e.message);
+    }
 }

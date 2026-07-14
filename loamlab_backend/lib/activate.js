@@ -196,33 +196,47 @@ export async function reconcilePaymentsForEmail(supabase, email, dodoApiKey) {
     let activated = false;
     let foundSucceeded = false;
     try {
-        const payRes = await fetch(
-            `${dodoBase}/payments?customer_email=${encodeURIComponent(email)}&limit=10`,
-            { headers: { Authorization: `Bearer ${dodoApiKey}` } }
-        );
-        if (payRes.ok) {
-            const pays = (await payRes.json()).items || [];
-            for (const pay of pays) {
-                const payEmail = pay.customer?.email || pay.email || pay.customer_email;
-                if (payEmail !== email) continue;
-                if (pay.status !== 'succeeded') continue;
-                foundSucceeded = true;
-                const productId = pay.product_cart?.[0]?.product_id || pay.product_id;
-                if (!productId) continue;
-                // 對齊 webhook.js orderId 格式（subscription 付款含 sub_id 前綴）
-                const orderId = pay.subscription_id ? `${pay.subscription_id}_${pay.payment_id}` : pay.payment_id;
-                const { data: ex } = await supabase.from('transactions').select('id').eq('order_id', `DODO_${orderId}`).maybeSingle();
-                // fallback：查舊格式（07a6772 之前寫入的 transaction，避免重複補發）
-                let alreadyIssued = !!ex;
-                if (!alreadyIssued && pay.subscription_id) {
-                    const { data: exOld } = await supabase.from('transactions').select('id').eq('order_id', `DODO_${pay.payment_id}`).maybeSingle();
-                    alreadyIssued = !!exOld;
-                }
-                if (!alreadyIssued) {
-                    const payCustomerId = pay.customer?.customer_id || null;
-                    await processTopup(supabase, email, productId, orderId, 'DODO', null, pay.subscription_id || null, null, payCustomerId);
-                    activated = true;
-                }
+        // Dodo 的 /payments 端點會忽略 customer_email 這個查詢參數（已在 stats.js/user.js
+        // 的訂閱對帳邏輯實測證實），單頁 limit=10 抓到的其實是「全平台最新 10 筆付款」，
+        // 跟這個 email 完全無關。真正能信任的做法是分頁抓 + 用回傳資料裡的 email 欄位自己比對
+        // （下面 payEmail !== email 這段本來就有做），分頁參數要用 page_size/page_number，
+        // 用 limit 一樣會被忽略。抓 3 頁（最多 300 筆全平台付款）足以涵蓋任何訂閱的月結週期。
+        let pays = [];
+        for (let page = 0; page < 3; page++) {
+            const payRes = await fetch(
+                `${dodoBase}/payments?page_size=100&page_number=${page}`,
+                { headers: { Authorization: `Bearer ${dodoApiKey}` } }
+            );
+            if (!payRes.ok) break;
+            const items = (await payRes.json()).items || [];
+            if (!items.length) break;
+            pays = pays.concat(items);
+            if (items.length < 100) break;
+        }
+        for (const pay of pays) {
+            const payEmail = pay.customer?.email || pay.email || pay.customer_email;
+            if (payEmail !== email) continue;
+            if (pay.status !== 'succeeded') continue;
+            foundSucceeded = true;
+            const productId = pay.product_cart?.[0]?.product_id || pay.product_id;
+            // 對齊 webhook.js 的判斷順序：/payments 列表端點回來的物件通常沒有 product_cart，
+            // 只有 metadata.planKey——只認 productId 會讓幾乎所有透過這條路徑補發的付款都被
+            // 誤判成「無法辨識商品」而整筆跳過（foundSucceeded 仍為 true，但 activated 永遠是 false）
+            const planKey = pay.metadata?.planKey || null;
+            if (!productId && !planKey) continue;
+            // 對齊 webhook.js orderId 格式（subscription 付款含 sub_id 前綴）
+            const orderId = pay.subscription_id ? `${pay.subscription_id}_${pay.payment_id}` : pay.payment_id;
+            const { data: ex } = await supabase.from('transactions').select('id').eq('order_id', `DODO_${orderId}`).maybeSingle();
+            // fallback：查舊格式（07a6772 之前寫入的 transaction，避免重複補發）
+            let alreadyIssued = !!ex;
+            if (!alreadyIssued && pay.subscription_id) {
+                const { data: exOld } = await supabase.from('transactions').select('id').eq('order_id', `DODO_${pay.payment_id}`).maybeSingle();
+                alreadyIssued = !!exOld;
+            }
+            if (!alreadyIssued) {
+                const payCustomerId = pay.customer?.customer_id || null;
+                await processTopup(supabase, email, productId, orderId, 'DODO', null, pay.subscription_id || null, planKey, payCustomerId);
+                activated = true;
             }
         }
     } catch (e) { console.warn(`[reconcilePaymentsForEmail] ${email}:`, e.message); }

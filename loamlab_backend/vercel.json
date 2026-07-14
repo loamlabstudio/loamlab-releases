@@ -8,6 +8,10 @@
     {
       "path": "/api/stats?action=cron_insights",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/stats?action=scan_render_anomalies",
+      "schedule": "30 1 * * *"
     }
   ],
   "rewrites": [

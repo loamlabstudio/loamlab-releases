@@ -451,6 +451,127 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
+    // ── 渲染異常自動掃描與退款（Vercel Cron 每日觸發，或管理員手動觸發）───────────
+    // 背景：render.js 的 poll_render 有 4 分鐘逾時退款安全網，但那只覆蓋「還在輪詢中」
+    // 的任務；若輪詢本身在客戶端提前放棄（例如 main.rb 5 分鐘逾時、App 被關閉、網路斷線），
+    // 扣點交易會變成孤兒——沒有 render_history 出圖記錄，也沒有任何 REFUND_* 交易。
+    // 這支排程用「同一用戶的扣款 vs. 出圖/退款」時間序列做配對，找出超過 20 分鐘仍未配對
+    // 到結果的孤兒扣款，自動退回點數，把「客訴才發現」變成系統自癒。
+    // 判斷成功與否依賴 render_history 記錄完整——這也是為什麼 saveRenderHistory 必須 await
+    // 而不是 fire-and-forget（見 render.js），否則這裡會把「其實有出圖但記錄漏寫」誤判成孤兒。
+    if (action === 'scan_render_anomalies') {
+        const isCron = req.headers['x-vercel-cron'] === '1';
+        const isAdmin = isValidAdminKey((req.headers['authorization'] || '').replace(/^Bearer\s+/i, ''));
+        if (!isCron && !isAdmin) return res.status(401).json({ code: -1, msg: 'Unauthorized' });
+
+        const RENDER_TYPES = ['RENDER_1K', 'RENDER_2K', 'RENDER_4K'];
+        // 注意：REFUND_PENALTY 故意不列入——那是付款爭議/退單的扣點（amount 是負的、原因跟渲染
+        // 無關），列進來會讓真正的孤兒扣款被誤判成「已處理」而漏退
+        const REFUND_TYPES = ['REFUND_TASK_FAILED', 'REFUND_NO_URL', 'REFUND_NETWORK_ERROR', 'REFUND_UPLOAD_FAIL', 'REFUND_MANUAL_COMPENSATION', 'REFUND_AUTO_ANOMALY', 'REFUND_COMPENSATION'];
+        const STALE_MS = 15 * 60 * 1000;         // poll_render 逾時退款安全網是 4 分鐘，這裡多留緩衝，絕不碰還在跑的任務
+        const MATCH_WINDOW_MS = 20 * 60 * 1000;  // 扣款後 20 分鐘內若配不到出圖/退款記錄，視為孤兒
+        const LOOKBACK_MS = 26 * 60 * 60 * 1000; // 略多於一天，涵蓋每日排程間隔，避免漏掃
+        const now = Date.now();
+        const windowStart = new Date(now - LOOKBACK_MS).toISOString();
+        const windowEnd = new Date(now - STALE_MS).toISOString();
+
+        try {
+            const [debitRes, refundRes, historyRes] = await Promise.all([
+                noTestRef(supabase.from('transactions').select('id,user_email,amount,transaction_type,created_at'))
+                    .in('transaction_type', RENDER_TYPES)
+                    .gte('created_at', windowStart).lte('created_at', windowEnd)
+                    .order('created_at', { ascending: true }),
+                noTestRef(supabase.from('transactions').select('id,user_email,amount,transaction_type,created_at,metadata'))
+                    .in('transaction_type', REFUND_TYPES)
+                    .gte('created_at', windowStart)
+                    .order('created_at', { ascending: true }),
+                noTestRef(supabase.from('render_history').select('user_email,created_at'))
+                    .gte('created_at', windowStart)
+                    .order('created_at', { ascending: true }),
+            ]);
+            if (debitRes.error) throw new Error('debit query: ' + debitRes.error.message);
+            if (refundRes.error) throw new Error('refund query: ' + refundRes.error.message);
+            if (historyRes.error) throw new Error('history query: ' + historyRes.error.message);
+
+            // 已經自動退過款的原始交易 id，防止重複掃描造成重複退款
+            const alreadyRefundedIds = new Set(
+                (refundRes.data || [])
+                    .filter(r => r.transaction_type === 'REFUND_AUTO_ANOMALY')
+                    .map(r => r.metadata?.original_transaction_id)
+                    .filter(Boolean)
+            );
+
+            const byUser = {};
+            for (const tx of debitRes.data || []) {
+                if (alreadyRefundedIds.has(tx.id)) continue;
+                (byUser[tx.user_email] ||= { debits: [], resolves: [] }).debits.push(tx);
+            }
+            for (const tx of refundRes.data || []) {
+                if (!byUser[tx.user_email]) continue;
+                byUser[tx.user_email].resolves.push(new Date(tx.created_at).getTime());
+            }
+            for (const row of historyRes.data || []) {
+                if (!byUser[row.user_email]) continue;
+                byUser[row.user_email].resolves.push(new Date(row.created_at).getTime());
+            }
+
+            const orphans = [];
+            for (const [email, { debits, resolves }] of Object.entries(byUser)) {
+                resolves.sort((a, b) => a - b);
+                const used = new Array(resolves.length).fill(false);
+                for (const d of debits) {
+                    const dTime = new Date(d.created_at).getTime();
+                    let matched = false;
+                    for (let i = 0; i < resolves.length; i++) {
+                        if (used[i]) continue;
+                        if (resolves[i] >= dTime && resolves[i] - dTime <= MATCH_WINDOW_MS) {
+                            used[i] = true; matched = true; break;
+                        }
+                    }
+                    if (!matched) orphans.push({ id: d.id, user_email: email, amount: Math.abs(d.amount), created_at: d.created_at });
+                }
+            }
+
+            // dry_run=1：只回報掃描結果，不執行任何退款寫入（部署前 / 人工複查用）
+            const dryRun = req.query.dry_run === '1';
+            if (dryRun) {
+                return res.status(200).json({
+                    code: 0, dry_run: true, orphans_found: orphans.length,
+                    orphans: orphans.slice(0, 200),
+                    window: { start: windowStart, end: windowEnd }
+                });
+            }
+
+            // 安全上限：單次最多處理 200 筆，避免資料異常時一次性放大衝擊
+            const toRefund = orphans.slice(0, 200);
+            let totalPoints = 0;
+            const failures = [];
+            for (const o of toRefund) {
+                try {
+                    const { data: rpcData, error: rpcErr } = await supabase.rpc('deduct_render_points', { p_email: o.user_email, p_cost: -o.amount });
+                    if (rpcErr || !rpcData?.success) { failures.push({ ...o, reason: rpcErr?.message || rpcData?.error }); continue; }
+                    await supabase.from('transactions').insert([{
+                        user_email: o.user_email, amount: o.amount, transaction_type: 'REFUND_AUTO_ANOMALY',
+                        metadata: { original_transaction_id: o.id, original_created_at: o.created_at, reason: '排程掃描：扣點後無對應出圖/退款記錄，自動退回' }
+                    }]);
+                    totalPoints += o.amount;
+                } catch (e) {
+                    failures.push({ ...o, reason: e.message });
+                }
+            }
+
+            console.log(`[scan_render_anomalies] orphans_found=${orphans.length} refunded=${toRefund.length - failures.length} points=${totalPoints} failures=${failures.length}`);
+            return res.status(200).json({
+                code: 0, orphans_found: orphans.length, refunded_count: toRefund.length - failures.length,
+                total_points_refunded: totalPoints, failures,
+                window: { start: windowStart, end: windowEnd }
+            });
+        } catch (e) {
+            console.error('[scan_render_anomalies] fatal:', e.message);
+            return res.status(500).json({ code: -1, msg: e.message });
+        }
+    }
+
     // --- Admin 端點（需要 ADMIN_KEY）---
     const adminKeyHeader = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     if (!isValidAdminKey(adminKeyHeader)) {

@@ -157,8 +157,18 @@ function _syncNodeDisplay(nodeId) {
     const tagsWrapper = document.getElementById('t1-tags-' + nodeId);
     if (tagsWrapper) {
         const ph = tagsWrapper.dataset.placeholder || '點擊快選...';
+        // 標籤顯示文字需依語言換成 label（跟下方 chip 按鈕同一套邏輯），
+        // 否則會直接顯示送給 AI 的原始英文 value，不會跟著切換語言變化
+        const isCJK = ['zh-TW', 'zh-CN'].includes(currentLang);
+        const adminOpts = optionsData.filter(o => o.field_id === nodeId);
+        const personalOpts = userChips[nodeId] || [];
+        const displayFor = (v) => {
+            const opt = adminOpts.find(o => (o.value || o.label) === v) || personalOpts.find(o => o.value === v);
+            if (!opt) return v;
+            return (opt.labels && opt.labels[currentLang]) || (isCJK ? (opt.label || opt.value) : (opt.value || opt.label));
+        };
         tagsWrapper.innerHTML = vals.length
-            ? vals.map(v => `<span class="node-tag">${v}<span class="node-tag-remove" data-val="${v.replace(/"/g,'&quot;')}">✕</span></span>`).join('')
+            ? vals.map(v => `<span class="node-tag">${displayFor(v)}<span class="node-tag-remove" data-val="${v.replace(/"/g,'&quot;')}">✕</span></span>`).join('')
             : `<span class="node-tags-placeholder">${ph}</span>`;
         tagsWrapper.querySelectorAll('.node-tag-remove').forEach(rm => {
             rm.addEventListener('click', () => {
@@ -5084,6 +5094,33 @@ function _scInitCanvases(w, h, dw = null, dh = null) {
     // 標註字級/線寬皆以 1920px 寬為基準換算，確保 1K/2K/4K 出圖時視覺比例一致
     // 下限拉到 0.8：即使底圖較小，文字仍要維持 AI 可辨識的最小尺寸
     SmartCanvas.uiScale = Math.max(0.8, Math.min(3, w / 1920));
+
+    _scWatchCanvasResize();
+}
+
+// 圖片的 CSS 顯示尺寸只在載入當下量測一次（見 openSmartCanvas 的 onload），若使用者之後
+// 縮放/拖曳 SketchUp 對話框視窗，<img> 會跟著 max-width/max-height 流式縮放，但三層 canvas
+// 當時是用 JS 寫死的 px 尺寸、不會跟著變——兩者尺寸一旦脫節，滑鼠座標換算（_scGetXY）
+// 用的還是舊的 rect，圖片有些區域就再也點不到（用戶回報「滑鼠點不到圖片的所有地方」的根因）。
+// 用 ResizeObserver 持續把 canvas 的顯示尺寸（style.width/height）釘住跟 <img> 一致；
+// 內部繪圖解析度（.width/.height）維持原生像素不變，只同步顯示尺寸即可。
+function _scResyncCanvasDisplaySize() {
+    if (!SmartCanvas.baseImg) return;
+    const rect = SmartCanvas.baseImg.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const dw = Math.round(rect.width) + 'px';
+    const dh = Math.round(rect.height) + 'px';
+    ['sc-highlight-canvas', 'sc-draw-canvas', 'sc-cursor-canvas'].forEach(id => {
+        const c = document.getElementById(id);
+        if (c) { c.style.width = dw; c.style.height = dh; }
+    });
+}
+
+function _scWatchCanvasResize() {
+    if (SmartCanvas._resizeObserver) SmartCanvas._resizeObserver.disconnect();
+    if (typeof ResizeObserver === 'undefined' || !SmartCanvas.baseImg) return;
+    SmartCanvas._resizeObserver = new ResizeObserver(() => _scResyncCanvasDisplaySize());
+    SmartCanvas._resizeObserver.observe(SmartCanvas.baseImg);
 }
 
 function _scGetXY(e) {
@@ -6122,6 +6159,7 @@ function _scConfirmSelections() {
 // 輪詢非同步渲染任務直到完成（每 3 秒一次，最多 6 分鐘）；每 30 秒更新一次提示，避免用戶以為卡住
 async function _pollRenderTask(initial) {
     const maxAttempts = 120;
+    const startedAt = Date.now(); // 任務起算時間，隨每次 poll 帶回後端；後端用來判斷是否該自動退款逾時任務
     for (let i = 0; i < maxAttempts; i++) {
         await new Promise(r => setTimeout(r, 3000));
         if ((i + 1) % 10 === 0) {
@@ -6144,7 +6182,8 @@ async function _pollRenderTask(initial) {
                     transaction_id: initial.transaction_id,
                     prompt: initial.prompt,
                     style: initial.style,
-                    input_url: initial.input_url
+                    input_url: initial.input_url,
+                    started_at: startedAt
                 })
             });
             const pData = await pResp.json();

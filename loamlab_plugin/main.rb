@@ -1082,21 +1082,35 @@ module LoamLab
       begin
         raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
         data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
-        if data['status'] == 'processing' && data['task_id']
+        # 只認 task_id 是否存在，不強求 status 剛好等於 'processing'——
+        # task_id 才是「後端真的起了非同步任務」的權威訊號，若後端回應格式
+        # 有出入但 task_id 還在，寧可繼續輪詢也不要誤判成扣點未退的失敗
+        if data['task_id']
+          # started_at：輪詢起始時間戳記（epoch ms），每次 poll_render 隨 meta 帶回後端，
+          # 讓後端可以判斷任務逾時該不該自動退款——後端不能只靠 AtlasCloud 的 created_at
+          # 欄位（不保證存在），沒有這個時間戳記就會退回「扣點但永遠卡在 processing」的舊問題
           meta = {
             cost: data['cost'], resolution: data['resolution'], tool: data['tool'],
             transaction_id: data['transaction_id'], prompt: data['prompt'],
-            style: data['style'], input_url: data['input_url']
+            style: data['style'], input_url: data['input_url'],
+            started_at: (Time.now.to_f * 1000).to_i
           }
           self.poll_render_task(data['task_id'], headers, meta) do |final_result|
             on_result.call(final_result.merge(extra))
           end
           return
         end
-        result = (data['code'] == 0 && data['url']) ?
-          { status: 'render_success', url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] } :
-          { status: 'render_failed', message: self.sanitize_error(data['msg'] || "HTTP #{response.status_code}"),
-            points_refunded: data['points_refunded'], error: data['error'] }
+        if data['code'] == 0 && data['url']
+          on_result.call({ status: 'render_success', url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] }.merge(extra))
+          return
+        end
+        # data['msg'] 缺失代表後端回應不符合任何已知形狀（例如中途被截斷的空 body）——
+        # 這種情況下我們無法確認是否已退款，絕不能顯示「HTTP 200」這種對用戶毫無意義的
+        # 假訊息，也不能預設沒退款；改用誠實但不嚇人的提示，並引導去歷史/點數自行核對
+        known_msg = data['msg']
+        fallback_msg = known_msg || "系統回應異常（HTTP #{response.status_code}），無法確認是否已扣點或出圖，請至「渲染歷史」與點數餘額確認，如有異常請回報問題"
+        result = { status: 'render_failed', message: self.sanitize_error(fallback_msg),
+          points_refunded: data['points_refunded'], error: data['error'] }
         on_result.call(result.merge(extra))
       rescue => e
         on_result.call({ status: 'render_failed', message: self.sanitize_error("解析失敗: #{e.message}") }.merge(extra))

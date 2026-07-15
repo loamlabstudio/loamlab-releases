@@ -16,4 +16,11 @@
   - **調整**：`.agents/scripts/hot_reload_ui.rb` 不存在於此專案，實際熱重載流程為 `load 'dev_reload.rb'`（見 CLAUDE.md）。GUI 手動視覺驗收需要人類在 SketchUp 中操作，Claude 無法代為執行；經用戶確認後，此為單純 CSS/JS 修正、風險低，用戶選擇直接 commit，略過此步驟的即時人工驗證，待實際使用時回報。
 - [MUST] 確認無誤後，將變更 commit 進入儲存庫。 [x]
 
+## RELEASE_GATE
+release_type: hotfix
+verified_diff:
+  - loamlab_plugin/ui/app.js
+  - loamlab_plugin/ui/index.html
+sql_migration: false
+
 status: DONE

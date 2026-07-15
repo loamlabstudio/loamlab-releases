@@ -5071,13 +5071,13 @@ function retryScImageLoad() {
 }
 
 function _scInitCanvases(w, h, dw = null, dh = null) {
-    const displayW = dw || w;
-    const displayH = dh || h;
     ['sc-highlight-canvas', 'sc-draw-canvas', 'sc-cursor-canvas'].forEach(id => {
         const c = document.getElementById(id);
         if (!c) return;
         c.width = w; c.height = h;
-        c.style.width = displayW + 'px'; c.style.height = displayH + 'px';
+        // 使用 CSS 100% 自適應尺寸，完美貼合 sc-canvas-stack (該 stack 會自動 shrink-wrap 圖片)
+        c.style.width = '100%';
+        c.style.height = '100%';
     });
 
     SmartCanvas.highlightCanvas = document.getElementById('sc-highlight-canvas');
@@ -5098,29 +5098,16 @@ function _scInitCanvases(w, h, dw = null, dh = null) {
     _scWatchCanvasResize();
 }
 
-// 圖片的 CSS 顯示尺寸只在載入當下量測一次（見 openSmartCanvas 的 onload），若使用者之後
-// 縮放/拖曳 SketchUp 對話框視窗，<img> 會跟著 max-width/max-height 流式縮放，但三層 canvas
-// 當時是用 JS 寫死的 px 尺寸、不會跟著變——兩者尺寸一旦脫節，滑鼠座標換算（_scGetXY）
-// 用的還是舊的 rect，圖片有些區域就再也點不到（用戶回報「滑鼠點不到圖片的所有地方」的根因）。
-// 用 ResizeObserver 持續把 canvas 的顯示尺寸（style.width/height）釘住跟 <img> 一致；
-// 內部繪圖解析度（.width/.height）維持原生像素不變，只同步顯示尺寸即可。
+// 圖片現在由 CSS flex 完美控制縮放與包覆，不再需要 ResizeObserver 手動算 px
 function _scResyncCanvasDisplaySize() {
-    if (!SmartCanvas.baseImg) return;
-    const rect = SmartCanvas.baseImg.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const dw = Math.round(rect.width) + 'px';
-    const dh = Math.round(rect.height) + 'px';
-    ['sc-highlight-canvas', 'sc-draw-canvas', 'sc-cursor-canvas'].forEach(id => {
-        const c = document.getElementById(id);
-        if (c) { c.style.width = dw; c.style.height = dh; }
-    });
+    // 已經改用 CSS (w-full h-full) 讓 canvas 自動貼合 img，避免因為 px 四捨五入造成滑鼠脫離畫布
 }
 
 function _scWatchCanvasResize() {
-    if (SmartCanvas._resizeObserver) SmartCanvas._resizeObserver.disconnect();
-    if (typeof ResizeObserver === 'undefined' || !SmartCanvas.baseImg) return;
-    SmartCanvas._resizeObserver = new ResizeObserver(() => _scResyncCanvasDisplaySize());
-    SmartCanvas._resizeObserver.observe(SmartCanvas.baseImg);
+    if (SmartCanvas._resizeObserver) {
+        SmartCanvas._resizeObserver.disconnect();
+        SmartCanvas._resizeObserver = null;
+    }
 }
 
 function _scGetXY(e) {

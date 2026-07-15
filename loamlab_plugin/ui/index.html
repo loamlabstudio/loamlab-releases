@@ -1537,9 +1537,9 @@
                 <div class="flex-1 flex flex-col bg-black/60 relative min-w-0">
                     <!-- Canvas Stack -->
                     <div class="flex-1 relative flex items-center justify-center overflow-hidden p-3">
-                        <div class="relative inline-block" id="sc-canvas-stack">
+                        <div class="relative inline-flex justify-center items-center" id="sc-canvas-stack" style="max-width: 100%; max-height: 100%;">
                             <!-- 底層：渲染結果圖 -->
-                            <img id="sc-base-img" class="block max-w-full rounded-lg select-none opacity-0 transition-opacity duration-300" style="max-height:calc(100% - 200px);" alt="render" crossorigin="anonymous">
+                            <img id="sc-base-img" class="block rounded-lg select-none opacity-0 transition-opacity duration-300" style="max-width: 100%; max-height: 100%; width: auto; height: auto;" alt="render" crossorigin="anonymous">
                             
                             <!-- Loading Spinner -->
                             <div id="sc-loading" class="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm rounded-lg z-[2]">
@@ -1555,11 +1555,11 @@
                                 <button onclick="retryScImageLoad()" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[10px] font-bold tracking-widest transition-all">RETRY 重新載入</button>
                             </div>
                             <!-- 次頂：hover 高亮疊層 -->
-                            <canvas id="sc-highlight-canvas" class="absolute inset-0 rounded-lg pointer-events-none" style="opacity:1;"></canvas>
+                            <canvas id="sc-highlight-canvas" class="absolute inset-0 w-full h-full rounded-lg pointer-events-none" style="opacity:1;"></canvas>
                             <!-- 頂層：手繪互動層 -->
-                            <canvas id="sc-draw-canvas" class="absolute inset-0 rounded-lg opacity-70" style="touch-action:none; cursor:crosshair;"></canvas>
+                            <canvas id="sc-draw-canvas" class="absolute inset-0 w-full h-full rounded-lg opacity-70" style="touch-action:none; cursor:crosshair;"></canvas>
                             <!-- 游標預覽層：PS 風格空心圓，pointer-events-none 不攔截點擊 -->
-                            <canvas id="sc-cursor-canvas" class="absolute inset-0 rounded-lg pointer-events-none"></canvas>
+                            <canvas id="sc-cursor-canvas" class="absolute inset-0 w-full h-full rounded-lg pointer-events-none"></canvas>
                         </div>
                     </div>
 

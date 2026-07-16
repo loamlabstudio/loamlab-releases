@@ -4830,14 +4830,8 @@ function appendInpaintResultCard(url, promptText = 'Inpaint Result') {
     swapBtn.textContent = 'SWAP';
     swapBtn.onclick = (e) => { e.stopPropagation(); openSwapModal(url, url); };
 
-    const extractBtn = document.createElement('button');
-    extractBtn.className = "text-[9px] px-2.5 py-1 rounded border border-sky-500/30 text-sky-300/80 hover:bg-sky-500/20 hover:text-sky-200 transition-all font-medium uppercase tracking-widest active:scale-90 cursor-pointer";
-    extractBtn.textContent = 'EXTRACT';
-    extractBtn.onclick = (e) => { e.stopPropagation(); startExtractMode(url); };
-
     btnContainer.appendChild(saveBtn);
     btnContainer.appendChild(swapBtn);
-    btnContainer.appendChild(extractBtn);
     footer.appendChild(label);
     footer.appendChild(btnContainer);
     card.appendChild(imgWrap);
@@ -5033,15 +5027,12 @@ function openSmartCanvas(channelBase64, renderedUrl, sceneName, keepRegions = fa
         requestAnimationFrame(() => {
             const w = SmartCanvas.baseImg.naturalWidth;
             const h = SmartCanvas.baseImg.naturalHeight;
-            const rect = SmartCanvas.baseImg.getBoundingClientRect();
-            const dw = Math.round(rect.width)  || w;
-            const dh = Math.round(rect.height) || h;
-            
+
             // 使用 naturalWidth/Height 作為 Canvas 的邏輯尺寸，保證出圖比例與畫素精度 100% 對齊且不模糊
             SmartCanvas.canvasW = w;
             SmartCanvas.canvasH = h;
-            
-            _scInitCanvases(w, h, dw, dh);
+
+            _scInitCanvases(w, h);
             _scBindEvents();
         });
     };
@@ -5070,12 +5061,13 @@ function retryScImageLoad() {
     SmartCanvas.baseImg.src = retryUrl;
 }
 
-function _scInitCanvases(w, h, dw = null, dh = null) {
+function _scInitCanvases(w, h) {
     ['sc-highlight-canvas', 'sc-draw-canvas', 'sc-cursor-canvas'].forEach(id => {
         const c = document.getElementById(id);
         if (!c) return;
         c.width = w; c.height = h;
-        // 使用 CSS 100% 自適應尺寸，完美貼合 sc-canvas-stack (該 stack 會自動 shrink-wrap 圖片)
+        // 內部解析度固定＝原圖 px；顯示尺寸用 100% 貼合 sc-canvas-stack，
+        // stack 本身的 px 尺寸由 _scApplyStackSize() 用單一算式算出，不靠 CSS shrink-to-fit
         c.style.width = '100%';
         c.style.height = '100%';
     });
@@ -5095,12 +5087,27 @@ function _scInitCanvases(w, h, dw = null, dh = null) {
     // 下限拉到 0.8：即使底圖較小，文字仍要維持 AI 可辨識的最小尺寸
     SmartCanvas.uiScale = Math.max(0.8, Math.min(3, w / 1920));
 
+    _scApplyStackSize();
     _scWatchCanvasResize();
 }
 
-// 圖片現在由 CSS flex 完美控制縮放與包覆，不再需要 ResizeObserver 手動算 px
-function _scResyncCanvasDisplaySize() {
-    // 已經改用 CSS (w-full h-full) 讓 canvas 自動貼合 img，避免因為 px 四捨五入造成滑鼠脫離畫布
+// 依原圖比例＋可用空間算出 sc-canvas-stack 的精確 px 尺寸（等比縮放，不放大超過原圖）。
+// Why: img 用 max-width:100%/width:auto 的 shrink-to-fit 在部分嵌入式瀏覽器（SketchUp 舊版 CEF）
+// 算不準，會讓 stack 實際大小跟 img 視覺範圍對不齊，導致游標在圖片局部區域對不上／消失。
+// 改成 JS 用同一個 scale 算兩個軸，直接設 stack px 尺寸，img/canvas 全部 100% 貼合同一個 stack，沒有循環依賴。
+function _scComputeFitBox(naturalW, naturalH, availW, availH) {
+    if (!availW || !availH || !naturalW || !naturalH) return { w: naturalW, h: naturalH };
+    const scale = Math.min(availW / naturalW, availH / naturalH, 1);
+    return { w: Math.round(naturalW * scale), h: Math.round(naturalH * scale) };
+}
+
+function _scApplyStackSize() {
+    const viewport = document.getElementById('sc-canvas-viewport');
+    const stack = document.getElementById('sc-canvas-stack');
+    if (!viewport || !stack || !SmartCanvas.canvasW) return;
+    const { w, h } = _scComputeFitBox(SmartCanvas.canvasW, SmartCanvas.canvasH, viewport.clientWidth, viewport.clientHeight);
+    stack.style.width = w + 'px';
+    stack.style.height = h + 'px';
 }
 
 function _scWatchCanvasResize() {
@@ -5108,6 +5115,10 @@ function _scWatchCanvasResize() {
         SmartCanvas._resizeObserver.disconnect();
         SmartCanvas._resizeObserver = null;
     }
+    const viewport = document.getElementById('sc-canvas-viewport');
+    if (!viewport || typeof ResizeObserver === 'undefined') return;
+    SmartCanvas._resizeObserver = new ResizeObserver(() => _scApplyStackSize());
+    SmartCanvas._resizeObserver.observe(viewport);
 }
 
 function _scGetXY(e) {
@@ -5248,10 +5259,8 @@ function _scCreateAnnotatedComposite(bakeRefTags = false) {
     const ctx = c.getContext('2d');
     ctx.drawImage(SmartCanvas.baseImg, 0, 0, w, h);
     const refIdxMap = bakeRefTags ? _scAssignRefImageIndices() : null;
-    // 目前測試版本：composite 維持彩色線框（方便使用者編輯辨識），但送給 AI 的那份額外烘入
-    // 數字編號，跟文字 prompt 的「Region N」對應；方案二（改中性白線框）程式碼保留備用，
-    // 呼叫時把第 4 個參數改成 true 即可切換，不用重寫
-    SmartCanvas.regions.forEach((r, i) => _scDrawRegionAnnotation(ctx, r, refIdxMap ? refIdxMap.get(r.id) : undefined, false, bakeRefTags ? i + 1 : undefined));
+    // 預覽時 (bakeRefTags=false) 維持彩色線框方便辨識；送給 AI 時 (bakeRefTags=true) 切換至方案二（中性白線框），完全移除顏色干擾
+    SmartCanvas.regions.forEach((r, i) => _scDrawRegionAnnotation(ctx, r, refIdxMap ? refIdxMap.get(r.id) : undefined, bakeRefTags, bakeRefTags ? i + 1 : undefined));
     return c;
 }
 

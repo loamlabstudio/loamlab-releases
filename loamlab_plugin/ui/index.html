@@ -1537,10 +1537,13 @@
                 <div class="flex-1 flex flex-col bg-black/60 relative min-w-0">
                     <!-- Canvas Stack -->
                     <div class="flex-1 relative flex items-center justify-center overflow-hidden p-3">
-                        <div class="relative inline-flex justify-center items-center" id="sc-canvas-stack" style="max-width: 100%; max-height: 100%;">
-                            <!-- 底層：渲染結果圖 -->
-                            <img id="sc-base-img" class="block rounded-lg select-none opacity-0 transition-opacity duration-300" style="max-width: 100%; max-height: 100%; width: auto; height: auto;" alt="render" crossorigin="anonymous">
-                            
+                        <!-- 量測用容器：無 padding，clientWidth/Height 即為可用空間，JS 依此算出 stack 精確 px 尺寸，
+                             避免 stack 用 CSS shrink-to-fit + 子元素 max-width:100% 互相依賴造成的循環算式（部分嵌入式瀏覽器算不準，導致游標對不齊） -->
+                        <div class="w-full h-full flex items-center justify-center overflow-hidden" id="sc-canvas-viewport">
+                        <div class="relative" id="sc-canvas-stack">
+                            <!-- 底層：渲染結果圖。改用 absolute+object-contain，與畫布疊層共用同一個 stack box，尺寸來源單一化 -->
+                            <img id="sc-base-img" class="absolute inset-0 w-full h-full object-contain rounded-lg select-none opacity-0 transition-opacity duration-300" alt="render" crossorigin="anonymous">
+
                             <!-- Loading Spinner -->
                             <div id="sc-loading" class="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm rounded-lg z-[2]">
                                 <div class="w-8 h-8 border-2 border-white/20 border-t-[#dc2626] rounded-full animate-spin"></div>
@@ -1560,6 +1563,7 @@
                             <canvas id="sc-draw-canvas" class="absolute inset-0 w-full h-full rounded-lg opacity-70" style="touch-action:none; cursor:crosshair;"></canvas>
                             <!-- 游標預覽層：PS 風格空心圓，pointer-events-none 不攔截點擊 -->
                             <canvas id="sc-cursor-canvas" class="absolute inset-0 w-full h-full rounded-lg pointer-events-none"></canvas>
+                        </div>
                         </div>
                     </div>
 

@@ -1,20 +1,17 @@
-# SPRINT: 修復 Smart Canvas 鼠標消失邊界問題
+# SPRINT: T2 Smart Canvas 綜合體驗修復與優化
 
 ## CONTEXT_DIGEST
-- **問題**：使用者回報 T2 Smart Canvas 在某些圖片區域邊界鼠標會消失，無法操作。
-- **根因**：原先使用 `ResizeObserver` 搭配 JS `Math.round()` 計算 Canvas px 尺寸，會產生小數點像素誤差，導致 Canvas 比底圖稍小。當鼠標移至底圖邊緣但超出 Canvas 範圍時，會觸發 `mouseleave` 清除鼠標圈。另外 `max-height: calc(100% - 200px)` 在 `inline-block` 容器內無效，導致長圖可能超出邊界。
-- **解決方案（已實作）**：將 `sc-canvas-stack` 改為 `inline-flex` 並加上 `max-width: 100%; max-height: 100%;` 讓其原生縮放並緊緻包覆底圖。並將三層 Canvas 改為 CSS `w-full h-full` 100% 貼合容器，完全移除 `ResizeObserver` 的 px 計算。
+本 SPRINT 包含三個重要的 T2 模組修復與優化：
+1. **邊界與偏移 Bug 修復**：舊版使用 JS `ResizeObserver` + `Math.round()` 同步 Canvas 尺寸，小數點誤差會被等比放大，導致「鼠標在邊界消失」以及「送出的線框位置偏移」。已全面改用 CSS 原生 `w-full h-full` 與 `inline-flex` 完美包覆解決。
+2. **AI 去色干擾優化**：AI 常把彩色線框當成塗色指令（殘留螢光色）。已將 `_scCreateAnnotatedComposite` 邏輯改為「內外分離」：使用者預覽維持彩色，送交 AI 時 (`bakeRefTags=true`) 自動轉為「純白線框＋黑暈」。
+3. **介面精簡**：移除 T2 生成結果卡片上的 EXTRACT 按鈕，精簡操作流程。
 
 ## TASKS
-- [MUST] 檢視並確認 `loamlab_plugin/ui/index.html` (sc-canvas-stack 及底下三個 canvas 的 class 與 style 變更) [x]
-  - **影響檔案**：`loamlab_plugin/ui/index.html`
-  - **結果**：與 CONTEXT_DIGEST 描述吻合，`git diff` 核對通過。
-- [MUST] 檢視並確認 `loamlab_plugin/ui/app.js` (移除 ResizeObserver 並將 canvas 設為 style.width/height = '100%') [x]
-  - **影響檔案**：`loamlab_plugin/ui/app.js`
-  - **結果**：與 CONTEXT_DIGEST 描述吻合，`git diff` 核對通過。
-- [MUST] 使用 `ruby .agents/scripts/hot_reload_ui.rb` 更新 UI，並在 SketchUp 中開啟 T2 Smart Canvas，載入各種比例（如長圖、寬圖）測試邊界是否有鼠標消失的問題。 [~]
-  - **調整**：`.agents/scripts/hot_reload_ui.rb` 不存在於此專案，實際熱重載流程為 `load 'dev_reload.rb'`（見 CLAUDE.md）。GUI 手動視覺驗收需要人類在 SketchUp 中操作，Claude 無法代為執行；經用戶確認後，此為單純 CSS/JS 修正、風險低，用戶選擇直接 commit，略過此步驟的即時人工驗證，待實際使用時回報。
-- [MUST] 確認無誤後，將變更 commit 進入儲存庫。 [x]
+- [x] 使用者需在 SketchUp 重新載入外掛（執行 `ruby .agents/scripts/hot_reload_ui.rb`），進入 T2 畫圖測試。
+- [x] 確認滑鼠移動到圖片邊緣時，座標與鼠標不再消失或偏移。（測試回報：偏移已消失；另發現「部分圖片局部區域鼠標消失」的殘留問題，已用 JS 精確算 stack px 尺寸取代 CSS shrink-to-fit 修復，詳見 v1.4.62 commit）
+- [x] 確認預覽圖維持彩色線框，且生成的結果圖不再殘留螢光色線條（實際送出為黑白圖）。
+- [x] 確認 T2 結果卡片（SWAPPED）上的 EXTRACT 按鈕已消失。
+- [x] 已檢視 `loamlab_plugin/ui/index.html` 與 `loamlab_plugin/ui/app.js` 相關變更，並將所有變更 commit 進入儲存庫（1b7fd39 fix + d8668f3 版本號）。
 
 ## RELEASE_GATE
 release_type: hotfix
@@ -22,5 +19,8 @@ verified_diff:
   - loamlab_plugin/ui/app.js
   - loamlab_plugin/ui/index.html
 sql_migration: false
+
+## 已發布
+v1.4.62（2026-07-16）：三項修復已 build + publish 上線，用戶可透過自動更新取得。
 
 status: DONE

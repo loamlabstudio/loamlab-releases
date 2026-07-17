@@ -33,4 +33,4 @@ sql_migration: false
 - Task 1/2 審查通過：Plan Tier Protection 邏輯正確，RPC `apply_points_delta` 對 `p_set_monthly=NULL` 有 `CASE WHEN` 保護，不會出錯。
 - 執行過程中額外發現並修復關聯漏洞：既有訂閱者升級/降級方案時，前端一律走「建立新 checkout」流程，從未呼叫 Dodo 原生 change-plan API，導致舊訂閱不會被取消，變成兩筆訂閱各自每月扣款（例：Starter 升 Pro 沒取消舊訂閱，變成 $7+$15/月）。已在 `user.js` checkout 端點補上：偵測到既有訂閱者切換方案時改呼叫 `POST /subscriptions/{id}/change-plan`（原地換方案 + proration），並同步調整 `app.js` 前端輪詢邏輯。webhook.js 端的 `subscription.plan_changed` 處理與 tier 比較邏輯本來就已存在，只是從未被觸發，這次補上觸發路徑後即可運作。
 
-status: READY_FOR_CLAUDE
+status: DONE

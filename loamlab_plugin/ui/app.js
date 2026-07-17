@@ -5773,7 +5773,7 @@ function _scPlayCloseGlow(drawPathFn, anchor, onDone) {
     const duration = 480;
     const start = performance.now();
     function frame(now) {
-        const t = Math.min(1, (now - start) / duration);
+        const t = Math.max(0, Math.min(1, (now - start) / duration));
         const pulse = Math.pow(Math.sin(t * Math.PI), 0.6); // 0 → 1 → 0，先衝高再快速衰減
         ctx.clearRect(0, 0, SmartCanvas.canvasW, SmartCanvas.canvasH);
         ctx.save();

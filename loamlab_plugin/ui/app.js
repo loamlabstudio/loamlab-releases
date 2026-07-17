@@ -53,6 +53,7 @@ let userChips = JSON.parse(localStorage.getItem('loamlab_user_chips') || '{}');
 // { [nodeId]: [{label, value}] }
 let userPresets = JSON.parse(localStorage.getItem('loamlab_presets') || '[]');
 // [{name, created_at, data:{nodes, userChips}}]
+let _nodeValidValues = {}; // 追蹤各節點有效的選項，用以過濾舊版殘留資料
 
 const T1_GROUP_TITLES = {
     meta:           { 'zh-TW': '場景類型', 'en-US': 'Project', 'zh-CN': '场景类型', 'es-ES': 'Proyecto', 'pt-BR': 'Projeto', 'ja-JP': 'プロジェクト' },
@@ -260,6 +261,8 @@ function renderT1Nodes() {
                     strategy: node.custom_strategy || (adminOpts[0] && adminOpts[0].strategy) || 'replace', is_default: false
                 }));
                 const nodeOpts = [...adminOpts, ...personalOpts];
+                // 收集當下有效的選項，用以過濾殘留資料
+                _nodeValidValues[node.id] = nodeOpts.map(o => o.value || o.label);
                 // 依語言決定 chip 顯示文字（如果沒有多語系設定，則回退到中文或英文值）
                 const isCJK = ['zh-TW', 'zh-CN'].includes(currentLang);
                 const chipDisplay = (o) => (o.labels && o.labels[currentLang]) || (isCJK ? (o.label || o.value) : (o.value || o.label));
@@ -302,12 +305,22 @@ function renderT1Nodes() {
                 const savedNodeVal = _allNodeVals[node.id];
                 const defaultChips = item.querySelectorAll('.node-chip[data-chip-default="1"]');
                 if (savedNodeVal !== undefined && savedNodeVal !== '') {
-                    hiddenInput.value = savedNodeVal;
                     const parts = savedNodeVal.split(',').map(s => s.trim()).filter(Boolean);
-                    item.querySelectorAll('.node-chip').forEach(c => {
-                        c.classList.toggle('active', parts.includes(c.dataset.chipValue));
-                    });
-                    if (typeof _syncNodeDisplay === 'function') setTimeout(() => _syncNodeDisplay(node.id), 0);
+                    const validParts = parts.filter(p => _nodeValidValues[node.id].includes(p));
+                    if (validParts.length > 0) {
+                        hiddenInput.value = validParts.join(', ');
+                        item.querySelectorAll('.node-chip').forEach(c => {
+                            c.classList.toggle('active', validParts.includes(c.dataset.chipValue));
+                        });
+                        if (typeof _syncNodeDisplay === 'function') setTimeout(() => _syncNodeDisplay(node.id), 0);
+                    } else if (defaultChips.length > 0) {
+                        const defVals = Array.from(defaultChips).map(c => c.dataset.chipValue);
+                        hiddenInput.value = defVals.join(', ');
+                        defaultChips.forEach(c => c.classList.add('active'));
+                        if (typeof _syncNodeDisplay === 'function') setTimeout(() => _syncNodeDisplay(node.id), 0);
+                    } else {
+                        hiddenInput.value = '';
+                    }
                 } else if (defaultChips.length > 0) {
                     const defVals = Array.from(defaultChips).map(c => c.dataset.chipValue);
                     hiddenInput.value = defVals.join(', ');
@@ -365,7 +378,12 @@ function renderT1Nodes() {
             Object.keys(_savedVals).forEach(nodeId => {
                 const el = document.getElementById('t1-node-' + nodeId);
                 if (!el) return;
-                el.value = _savedVals[nodeId];
+                let valToRestore = _savedVals[nodeId];
+                if (valToRestore && _nodeValidValues[nodeId]) {
+                    const validParts = valToRestore.split(',').map(s => s.trim()).filter(p => _nodeValidValues[nodeId].includes(p));
+                    valToRestore = validParts.join(', ');
+                }
+                el.value = valToRestore;
                 _syncNodeDisplay(nodeId);
             });
         }, 0);
@@ -686,24 +704,42 @@ function saveCurrentPreset(name) {
     _pushPresetsToServer();
 }
 
-function applyPreset(idx) {
-    const p = userPresets[idx];
-    if (!p) return;
-    // 合併個人 chips（不覆蓋現有，只新增缺少的）
-    const incoming = p.data.userChips || {};
+// 合併配方帶來的個人 chips，並將節點值中官方選項與已知自訂 chips 都未涵蓋的字串
+// （代表分享者的自訂 Node）自動寫入本地 userChips，避免被過濾機制當殘留資料剔除
+function _reconcilePresetChips(data) {
+    const incoming = data.userChips || {};
     Object.keys(incoming).forEach(nid => {
         userChips[nid] = userChips[nid] || [];
         incoming[nid].forEach(c => {
             if (!userChips[nid].find(x => x.value === c.value)) userChips[nid].push(c);
         });
     });
+    Object.entries(data.nodes || {}).forEach(([nid, val]) => {
+        if (!val) return;
+        const adminVals = optionsData.filter(o => o.field_id === nid).map(o => o.value || o.label);
+        userChips[nid] = userChips[nid] || [];
+        val.split(',').map(s => s.trim()).filter(Boolean).forEach(v => {
+            const known = adminVals.includes(v) || userChips[nid].some(c => c.value === v);
+            if (!known) userChips[nid].push({ label: v, value: v });
+        });
+    });
     localStorage.setItem('loamlab_user_chips', JSON.stringify(userChips));
+}
+
+function applyPreset(idx) {
+    const p = userPresets[idx];
+    if (!p) return;
+    _reconcilePresetChips(p.data || {});
     renderT1Nodes();
     // 恢復節點值（等 renderT1Nodes 完成後 DOM 已就緒）
     setTimeout(() => {
         Object.entries(p.data.nodes || {}).forEach(([id, val]) => {
             const el = document.getElementById('t1-node-' + id);
             if (!el) return;
+            if (val && _nodeValidValues[id]) {
+                const validParts = val.split(',').map(s => s.trim()).filter(p => _nodeValidValues[id].includes(p));
+                val = validParts.join(', ');
+            }
             el.value = val;
             _syncNodeDisplay(id);
         });
@@ -775,6 +811,7 @@ function importPresetCode() {
         const isNew = decoded && typeof decoded === 'object' && 'name' in decoded && 'data' in decoded;
         const name = isNew ? decoded.name : ('匯入 ' + new Date().toLocaleDateString());
         const data = isNew ? decoded.data : decoded;
+        _reconcilePresetChips(data || {});
         userPresets.unshift({ name, created_at: new Date().toISOString(), data });
         userPresets = userPresets.slice(0, 20);
         localStorage.setItem('loamlab_presets', JSON.stringify(userPresets));

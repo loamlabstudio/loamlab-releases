@@ -1,36 +1,23 @@
-# SPRINT
+# Sprint Plan: 完善 Node 選項過濾與配方匯入機制
 
 ## CONTEXT_DIGEST
-- **目標**：修復 Dodo Payments Webhook 延遲或舊訂單重試時，低階方案可能覆寫高階方案（降級並扣除點數）的邊界漏洞。
-- **現狀**：已在 `lib/activate.js` 的 `processTopup` 實作「Plan Tier Protection」，透過 `PLAN_TIERS` 比對 `newTier` 與 `currentTier`。
-- **規則**：若進件方案等級較低，將略過更新 `subscription_plan`，並將 `apply_points_delta` 的 `p_set_monthly` 設為 null 防護點數，但保留寫入 transaction 以利對帳。
+目前已實作 Node 過濾機制，會將不再有效的舊選項從用戶快取中剔除。然而用戶希望：1. 官方預設更新時，若無用戶有效選項則自動跟隨新預設。2. 保留用戶既有的自訂 Node。3. 匯入他人分享的配方時，若含有未知自訂 Node，需自動在本地新建這些自訂 Node 而非剔除。
 
 ## TASKS
 
-1. **[MUST] Review Tier Protection Logic**
-   - 檢查 `loamlab_backend/lib/activate.js` 中的 `processTopup` 函式。
-   - 確認 `PLAN_TIERS` 防護機制是否正確處理了 `shouldUpdatePlan` 與 `isOverridingLowerTier` 邏輯。
-   - **影響檔案**：`loamlab_backend/lib/activate.js`
+1. [x] **優化配方匯入邏輯 (Import Preset)，自動繼承並新建自訂 Node**
+   - **優先級**: [MUST]
+   - **影響檔案**: `loamlab_plugin/ui/app.js`
+   - **描述**: 修改 `importPresetCode()` 及 `applyPreset()`。當解析別人分享的配方時，檢查其附帶的 `userChips` 或是節點字串。遇到不在官方選項且本地沒有的 Node 字串，必須自動將它寫入本地的 `userChips`，讓它成為合法的自訂選項，防止被剛上線的過濾機制當作「殘留舊選項」刪除。
 
-2. **[MUST] Test Point Calculation RPC Call**
-   - 確認在低階覆寫的情境下，傳入 `supabase.rpc('apply_points_delta')` 的參數 `p_set_monthly` 確實為 `null`，且不會異常拋錯。
-   - **影響檔案**：`loamlab_backend/lib/activate.js`
+2. [x] **確保無效選項過濾後能自動回退至最新官方預設 (Default)**
+   - **優先級**: [MUST]
+   - **影響檔案**: `loamlab_plugin/ui/app.js`
+   - **描述**: 在 `renderT1Nodes()` 中，再次檢驗舊快取字串被過濾掉無效選項後的回退邏輯。確保如果有效字串數量為零，系統能正確套用當前官方最新的 `data-chip-default="1"` 的選項，完全跟隨官方最新的預設設定。
 
-3. **[MUST] Git Commit & Deploy**
-   - 驗證無誤後，將變更 commit。
-   - 執行後端 Vercel 部署流程，使防護機制上線生效。
-   - **影響檔案**：`loamlab_backend/lib/activate.js`
-
-## RELEASE_GATE
-release_type: hotfix
-verified_diff:
-  - loamlab_backend/lib/activate.js
-  - loamlab_backend/api/user.js
-  - loamlab_plugin/ui/app.js
-sql_migration: false
-
-## EXECUTION_NOTES（Claude 補充）
-- Task 1/2 審查通過：Plan Tier Protection 邏輯正確，RPC `apply_points_delta` 對 `p_set_monthly=NULL` 有 `CASE WHEN` 保護，不會出錯。
-- 執行過程中額外發現並修復關聯漏洞：既有訂閱者升級/降級方案時，前端一律走「建立新 checkout」流程，從未呼叫 Dodo 原生 change-plan API，導致舊訂閱不會被取消，變成兩筆訂閱各自每月扣款（例：Starter 升 Pro 沒取消舊訂閱，變成 $7+$15/月）。已在 `user.js` checkout 端點補上：偵測到既有訂閱者切換方案時改呼叫 `POST /subscriptions/{id}/change-plan`（原地換方案 + proration），並同步調整 `app.js` 前端輪詢邏輯。webhook.js 端的 `subscription.plan_changed` 處理與 tier 比較邏輯本來就已存在，只是從未被觸發，這次補上觸發路徑後即可運作。
+3. [x] **驗證用戶本地自訂節點 (userChips) 的保留與顯示邏輯**
+   - **優先級**: [MUST]
+   - **影響檔案**: `loamlab_plugin/ui/app.js`
+   - **描述**: 確保每次 UI 重繪時，`_nodeValidValues` 陣列能正確將 `personalOpts` (用戶過去自己新增的 Chips) 包裝進合法清單中，讓他們自定義的保存永久保留不受新過濾機制干擾。
 
 status: DONE

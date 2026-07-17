@@ -3993,6 +3993,14 @@ window.openCheckout = async function (planKey, quantity = 1) {
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            // 既有訂閱者切換方案：後端已直接在原訂閱上完成升降級（change-plan API），
+            // 不會有 checkoutUrl 可跳轉，直接進入輪詢等待 webhook 入帳
+            if (data.planChanged) {
+                closePricingModal();
+                showUpdateToast('🔄 方案切換中，稍候將自動更新點數...');
+                startPaymentPolling();
+                return;
+            }
             if (!data.checkoutUrl) { showUpdateToast('⚠️ 無法建立結帳連結，請稍後再試'); return; }
             finalUrl = data.checkoutUrl;
         } catch (e) {
@@ -4018,9 +4026,14 @@ window.openCheckout = async function (planKey, quantity = 1) {
     // 關閉 Modal，顯示等待提示
     closePricingModal();
     showUpdateToast('🔄 瀏覽器已開啟付款頁面，完成付款後將自動入帳...');
+    startPaymentPolling();
+}
 
-    // 支付後輪詢：用 last_topup_at 時間戳偵測充值成功（解決同值無法偵測的問題）
+// 支付/方案切換後輪詢：偵測 last_topup_at 時間戳變化（一般儲值/升級有即時扣款）或
+// subscription_plan 變化（降級走 proration credit，可能不會產生 payment.succeeded）
+function startPaymentPolling() {
     const topupBefore = window.loamlabLastTopupAt;
+    const planBefore = window.loamlabSubscriptionPlan;
     const pointsBefore = parseInt((document.getElementById('point-balance') || document.createElement('div')).textContent) || 0;
     let pollCount = 0;
     const paymentPollTimer = setInterval(async () => {
@@ -4047,7 +4060,7 @@ window.openCheckout = async function (planKey, quantity = 1) {
                 headers: { 'X-User-Email': window.loamlabUserEmail }
             });
             const d = await r.json();
-            if (d.last_topup_at && d.last_topup_at !== topupBefore) {
+            if ((d.last_topup_at && d.last_topup_at !== topupBefore) || (d.subscription_plan || null) !== planBefore) {
                 clearInterval(paymentPollTimer);
                 window.loamlabSubscriptionPlan = d.subscription_plan || null;
                 window.loamlabLastTopupAt = d.last_topup_at;

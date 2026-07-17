@@ -122,14 +122,23 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
         }
     }
 
-    // points = 訂閱月額度（每月覆寫），lifetime_points = 單次購買的永久餘額（不隨訂閱續訂消失）。
-    // 訂閱只覆寫 points；單次購買只累加 lifetime_points——兩者互不重疊，避免雙重入帳。
-    // 改用 apply_points_delta 原子 RPC：同一個 email 若被 webhook 重送 + verify_payment 手動
-    // 觸發同時打到，FOR UPDATE 鎖列保證兩者依序疊加，不會互相蓋掉（原本的 race condition）。
+    // 方案防護：如果用戶目前已經是較高等級的方案，忽略低等級的訂閱覆寫
+    let shouldUpdatePlan = true;
+    const PLAN_TIERS = { starter: 1, pro: 2, studio: 3 };
+    if (planName && user && user.subscription_plan) {
+        const currentTier = PLAN_TIERS[user.subscription_plan] || 0;
+        const newTier = PLAN_TIERS[planName] || 0;
+        if (newTier < currentTier) {
+            shouldUpdatePlan = false;
+            console.log(`[🛡️防護] 忽略低階方案更新: ${customerEmail} (目前: ${user.subscription_plan}, 傳入: ${planName})`);
+        }
+    }
+
+    const isOverridingLowerTier = isSubscription && !shouldUpdatePlan;
     const lifetimeDelta = (isSubscription ? 0 : pointsToAdd) + bonusB;
     const { data: mainRpc, error: mainRpcErr } = await supabase.rpc('apply_points_delta', {
         p_email: customerEmail,
-        p_set_monthly: isSubscription ? pointsToAdd : null,
+        p_set_monthly: (isSubscription && !isOverridingLowerTier) ? pointsToAdd : null,
         p_add_lifetime: lifetimeDelta,
         p_add_referral_count: 0
     });
@@ -143,7 +152,7 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
         is_beta_tester: true,
         last_topup_at: new Date().toISOString(),
     };
-    if (planName) otherFields.subscription_plan = planName;
+    if (planName && shouldUpdatePlan) otherFields.subscription_plan = planName;
     await supabase.from('users').update(otherFields).eq('email', customerEmail);
 
     const PLAN_PRICES_CENTS = { starter: 700, pro: 1500, studio: 3500, topup: 490 };

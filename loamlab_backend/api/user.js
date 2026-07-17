@@ -49,6 +49,43 @@ export default async function handler(req, res) {
         const DODO_API_KEY = process.env.DODO_API_KEY;
         const DODO_DISCOUNT_CODE = process.env.DODO_DISCOUNT_CODE || 'LOAM_BETA_30';
 
+        // 既有訂閱者切換到「不同的訂閱方案」：改走 Dodo 原生 change-plan API（同一個 subscription_id
+        // 直接換 product_id + proration），而不是走下面的 /checkouts 建立第二筆獨立訂閱——否則舊訂閱
+        // 不會被取消，會變成兩筆訂閱各自每月扣款（例：Starter 沒取消又訂了 Pro，變成 $7+$15/月）
+        const targetKey = planKey.toUpperCase();
+        if (targetKey !== 'TOPUP' && email && DODO_API_KEY) {
+            try {
+                const sbUrl0 = process.env.SUPABASE_URL;
+                const sbKey0 = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+                if (sbUrl0 && sbKey0) {
+                    const sb0 = createClient(sbUrl0, sbKey0);
+                    const { data: existingUser } = await sb0.from('users')
+                        .select('dodo_subscription_id, subscription_plan').eq('email', email).maybeSingle();
+                    if (existingUser?.dodo_subscription_id && existingUser.subscription_plan &&
+                        existingUser.subscription_plan !== targetKey.toLowerCase()) {
+                        const dodoBase0 = DODO_API_KEY.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+                        const changeRes = await fetch(
+                            `${dodoBase0}/subscriptions/${existingUser.dodo_subscription_id}/change-plan`,
+                            {
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${DODO_API_KEY}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ product_id: productId, quantity: 1, proration_billing_mode: 'prorated_immediately', metadata: { planKey: targetKey, email } })
+                            }
+                        );
+                        if (changeRes.ok) {
+                            console.log(`[checkout] change-plan 成功（原地切換）: ${email} ${existingUser.subscription_plan} → ${targetKey.toLowerCase()}`);
+                            return res.json({ planChanged: true });
+                        }
+                        const errText = await changeRes.text().catch(() => '');
+                        console.error('[checkout] change-plan 失敗，fallback 走新訂閱 checkout:', changeRes.status, errText);
+                        // 失敗就 fallback 到下面正常 checkout 流程，總比擋住用戶付款好
+                    }
+                }
+            } catch (e) {
+                console.warn('[checkout] change-plan 檢查失敗（non-fatal，fallback 走新訂閱 checkout）:', e.message);
+            }
+        }
+
         // 歸因綁定 + KOL 折扣查詢（單次 DB 查詢合併）
         let kolDiscountCode = null;
         if (referralCode && email) {

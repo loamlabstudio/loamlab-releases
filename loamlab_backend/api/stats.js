@@ -361,6 +361,30 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, msg: 'Saved' });
     }
 
+    // --- 用戶自訂 Node (userChips) 雲端同步（需要 X-User-Email，不需要 ADMIN_KEY）---
+    if (action === 'get_user_chips' && req.method === 'GET') {
+        const ue = (await resolveUserEmail(req)).email;
+        if (!ue) return res.status(401).json({ code: -1, msg: 'Unauthorized' });
+        const { data, error } = await supabase.from('users')
+            .select('user_chips')
+            .eq('email', ue)
+            .single();
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0, user_chips: data?.user_chips || {} });
+    }
+
+    if (action === 'save_user_chips' && req.method === 'POST') {
+        const ue = (await resolveUserEmail(req)).email;
+        if (!ue) return res.status(401).json({ code: -1, msg: 'Unauthorized' });
+        const { user_chips } = req.body || {};
+        if (!user_chips || typeof user_chips !== 'object' || Array.isArray(user_chips)) {
+            return res.status(400).json({ code: -1, msg: 'user_chips must be object' });
+        }
+        const { error } = await supabase.from('users').update({ user_chips }).eq('email', ue);
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0, msg: 'Saved' });
+    }
+
     // --- Lead Capture（公開端點，無需 ADMIN_KEY）---
     if (action === 'capture_email' && req.method === 'POST') {
         const { email, lang } = req.body || {};

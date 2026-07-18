@@ -491,3 +491,10 @@ $$;
 
 -- Dodo 對賬用：儲存 Dodo 的 customer_id（非 email），供未來查詢 balance/回報 usage 用
 ALTER TABLE users ADD COLUMN IF NOT EXISTS dodo_customer_id TEXT DEFAULT NULL;
+
+-- ==============================================================================
+-- Phase 35: 自訂 Node (userChips) 綁定帳號
+-- 背景：userChips 原本只存前端 localStorage，SketchUp 內嵌瀏覽器核心重啟時常清空
+-- 快取，導致自訂節點遺失並被過濾機制一併清除已選取值。改存資料庫與帳號綁定。
+-- ==============================================================================
+ALTER TABLE users ADD COLUMN IF NOT EXISTS user_chips JSONB DEFAULT '{}'::jsonb;

@@ -657,6 +657,7 @@ function saveUserChip(nodeId, value) {
     if (userChips[nodeId].find(c => c.value === val)) return; // 避免重複
     userChips[nodeId].push({ label: val, value: val });
     localStorage.setItem('loamlab_user_chips', JSON.stringify(userChips));
+    _pushUserChipsToServer();
     // 清空自訂輸入框
     const customInput = document.getElementById('t1-custom-input-' + nodeId);
     if (customInput) customInput.value = '';
@@ -668,6 +669,7 @@ function removeUserChip(nodeId, value) {
     userChips[nodeId] = userChips[nodeId].filter(c => c.value !== value);
     if (!userChips[nodeId].length) delete userChips[nodeId];
     localStorage.setItem('loamlab_user_chips', JSON.stringify(userChips));
+    _pushUserChipsToServer();
 
     // 若這個自訂 chip 目前正被選用，一併清掉選取值，避免刪除後留下永久存在的
     // 孤兒選取值（該值再也對應不到任何 chip，下次開插件也無法透過快選移除）。
@@ -782,6 +784,46 @@ async function syncPresetsFromServer() {
             } else if (userPresets.length > 0) {
                 _pushPresetsToServer();
             }
+        }
+    } catch(e) {}
+}
+
+async function _pushUserChipsToServer() {
+    if (!window.loamlabUserEmail) return;
+    try {
+        await fetch(`${API_BASE}/api/stats?action=save_user_chips`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-User-Email': window.loamlabUserEmail },
+            body: JSON.stringify({ user_chips: userChips })
+        });
+    } catch(e) {}
+}
+
+async function syncUserChipsFromServer() {
+    if (!window.loamlabUserEmail) return;
+    try {
+        const r = await fetch(`${API_BASE}/api/stats?action=get_user_chips`, {
+            headers: { 'X-User-Email': window.loamlabUserEmail }
+        });
+        const d = await r.json();
+        if (d.code === 0 && d.user_chips && typeof d.user_chips === 'object') {
+            // 雙向合併：雲端與本地的自訂 chip 互補，避免多裝置切換時互相蓋掉
+            let changed = false;
+            Object.keys(d.user_chips).forEach(nid => {
+                userChips[nid] = userChips[nid] || [];
+                (d.user_chips[nid] || []).forEach(c => {
+                    if (!userChips[nid].find(x => x.value === c.value)) {
+                        userChips[nid].push(c);
+                        changed = true;
+                    }
+                });
+            });
+            if (changed) {
+                localStorage.setItem('loamlab_user_chips', JSON.stringify(userChips));
+                renderT1Nodes();
+            }
+            // 合併後推回雲端，確保雲端也拿到本地獨有（例如離線新增）的自訂 chip
+            _pushUserChipsToServer();
         }
     } catch(e) {}
 }
@@ -1432,11 +1474,23 @@ window.receiveFromRuby = function (data) {
         window.setLanguage(langStr);
         if (data.save_path) window.setNormalSaveDir(data.save_path);
 
+        if (data.dev_post_template_v2) {
+            try { localStorage.setItem('loamlab_dev_post_template_v2', data.dev_post_template_v2); } catch(e) {}
+        }
+        if (data.last_resolution) {
+            const resRadio = document.querySelector(`input[name="resolution"][value="${data.last_resolution}"]`);
+            if (resRadio) {
+                resRadio.checked = true;
+                if (window.updateCostPreview) window.updateCostPreview();
+            }
+        }
+
         if (data.user_email && data.user_email !== "") {
             window.loamlabUserEmail = data.user_email;
             window.updateLoginUI(data.user_email, "...");
             window.fetchUserPoints(data.user_email);
             syncPresetsFromServer();
+            syncUserChipsFromServer();
         } else {
             setTimeout(() => { if (!window.loamlabUserEmail) openLoginModal(); }, 1000);
         }
@@ -2056,6 +2110,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const plan = window.loamlabSubscriptionPlan;
             const canUse4k = plan === 'pro' || plan === 'studio';
             hint.classList.toggle('hidden', !(is4k && !canUse4k));
+            
+            if (window.sketchup) {
+                try { sketchup.save_user_prefs({ resolution: radio.value }); } catch(e) {}
+            }
         });
     });
     // 初始化時立即顯示預設成本
@@ -2987,15 +3045,22 @@ window.togglePostTemplateEdit = function() {
 };
 
 // DEV 專用：儲存版型
-window.savePostTemplate = function() {
+window.savePostTemplate = function(silent = false) {
     const layout = document.getElementById('dev-template-textarea').value;
     const bullet = document.getElementById('dev-template-bullet').value;
     
     const config = { layout, bullet };
-    localStorage.setItem('loamlab_dev_post_template_v2', JSON.stringify(config));
+    const jsonStr = JSON.stringify(config);
+    localStorage.setItem('loamlab_dev_post_template_v2', jsonStr);
     
-    if (typeof showUpdateToast === 'function') showUpdateToast('✅ 版型已儲存，請點擊刷新預覽');
-    if (window.previewAutoGeneratePost) window.previewAutoGeneratePost();
+    if (window.sketchup) {
+        try { sketchup.save_user_prefs({ dev_post_template_v2: jsonStr }); } catch(e) {}
+    }
+    
+    if (!silent) {
+        if (typeof showUpdateToast === 'function') showUpdateToast('✅ 版型已儲存，請點擊刷新預覽');
+        if (window.previewAutoGeneratePost) window.previewAutoGeneratePost();
+    }
 };
 
 // DEV 專用：產生預覽
@@ -3161,8 +3226,8 @@ window.openShareModal = function() {
 
     const textContent = document.getElementById('share-text-content');
 
-    // 自動帶入上次填入的 project / designer
-    ['share-input-project', 'share-input-designer'].forEach(id => {
+    // 自動帶入上次填入的 project / designer / content
+    ['share-input-project', 'share-input-designer', 'share-input-content'].forEach(id => {
         const el = document.getElementById(id);
         if (el && !el.value) el.value = localStorage.getItem(`loamlab_${id}`) || '';
     });
@@ -3178,7 +3243,7 @@ window.openShareModal = function() {
 
     // 輸入框變更時更新文字預覽
     window._updateQRCode = function() {
-        ['share-input-project', 'share-input-designer'].forEach(id => {
+        ['share-input-project', 'share-input-designer', 'share-input-content'].forEach(id => {
             const el = document.getElementById(id);
             if (el) localStorage.setItem(`loamlab_${id}`, el.value);
         });
@@ -3227,6 +3292,28 @@ window.interceptDownloadIfLowPoints = function(saveCallback) {
 
 
 document.addEventListener('DOMContentLoaded', () => {
+    // 儲存 textarea 的高度 (使用者拖拉 resize-y 後，下次打開保持)
+    ['dev-template-textarea', 'dev-template-preview'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            const savedHeight = localStorage.getItem(`loamlab_height_${id}`);
+            if (savedHeight) el.style.height = savedHeight;
+            el.addEventListener('mouseup', () => {
+                if (el.style.height) localStorage.setItem(`loamlab_height_${id}`, el.style.height);
+            });
+        }
+    });
+
+    // Template 編輯器自動儲存
+    ['dev-template-textarea', 'dev-template-bullet'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('input', () => {
+                if (window.savePostTemplate) window.savePostTemplate(true);
+            });
+        }
+    });
+
     // Share Buttons Logic
     const btnShowShare = document.getElementById('btn-show-share');
     if (btnShowShare) {
@@ -4228,6 +4315,7 @@ function startOAuthFlow() {
                     if (window.sketchup) sketchup.save_email(data.email);
                     window.fetchUserPoints(data.email);
                     syncPresetsFromServer();
+                    syncUserChipsFromServer();
                 } catch(e) { console.error('[auth] post-login error:', e); }
                 closeLoginModal();
             } else if (data.status === 'device_limit') {
@@ -4363,6 +4451,7 @@ function startOAuthFlow() {
                 }
                 window.fetchUserPoints(data.email);
                 syncPresetsFromServer();
+                syncUserChipsFromServer();
                 closeLoginModal();
                 
                 // 恢復按鈕狀態以備下次使用

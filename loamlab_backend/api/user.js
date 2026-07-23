@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { DODO_PRODUCTS, INITIAL_POINTS } from '../config.js';
-import { processTopup, makeSupabase, reconcilePaymentsForEmail } from '../lib/activate.js';
+import { makeSupabase, reconcilePaymentsForEmail } from '../lib/activate.js';
 import { isValidAdminKey } from '../lib/safeCompare.js';
 import { getClientIp } from '../lib/net.js';
 import { resolveUserEmail } from '../lib/verifyIdentity.js';
@@ -449,45 +449,27 @@ export default async function handler(req, res) {
 
             // 靜默自動修復：用戶有帳、無訂閱 → 主動查 Dodo 補發
             // 觸發條件：從未入帳（新用戶）OR 距上次入帳 > 29 天（月訂閱週期已過，renewal webhook 可能失敗）
+            // 【2026-07 洗點防禦補漏】改呼叫 reconcilePaymentsForEmail（唯一真理來源：Dodo payments 紀錄
+            // + fetchDodoSubscriptionInfo 真實金額比對），不再自己查 /subscriptions?status=active 直接發點——
+            // 舊寫法跟 verify_payment 當初移除的版本是同一種反模式：(1) 完全沒有金額驗證，(2) 用
+            // subscription_id 合成 order_id（跟 payment_id 是不同冪等鍵，過去已造成一次雙重入帳，
+            // 見上方 verify_payment 註解）。統一收斂到同一套已修好的邏輯，不維護兩份補發機制。
             const _daysSinceLast = data?.last_topup_at
                 ? (Date.now() - new Date(data.last_topup_at).getTime()) / (24 * 3600 * 1000)
                 : Infinity;
             if (data && !data.subscription_plan && (_daysSinceLast > 29 || !data.last_topup_at) && process.env.DODO_API_KEY) {
                 try {
-                    const dodoBase = process.env.DODO_API_KEY.startsWith('test_')
-                        ? 'https://test.dodopayments.com'
-                        : 'https://live.dodopayments.com';
-                    const subRes = await Promise.race([
-                        fetch(`${dodoBase}/subscriptions?customer_email=${encodeURIComponent(email)}&status=active&limit=3`,
-                            { headers: { Authorization: `Bearer ${process.env.DODO_API_KEY}` } }),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
-                    ]);
-                    if (subRes.ok) {
-                        const subs = (await subRes.json()).items || [];
-                        for (const sub of subs) {
-                            const subEmail = sub.customer?.email || sub.customer_email;
-                            if (subEmail !== email) continue;
-                            // Dodo API 忽略 status 查詢參數；必須手動過濾，防止重新激活已取消的訂閱
-                            // （官方 status 枚舉：pending/active/on_hold/cancelled/failed/expired，無 trialing）
-                            if (sub.status !== 'active') continue;
-                            const productId = sub.product_id || sub.plan_id;
-                            if (!productId) continue;
-                            const orderId = `${sub.subscription_id}_auto`;
-                            const { data: ex } = await supabase.from('transactions').select('id').eq('order_id', `DODO_${orderId}`).maybeSingle();
-                            if (!ex) {
-                                await processTopup(supabase, email, productId, orderId, 'DODO', null, sub.subscription_id);
-                                const { data: refreshed } = await supabase
-                                    .from('users')
-                                    .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending, subscription_period_end')
-                                    .eq('email', email).single();
-                                if (refreshed) data = refreshed;
-                                // 標記此 email 的 webhook 錯誤為已解決
-                                supabase.from('webhook_errors').update({ resolved: true })
-                                    .eq('customer_email', email).eq('resolved', false)
-                                    .catch(() => {});
-                                console.log(`[🔄自動修復] ${email} 已自動補發訂閱`);
-                            }
-                        }
+                    const { activated } = await reconcilePaymentsForEmail(supabase, email, process.env.DODO_API_KEY);
+                    if (activated) {
+                        const { data: refreshed } = await supabase
+                            .from('users')
+                            .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending, subscription_period_end')
+                            .eq('email', email).single();
+                        if (refreshed) data = refreshed;
+                        supabase.from('webhook_errors').update({ resolved: true })
+                            .eq('customer_email', email).eq('resolved', false)
+                            .catch(() => {});
+                        console.log(`[🔄自動修復] ${email} 已自動補發訂閱`);
                     }
                 } catch (e) {
                     console.warn('[auto-repair] non-fatal:', e.message);

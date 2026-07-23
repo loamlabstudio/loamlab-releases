@@ -35,3 +35,20 @@ status: DONE
 - **[4]** `ui/app.js` + `i18n.js`：移除 `planChanged` 分支；既有訂閱者升級顯示新文案「升級將立即以新方案重新計費並發放全額點數，舊方案將自動取消」（新 i18n key `upgrade_full_rebill_note`，6 語系齊全）。
 - 驗證：4 支後端/前端檔 `node --check` 通過（app.js/i18n.js 因 bash mount 對超大檔截斷無法在沙箱驗證，已用 Read 工具確認結構完整＋localized key 齊全；ESLint 於 Windows build_rbz.ps1 實際把關）。
 - 未執行 build/publish（非「發佈更新」指令）。
+
+# COMPLETION_NOTES_2 (2026-07-23, Claude — 嚴格驗證補漏輪)
+- **發現並修補第三條未受金額驗證的發點路徑**：`user.js` `GET /api/user` 內「靜默自動修復」區塊（觸發條件：用戶無 `subscription_plan` 且 >29 天未入帳/從未入帳），原本自己查 `/subscriptions?status=active` 後直接呼叫 `processTopup`，完全沒有金額驗證，且用 `{subscription_id}_auto` 合成 order_id——跟 `verify_payment` endpoint 註解裡記載「曾造成雙重入帳、已移除」的舊反模式是同一種寫法。已改為呼叫 `reconcilePaymentsForEmail()`（與 `verify_payment`、`stats.js` cron `dodo_reconcile` 共用同一套已含金額驗證的邏輯），收斂為單一補發機制。`processTopup` 在 `user.js` 已無直接呼叫，一併移除未用 import。
+- **WebFetch 查證 Dodo 官方文件**確認：`GET /subscriptions/{id}` 回傳 `recurring_pre_tax_amount`（該訂閱真實鎖定金額，已含折扣）；`payment.succeeded` 的 `total_amount` 為稅後實付總額（非 nullable）；`product_cart` 在訂閱續訂事件上確認可為 null（故不可拿「product_cart 是否為空」當唯一防禦依據，需維持金額比對機制）。
+- **FEATURE_FLAGS.md 核對**：無 `wip` BLOCKED_FILES 與本次 diff（`user.js`/`webhook.js`/`activate.js`/`app.js`/`i18n.js`）重疊，無跨分支風險（本次全程在 `main` 分支，未 merge `dev`）。
+- 5 支檔案 `node --check` 全數通過。
+- **殘留已知限制（非本輪範圍）**：LS webhook 路徑仍無金額驗證，已與用戶確認 LS 現無實際流量（`CURRENT_PAYMENT_PLATFORM='DODO'`），留待 LS 停用/移除時處理。
+
+## RELEASE_GATE
+release_type: feature
+verified_diff:
+  - loamlab_backend/api/user.js
+  - loamlab_backend/api/webhook.js
+  - loamlab_backend/lib/activate.js
+  - loamlab_plugin/ui/app.js
+  - loamlab_plugin/ui/i18n.js
+sql_migration: false

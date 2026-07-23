@@ -4552,7 +4552,65 @@ function openReferralModal() {
             referralModal.classList.remove('opacity-0');
             if (referralModalContent) referralModalContent.classList.remove('scale-95');
         }, 10);
+        loadReferralProgress();
     }
+}
+
+// 邀請進度可視化：每位好友顯示 joined → rendered(+20) → paid(+300) 三階段進度，
+// 跟上次看到的狀態比對，剛升級的好友加發光動畫製造「驚喜」感。
+function loadReferralProgress() {
+    const section = document.getElementById('referral-progress-section');
+    const list = document.getElementById('referral-progress-list');
+    if (!section || !list || !window.loamlabUserEmail) return;
+
+    fetch(`${API_BASE}/api/user?action=referral_friends&email=${encodeURIComponent(window.loamlabUserEmail)}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data || data.code !== 0 || !data.total_invited) {
+                section.classList.add('hidden');
+                return;
+            }
+            section.classList.remove('hidden');
+
+            let lastStatuses = {};
+            try { lastStatuses = JSON.parse(localStorage.getItem('loamlab_referral_friend_statuses') || '{}'); } catch (_) {}
+            const newStatuses = {};
+
+            const STAGE_ORDER = { joined: 0, rendered: 1, paid: 2 };
+            const STAGE_LABELS = {
+                joined: t('referral_stage_joined') || '已加入',
+                rendered: t('referral_stage_rendered') || '已算圖 +20',
+                paid: t('referral_stage_paid') || '已升級 +300'
+            };
+
+            list.innerHTML = data.friends.map((f) => {
+                newStatuses[f.email_masked] = f.status;
+                const prevStage = lastStatuses[f.email_masked];
+                const isLevelUp = prevStage && STAGE_ORDER[f.status] > STAGE_ORDER[prevStage];
+                const stageIdx = STAGE_ORDER[f.status] ?? 0;
+                const dots = ['joined', 'rendered', 'paid'].map((stage) => {
+                    const filled = STAGE_ORDER[stage] <= stageIdx;
+                    const color = filled ? (stage === 'paid' ? 'bg-emerald-400' : 'bg-amber-400') : 'bg-white/10';
+                    return `<div class="flex-1 h-1.5 rounded-full ${color} transition-all duration-500"></div>`;
+                }).join('<div class="w-1"></div>');
+                const glow = isLevelUp ? 'ring-2 ring-amber-400/70 animate-pulse' : '';
+                const statusColor = f.status === 'paid' ? 'text-emerald-400' : f.status === 'rendered' ? 'text-amber-400' : 'text-white/30';
+                return `
+                <div class="bg-black/30 rounded-lg p-3 border border-white/5 ${glow}">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-amber-400/30 to-purple-500/30 flex items-center justify-center text-[10px] font-bold text-white/80">${(f.email_masked[0] || '?').toUpperCase()}</div>
+                            <span class="text-[11px] text-white/60 font-mono">${f.email_masked}</span>
+                        </div>
+                        <span class="text-[10px] font-semibold ${statusColor}">${STAGE_LABELS[f.status]}${isLevelUp ? ' 🎉' : ''}</span>
+                    </div>
+                    <div class="flex items-center gap-1">${dots}</div>
+                </div>`;
+            }).join('');
+
+            try { localStorage.setItem('loamlab_referral_friend_statuses', JSON.stringify(newStatuses)); } catch (_) {}
+        })
+        .catch(() => { section.classList.add('hidden'); });
 }
 
 function closeReferralModal() {

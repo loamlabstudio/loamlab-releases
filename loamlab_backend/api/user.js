@@ -204,6 +204,51 @@ export default async function handler(req, res) {
     let email = tokenEmail || req.query.email || req.headers['x-user-email'] || req.body?.email;
     if (email) email = email.toLowerCase().trim();
 
+    // 邀請進度清單：A 查自己邀請了誰、每人進度到哪（joined → rendered → paid）
+    // 供邀請面板顯示，不回傳好友完整 email（隱私考量，只回傳遮罩過的版本）
+    if (req.method === 'GET' && req.query.action === 'referral_friends') {
+        if (!email) return res.status(400).json({ error: 'Missing email' });
+        try {
+            const { data: friends } = await supabase.from('users')
+                .select('email, created_at')
+                .eq('referred_by', email)
+                .order('created_at', { ascending: false });
+
+            if (!friends || friends.length === 0) {
+                return res.status(200).json({ code: 0, total_invited: 0, friends: [] });
+            }
+
+            const friendEmails = friends.map(f => f.email);
+            const { data: txs } = await supabase.from('transactions')
+                .select('user_email, transaction_type')
+                .in('user_email', friendEmails)
+                .in('transaction_type', ['REFERRAL_FREE_B', 'REFERRAL_PAID_B']);
+
+            const statusByEmail = {};
+            (txs || []).forEach(tx => {
+                if (tx.transaction_type === 'REFERRAL_PAID_B') statusByEmail[tx.user_email] = 'paid';
+                else if (tx.transaction_type === 'REFERRAL_FREE_B' && statusByEmail[tx.user_email] !== 'paid') statusByEmail[tx.user_email] = 'rendered';
+            });
+
+            const maskEmail = (e) => {
+                const [local, domain] = e.split('@');
+                if (!domain) return '****';
+                const visible = local.slice(0, 2);
+                return `${visible}${'*'.repeat(Math.max(1, local.length - 2))}@${domain}`;
+            };
+
+            const result = friends.map(f => ({
+                email_masked: maskEmail(f.email),
+                status: statusByEmail[f.email] || 'joined',
+                joined_at: f.created_at
+            }));
+
+            return res.status(200).json({ code: 0, total_invited: result.length, friends: result });
+        } catch (e) {
+            return res.status(500).json({ code: -1, msg: e.message });
+        }
+    }
+
     // KOL dashboard (email-only, no IP auth — KOL checks own stats)
     if (req.method === 'GET' && req.query.action === 'kol_dashboard') {
         if (!email) return res.status(400).json({ error: 'Missing email' });

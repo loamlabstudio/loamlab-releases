@@ -1071,6 +1071,12 @@
                 </div>
             </div>
 
+            <!-- 邀請進度可視化（所有登入用戶可見，只要邀請過至少 1 人）-->
+            <div id="referral-progress-section" class="hidden bg-[#18181d] border border-white/10 rounded-xl p-5 mb-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                <p class="text-white/60 text-[11px] uppercase font-semibold tracking-wider mb-3" data-i18n="referral_progress_title">🚀 你的邀請旅程</p>
+                <div id="referral-progress-list" class="space-y-2.5 max-h-[220px] overflow-y-auto custom-scrollbar pr-1"></div>
+            </div>
+
             <!-- KOL 大使專屬區塊（is_kol=true 才顯示）-->
             <div id="kol-ambassador-section" class="hidden">
                 <!-- KOL 大使進度面板 -->

@@ -298,11 +298,14 @@ async function _handleRender(req, res) {
                 await supa.from('transactions').insert([{ user_email: userEmail, amount: -5, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
                 await supa.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: 5 }]);
             } catch(e) {}
+            let refReward360 = { granted: false, amount: 0 };
+            try { refReward360 = await grantFreeReferralReward(supa, userEmail, getClientIp(req)); } catch (e) {}
             return res.status(200).json({
                 code: 0, share_id: shareId, upload_urls: uploadUrls,
                 meta_url: metaUrlResult.data.signedUrl,
                 scene_names: sceneNames.slice(0, nScenes),
-                share_url: shareUrl, points_remaining: deductResult.balance
+                share_url: shareUrl, points_remaining: deductResult.balance,
+                referral_bonus: refReward360?.granted ? refReward360.amount : 0
             });
         }
 
@@ -344,11 +347,14 @@ async function _handleRender(req, res) {
                 await supa.from('transactions').insert([{ user_email: userEmail, amount: -COST_360, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
                 await supa.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: COST_360 }]);
             } catch(e) {}
+            let refRewardS360 = { granted: false, amount: 0 };
+            try { refRewardS360 = await grantFreeReferralReward(supa, userEmail, getClientIp(req)); } catch (e) {}
             return res.status(200).json({
                 code: 0, share_id: shareId,
                 upload_url: urlData.signedUrl,
                 share_url: shareUrl,
-                points_remaining: deductS.balance
+                points_remaining: deductS.balance,
+                referral_bonus: refRewardS360?.granted ? refRewardS360.amount : 0
             });
         }
 

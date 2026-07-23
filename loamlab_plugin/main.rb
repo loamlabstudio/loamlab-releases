@@ -1414,6 +1414,7 @@ module LoamLab
       upload_url       = init_data['upload_url']
       share_url        = init_data['share_url']
       points_remaining = init_data['points_remaining']
+      referral_bonus   = init_data['referral_bonus']
 
       # 3. 單次 PUT 上傳整個 HTML（1 個請求，比原本 18 個快得多）
       begin
@@ -1435,7 +1436,8 @@ module LoamLab
       end
 
       result_json = JSON.generate({ status: 'render_success', url: share_url,
-                                    points_remaining: points_remaining, scene_name: '360°全景分享' })
+                                    points_remaining: points_remaining, scene_name: '360°全景分享',
+                                    referral_bonus: referral_bonus })
       begin; dialog.execute_script("window.receiveFromRuby(#{result_json})"); rescue; end
     rescue => e
       begin

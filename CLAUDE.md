@@ -185,8 +185,10 @@ sql_migration: false          # true = supabase_setup.sql 有新 Phase，需人�
 ### FEATURE_FLAGS.md 維護規則（見根目錄 FEATURE_FLAGS.md）
 
 - 新增 WIP 代碼時：同一 commit 更新 FEATURE_FLAGS.md（status=`wip`，填 BLOCKED_FILES）
-- 功能完成：status → `ready`，清空 BLOCKED_FILES
+- **獨立新檔案的 WIP 一律放 `loamlab_plugin/_wip/<feature_name>/`**——`build_rbz.ps1` 對含 `_wip` 的路徑結構性硬排除（direct/EW 皆排除，`-Force` 也無法繞過），比 BLOCKED_FILES 人工記錄更可靠
+- 功能完成：從 `_wip/` 移出到正式路徑，status → `ready`，清空 BLOCKED_FILES
 - 上線後：status → `released`，Notes 記錄版本號
+- 改共用核心檔案（app.js/render.js/user.js）的 WIP，`_wip/` 幫不上忙，仍用 `.dev-only-tool` class 隔離
 
 ---
 
@@ -198,7 +200,7 @@ Commit message 格式：`feat(ui): 說明 [T07][DONE]`（`[T\d+][DONE]` 觸發 `
 |---|---|
 | 支付 | `loamlab_backend/api/webhook.js`, `loamlab_plugin/ui/app.js`（LS_VARIANTS 部分）|
 | 渲染後端 | `loamlab_backend/api/render.js` |
-| 用戶/點數 | `loamlab_backend/api/user.js`, `loamlab_backend/api/referral.js` |
+| 用戶/點數 | `loamlab_backend/api/user.js`（含邀請碼綁定與獎勵發放，經由 `loamlab_backend/lib/activate.js`）|
 | Plugin UI | `loamlab_plugin/ui/app.js`, `loamlab_plugin/ui/index.html`, `loamlab_plugin/ui/i18n.js` |
 | Plugin 核心 | `loamlab_plugin/main.rb`, `loamlab_plugin/coze_api.rb` |
 | 版本/更新 | `loamlab_plugin/updater.rb`, `loamlab_backend/api/version.js` |
@@ -283,3 +285,9 @@ Commit message 格式：`feat(ui): 說明 [T07][DONE]`（`[T\d+][DONE]` 觸發 `
 | `GOOGLE_CLOUD_PROJECT` | Vertex AI Inpainting（未實裝）| GCP 控制台取得 |
 | `RESEND_API_KEY` | `stats.js` (`notify_users` action) | Resend 發信 API key；缺少時 notify_users 回傳 503 |
 | `RESEND_FROM_EMAIL` | `stats.js` (`notify_users` action) | 發件人地址，預設 `LoamLab <noreply@loamlab.studio>` |
+
+**`loamlab_website` 專案自己的 Vercel 環境變數（非 `loamlab_backend/.env.local`）：**
+
+| Variable | Used by | Notes |
+|---|---|---|
+| `NEXT_PUBLIC_AFFONSO_PROGRAM_ID` | `loamlab_website/src/app/layout.tsx` | Affonso 聯盟行銷 pixel 的 Program ID；缺值時 pixel 不注入，即靜默停用該功能 |

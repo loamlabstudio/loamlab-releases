@@ -20,11 +20,11 @@
 ---
 
 ## 2. 定價與套餐結構 (Pricing & Subscription Plans)
-這些套餐應於 LemonSqueezy 或 Stripe 後台建立對應商品，並將 Webhook 對接至 Vercel，用於使用者付款後自動增加庫存。
+這些套餐應於 Dodo Payments 後台建立對應商品，並將 Webhook 對接至 Vercel，用於使用者付款後自動增加庫存。
 
 ### Beta 折扣碼
 - **代碼**：`LOAM_BETA_30`（7折，30% off）
-- **使用場景**：結帳時自動帶入 LemonSqueezy URL，透過 `?checkout[discount_code]=LOAM_BETA_30` 預填
+- **使用場景**：結帳時自動帶入 Dodo Payments URL 參數預填
 - **Beta 用戶身份**：公測期付費用戶標記為 Beta Tester，享有首年或永久折扣承諾
 
 ### 單次購買包 (Top-up) - [Beta 7折優惠]
@@ -69,39 +69,28 @@ create table users (
 ---
 
 ## 4. Webhook 流程預定 (Phase 10 後續)
-1. 用戶在 SketchUp 點擊購買/訂閱，跳轉至 LemonSqueezy 或 Stripe 帶有其 `email` 的專屬結帳網址。
+1. 用戶在 SketchUp 點擊購買/訂閱，跳轉至 Dodo Payments 帶有其 `email` 的專屬結帳網址。
 2. 結帳成功，支付平台向您的 Vercel `/api/webhook` 發送 POST 請求。
 3. Vercel 內的代碼解析 Payload 得到使用者買了哪個方案，將對應的點數 `UPDATE users SET points = points + N WHERE email = X`。
 4. 使用者在 SketchUp 重整即可獲得點數並開始出圖。
 
 ---
 
-## 5. 邀請碼裂變雙贏系統 (Refer & Earn B+100 / A+300) - Phase 17
-為在獲取新用戶與保護利潤間取得平衡，我們實施「防羊毛黨」的階梯式動態獎勵：
+## 5. 邀請碼裂變系統 (Refer & Earn B+100 / A+300)
+只有一層獎勵，**綁定當下不發任何點數**，只在被邀請人 (B) 首次付費（Top-up 或訂閱）成功時，一次性觸發：
+- B 獲得 **+100 pts**（固定，`loamlab_backend/config.js` `PRICING_CONFIG.referral.paid_reward_b`）
+- 邀請人 A 獲得 **+300 pts**（固定，`paid_reward_a`）
 
-### A. 獎勵結構
-1. **免費行為 (算圖成功即送小甜頭)**：被邀請人 (B) 完成首次成功算圖時，給予雙方些微鼓勵。
-   - B 獲得 **+50 pts** 
-   - 邀請人 A 獲得 **+50 pts**
-2. **付費行為 (首次購課解鎖大獎勵)**：一旦被邀請人 (B) 首次購買任意方案 (Top-up或訂閱)，給予高額獎金，直接與營收掛鉤。
-   - B 獲得該購買方案點數的 **20%** 作為首購加碼 (例如 Starter 送 60 點)。
-   - 邀請人 A 獲得該購買方案點數的 **50%** 作為分潤 (例如 Starter 送 150 點)。
+> 2026-07-23 補充：舊版曾規劃「B 免費算圖成功即送 A/B 各 +50 pts」的免費層與「按購買金額 20%/50% 抽成」的百分比付費層，兩者皆為早期草稿、從未實作，已從文件移除避免與實際行為混淆。目前上線的就是本節描述的單層固定金額設計。
 
-### B. 運作體驗 (UX)
-1. **老用戶分享**：在 SketchUp 插件的點數面板旁，點擊「🎟️ Invite & Earn」。系統顯示專屬邀請碼 (如 `LOAM-1A2B`)。老用戶將代碼貼到社群分享。
-2. **新用戶綁定**：新用戶下載插件並登入後，在相同面板輸入老用戶的邀請碼，系統綁定關聯 (防呆機制：無法互相綁定、無法自己填自己)。
-3. **無感觸發 (Zero-Friction)**：新用戶完成上述目標操作時，背景無聲派發點數，並更新對應的 `rewarded` 標記防重複。
+### A. 運作體驗 (UX)
+1. **老用戶分享**：插件點數面板點擊「Invite & Earn」，顯示專屬邀請碼。
+2. **新用戶綁定**：新用戶在同一面板輸入邀請碼，`POST /api/user`（`{email, code}`）驗證後寫入 `referred_by`（防呆：不可互相綁定、不可填自己、每人只能綁定一次）。
+3. **付費觸發發放**：B 首次付費成功時，`loamlab_backend/lib/activate.js` 的 `processTopup` 檢查 `referred_by` 且尚未發過（以 `transactions` 表的 `REFERRAL_PAID_B` 記錄冪等判斷），一次性發放上述點數。
 
-### B. 資料庫擴充 (Supabase Schema V2)
-在原本的 `users` 結構上，我們將利用 SQL 追加三個輕量級欄位：
+### B. 資料庫欄位
 ```sql
-ALTER TABLE users ADD COLUMN referral_code text UNIQUE; -- 用戶自己的邀請碼 (登入時自動生成)
-ALTER TABLE users ADD COLUMN referred_by text;          -- 填入的老用戶邀請碼 (綁定對象)
-ALTER TABLE users ADD COLUMN referral_rewarded boolean DEFAULT false; -- 是否已發放過首購獎勵
+ALTER TABLE users ADD COLUMN referral_code text UNIQUE; -- 用戶自己的邀請碼（登入時自動生成）
+ALTER TABLE users ADD COLUMN referred_by text;          -- 填入的老用戶邀請碼（綁定對象）
 ```
-
-### C. 實作架構 (Vercel + HTMLDialog)
-- **API `GET /api/auth/poll`**: 輪詢時，若用戶沒有 `referral_code`，後端順手幫他生成一組 6 碼英數並存入 DB，回傳給前端顯示。
-- **API `POST /api/referral`**: 專門接收新用戶填寫的代碼，負責驗證代碼是否有效、是否是自己，驗證通過則更新 `referred_by`。
-- **UI 面板**: 使用 Tailwind 實作精美的卡片，顯示 `Your Code: XXX [Copy]` 以及輸入框 `Enter Inviter's Code`。
-- **render.js 觸發**：首次算圖成功後，若 `referred_by` 已設定且 `referral_rewarded == false`，執行 B `lifetime_points += 100`、A `lifetime_points += 300`，並將狀態改為 `true`。
+> `referral_rewarded boolean` 欄位是舊設計殘留，目前程式碼未使用（改用 `transactions` 表冪等判斷），保留欄位但不維護。

@@ -4587,7 +4587,7 @@ function loadReferralProgress() {
                 newStatuses[f.email_masked] = f.status;
                 const prevStage = lastStatuses[f.email_masked];
                 const isLevelUp = prevStage && STAGE_ORDER[f.status] > STAGE_ORDER[prevStage];
-                const stageIdx = STAGE_ORDER[f.status] ?? 0;
+                const stageIdx = (STAGE_ORDER[f.status] !== undefined) ? STAGE_ORDER[f.status] : 0;
                 const dots = ['joined', 'rendered', 'paid'].map((stage) => {
                     const filled = STAGE_ORDER[stage] <= stageIdx;
                     const color = filled ? (stage === 'paid' ? 'bg-emerald-400' : 'bg-amber-400') : 'bg-white/10';

@@ -4574,13 +4574,39 @@ if (referralModal) referralModal.addEventListener('click', (e) => {
     if (e.target === referralModal) closeReferralModal();
 });
 
+// SU 2022 內建瀏覽器（老 CEF）不支援 navigator.clipboard，用 execCommand('copy') 隱藏 textarea 退回相容
+function copyTextViaExecCommand(text) {
+    return new Promise((resolve, reject) => {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            ok ? resolve() : reject(new Error('execCommand copy failed'));
+        } catch (e) {
+            reject(e);
+        }
+    });
+}
+function copyTextCompat(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text).catch(() => copyTextViaExecCommand(text));
+    }
+    return copyTextViaExecCommand(text);
+}
+
 // 複製推薦碼按鈕特效
 const btnCopyReferral = document.getElementById('btn-copy-referral');
 if (btnCopyReferral) {
     btnCopyReferral.addEventListener('click', () => {
         const codeText = (document.getElementById('my-referral-code') || document.createElement('div')).textContent;
         if (codeText && codeText !== '------') {
-            navigator.clipboard.writeText(codeText).then(() => {
+            copyTextCompat(codeText).then(() => {
                 const ogText = btnCopyReferral.textContent;
                 btnCopyReferral.textContent = 'COPIED!';
                 btnCopyReferral.classList.replace('text-white', 'text-emerald-400');
@@ -4588,7 +4614,7 @@ if (btnCopyReferral) {
                     btnCopyReferral.textContent = ogText;
                     btnCopyReferral.classList.replace('text-emerald-400', 'text-white');
                 }, 2000);
-            });
+            }).catch(() => {});
         }
     });
 }

@@ -1660,6 +1660,13 @@ window.receiveFromRuby = function (data) {
             }
         }
 
+        // 邀請碼免費層獎勵：B 首次成功算圖時後端會順帶發放，這裡給即時反饋（一個 session 只提示一次）
+        if (data.referral_bonus && !window._referralFreeBonusShown) {
+            window._referralFreeBonusShown = true;
+            const bonusMsg = (t('referral_free_bonus_toast') || '🎁 邀請獎勵 +{n} 點到帳！').replace('{n}', data.referral_bonus);
+            setTimeout(() => showUpdateToast(bonusMsg), 800);
+        }
+
         // Tool 1：立即更新對應卡片（每個結果到就更新，不批量 buffer 以避免 race condition）
         if (data.scene_name && data.url && currentActiveTool === 1 && !_baseImageEntry) {
             _applyTool1CardUpdate(data.scene_name, data.url, data.channel_base64 || '', data.transaction_id);
@@ -4015,10 +4022,10 @@ function openSharePlatform(platform) {
     const hint = platform === 'line'
         ? (lang['share_copied_line'] || '✓ 已複製，開啟 LINE 貼給好友')
         : (lang['share_copied_wa'] || '✓ 已複製，開啟 WhatsApp 貼給好友');
-    navigator.clipboard.writeText(text).then(() => {
+    copyTextCompat(text).then(() => {
         showUpdateToast(hint);
     }).catch(() => {
-        showUpdateToast('✓ 訊息已複製');
+        showUpdateToast('複製失敗，請手動選取文字複製');
     });
 }
 

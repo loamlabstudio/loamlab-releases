@@ -1121,7 +1121,7 @@ module LoamLab
           return
         end
         if data['code'] == 0 && data['url']
-          on_result.call({ status: 'render_success', url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] }.merge(extra))
+          on_result.call({ status: 'render_success', url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'], referral_bonus: data['referral_bonus'] }.merge(extra))
           return
         end
         # data['msg'] 缺失代表後端回應不符合任何已知形狀（例如中途被截斷的空 body）——
@@ -1155,7 +1155,7 @@ module LoamLab
             data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
             case data['status']
             when 'success'
-              on_final.call({ status: 'render_success', url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'] })
+              on_final.call({ status: 'render_success', url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'], referral_bonus: data['referral_bonus'] })
             when 'failed'
               on_final.call({ status: 'render_failed', message: self.sanitize_error(data['msg'] || '渲染失敗'), points_refunded: data['points_refunded'] })
             else

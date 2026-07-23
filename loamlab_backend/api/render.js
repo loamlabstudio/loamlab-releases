@@ -5,6 +5,7 @@ import { getClientIp } from '../lib/net.js';
 import { resolveUserEmail } from '../lib/verifyIdentity.js';
 import { getConfig } from '../lib/systemConfig.js';
 import { reportUsageEvent } from '../lib/dodo.js';
+import { grantFreeReferralReward } from '../lib/activate.js';
 
 export const maxDuration = 300; // 提示詞翻譯/圖片代傳等前置作業可能耗時；AtlasCloud 生成本身已改為非同步 task_id，不在此函式內等待
 
@@ -601,17 +602,21 @@ async function _handleRender(req, res) {
                     }
                     return res.status(200).json({ code: 0, status: 'processing' });
                 }
-                await saveRenderHistory(supabase, {
+                const refReward = await saveRenderHistory(supabase, {
                     userEmail, url: finalUrl,
                     userPayload: { parameters: { user_prompt: pollPrompt, style: pollStyle } },
-                    resVal: pollResVal, cost: pollCost, activeTool: pollTool, inputUrl: pollInputUrl
+                    resVal: pollResVal, cost: pollCost, activeTool: pollTool, inputUrl: pollInputUrl,
+                    clientIp: getClientIp(req)
                 });
                 let balance = null;
                 try {
                     const { data: uRow } = await supabase.from('users').select('points').eq('email', userEmail).single();
                     balance = uRow?.points ?? null;
                 } catch (e) {}
-                return res.status(200).json({ code: 0, status: 'success', url: finalUrl, points_remaining: balance, transaction_id: pollTxId });
+                return res.status(200).json({
+                    code: 0, status: 'success', url: finalUrl, points_remaining: balance, transaction_id: pollTxId,
+                    referral_bonus: refReward?.granted ? refReward.amount : 0
+                });
             }
             if (!IN_PROGRESS_STATES.has(state)) {
                 return res.status(200).json(await refundAndFail(supabase, userEmail, pollCost, `AI 渲染引擎任務失敗（狀態: ${state || '未知'}）`));
@@ -1020,8 +1025,11 @@ async function _handleRender(req, res) {
         await cleanTemp();
 
         if (finalUrl) {
-            await saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool, inputUrl: inputUrlForHistory });
-            return res.status(200).json({ code: 0, url: finalUrl, points_deducted: cost, points_remaining: deductResult.balance, transaction_id: transactionId });
+            const refReward = await saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool, inputUrl: inputUrlForHistory, clientIp: getClientIp(req) });
+            return res.status(200).json({
+                code: 0, url: finalUrl, points_deducted: cost, points_remaining: deductResult.balance, transaction_id: transactionId,
+                referral_bonus: refReward?.granted ? refReward.amount : 0
+            });
         } else {
             try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch(e) {}
             try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL' }]); } catch(e) {}
@@ -1050,7 +1058,7 @@ async function refundAndFail(supabase, userEmail, cost, reason) {
 // 執行環境可能立刻被凍結/回收，沒 await 的 insert promise 有機會根本來不及打進資料庫，
 // 導致「明明出圖成功但 render_history 完全沒記錄」——這個表後續也要當異常掃描的成功判斷
 // 依據，記錄不可靠會直接讓自動退款誤判，所以這裡必須是可靠的寫入。失敗只 log，不影響回應。
-async function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal, cost, activeTool, inputUrl }) {
+async function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal, cost, activeTool, inputUrl, clientIp }) {
     const prompt = userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '';
     const style  = userPayload.parameters?.style || '';
     try {
@@ -1068,5 +1076,15 @@ async function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal
         if (error) console.error('[render_history] save failed:', error.message);
     } catch (e) {
         console.error('[render_history] save exception:', e.message);
+    }
+
+    // 這裡是全站唯一的「算圖真正成功」匯合點，邀請碼免費層獎勵（B 首次成功算圖）從這裡觸發。
+    // 回傳結果供呼叫端塞進本次算圖的回應，讓前端能立即顯示「+20 點到帳」，不影響主流程——
+    // 失敗只記 log，不拋出，一律回傳「未發放」。
+    try {
+        return await grantFreeReferralReward(supabase, userEmail, clientIp);
+    } catch (e) {
+        console.warn('[grantFreeReferralReward] saveRenderHistory 呼叫失敗（非致命）:', e.message);
+        return { granted: false, amount: 0 };
     }
 }

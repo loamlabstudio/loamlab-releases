@@ -76,21 +76,28 @@ create table users (
 
 ---
 
-## 5. 邀請碼裂變系統 (Refer & Earn B+100 / A+300)
-只有一層獎勵，**綁定當下不發任何點數**，只在被邀請人 (B) 首次付費（Top-up 或訂閱）成功時，一次性觸發：
-- B 獲得 **+100 pts**（固定，`loamlab_backend/config.js` `PRICING_CONFIG.referral.paid_reward_b`）
-- 邀請人 A 獲得 **+300 pts**（固定，`paid_reward_a`）
+## 5. 邀請碼裂變系統 (Refer & Earn)
+**綁定當下不發任何點數**，共兩層獎勵，觸發條件不同：
 
-> 2026-07-23 補充：舊版曾規劃「B 免費算圖成功即送 A/B 各 +50 pts」的免費層與「按購買金額 20%/50% 抽成」的百分比付費層，兩者皆為早期草稿、從未實作，已從文件移除避免與實際行為混淆。目前上線的就是本節描述的單層固定金額設計。
+| 層級 | 觸發條件 | B 獲得 | A 獲得 | 冪等鍵（transactions.order_id）|
+|---|---|---|---|---|
+| 免費層 | B **首次成功算圖**（不需付費）| +20 pts | +20 pts | `reffree_b_<email>` / `reffree_a_<email>` |
+| 付費層 | B **首次付費**（Top-up 或訂閱）| +100 pts | +300 pts | 見 `processTopup` 既有邏輯 |
+
+免費層金額刻意遠低於付費層（`loamlab_backend/lib/activate.js` 的 `FREE_REFERRAL_REWARD = 20`），目的是補上「綁碼→首付費」中間漫長的零回饋空窗、提升分享動能，而非可套利的主力獎勵；20 點連 1 張 2K 圖（20 點）都不夠買。防刷機制：(1) 每個 B 天生只會觸發一次免費層（`transactions` 表 order_id 唯一鍵冪等）；(2) 同一 IP 24 小時內最多發放 3 次（`rate_limits` 表，`checkFreeReferralRateLimit`）。
+
+> 2026-07-23 補充：舊版文件曾寫「B 免費算圖成功即送 A/B 各 +50 pts」與「按購買金額 20%/50% 抽成」的百分比付費層，皆為早期草稿、從未實作，已移除避免混淆。本節現在描述的免費層是同一天重新設計、實際已上線的版本（金額改為 +20/+20，非舊草稿的 +50/+50），付費層維持既有固定金額不變。
 
 ### A. 運作體驗 (UX)
-1. **老用戶分享**：插件點數面板點擊「Invite & Earn」，顯示專屬邀請碼。
+1. **老用戶分享**：插件點數面板點擊「Invite & Earn」，顯示專屬邀請碼；分享文字（`i18n.js` 的 `share_text`）與到帳通知（`referral_toast`）皆已對齊「首次付費」的正確觸發條件。
 2. **新用戶綁定**：新用戶在同一面板輸入邀請碼，`POST /api/user`（`{email, code}`）驗證後寫入 `referred_by`（防呆：不可互相綁定、不可填自己、每人只能綁定一次）。
-3. **付費觸發發放**：B 首次付費成功時，`loamlab_backend/lib/activate.js` 的 `processTopup` 檢查 `referred_by` 且尚未發過（以 `transactions` 表的 `REFERRAL_PAID_B` 記錄冪等判斷），一次性發放上述點數。
+3. **免費層觸發**：B 首次成功算圖時，`loamlab_backend/api/render.js` 的 `saveRenderHistory`（全站唯一「算圖真正成功」匯合點）呼叫 `activate.js` 的 `grantFreeReferralReward`，並把發放結果透過 `referral_bonus` 欄位一路帶回前端（`render.js` API 回應 → `main.rb` `handle_render_response`/`poll_render_task` → `app.js` 的 `render_success` 處理），立即 toast 通知 B。
+4. **付費層觸發**：B 首次付費成功時，`activate.js` 的 `processTopup` 檢查 `referred_by` 且尚未發過（以 `transactions` 表的 `REFERRAL_PAID_B` 記錄冪等判斷），一次性發放。
 
 ### B. 資料庫欄位
 ```sql
 ALTER TABLE users ADD COLUMN referral_code text UNIQUE; -- 用戶自己的邀請碼（登入時自動生成）
 ALTER TABLE users ADD COLUMN referred_by text;          -- 填入的老用戶邀請碼（綁定對象）
 ```
+免費層與付費層都只使用既有的 `transactions`／`rate_limits` 表，無需新增欄位或 migration。
 > `referral_rewarded boolean` 欄位是舊設計殘留，目前程式碼未使用（改用 `transactions` 表冪等判斷），保留欄位但不維護。

@@ -343,6 +343,76 @@ export async function reconcilePaymentsForEmail(supabase, email, dodoApiKey) {
     return { activated, foundSucceeded };
 }
 
+// 【邀請碼免費層】B 首次成功算圖（不需付費）時，給雙方象徵性小獎勵，補上「綁碼→首付費」中間漫長的
+// 零回饋空窗，提升分享動能。金額刻意遠低於付費層（B+100/A+300），20 點連 1 張 2K 圖都不夠，
+// 只是即時反饋、不是可套利的主力，用 transactions 表冪等（每個 B 天生只會觸發一次）+ IP 24h 次數
+// 上限雙重防刷。呼叫端（render.js saveRenderHistory）用 try/catch 包起來，任何失敗都不影響算圖主流程。
+const FREE_REFERRAL_REWARD = 20;
+
+async function checkFreeReferralRateLimit(supabase, clientIp) {
+    if (!clientIp || clientIp === 'unknown') return true; // 拿不到 IP 就不擋，避免誤傷正常用戶
+    const bucketKey = `reffree:${clientIp}`;
+    const maxCount = 3, windowSeconds = 24 * 3600;
+    try {
+        const now = new Date();
+        const { data: row } = await supabase.from('rate_limits').select('count, window_start').eq('bucket_key', bucketKey).maybeSingle();
+        const windowStart = row ? new Date(row.window_start) : null;
+        const windowExpired = !windowStart || (now - windowStart) > windowSeconds * 1000;
+        if (windowExpired) {
+            await supabase.from('rate_limits').upsert({ bucket_key: bucketKey, count: 1, window_start: now.toISOString() });
+            return true;
+        }
+        if (row.count >= maxCount) return false;
+        await supabase.from('rate_limits').update({ count: row.count + 1 }).eq('bucket_key', bucketKey);
+        return true;
+    } catch (_) {
+        return true; // fail-open：限流機制本身故障不該連帶擋掉正常用戶
+    }
+}
+
+// 回傳 { granted: boolean, amount } 供呼叫端（render.js）決定要不要在算圖成功的回應裡
+// 一併告訴前端「這次順便拿到邀請獎勵了」，藉此在算圖成功的當下給 B 立即反饋。
+export async function grantFreeReferralReward(supabase, customerEmail, clientIp) {
+    const NOT_GRANTED = { granted: false, amount: 0 };
+    try {
+        const { data: user } = await supabase.from('users').select('referred_by').eq('email', customerEmail).maybeSingle();
+        if (!user?.referred_by) return NOT_GRANTED;
+
+        const orderIdB = `reffree_b_${customerEmail}`;
+        const { data: already } = await supabase.from('transactions').select('id').eq('order_id', orderIdB).maybeSingle();
+        if (already) return NOT_GRANTED; // 冪等：這個 B 已經拿過免費層獎勵
+
+        const allowed = await checkFreeReferralRateLimit(supabase, clientIp);
+        if (!allowed) {
+            console.warn(`[免費層防刷] IP ${clientIp} 24h 內已達上限，跳過發放: ${customerEmail}`);
+            return NOT_GRANTED;
+        }
+
+        const inviterEmail = user.referred_by;
+        const { data: bRpc } = await supabase.rpc('apply_points_delta', {
+            p_email: customerEmail, p_set_monthly: null, p_add_lifetime: FREE_REFERRAL_REWARD, p_add_referral_count: 0
+        });
+        if (!bRpc?.success) return NOT_GRANTED;
+
+        const { data: aRpc } = await supabase.rpc('apply_points_delta', {
+            p_email: inviterEmail, p_set_monthly: null, p_add_lifetime: FREE_REFERRAL_REWARD, p_add_referral_count: 0
+        });
+
+        const inserts = [{ user_email: customerEmail, amount: FREE_REFERRAL_REWARD, transaction_type: 'REFERRAL_FREE_B', order_id: orderIdB }];
+        if (aRpc?.success) {
+            inserts.push({ user_email: inviterEmail, amount: FREE_REFERRAL_REWARD, transaction_type: 'REFERRAL_FREE_A', order_id: `reffree_a_${customerEmail}` });
+        } else {
+            console.error(`[🚨免費層] A 端發放失敗，僅 B 到帳: ${inviterEmail}`, aRpc);
+        }
+        await supabase.from('transactions').insert(inserts);
+        console.log(`[🎁邀請免費層] ${customerEmail} 首次算圖 → B+${FREE_REFERRAL_REWARD}${aRpc?.success ? `, A(${inviterEmail})+${FREE_REFERRAL_REWARD}` : ''}`);
+        return { granted: true, amount: FREE_REFERRAL_REWARD };
+    } catch (e) {
+        console.warn('[grantFreeReferralReward] non-fatal:', e.message);
+        return NOT_GRANTED;
+    }
+}
+
 export async function writeKolCommission(supabase, buyerEmail, amountPaid, orderId) {
     try {
         const { data: buyer } = await supabase.from('users')

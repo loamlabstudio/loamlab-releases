@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 
-import { processTopup, makeSupabase } from '../lib/activate.js';
+import { processTopup, makeSupabase, cancelDodoSubscription, fetchDodoSubscriptionInfo } from '../lib/activate.js';
 import { DODO_PRODUCTS } from '../config.js';
 
 const supabase = makeSupabase();
@@ -66,21 +66,9 @@ export default async function handler(req, res) {
                 const discountCode = data.discount?.code || data.discount_code || null;
                 const planKey = data.metadata?.planKey || null;
                 const dodoCustomerId = data.customer?.customer_id || null;
-
-                // 某些訂閱的 payment.succeeded 不帶 product_id → 用 subscription_id 補查（planKey 已存在時跳過）
-                if (!variantId && !planKey && data.subscription_id && process.env.DODO_API_KEY) {
-                    try {
-                        const subRes = await fetch(
-                            `https://live.dodopayments.com/subscriptions/${data.subscription_id}`,
-                            { headers: { 'Authorization': `Bearer ${process.env.DODO_API_KEY}` } }
-                        );
-                        const subData = await subRes.json();
-                        variantId = subData.product_id || subData.plan_id || subData.items?.[0]?.product_id;
-                        console.log(`[Dodo] Resolved variantId from subscription lookup: ${variantId}`);
-                    } catch (e) {
-                        console.warn('[Dodo] subscription lookup failed:', e.message);
-                    }
-                }
+                // 實付金額（美分），供 processTopup 做洗點金額校驗與精準記帳
+                const amountPaidCents = (typeof data.total_amount === 'number') ? data.total_amount
+                    : (typeof data.settlement_amount === 'number' ? data.settlement_amount : null);
 
                 // 無主訂單攔截：email 缺失或為 Apple Pay 匿名信箱 → 留稽核紀錄，不丟棄金流
                 if (isAnonymousEmail(customerEmail)) {
@@ -90,6 +78,22 @@ export default async function handler(req, res) {
                     return res.status(200).json({ status: 'unclaimed', reason: 'anonymous_email' });
                 }
 
+                // 【洗點防禦・第一性原理 2026-07】訂閱付款一律去問 Dodo「這筆訂閱真正鎖定多少錢」
+                // （recurring_pre_tax_amount，已涵蓋任何折扣碼），取代自己猜價格表 × 比例的舊做法；
+                // 順便補上遺漏的 product_id（部分 payment.succeeded 不帶 product_cart）。
+                // 查不到就不能發點——回 500 讓 Dodo 重試，而不是在沒驗證金額的情況下放行。
+                let expectedAmountCents = null;
+                if (data.subscription_id) {
+                    const subInfo = await fetchDodoSubscriptionInfo(data.subscription_id);
+                    if (!variantId) variantId = subInfo.productId;
+                    expectedAmountCents = subInfo.expectedAmountCents;
+                    if (expectedAmountCents == null) {
+                        await logWebhookError('DODO', event.type, orderId, customerEmail || 'unknown',
+                            'subscription 真實金額查詢失敗，暫緩發點等待重試', data);
+                        return res.status(500).json({ error: 'subscription_amount_lookup_failed_retry' });
+                    }
+                }
+
                 if (customerEmail) {
                     await supabase.from('users').update({ payment_failed: false }).eq('email', customerEmail)
                         .catch(e => console.warn('[Dodo] clear payment_failed failed:', e.message));
@@ -97,14 +101,35 @@ export default async function handler(req, res) {
                 if (customerEmail && (variantId || planKey) && orderId) {
                     // 唯一真理來源：processTopup 內部以 UNIQUE(order_id) 做冪等檢查，
                     // 重複的 payment_id 會被自然擋下，不需要任何額外的週期/升級判斷
+
+                    // 【Task 2】在 processTopup 覆寫 dodo_subscription_id 之前，先抓「舊訂閱 ID」。
+                    // 若這次是全新的訂閱（subscription_id 與舊的不同），發點成功後要主動取消舊訂閱，
+                    // 避免用戶同時持有兩筆訂閱被雙重扣款。
+                    let oldSubId = null;
+                    if (data.subscription_id) {
+                        const { data: uRow } = await supabase.from('users')
+                            .select('dodo_subscription_id').eq('email', customerEmail).maybeSingle();
+                        oldSubId = uRow?.dodo_subscription_id || null;
+                    }
+
                     try {
-                        await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey, dodoCustomerId);
+                        await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey, dodoCustomerId, amountPaidCents, expectedAmountCents);
                         if (data.subscription_id) {
                             await supabase.from('users')
                                 .update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
                                 .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
+                            // 發點成功且確為「不同的新訂閱」→ 取消舊訂閱（立即生效，避免雙重扣款）
+                            if (oldSubId && oldSubId !== data.subscription_id) {
+                                await cancelDodoSubscription(oldSubId);
+                            }
                         }
                     } catch (e) {
+                        // 洗點防禦攔截：金額異常（proration/0 元）→ 記稽核、回 200 不重試、不寄激活失敗信
+                        // （用戶「確實付了」一筆畸零款，但這是我們刻意拒發的，重試與寄信都無意義）
+                        if (e.code === 'AMOUNT_VALIDATION_FAILED') {
+                            await logWebhookError('DODO', event.type, orderId, customerEmail, e.message, data, 'rejected');
+                            return res.status(200).json({ status: 'rejected', reason: 'amount_validation_failed' });
+                        }
                         await logWebhookError('DODO', event.type, orderId, customerEmail, e.message, data);
                         await sendActivationFailureEmail(customerEmail, orderId);
                         throw e; // 讓外層回傳 500，Dodo 會重試

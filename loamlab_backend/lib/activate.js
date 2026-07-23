@@ -6,6 +6,12 @@ const IDS = {
     DODO: DODO_PRODUCTS
 };
 
+// 方案「定價原價」（美分），對齊 POINTS_SYSTEM.md 與 Dodo 商品原價（折扣前）。
+// 【2026-07 架構重構】不再用於洗點防禦驗證（改比對 Dodo 真實訂閱金額，見下方 processTopup），
+// 只剩「記帳 fallback」這一個用途——完全查不到任何真實金額時，交易紀錄用它估算顯示金額。
+// ⚠️ 調價時務必同步 POINTS_SYSTEM.md / Dodo 後台。
+const PLAN_PRICES_CENTS = { starter: 3500, pro: 7500, studio: 19900, topup: 2500 };
+
 export function makeSupabase() {
     return createClient(
         process.env.SUPABASE_URL || '',
@@ -13,7 +19,7 @@ export function makeSupabase() {
     );
 }
 
-export async function processTopup(supabase, customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null, planKey = null, dodoCustomerId = null) {
+export async function processTopup(supabase, customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null, planKey = null, dodoCustomerId = null, amountPaidCents = null, expectedAmountCents = null) {
     const fullOrderId = `${platform}_${orderId}`;
     const { data: existingTx } = await supabase.from('transactions').select('id').eq('order_id', fullOrderId).maybeSingle();
     if (existingTx) return console.log(`[🔁冪等] ${fullOrderId} 已處理過`);
@@ -43,6 +49,22 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
 
     if (pointsToAdd <= 0) {
         throw new Error(`Unknown product: planKey=${planKey} variantId=${variantId} (${platform})`);
+    }
+
+    // 【洗點防禦・第一性原理 2026-07】不猜折扣比例，直接比對 Dodo 對「這筆訂閱」真正鎖定的金額
+    // （expectedAmountCents = webhook.js 呼叫 GET /subscriptions/{id} 拿到的 recurring_pre_tax_amount，
+    // 已經是折扣後的真實數字，自動涵蓋 beta 折扣、KOL 折扣，不需要我方自己維護價格表或猜比例）。
+    // TOLERANCE 只吸收稅金/貨幣捨入誤差，不是折扣容忍——因為比對對象本來就已經是折扣後金額。
+    // 兩者缺一（amountPaidCents 或 expectedAmountCents 為 null）就跳過校驗，交由呼叫端自行把關
+    // （webhook.js 對訂閱付款會強制查到 expectedAmountCents 才呼叫這裡，查不到就整批 500 重試）。
+    const AMOUNT_TOLERANCE = 0.9;
+    if (isSubscription && amountPaidCents != null && expectedAmountCents != null && expectedAmountCents > 0) {
+        const minCents = Math.round(expectedAmountCents * AMOUNT_TOLERANCE);
+        if (amountPaidCents <= 0 || amountPaidCents < minCents) {
+            const err = new Error(`[洗點防禦] 實付金額與 Dodo 記錄的訂閱金額不符，拒絕發點: paid=${amountPaidCents}¢ < expected=${expectedAmountCents}¢(×${AMOUNT_TOLERANCE}) order=${fullOrderId}`);
+            err.code = 'AMOUNT_VALIDATION_FAILED';
+            throw err;
+        }
     }
 
     let kolEmailFromCode = null;
@@ -155,8 +177,12 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
     if (planName && shouldUpdatePlan) otherFields.subscription_plan = planName;
     await supabase.from('users').update(otherFields).eq('email', customerEmail);
 
-    const PLAN_PRICES_CENTS = { starter: 700, pro: 1500, studio: 3500, topup: 490 };
-    const amountPaid = planName ? (PLAN_PRICES_CENTS[planName] || 490) : 490;
+    // 記帳金額：優先用實付金額（含折扣後真實營收），其次用 Dodo 記錄的真實訂閱金額，
+    // 兩者都拿不到時才退回內部價格表估算（僅 LS 舊路徑等缺金額資訊的情境會走到這裡）。
+    const listPrice = planName ? (PLAN_PRICES_CENTS[planName] || 490) : 490;
+    const amountPaid = (amountPaidCents != null && amountPaidCents > 0) ? amountPaidCents
+        : (expectedAmountCents != null && expectedAmountCents > 0) ? expectedAmountCents
+        : listPrice;
     const { error: txInsertErr } = await supabase.from('transactions').insert([{
         user_email: customerEmail,
         amount: pointsToAdd,
@@ -194,6 +220,57 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
     await writeKolCommission(supabase, customerEmail, amountPaid, fullOrderId);
 
     console.log(`[🚀金流] 成功處理 ${platform} 充值: ${customerEmail} (+${pointsToAdd} pts)`);
+}
+
+// 【Task 2】立即取消一筆 Dodo 訂閱。用於「新訂閱取代舊訂閱」時清掉舊訂閱，避免用戶被雙重扣款。
+// 立即取消（非期末），因為用戶已為新訂閱付了全額、開始了新週期，舊訂閱不該再存在。
+// 回傳 boolean 表示是否成功；失敗僅記 log（non-fatal），不阻斷主金流。
+export async function cancelDodoSubscription(subscriptionId, dodoApiKey = process.env.DODO_API_KEY) {
+    if (!subscriptionId || !dodoApiKey) return false;
+    const dodoBase = dodoApiKey.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+    try {
+        const res = await fetch(`${dodoBase}/subscriptions/${subscriptionId}`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${dodoApiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'cancelled' })
+        });
+        if (res.ok) {
+            console.log(`[🔁舊訂閱取消] Dodo subscription cancelled: ${subscriptionId}`);
+            return true;
+        }
+        const errText = await res.text().catch(() => '');
+        console.error(`[🔁舊訂閱取消] 失敗 ${res.status}: ${subscriptionId} — ${errText}`);
+        return false;
+    } catch (e) {
+        console.error(`[🔁舊訂閱取消] fetch error: ${subscriptionId} — ${e.message}`);
+        return false;
+    }
+}
+
+// 【共用真理來源】查詢 Dodo 這筆訂閱「真正鎖定」的商品與金額（recurring_pre_tax_amount），
+// 已涵蓋任何折扣碼，是洗點防禦驗證（processTopup）與 variantId 補查唯一該問的地方——
+// webhook.js（即時）與 reconcilePaymentsForEmail（補發）共用，不維護兩份查詢邏輯。
+// 查詢失敗回傳全 null，呼叫端自行決定要重試還是略過（此函式不拋錯，避免中斷主流程）。
+export async function fetchDodoSubscriptionInfo(subscriptionId, dodoApiKey = process.env.DODO_API_KEY) {
+    if (!subscriptionId || !dodoApiKey) return { productId: null, expectedAmountCents: null };
+    const dodoBase = dodoApiKey.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+    try {
+        const res = await fetch(`${dodoBase}/subscriptions/${subscriptionId}`, {
+            headers: { 'Authorization': `Bearer ${dodoApiKey}` }
+        });
+        if (!res.ok) {
+            console.warn(`[Dodo] subscription lookup HTTP ${res.status}: ${subscriptionId}`);
+            return { productId: null, expectedAmountCents: null };
+        }
+        const subData = await res.json();
+        return {
+            productId: subData.product_id || subData.plan_id || subData.items?.[0]?.product_id || null,
+            expectedAmountCents: (typeof subData.recurring_pre_tax_amount === 'number') ? subData.recurring_pre_tax_amount : null,
+        };
+    } catch (e) {
+        console.warn(`[Dodo] subscription lookup failed: ${subscriptionId} —`, e.message);
+        return { productId: null, expectedAmountCents: null };
+    }
 }
 
 // 無腦拉取（Dumb Pull）：向 Dodo 拉該 email 的 payments，把還沒入帳的 succeeded 付款全部補發。
@@ -244,8 +321,22 @@ export async function reconcilePaymentsForEmail(supabase, email, dodoApiKey) {
             }
             if (!alreadyIssued) {
                 const payCustomerId = pay.customer?.customer_id || null;
-                await processTopup(supabase, email, productId, orderId, 'DODO', null, pay.subscription_id || null, planKey, payCustomerId);
-                activated = true;
+                // 對齊 webhook.js：訂閱付款一併問 Dodo 真實鎖定金額，套用同一套洗點防禦
+                let expectedAmountCents = null;
+                if (pay.subscription_id) {
+                    expectedAmountCents = (await fetchDodoSubscriptionInfo(pay.subscription_id, dodoApiKey)).expectedAmountCents;
+                }
+                try {
+                    await processTopup(supabase, email, productId, orderId, 'DODO', null, pay.subscription_id || null, planKey, payCustomerId, pay.total_amount ?? null, expectedAmountCents);
+                    activated = true;
+                } catch (perPayErr) {
+                    // 單筆付款失敗（如洗點防禦拒絕的 proration 畸零款）不應中斷其餘付款補發
+                    if (perPayErr.code === 'AMOUNT_VALIDATION_FAILED') {
+                        console.warn(`[reconcile] 跳過金額異常付款: ${orderId} — ${perPayErr.message}`);
+                    } else {
+                        console.warn(`[reconcile] 單筆補發失敗（繼續處理其餘）: ${orderId} — ${perPayErr.message}`);
+                    }
+                }
             }
         }
     } catch (e) { console.warn(`[reconcilePaymentsForEmail] ${email}:`, e.message); }

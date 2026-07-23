@@ -4117,14 +4117,9 @@ window.openCheckout = async function (planKey, quantity = 1) {
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
-            // 既有訂閱者切換方案：後端已直接在原訂閱上完成升降級（change-plan API），
-            // 不會有 checkoutUrl 可跳轉，直接進入輪詢等待 webhook 入帳
-            if (data.planChanged) {
-                closePricingModal();
-                showUpdateToast('🔄 方案切換中，稍候將自動更新點數...');
-                startPaymentPolling();
-                return;
-            }
+            // 【洗點事故重構 2026-07】後端已廢除 change-plan / proration 補差價流程。
+            // 所有購買/升降級一律走全新的 /checkouts 全額結帳，因此永遠會回傳 checkoutUrl，
+            // 不再有 planChanged 就地切換分支。舊訂閱在 webhook 發點成功後由後端自動取消。
             if (!data.checkoutUrl) { showUpdateToast('⚠️ 無法建立結帳連結，請稍後再試'); return; }
             finalUrl = data.checkoutUrl;
         } catch (e) {
@@ -4149,12 +4144,17 @@ window.openCheckout = async function (planKey, quantity = 1) {
 
     // 關閉 Modal，顯示等待提示
     closePricingModal();
-    showUpdateToast('🔄 瀏覽器已開啟付款頁面，完成付款後將自動入帳...');
+    // 既有訂閱者切換方案：提醒為「全額重新計費，舊方案自動取消」，與後端第一性原理一致
+    const isExistingSubscriber = planKeyLower !== 'topup' && window.loamlabSubscriptionPlan &&
+        window.loamlabSubscriptionPlan !== planKeyLower;
+    showUpdateToast(isExistingSubscriber
+        ? '🔄 ' + t('upgrade_full_rebill_note')
+        : '🔄 瀏覽器已開啟付款頁面，完成付款後將自動入帳...');
     startPaymentPolling();
 }
 
-// 支付/方案切換後輪詢：偵測 last_topup_at 時間戳變化（一般儲值/升級有即時扣款）或
-// subscription_plan 變化（降級走 proration credit，可能不會產生 payment.succeeded）
+// 支付/方案切換後輪詢：偵測 last_topup_at 時間戳變化或 subscription_plan 變化。
+// （新訂閱一律走全額 /checkouts，payment.succeeded 會即時發點；舊訂閱由後端自動取消）
 function startPaymentPolling() {
     const topupBefore = window.loamlabLastTopupAt;
     const planBefore = window.loamlabSubscriptionPlan;

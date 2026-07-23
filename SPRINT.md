@@ -41,7 +41,7 @@ IyBDT05URVhUX0RJR0VTVArnlb前金流架構使用 Dodo Payments 的 change-plan AP
   - T2 舊訂閱自動取消 → `loamlab_backend/lib/activate.js:cancelDodoSubscription()` + `webhook.js:123` 已串接
   - T3 processTopup 金額驗證 → `activate.js:60-68` `AMOUNT_TOLERANCE` 比對 Dodo 真實訂閱金額已上線
   - T4 前端補差價文案清除 → `app.js:4120` 註解確認已移除
-- **T5 SU2022 開啟卡住** — 暫緩。查核 `main.rb` 的 `getInitialData`（初始化 callback）與 JS 端 `DOMContentLoaded` 呼叫點，皆無同步 `view.write_image` 或鏡頭同步呼叫，原描述的根因與現有程式碼對不上。需要用戶提供實際重現步驟或錯誤 log 才能繼續診斷，避免盲猜修復。
+- **T5 SU2022 開啟卡住** — [x] 已套用防禦性修復 2026-07-23。查無 log（用戶端回報、非可重現案例），確認無法進一步診斷根因後，改採低成本保險：`main.rb:268` `getInitialData` callback 整段包進 `UI.start_timer(0.3, false)`，讓 WebView 先完成畫面繪製再執行 Ruby 端 API 呼叫與 `execute_script`，避免搶主執行緒。**未確認是否解決真因**，需後續使用者回報驗證。
 - **T6 已完成**，實作方式與原描述有 1 處落差：SketchUp Ruby API 沒有 `UI.set_clipboard` 這個方法，改用純前端 `execCommand('copy')` fallback 達成同等效果，未改動 Ruby 檔案。
 
-status: DONE_EXCEPT_T5（T5 待用戶提供重現步驟/log 後續處理，其餘 5 項皆已完成）
+status: DONE（全數 6 項完成，T5 為防禦性修復未確認根因，待使用者回報驗證）

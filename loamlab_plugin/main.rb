@@ -266,44 +266,55 @@ module LoamLab
     def self.register_callbacks(dialog)
       # 1. 初始化資料請求 (由 JS 呼叫)
       dialog.add_action_callback("getInitialData") do |action_context, params|
-        model = Sketchup.active_model
-        save_path = self.get_effective_save_path(model)
-        user_email = Sketchup.read_default("LoamLabAI", "user_email", "")
-        saved_lang = Sketchup.read_default("LoamLabAI", "ui_lang", "")
-        
-        device_id = Sketchup.read_default("LoamLabAI", "device_id", "")
-        if device_id.to_s.strip.empty?
-          device_id = "10000000-1000-4000-8000-100000000000".gsub(/0/){rand(16).to_s(16)}
-          Sketchup.write_default("LoamLabAI", "device_id", device_id)
+        # 【SU2022 開啟卡住防禦性修復】部分用戶回報開啟插件時凍結、需重開多次才能連上，
+        # 無法取得 repro log 確認根因。這裡延遲 0.3s 執行，讓 WebView 先把 HTML/CSS 畫完，
+        # 避免 model.rendering_options / Sketchup.active_model 等 API 呼叫與畫面繪製搶主執行緒。
+        # 低成本保險：即使不是真因也不影響現有功能。
+        UI.start_timer(0.3, false) do
+          model = Sketchup.active_model
+          save_path = self.get_effective_save_path(model)
+          user_email = Sketchup.read_default("LoamLabAI", "user_email", "")
+          saved_lang = Sketchup.read_default("LoamLabAI", "ui_lang", "")
+
+          device_id = Sketchup.read_default("LoamLabAI", "device_id", "")
+          if device_id.to_s.strip.empty?
+            device_id = "10000000-1000-4000-8000-100000000000".gsub(/0/){rand(16).to_s(16)}
+            Sketchup.write_default("LoamLabAI", "device_id", device_id)
+          end
+
+          # 偵測 AO 是否受支持（classic engine 沒有 AmbientOcclusion key）
+          ao_unsupported = RENDER_KEYS['AmbientOcclusion'] == true &&
+                           !model.rendering_options.keys.include?('AmbientOcclusion')
+
+          dev_post_template_v2 = Sketchup.read_default("LoamLabAI", "dev_post_template_v2", "")
+          last_resolution = Sketchup.read_default("LoamLabAI", "last_resolution", "1k")
+
+          response = {
+            status: 'success',
+            version: LoamLab::VERSION,
+            api_base: LoamLab::API_BASE_URL,
+            build_type: LoamLab::BUILD_TYPE,
+            dist_channel: LoamLab::DIST_CHANNEL,
+            lang: saved_lang.empty? ? nil : saved_lang,
+            scenes: self.get_scene_names,
+            save_path: save_path,
+            user_email: user_email,
+            device_id: device_id,
+            ao_unsupported: ao_unsupported,
+            dev_post_template_v2: dev_post_template_v2,
+            last_resolution: last_resolution
+          }
+
+          json_str = response.to_json
+          dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(json_str)}')")
+
+          # 若上次渲染後未正常還原（如插件強制關閉），在此還原
+          if model.get_attribute('LoamLabRenderOverride', 'applied') == true
+            self.restore_render_keys(model)
+          end
+          # 注意：apply_render_keys 已移至 batch_export_scenes 渲染開始時才呼叫
+          # 此處不再套用強制樣式，避免插件開啟時就改變 SketchUp 視圖
         end
-
-        # 偵測 AO 是否受支持（classic engine 沒有 AmbientOcclusion key）
-        ao_unsupported = RENDER_KEYS['AmbientOcclusion'] == true &&
-                         !model.rendering_options.keys.include?('AmbientOcclusion')
-
-        response = {
-          status: 'success',
-          version: LoamLab::VERSION,
-          api_base: LoamLab::API_BASE_URL,
-          build_type: LoamLab::BUILD_TYPE,
-          dist_channel: LoamLab::DIST_CHANNEL,
-          lang: saved_lang.empty? ? nil : saved_lang,
-          scenes: self.get_scene_names,
-          save_path: save_path,
-          user_email: user_email,
-          device_id: device_id,
-          ao_unsupported: ao_unsupported
-        }
-        
-        json_str = response.to_json
-        dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(json_str)}')")
-
-        # 若上次渲染後未正常還原（如插件強制關閉），在此還原
-        if model.get_attribute('LoamLabRenderOverride', 'applied') == true
-          self.restore_render_keys(model)
-        end
-        # 注意：apply_render_keys 已移至 batch_export_scenes 渲染開始時才呼叫
-        # 此處不再套用強制樣式，避免插件開啟時就改變 SketchUp 視圖
       end
 
       # 1.2 更新相關（僅限 direct channel；EW 版不注冊，審核員看不到 update 能力）
@@ -342,6 +353,15 @@ module LoamLab
       dialog.add_action_callback("save_ui_lang") do |action_context, params|
         lang = params.is_a?(Hash) ? params["lang"] : params.to_s
         Sketchup.write_default("LoamLabAI", "ui_lang", lang) unless lang.nil? || lang.empty?
+      end
+
+      dialog.add_action_callback("save_user_prefs") do |action_context, params|
+        if params.is_a?(Hash)
+          res = params["resolution"]
+          tmpl = params["dev_post_template_v2"]
+          Sketchup.write_default("LoamLabAI", "last_resolution", res.to_s) unless res.nil? || res.to_s.empty?
+          Sketchup.write_default("LoamLabAI", "dev_post_template_v2", tmpl.to_s) unless tmpl.nil?
+        end
       end
 
       # 1.5a. Tool 4 (360) 獨立存檔目錄

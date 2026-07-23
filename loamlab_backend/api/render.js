@@ -250,19 +250,6 @@ async function _handleRender(req, res) {
                 : ['全景分享'];
             const nScenes = Math.min(sceneNames.length, 10);
             const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-            const { data: user } = await supa.from('users').select('points, lifetime_points').eq('email', userEmail).single();
-            const totalPoints = (user?.points || 0) + (user?.lifetime_points || 0);
-            if (!user || totalPoints < 5) {
-                return res.status(200).json({ code: -1, msg: `點數不足（需要 5 點，目前 ${totalPoints} 點）` });
-            }
-            // 原子扣款（在建 URL 前扣，避免 finalize 多一次 RTT）
-            const { data: deductResult, error: deductErr } = await supa.rpc('deduct_render_points', { p_email: userEmail, p_cost: 5 });
-            if (deductErr || !deductResult?.success) {
-                const msg = deductResult?.error === 'insufficient_points'
-                    ? `點數不足，餘額 ${deductResult.balance} 點`
-                    : (deductErr?.message || '點數扣除失敗，請稍後再試');
-                return res.status(200).json({ code: -1, msg });
-            }
             const supaAdmin = createClient(
                 process.env.SUPABASE_URL,
                 process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
@@ -295,37 +282,24 @@ async function _handleRender(req, res) {
             const snEncoded = encodeURIComponent(sceneNames.slice(0, nScenes).join('|'));
             const shareUrl = `https://loamlab-camera-backend.vercel.app/360-viewer.html?id=${shareId}&sc=${nScenes}&sn=${snEncoded}`;
             try {
-                await supa.from('transactions').insert([{ user_email: userEmail, amount: -5, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
-                await supa.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: 5 }]);
+                await supa.from('transactions').insert([{ user_email: userEmail, amount: 0, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
+                await supa.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: 0 }]);
             } catch(e) {}
-            // 【故意不觸發免費層邀請獎勵】360 只是圖片上傳生成可分享連結，不是 AI 算圖，
-            // 且成本遠低於一般渲染，若比照發放等同開一條低成本刷邀請獎勵的捷徑。
             return res.status(200).json({
                 code: 0, share_id: shareId, upload_urls: uploadUrls,
                 meta_url: metaUrlResult.data.signedUrl,
                 scene_names: sceneNames.slice(0, nScenes),
-                share_url: shareUrl, points_remaining: deductResult.balance
+                share_url: shareUrl
             });
         }
 
-        // All-in-One HTML 單文件上傳：扣款 + 返回 1 個簽名 URL
+        // All-in-One HTML 單文件上傳：完全免費（不呼叫 AtlasCloud，只是把既有截圖包成可分享連結，
+        // 我方零 API 成本）→ 返回 1 個簽名 URL，不扣款、不觸發免費層邀請獎勵（同一個理由：零成本
+        // 若還能換取點數或獎勵，就是現成的刷分捷徑）
         if (action === 'init_360_single_upload') {
             const userEmail = ((await resolveUserEmail(req)).email || '').trim();
             if (!userEmail) return res.status(200).json({ code: -1, msg: '未登入' });
-            const COST_360 = 5;
             const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-            const { data: user360s } = await supa.from('users').select('points, lifetime_points').eq('email', userEmail).single();
-            const totalPts = (user360s?.points || 0) + (user360s?.lifetime_points || 0);
-            if (!user360s || totalPts < COST_360) {
-                return res.status(200).json({ code: -1, msg: `點數不足（需要 ${COST_360} 點，目前 ${totalPts} 點）` });
-            }
-            const { data: deductS, error: deductSErr } = await supa.rpc('deduct_render_points', { p_email: userEmail, p_cost: COST_360 });
-            if (deductSErr || !deductS?.success) {
-                const msg = deductS?.error === 'insufficient_points'
-                    ? `點數不足，餘額 ${deductS.balance} 點`
-                    : (deductSErr?.message || '點數扣除失敗，請稍後再試');
-                return res.status(200).json({ code: -1, msg });
-            }
             const supaAdmin = createClient(
                 process.env.SUPABASE_URL,
                 process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
@@ -336,23 +310,22 @@ async function _handleRender(req, res) {
             const { data: urlData, error: urlErr } = await supaAdmin.storage
                 .from('pano-360').createSignedUploadUrl(htmlPath);
             if (urlErr) {
-                // 退款
-                try { await supa.rpc('deduct_render_points', { p_email: userEmail, p_cost: -COST_360 }); } catch(e) {}
                 return res.status(200).json({ code: -1, msg: `簽名失敗: ${urlErr.message}` });
             }
             // 公開 URL 直接作為 share URL（pano-360 bucket 為 public）
             const shareUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/pano-360/${htmlPath}`;
+            let balance360 = null;
             try {
-                await supa.from('transactions').insert([{ user_email: userEmail, amount: -COST_360, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
-                await supa.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: COST_360 }]);
+                await supa.from('transactions').insert([{ user_email: userEmail, amount: 0, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
+                await supa.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: 0 }]);
+                const { data: uRow } = await supa.from('users').select('points, lifetime_points').eq('email', userEmail).single();
+                if (uRow) balance360 = (uRow.points || 0) + (uRow.lifetime_points || 0);
             } catch(e) {}
-            // 【故意不觸發免費層邀請獎勵】理由同上（另一個 360 action 區塊）：
-            // 不是 AI 算圖、成本過低，比照發放會變成低成本刷獎勵捷徑。
             return res.status(200).json({
                 code: 0, share_id: shareId,
                 upload_url: urlData.signedUrl,
                 share_url: shareUrl,
-                points_remaining: deductS.balance
+                points_remaining: balance360
             });
         }
 
@@ -486,20 +459,11 @@ async function _handleRender(req, res) {
 
     // 360 全景雲端上傳（early return，不走渲染流程）
     if (userPayload.action === 'upload_360') {
-        const COST_360 = 5;
         const faces = userPayload.faces || {};
         const faceNames = ['back', 'front', 'top', 'bottom', 'right', 'left'];
         if (!faceNames.every(n => faces[n])) {
             return res.status(200).json({ code: -1, msg: '全景圖不完整，請重新截圖' });
         }
-        let { data: user } = await supabase.from('users').select('points, lifetime_points').eq('email', userEmail).single();
-        if (!user || user.points < COST_360) {
-            return res.status(200).json({ code: -1, msg: `點數不足（需要 ${COST_360} 點，目前 ${user?.points ?? 0} 點）` });
-        }
-        const { error: deductErr } = await supabase.from('users').update({
-            points: user.points - COST_360
-        }).eq('email', userEmail);
-        if (deductErr) return res.status(200).json({ code: -1, msg: '點數扣除失敗，請稍後再試' });
         try {
             const { randomUUID } = await import('node:crypto');
             const shareId = randomUUID();
@@ -512,12 +476,11 @@ async function _handleRender(req, res) {
             }
             const shareUrl = `https://loamlab-camera-backend.vercel.app/360-viewer.html?id=${shareId}`;
             try {
-                await supabase.from('transactions').insert([{ user_email: userEmail, amount: -COST_360, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
-                await supabase.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: COST_360 }]);
+                await supabase.from('transactions').insert([{ user_email: userEmail, amount: 0, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
+                await supabase.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: 0 }]);
             } catch(e) {}
-            return res.status(200).json({ code: 0, share_url: shareUrl, points_remaining: user.points - COST_360 });
+            return res.status(200).json({ code: 0, share_url: shareUrl });
         } catch (e) {
-            await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -COST_360 }).catch(() => {});
             return res.status(200).json({ code: -1, msg: `上傳失敗：${e.message}` });
         }
     }
@@ -527,25 +490,12 @@ async function _handleRender(req, res) {
         if (!/^[0-9a-f-]{36}$/i.test(shareId)) {
             return res.status(200).json({ code: -1, msg: 'Invalid share ID' });
         }
-        const COST_360 = 5;
-        let { data: user360 } = await supabase.from('users').select('points, lifetime_points').eq('email', userEmail).single();
-        const totalPoints360 = (user360?.points || 0) + (user360?.lifetime_points || 0);
-        if (!user360 || totalPoints360 < COST_360) {
-            return res.status(200).json({ code: -1, msg: `點數不足（需要 ${COST_360} 點，目前 ${totalPoints360} 點）` });
-        }
-        const { data: deductResult360, error: deductErr360 } = await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: COST_360 });
-        if (deductErr360 || !deductResult360?.success) {
-            const errMsg = deductResult360?.error === 'insufficient_points'
-                ? `點數不足，餘額 ${deductResult360.balance} 點`
-                : (deductErr360?.message || '點數扣除失敗，請稍後再試');
-            return res.status(200).json({ code: -1, msg: errMsg });
-        }
         const shareUrl = `https://loamlab-camera-backend.vercel.app/360-viewer.html?id=${shareId}`;
         try {
-            await supabase.from('transactions').insert([{ user_email: userEmail, amount: -COST_360, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
-            await supabase.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: COST_360 }]);
+            await supabase.from('transactions').insert([{ user_email: userEmail, amount: 0, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
+            await supabase.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: 0 }]);
         } catch(e) {}
-        return res.status(200).json({ code: 0, share_url: shareUrl, points_remaining: deductResult360.balance });
+        return res.status(200).json({ code: 0, share_url: shareUrl });
     }
 
     // 非同步任務輪詢（配合 AtlasCloud 長任務，避免佔用 Vercel 連線）

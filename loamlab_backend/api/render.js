@@ -537,15 +537,16 @@ async function _handleRender(req, res) {
                 // 真的解析不出任務資料：無法判斷真實狀態，先當作仍在處理中，交由下次輪詢重試
                 return res.status(200).json({ code: 0, status: 'processing' });
             }
-            const state = (pData?.data?.state || pData?.data?.status || '').toLowerCase();
-            let finalUrl = pData?.data?.outputs?.[0] || pData?.data?.image_url || pData?.data?.images?.[0] || pData?.data?.output;
-            if (!finalUrl && Array.isArray(pData?.data?.images)) finalUrl = pData.data.images[0]?.url || pData.data.images[0];
-            if (!finalUrl && Array.isArray(pData?.data?.outputs)) finalUrl = pData.data.outputs[0]?.url || pData.data.outputs[0]?.image_url;
+            const realData = pData?.data || pData || {};
+            const state = (realData.state || realData.status || '').toLowerCase();
+            let finalUrl = realData.outputs?.[0] || realData.image_url || realData.images?.[0] || realData.output;
+            if (!finalUrl && Array.isArray(realData.images)) finalUrl = realData.images[0]?.url || realData.images[0];
+            if (!finalUrl && Array.isArray(realData.outputs)) finalUrl = realData.outputs[0]?.url || realData.outputs[0]?.image_url;
             if (typeof finalUrl === 'object' && finalUrl) finalUrl = finalUrl.url || finalUrl.image_url;
 
             if (userPayload.debug) return res.status(200).json({ code: 0, status: 'processing', debug_http_status: pRes.status, debug_state: state, debug_raw: pData });
 
-            if (finalUrl || state === 'succeeded' || state === 'completed') {
+            if (finalUrl || state === 'succeeded' || state === 'completed' || state === 'success') {
                 if (!finalUrl) {
                     // 優先用前端帶回的輪詢起始時間；AtlasCloud 的 created_at 欄位不保證存在（未在文件中證實），
                     // 只當備援，避免該欄位缺失時這個安全網永遠不觸發、退回原本無限 processing 的問題
@@ -953,9 +954,10 @@ async function _handleRender(req, res) {
         const data = await response.json();
         // 與 poll_render（約 583-586 行）保持一致的解析邏輯，避免這裡漏抓 outputs/output
         // 或把 images[0]/outputs[0] 的物件形式誤當字串存進 render_history
-        let finalUrl = data?.data?.outputs?.[0] || data?.data?.image_url || data?.data?.images?.[0] || data?.data?.output || null;
-        if (!finalUrl && Array.isArray(data?.data?.images)) finalUrl = data.data.images[0]?.url || data.data.images[0];
-        if (!finalUrl && Array.isArray(data?.data?.outputs)) finalUrl = data.data.outputs[0]?.url || data.data.outputs[0]?.image_url;
+        const realData2 = data?.data || data || {};
+        let finalUrl = realData2.outputs?.[0] || realData2.image_url || realData2.images?.[0] || realData2.output || null;
+        if (!finalUrl && Array.isArray(realData2.images)) finalUrl = realData2.images[0]?.url || realData2.images[0];
+        if (!finalUrl && Array.isArray(realData2.outputs)) finalUrl = realData2.outputs[0]?.url || realData2.outputs[0]?.image_url;
         if (typeof finalUrl === 'object' && finalUrl) finalUrl = finalUrl.url || finalUrl.image_url;
 
         // AtlasCloud 已接受任務但尚未完成：立即回傳 task_id，不佔用 Vercel 連線 long-poll

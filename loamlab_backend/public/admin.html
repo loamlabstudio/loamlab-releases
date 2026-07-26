@@ -1993,6 +1993,17 @@ function renderT1Nodes() {
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div class="space-y-2">
           <div>
+            <label class="block text-[10px] text-gray-500 uppercase mb-1">Group (群組)</label>
+            <select onchange="updateNode(${idx}, 'group', this.value)" class="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none mb-2">
+              <option value="meta" ${node.group === 'meta' ? 'selected' : ''}>場景類型</option>
+              <option value="core_constraints" ${node.group === 'core_constraints' ? 'selected' : ''}>核心約束</option>
+              <option value="scene_lighting" ${node.group === 'scene_lighting' ? 'selected' : ''}>場景光效</option>
+              <option value="materials" ${node.group === 'materials' ? 'selected' : ''}>材質</option>
+              <option value="photography" ${node.group === 'photography' ? 'selected' : ''}>攝影</option>
+              <option value="rendering" ${node.group === 'rendering' ? 'selected' : ''}>渲染</option>
+            </select>
+          </div>
+          <div>
             <label class="block text-[10px] text-gray-500 uppercase mb-1">JSON Key (英文 ID)</label>
             <input type="text" value="${node.id}" onchange="updateNode(${idx}, 'id', this.value)" class="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white">
           </div>

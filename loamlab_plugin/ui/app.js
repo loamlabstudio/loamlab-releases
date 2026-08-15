@@ -2173,7 +2173,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // （Ruby 路徑缺少合成遮罩圖，且本地 file:/// 不穩定）
         if (currentActiveTool === 2) {
             if (_baseImageEntry) {
-                openSmartCanvas('', _baseImageEntry.cloud_url || _baseImageEntry.file_url || '', _baseImageEntry.scene || '');
+                openSmartCanvas('', _baseImageEntry.file_url || _baseImageEntry.cloud_url || '', _baseImageEntry.scene || '');
             } else {
                 showUpdateToast('⚠️ ' + (langObj['base_image_required'] || '請先從歷史選擇一張底圖'));
             }
@@ -2290,7 +2290,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     disable_batch_style_lock: disableBatchStyleLock,
                     render_force_style: JSON.stringify(_forceStyleVal),
                     ...(usingBaseImage && {
-                        base_image_url: _baseImageEntry.cloud_url || _baseImageEntry.file_url || '',
+                        base_image_url: _baseImageEntry.file_url || _baseImageEntry.cloud_url || '',
                         base_image_scene: _baseImageEntry.scene || '底圖'
                     }),
                     ...(currentActiveTool === 2 && _referenceImageBase64 && {

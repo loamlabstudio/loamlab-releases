@@ -1,4 +1,4 @@
-﻿# frozen_string_literal: true
+# frozen_string_literal: true
 
 module LoamLab
   # ==============================================================================
@@ -16,8 +16,9 @@ module LoamLab
     API_BASE_URL = "http://localhost:3001"
   end
 
-  VERSION = '1.4.66'
+  VERSION = '1.4.67'
 end
+
 
 
 

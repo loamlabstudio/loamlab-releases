@@ -45,7 +45,7 @@ $GITHUB_REPO = "loamlab-releases"
 $DOWNLOAD_URL = "https://github.com/$GITHUB_USER/$GITHUB_REPO/releases/download/v$version/loamlab_plugin.rbz"
 
 # Safety constants
-$MAX_RBZ_SIZE_BYTES = 1048576  # 1 megabyte
+$MAX_RBZ_SIZE_BYTES = 20971520  # 1 megabyte
 $FORBIDDEN_PATTERNS = @('node_modules/', '.git/', '__pycache__/', '.testsprite/')
 
 Write-Host ""

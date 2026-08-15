@@ -1,26 +1,29 @@
-require 'sketchup.rb'
+﻿require 'sketchup.rb'
 require 'extensions.rb'
 
 module LoamLab
   module AIURenderer
-    # 缁扁偓闁峰嫬顦婚幒娑欑壌閻╊噣瀵楃捄顖氱帆
+    # 缂佹墎鍋撻梺宄板椤﹀骞掑☉娆戝闁烩晩鍣ｇ€垫鎹勯姘卞竼
     PLUGIN_ROOT = File.expand_path(File.dirname(__FILE__))
-    # 鐏忓洨鏆ラ崜宥咁樆閹烘盯鏋婇惂鑲╂窗闁峰嫭甯归崗?$LOAD_PATH 閻ㄥ嫭娓堕崜宥夋桨閿?
-    # 闁瑦菐娑撯偓娓氬棗顩ч弸?SketchUp 閸徰勬箒閸忊晝绁崥灞芥倳閹挎潙鐫嶉敍灞界殻濮樻悂浠╁宄板煑閸庮亜鍘涚拋鈧崣鏍ㄦ付閺傛壆娈戦柅娆戠カ閵?
+    # 閻忓繐娲ㄩ弳銉╁礈瀹ュ拋妯嗛柟鐑樼洴閺嬪﹪鎯傞懖鈺傜獥闂佸嘲瀚敮褰掑礂?$LOAD_PATH 闁汇劌瀚〒鍫曞礈瀹ュ妗ㄩ柨?
+    # 闂侇偅鐟﹁彁濞戞挴鍋撳〒姘椤┭囧几?SketchUp 闁稿景鍕畳闁稿繆鏅濈粊顐﹀触鐏炶姤鍊抽柟鎸庢綑閻秹鏁嶇仦鐣屾婵ɑ鎮傛禒鈺侇嚕瀹勬澘鐓戦柛搴簻閸樻稓鎷嬮埀顒勫矗閺嶃劍浠橀柡鍌涘濞堟垿鏌呭▎鎴犮偒闁?
     unless file_loaded?(__FILE__)
-    ext = SketchupExtension.new('LoamLab Camera (闁插簼姹夐惄鍛婎熂)', File.join(File.dirname(__FILE__), 'loamlab_plugin', 'main'))
+    ext = SketchupExtension.new('LoamLab Camera (闂佹彃绨煎Ч澶愭儎閸涘鐔?', File.join(File.dirname(__FILE__), 'loamlab_plugin', 'main'))
     ext.description = 'LoamLab Camera Architecture Rendering Plugin'
     ext.version     = '1.4.67'
     ext.creator     = 'LoamLab Studio'
       ext.copyright   = '2026 LoamLab Inc.'
       
-      # 鐏忓洦鎽仦鏇∩戦崘濠傚煂 SketchUp
+      # 閻忓繐娲﹂幗顖滀沪閺団埄鎴﹀礃婵犲倸鐓?SketchUp
       Sketchup.register_extension(ext, true)
       
       file_loaded(__FILE__)
     end
   end
 end
+
+
+
 
 
 

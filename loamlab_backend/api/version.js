@@ -1,8 +1,8 @@
-// /api/version - 濞撴碍绋掕ぐ鍐╃閹澘娈伴柛鏇熸礃濞插潡寮悧鍫唫闁告帟鍩栭悡锛勬噹閵忊剝浠橀柡鍌涘婢ф寮?
-// 闁绘鐗婂﹢鎵尙閸ヮ亖鏋欓柣鈺佺摠鐢挳宕楄缁佺敻鏁嶅畝鈧弫?release.ps1 闁谎呭帶缁旂兘寮查崒娑欑函闁哄倻澧楅婵嗩瀶閺冣偓椤?
+﻿// /api/version - 婵炴挻纰嶇粙鎺曘亹閸愨晝顩烽柟顖涙緲濞堜即鏌涢弴鐔哥婵炴彃娼″顒勬偋閸偆鍞梺鍛婂笩閸╂牠鎮￠敍鍕櫣闁靛繆鍓濇禒姗€鏌￠崒娑橆棆濠⒀勵殜瀵?
+// 闂佺粯顨呴悧濠傦耿閹殿喗灏欓柛銉簴閺嬫瑩鏌ｉ埡浣烘憼閻㈩垱鎸冲畷妤勵槻缂佷胶鏁婚弫宥呯暆閳ь剟寮?release.ps1 闂佽皫鍛付缂佹梻鍏樺鏌ュ磼濞戞瑧鍑介梺鍝勫€绘晶妤咁敆濠靛棭鐎堕柡鍐ｅ亾妞?
 const LATEST = {
     latest_version: "1.4.67",
-    download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/latest/download/loamlab_plugin.rbz",
+    download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.4.67/loamlab_plugin.rbz",
     manual_url: "https://github.com/loamlabstudio/loamlab-releases/releases/latest"
 };
 
@@ -14,7 +14,7 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
 </urlset>`;
 
 export default function handler(req, res) {
-    // GET /sitemap.xml — rewritten from vercel.json
+    // GET /sitemap.xml 鈥?rewritten from vercel.json
     if (req.query && req.query._sitemap) {
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=86400');
@@ -30,6 +30,7 @@ export default function handler(req, res) {
         release_notes: `v${LATEST.latest_version} release`
     });
 }
+
 
 
 

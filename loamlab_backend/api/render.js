@@ -931,6 +931,8 @@ async function _handleRender(req, res) {
         // 將所有參考圖片確保為 URL 或 base64 data URL 容錯機制
                 // 將所有參考圖片確保為 URL 或 base64 data URL 容錯機制
         // 為避免 AtlasCloud 無法下載 TOS 導致 Model input cannot be empty
+                // 將所有參考圖片確保為 URL 或 base64 data URL 容錯機制
+        // 為避免 AtlasCloud 無法下載 TOS 導致 Model input cannot be empty
         const atlasImages = await Promise.all(allImagesStrArray.filter(Boolean).map(async (img) => {
             if (img.startsWith('http')) {
                 try {
@@ -940,11 +942,13 @@ async function _handleRender(req, res) {
                         const buffer = Buffer.from(arrayBuffer);
                         const mime = imgRes.headers.get('content-type') || 'image/jpeg';
                         return `data:${mime};base64,${buffer.toString('base64')}`;
+                    } else {
+                        throw new Error("無法下載參考圖片，歷史圖片連結可能已過期 (超過24小時)，請重新上傳一張新的參考圖。");
                     }
                 } catch (e) {
                     console.error('[render] fetch image URL for atlas failed:', e);
+                    throw new Error("無法下載參考圖片，歷史圖片連結可能已過期 (超過24小時)，請重新上傳一張新的參考圖。");
                 }
-                return img;
             }
             if (img.startsWith('data:image')) return img;
             return `data:image/jpeg;base64,${img}`;

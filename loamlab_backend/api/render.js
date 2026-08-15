@@ -929,11 +929,26 @@ async function _handleRender(req, res) {
         }
 
         // 將所有參考圖片確保為 URL 或 base64 data URL 容錯機制
-        const atlasImages = allImagesStrArray.filter(Boolean).map(img => {
-            if (img.startsWith('http')) return img;
+                // 將所有參考圖片確保為 URL 或 base64 data URL 容錯機制
+        // 為避免 AtlasCloud 無法下載 TOS 導致 Model input cannot be empty
+        const atlasImages = await Promise.all(allImagesStrArray.filter(Boolean).map(async (img) => {
+            if (img.startsWith('http')) {
+                try {
+                    const imgRes = await fetch(img);
+                    if (imgRes.ok) {
+                        const arrayBuffer = await imgRes.arrayBuffer();
+                        const buffer = Buffer.from(arrayBuffer);
+                        const mime = imgRes.headers.get('content-type') || 'image/jpeg';
+                        return `data:${mime};base64,${buffer.toString('base64')}`;
+                    }
+                } catch (e) {
+                    console.error('[render] fetch image URL for atlas failed:', e);
+                }
+                return img;
+            }
             if (img.startsWith('data:image')) return img;
             return `data:image/jpeg;base64,${img}`;
-        });
+        }));
 
         const normalizedRes = resolutionMap[resVal] || '2k';
         const aspectRatioOverride = activeTool === 2 ? (userPayload.parameters?.aspect_ratio || null) : null;

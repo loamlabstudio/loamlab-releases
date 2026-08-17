@@ -280,5 +280,6 @@
     "referral_bound_msg1": "✅ Ambassador code applied! Code: ",
     "referral_bound_msg2": "After your first payment, you'll receive <span class=\"text-emerald-400 font-bold\">+100 pts</span>, and the ambassador will receive <span class=\"text-amber-400 font-bold\">+300 pts</span>!",
     "sc_label_ph": "Describe the change...",
-    "sc_tool_rect": "Rectangle R  |  Click twice to set opposite corners, rounded automatically"
+    "sc_tool_rect": "Rectangle R  |  Click twice to set opposite corners, rounded automatically",
+    "err_copyright": "Generated image may be related to copyright restrictions. Task canceled."
 }

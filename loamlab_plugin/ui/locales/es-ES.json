@@ -280,5 +280,6 @@
     "sc_tool_color_picker": "Color del pincel",
     "sc_tool_brush_size": "Tamaño del pincel",
     "sc_label_ph": "Describe el cambio...",
-    "sc_tool_rect": "Rectángulo R  |  Haz clic dos veces para fijar las esquinas opuestas, se redondea automáticamente"
+    "sc_tool_rect": "Rectángulo R  |  Haz clic dos veces para fijar las esquinas opuestas, se redondea automáticamente",
+    "err_copyright": "La imagen generada puede estar relacionada con restricciones de derechos de autor. Tarea cancelada."
 }

@@ -284,7 +284,8 @@ const UI_LANG = {
         "testimonial_1_author": "— 室內設計師，台北",
         "testimonial_2_author": "— 建築師，高雄",
         "testimonial_3_quote": "“Pro 方案一個月 2000 點，我一個案子的提案圖就值回票價了。”",
-        "testimonial_3_author": "— 設計顧問，上海"
+        "testimonial_3_author": "— 設計顧問，上海",
+        "err_copyright": "生成的圖片可能涉及版權限制，任務已被取消。"
     },
     "en-US": {
         "title": "LoamLab Camera",
@@ -568,7 +569,8 @@ const UI_LANG = {
         "referral_bound_msg1": "✅ Ambassador code applied! Code: ",
         "referral_bound_msg2": "After your first payment, you'll receive <span class=\"text-emerald-400 font-bold\">+100 pts</span>, and the ambassador will receive <span class=\"text-amber-400 font-bold\">+300 pts</span>!",
         "sc_label_ph": "Describe the change...",
-        "sc_tool_rect": "[TBD] 矩形 R  |  點兩下決定對角，圓角自動產生"
+        "sc_tool_rect": "Rectangle R  |  Click twice to set opposite corners, rounded automatically",
+        "err_copyright": "Generated image may be related to copyright restrictions. Task canceled."
     },
     "zh-CN": {
         "title": "野人相機 (LoamLab Camera)",
@@ -852,7 +854,8 @@ const UI_LANG = {
         "sc_tool_color_picker": "筆刷顏色",
         "sc_tool_brush_size": "筆刷大小",
         "sc_label_ph": "描述替換內容...",
-        "sc_tool_rect": "矩形 R  |  點兩下決定對角，圓角自動產生"
+        "sc_tool_rect": "矩形 R  |  點兩下決定對角，圓角自動產生",
+        "err_copyright": "生成的图片可能涉及版权限制，任务已被取消。"
     },
     "es-ES": {
         "title": "LoamLab Camera",
@@ -1136,7 +1139,8 @@ const UI_LANG = {
         "sc_tool_color_picker": "Color del pincel",
         "sc_tool_brush_size": "Tamaño del pincel",
         "sc_label_ph": "Describe el cambio...",
-        "sc_tool_rect": "[TBD] 矩形 R  |  點兩下決定對角，圓角自動產生"
+        "sc_tool_rect": "Rectángulo R  |  Haz clic dos veces para fijar las esquinas opuestas, se redondea automáticamente",
+        "err_copyright": "La imagen generada puede estar relacionada con restricciones de derechos de autor. Tarea cancelada."
     },
     "pt-BR": {
         "title": "LoamLab Camera",
@@ -1420,7 +1424,8 @@ const UI_LANG = {
         "sc_tool_color_picker": "Cor do pincel",
         "sc_tool_brush_size": "Tamanho do pincel",
         "sc_label_ph": "Descreva a mudança...",
-        "sc_tool_rect": "[TBD] 矩形 R  |  點兩下決定對角，圓角自動產生"
+        "sc_tool_rect": "Retângulo R  |  Clique duas vezes para definir os cantos opostos, arredondado automaticamente",
+        "err_copyright": "A imagem gerada pode estar relacionada a restrições de direitos autorais. Tarefa cancelada."
     },
     "ja-JP": {
         "title": "LoamLab Camera",
@@ -1704,7 +1709,8 @@ const UI_LANG = {
         "sc_tool_color_picker": "ブラシカラー",
         "sc_tool_brush_size": "ブラシサイズ",
         "sc_label_ph": "変更内容を入力...",
-        "sc_tool_rect": "[TBD] 矩形 R  |  點兩下決定對角，圓角自動產生"
+        "sc_tool_rect": "四角形 R  |  2回クリックで対角を決定、角は自動的に丸くなります",
+        "err_copyright": "Generated image may be related to copyright restrictions. Task canceled."
     }
 };
 

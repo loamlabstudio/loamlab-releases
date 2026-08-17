@@ -525,7 +525,7 @@ async function _handleRender(req, res) {
             });
             if (pRes.status === 404 || pRes.status === 410) {
                 // 任務在 AtlasCloud 端已不存在/過期，不可能再有結果，視為失敗並退款
-                return res.status(200).json(await refundAndFail(supabase, userEmail, pollCost, `任務查詢不到（HTTP ${pRes.status}）`));
+                return res.status(200).json(await refundAndFail(supabase, userEmail, pollCost, `任務查詢不到（HTTP ${pRes.status}）`, pollTool, taskId));
             }
             // AtlasCloud 對「已失敗」的任務有時仍用非 200（如 500）包一層外層錯誤，
             // 但 body 內的 data.status 才是任務真實狀態（實測過：外層 500 + data.status:"failed"）。
@@ -553,7 +553,7 @@ async function _handleRender(req, res) {
                     const createdAt = pData?.data?.created_at;
                     const refStart = pollStartedAt || (createdAt ? new Date(createdAt).getTime() : null);
                     if (refStart && (Date.now() - refStart > 240000)) {
-                        return res.status(200).json(await refundAndFail(supabase, userEmail, pollCost, '任務已成功但圖檔遺失，自動退款'));
+                        return res.status(200).json(await refundAndFail(supabase, userEmail, pollCost, '任務已成功但圖檔遺失，自動退款', pollTool, taskId));
                     }
                     return res.status(200).json({ code: 0, status: 'processing' });
                 }
@@ -574,7 +574,18 @@ async function _handleRender(req, res) {
                 });
             }
             if (!IN_PROGRESS_STATES.has(state)) {
-                return res.status(200).json(await refundAndFail(supabase, userEmail, pollCost, `AI 渲染引擎任務失敗（狀態: ${state || '未知'}）`));
+                let reason = `AI 渲染引擎任務失敗（狀態: ${state || '未知'}）`;
+                let errorKey = null;
+                const errString = typeof realData.error === 'string' ? realData.error : (realData.error?.message || '');
+                if (errString.includes('copyright restrictions')) {
+                    reason = '圖檔可能涉及版權限制，任務已被取消';
+                    errorKey = 'err_copyright';
+                } else if (errString) {
+                    reason = `AI 渲染引擎任務失敗: ${errString}`;
+                }
+                const refundRes = await refundAndFail(supabase, userEmail, pollCost, reason, pollTool, taskId);
+                if (errorKey) refundRes.error_key = errorKey;
+                return res.status(200).json(refundRes);
             }
             return res.status(200).json({ code: 0, status: 'processing' });
         } catch (e) {
@@ -714,7 +725,7 @@ async function _handleRender(req, res) {
             tempStorageFile = fileName;
         } catch (uploadErr) {
             try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch(e) {}
-            try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_UPLOAD_FAIL' }]); } catch(e) {}
+            try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_UPLOAD_FAIL', metadata: { tool_id: activeTool } }]); } catch(e) {}
             return res.status(500).json({ code: -1, msg: sanitizeError(`圖床代傳失敗: ${uploadErr.message}`), points_refunded: true });
         }
     }
@@ -1007,7 +1018,7 @@ async function _handleRender(req, res) {
             });
         } else {
             try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch(e) {}
-            try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL' }]); } catch(e) {}
+            try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL', metadata: { tool_id: activeTool } }]); } catch(e) {}
             console.error('[render] no_url response:', JSON.stringify(data).slice(0, 200));
             return res.status(500).json({ code: -1, msg: '出圖完成但結果未返回，請稍後再試。', points_refunded: true });
         }
@@ -1015,16 +1026,30 @@ async function _handleRender(req, res) {
         await cleanTemp2().catch(() => {});
         await cleanTemp().catch(() => {});
         try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch(e) {}
-        try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NETWORK_ERROR' }]); } catch(e) {}
+        try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NETWORK_ERROR', metadata: { tool_id: activeTool } }]); } catch(e) {}
         return res.status(500).json({ code: -1, msg: sanitizeError(apiError?.message || '渲染失敗，請稍後再試。'), points_refunded: true });
     }
 }
 
 // poll_render 判定任務失敗時的統一退款處理：金額 > 0 才退，並回傳給前端的 JSON body
-async function refundAndFail(supabase, userEmail, cost, reason) {
+async function refundAndFail(supabase, userEmail, cost, reason, toolId = null, taskId = null) {
     if (cost > 0) {
+        if (taskId) {
+            const { data: existing } = await supabase.from('transactions')
+                .select('id')
+                .eq('user_email', userEmail)
+                .eq('transaction_type', 'REFUND_TASK_FAILED')
+                .contains('metadata', { task_id: taskId })
+                .maybeSingle();
+            if (existing) return { code: -1, status: 'failed', msg: `${reason}，點數已退回`, points_refunded: false };
+        }
         try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch (e) {}
-        try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_TASK_FAILED' }]); } catch (e) {}
+        try { 
+            const insertPayload = { user_email: userEmail, amount: cost, transaction_type: 'REFUND_TASK_FAILED', metadata: {} };
+            if (toolId) insertPayload.metadata.tool_id = toolId;
+            if (taskId) insertPayload.metadata.task_id = taskId;
+            await supabase.from('transactions').insert([insertPayload]); 
+        } catch (e) {}
     }
     return { code: -1, status: 'failed', msg: `${reason}，點數已退回`, points_refunded: cost > 0 };
 }

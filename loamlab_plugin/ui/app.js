@@ -1825,11 +1825,12 @@ window.receiveFromRuby = function (data) {
             if (typeof openLoginModal === 'function') setTimeout(() => openLoginModal(), 400);
         }
         const langObj5 = UI_LANG[currentLang];
-        let failMsg = sanitizeMsg(_msg401 || langObj5['render_failed'] || 'Render Failed');
+        let failMsg = data.error_key && window.t && window.t(data.error_key) ? window.t(data.error_key) : sanitizeMsg(_msg401 || langObj5['render_failed'] || 'Render Failed');
         if (data.points_refunded) {
             failMsg += ` (${langObj5['points_refunded'] || 'Points Refunded'})`;
         }
         statusText.textContent = `${langObj5['error_label'] || 'Error'}: ${failMsg} (${finishedScenesCount}/${totalScenesToRender})`;
+          if (data.error_key === 'err_copyright') { alert('⚠️ ' + failMsg); }
         statusText.classList.replace('text-green-500', 'text-[#dc2626]');
         statusText.classList.replace('text-amber-400', 'text-[#dc2626]');
         statusText.classList.replace('text-red-400', 'text-[#dc2626]');
@@ -6417,7 +6418,9 @@ async function _pollRenderTask(initial) {
                 return { code: 0, url: pData.url, points_remaining: pData.points_remaining, transaction_id: pData.transaction_id };
             }
             if (pData.status === 'failed') {
-                return { code: -1, msg: pData.msg || '渲染失敗', points_refunded: pData.points_refunded };
+                let msg = pData.msg || '渲染失敗';
+                  if (pData.error_key && window.t && window.t(pData.error_key)) msg = window.t(pData.error_key);
+                  return { code: -1, msg: msg, points_refunded: pData.points_refunded };
             }
             // status === 'processing' → 繼續輪詢
         } catch (e) {

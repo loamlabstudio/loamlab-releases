@@ -235,7 +235,15 @@ export default async function handler(req, res) {
     }
 }
 
-async function processCancellation(customerEmail, platform) {
+async function processCancellation(customerEmail, platform, subscriptionId = null) {
+    if (subscriptionId) {
+        const { data: uRow } = await supabase.from('users').select('dodo_subscription_id').eq('email', customerEmail).maybeSingle();
+        if (uRow && uRow.dodo_subscription_id && uRow.dodo_subscription_id !== subscriptionId) {
+            console.log(`[🛑取消訂閱] 忽略過期取消事件: ${customerEmail} (已綁定新訂閱)`);
+            return;
+        }
+    }
+
     console.log(`[🛑取消訂閱] 處理 ${platform} 取消: ${customerEmail}`);
     await supabase.from('users').update({
         subscription_plan: null,
@@ -246,15 +254,17 @@ async function processCancellation(customerEmail, platform) {
     }).eq('email', customerEmail);
 }
 
-// 單一事實來源：把 Dodo 回傳的訂閱物件原樣鏡射進 DB，取代過去分散在各事件裡各自猜欄位的寫法。
+// 單一事實來源：把 Dodo 回傳的訂閱物件原樣鏡射到 DB，取代過去分散在各事件裡各自猜欄位的寫法。
 // sub 直接是 Dodo API/webhook 的訂閱物件（status / subscription_id / product_id / cancel_at_next_billing_date / next_billing_date）。
 async function syncSubscriptionState(customerEmail, sub, { clearNextPlan = false, allowPlanChange = false } = {}) {
     if (!customerEmail || !sub?.subscription_id) return;
 
     // Dodo 官方 status 枚舉：pending/active/on_hold/cancelled/failed/expired（無 trialing、無 canceled 單L）
     if (sub.status === 'cancelled' || sub.status === 'expired') {
-        return processCancellation(customerEmail, 'DODO');
+        return processCancellation(customerEmail, 'DODO', sub.subscription_id);
     }
+
+    
 
     const updateFields = {
         dodo_subscription_id: sub.subscription_id,

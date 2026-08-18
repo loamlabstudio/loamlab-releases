@@ -24,17 +24,19 @@ export const config = {
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
+    let sigDodo, sigLS, event;
     try {
         const rawBody = await getRawBody(req);
-        const sigLS = req.headers['x-signature'];
-        const sigDodo = req.headers['webhook-signature'];
+        sigLS = req.headers['x-signature'];
+        sigDodo = req.headers['webhook-signature'];
 
         if (sigDodo) {
             // --- 處理 Dodo Payments Webhook ---
             if (!verifyDodoSignature(rawBody, req.headers, WEB_SECRET_DODO)) {
+                await logWebhookError('DODO', 'signature_verification', null, null, 'Invalid Dodo Signature', null);
                 return res.status(401).json({ error: 'Invalid Dodo Signature' });
             }
-            const event = JSON.parse(rawBody.toString());
+            event = JSON.parse(rawBody.toString());
             console.log('[Dodo] Event received:', event.type);
 
             if (event.type === 'payment.refunded' || event.type === 'payment.disputed') {
@@ -170,9 +172,10 @@ export default async function handler(req, res) {
         } else if (sigLS) {
             // --- 處理 LemonSqueezy Webhook ---
             if (!verifySignature(rawBody, sigLS, WEB_SECRET_LS)) {
+                await logWebhookError('LS', 'signature_verification', null, null, 'Invalid LS Signature', null);
                 return res.status(401).json({ error: 'Invalid LS Signature' });
             }
-            const event = JSON.parse(rawBody.toString());
+            event = JSON.parse(rawBody.toString());
             const eventName = event.meta.event_name;
             console.log('[LS] Event received:', eventName);
 
@@ -231,6 +234,8 @@ export default async function handler(req, res) {
 
     } catch (error) {
         console.error('Webhook Error:', error);
+        const platform = sigDodo ? 'DODO' : (sigLS ? 'LS' : 'UNKNOWN');
+        await logWebhookError(platform, event?.type || 'uncaught_exception', null, null, error.message, null);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 }

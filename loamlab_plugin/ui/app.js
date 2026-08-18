@@ -3382,9 +3382,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // =========================================================
-// LemonSqueezy Variant IDs & Beta 折扣碼
-// ★ 請至 LemonSqueezy 後台 Products > Variants 取得真實 ID 後更新此處
-// =========================================================
 // 幣種成本參考（各方案每張 2K 渲染成本）
 // =========================================================
 const COST_CURRENCY = {
@@ -3434,20 +3431,6 @@ function updateRenderHints() {
     });
 }
 
-// ★ webhook.js 的 VARIANT_* 常數必須與此同步
-// =========================================================
-// 支付平台配置：'LS' (LemonSqueezy) 或 'DODO' (Dodo Payments)
-const CURRENT_PAYMENT_PLATFORM = 'DODO'; 
-
-const LS_VARIANTS = {
-    TOPUP: 1432023,
-    STARTER: 1432194,
-    PRO: 1432198,
-    STUDIO: 1432205
-};
-
-
-const BETA_DISCOUNT_CODE = 'LOAM_BETA_30';
 const BETA_DISCOUNT_RATE = 0.70; // UI 顯示用（-30% 折扣視覺計算）
 
 function applyBetaDiscountDisplay() {
@@ -4109,37 +4092,30 @@ window.openCheckout = async function (planKey, quantity = 1) {
     const qty = Math.max(1, parseInt(quantity) || 1);
     let finalUrl = "";
 
-    if (CURRENT_PAYMENT_PLATFORM === 'DODO') {
-        // 後端代理：取得帶折扣的 checkout session URL
-        showUpdateToast('🔄 取得結帳頁面中...');
-        let kolRef = null;
-        try {
-            const raw = localStorage.getItem('loamlab_kol_ref');
-            if (raw) { const p = JSON.parse(raw); if (Date.now() <= p.expiry) kolRef = p.code; }
-        } catch (_) {}
-        try {
-            const res = await fetch(`${API_BASE}/api/user?action=checkout`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ planKey, email: window.loamlabUserEmail, quantity: qty, referralCode: kolRef })
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            // 【洗點事故重構 2026-07】後端已廢除 change-plan / proration 補差價流程。
-            // 所有購買/升降級一律走全新的 /checkouts 全額結帳，因此永遠會回傳 checkoutUrl，
-            // 不再有 planChanged 就地切換分支。舊訂閱在 webhook 發點成功後由後端自動取消。
-            if (!data.checkoutUrl) { showUpdateToast('⚠️ 無法建立結帳連結，請稍後再試'); return; }
-            finalUrl = data.checkoutUrl;
-        } catch (e) {
-            console.error('[checkout]', e);
-            showUpdateToast('⚠️ 無法建立結帳連結，請稍後再試');
-            return;
-        }
-    } else {
-        // LemonSqueezy fallback
-        const variantId = LS_VARIANTS[planKey] !== undefined ? LS_VARIANTS[planKey] : planKey;
-        const storeUrl = "https://loamlabstudio.lemonsqueezy.com/checkout/buy/";
-        finalUrl = `${storeUrl}${variantId}?checkout[email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[custom][user_email]=${encodeURIComponent(window.loamlabUserEmail)}&checkout[discount_code]=${BETA_DISCOUNT_CODE}`;
+    // 後端代理：取得帶折扣的 checkout session URL
+    showUpdateToast('🔄 取得結帳頁面中...');
+    let kolRef = null;
+    try {
+        const raw = localStorage.getItem('loamlab_kol_ref');
+        if (raw) { const p = JSON.parse(raw); if (Date.now() <= p.expiry) kolRef = p.code; }
+    } catch (_) {}
+    try {
+        const res = await fetch(`${API_BASE}/api/user?action=checkout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ planKey, email: window.loamlabUserEmail, quantity: qty, referralCode: kolRef })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        // 【洗點事故重構 2026-07】後端已廢除 change-plan / proration 補差價流程。
+        // 所有購買/升降級一律走全新的 /checkouts 全額結帳，因此永遠會回傳 checkoutUrl，
+        // 不再有 planChanged 就地切換分支。舊訂閱在 webhook 發點成功後由後端自動取消。
+        if (!data.checkoutUrl) { showUpdateToast('⚠️ 無法建立結帳連結，請稍後再試'); return; }
+        finalUrl = data.checkoutUrl;
+    } catch (e) {
+        console.error('[checkout]', e);
+        showUpdateToast('⚠️ 無法建立結帳連結，請稍後再試');
+        return;
     }
 
     if (!finalUrl) return;

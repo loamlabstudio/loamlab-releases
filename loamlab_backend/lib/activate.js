@@ -1,16 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { PRICING_CONFIG, DODO_PRODUCTS } from '../config.js';
-
-const IDS = {
-    LS: { TOPUP: 1432023, STARTER: 1432194, PRO: 1432198, STUDIO: 1432205 },
-    DODO: DODO_PRODUCTS
-};
-
-// 方案「定價原價」（美分），對齊 POINTS_SYSTEM.md 與 Dodo 商品原價（折扣前）。
-// 【2026-07 架構重構】不再用於洗點防禦驗證（改比對 Dodo 真實訂閱金額，見下方 processTopup），
-// 只剩「記帳 fallback」這一個用途——完全查不到任何真實金額時，交易紀錄用它估算顯示金額。
-// ⚠️ 調價時務必同步 POINTS_SYSTEM.md / Dodo 後台。
-const PLAN_PRICES_CENTS = { starter: 3500, pro: 7500, studio: 19900, topup: 2500 };
+import { PRICING_CONFIG, PLAN_DEFS } from '../config.js';
 
 export function makeSupabase() {
     return createClient(
@@ -19,37 +8,28 @@ export function makeSupabase() {
     );
 }
 
+// 商品辨識唯一入口：先認 planKey（webhook metadata 直接給的方案名），查不到再退回比對 Dodo 商品 ID。
+// 點數/價格/是否訂閱全部查 config.js 的 PLAN_DEFS，不在這裡重複硬編數字。
+function resolvePlan(planKey, variantId) {
+    if (planKey && PLAN_DEFS[planKey.toLowerCase()]) {
+        return { key: planKey.toLowerCase(), ...PLAN_DEFS[planKey.toLowerCase()] };
+    }
+    for (const [key, def] of Object.entries(PLAN_DEFS)) {
+        if (variantId == def.productId) return { key, ...def };
+    }
+    return null;
+}
+
 export async function processTopup(supabase, customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null, planKey = null, dodoCustomerId = null, amountPaidCents = null, expectedAmountCents = null) {
     const fullOrderId = `${platform}_${orderId}`;
-    const { data: existingTx } = await supabase.from('transactions').select('id').eq('order_id', fullOrderId).maybeSingle();
-    if (existingTx) return console.log(`[🔁冪等] ${fullOrderId} 已處理過`);
 
-    const PLAN_KEY_MAP = {
-        STARTER: { points: 300,  name: 'starter', isSub: true },
-        PRO:     { points: 2000, name: 'pro',     isSub: true },
-        STUDIO:  { points: 9000, name: 'studio',  isSub: true },
-        TOPUP:   { points: 200,  name: null,      isSub: false },
-    };
-
-    let pointsToAdd = 0;
-    let planName = null;
-    let isSubscription = false;
-
-    if (planKey && PLAN_KEY_MAP[planKey.toUpperCase()]) {
-        const m = PLAN_KEY_MAP[planKey.toUpperCase()];
-        pointsToAdd = m.points; planName = m.name; isSubscription = m.isSub;
-    } else {
-        const pIds = IDS[platform];
-        if (!pIds) throw new Error(`Unknown platform: ${platform}`);
-        if (variantId == pIds.STARTER) { pointsToAdd = 300; planName = 'starter'; isSubscription = true; }
-        else if (variantId == pIds.PRO) { pointsToAdd = 2000; planName = 'pro'; isSubscription = true; }
-        else if (variantId == pIds.STUDIO) { pointsToAdd = 9000; planName = 'studio'; isSubscription = true; }
-        else if (variantId == pIds.TOPUP) { pointsToAdd = 200; isSubscription = false; }
-    }
-
-    if (pointsToAdd <= 0) {
+    const plan = resolvePlan(planKey, variantId);
+    if (!plan) {
         throw new Error(`Unknown product: planKey=${planKey} variantId=${variantId} (${platform})`);
     }
+    const pointsToAdd = plan.points;
+    const isSubscription = plan.isSub;
+    const planName = isSubscription ? plan.key : null;
 
     // 【洗點防禦・第一性原理 2026-07】不猜折扣比例，直接比對 Dodo 對「這筆訂閱」真正鎖定的金額
     // （expectedAmountCents = webhook.js 呼叫 GET /subscriptions/{id} 拿到的 recurring_pre_tax_amount，
@@ -67,6 +47,29 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
         }
     }
 
+    // 記帳金額：優先用實付金額（含折扣後真實營收），其次用 Dodo 記錄的真實訂閱金額，
+    // 兩者都拿不到時才退回商品原價估算（僅 LS 舊路徑等缺金額資訊的情境會走到這裡）。
+    const amountPaid = (amountPaidCents != null && amountPaidCents > 0) ? amountPaidCents
+        : (expectedAmountCents != null && expectedAmountCents > 0) ? expectedAmountCents
+        : plan.priceCents;
+
+    // 【第一性原理・claim-first】先原子性地佔用這筆訂單號，佔不到（UNIQUE 撞號）代表已被處理過，
+    // 直接返回，後面「發點數」完全不會執行——徹底消滅「先發點數、最後才發現訂單重複」的並發雙重入帳窗口，
+    // 也不再需要「發完點數才發現要回滾」的補償邏輯。
+    const { error: claimErr } = await supabase.from('transactions').insert([{
+        user_email: customerEmail,
+        amount: pointsToAdd,
+        transaction_type: isSubscription ? 'TOPUP_SUBSCRIPTION' : 'TOPUP_SINGLE',
+        order_id: fullOrderId,
+        amount_usd_cents: amountPaid
+    }]);
+    if (claimErr) {
+        if (claimErr.code === '23505' || claimErr.message?.includes('unique')) {
+            return console.log(`[🔁冪等] ${fullOrderId} 已處理過`);
+        }
+        throw claimErr;
+    }
+
     let kolEmailFromCode = null;
     if (discountCode) {
         try {
@@ -82,144 +85,114 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
         }
     }
 
-    let { data: user } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
+    // 【關鍵區】訂單號已佔用成功，這行以下到 apply_points_delta 之間任何一步失敗，
+    // 都撤銷剛才佔的訂單號讓下次重試整段重跑——寧可重做一次冪等安全的步驟，也不留半套狀態。
+    // apply_points_delta 成功之後（點數已真正到帳）的步驟改為各自 non-fatal，不再觸發撤銷，
+    // 否則撤銷後的重試會把已經發過的點數再發一次。
+    try {
+        let { data: user } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
 
-    if (!user) {
-        await supabase.from('users').insert([{
-            email: customerEmail,
-            points: 0,
-            lifetime_points: 0,
-            is_beta_tester: true,
-            subscription_plan: planName,
-            last_topup_at: new Date().toISOString(),
-            referred_by: kolEmailFromCode || null,
-        }]);
-        const { data: fetchedUser } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
-        user = fetchedUser;
-        if (kolEmailFromCode) console.log(`[💡KOL新用戶歸因] discount_code=${discountCode}: ${customerEmail} → ${kolEmailFromCode}`);
-    } else if (kolEmailFromCode && !user.referred_by) {
-        await supabase.from('users').update({ referred_by: kolEmailFromCode }).eq('email', customerEmail);
-        user.referred_by = kolEmailFromCode;
-        console.log(`[💡KOL晚期綁定] discount_code=${discountCode}: ${customerEmail} → ${kolEmailFromCode}`);
-    }
-
-    // 邀請人分潤 A：改用 apply_points_delta 原子 RPC（FOR UPDATE 鎖列），避免多筆訂單
-    // 同時對同一個邀請人做 read-then-write 互相蓋掉。
-    let bonusB = 0;
-    let inviterEmail = null;
-    let REWARD_A = 0;
-    if (user?.referred_by) {
-        const { data: txPaid } = await supabase.from('transactions').select('id').eq('user_email', customerEmail).eq('transaction_type', 'REFERRAL_PAID_B').maybeSingle();
-        if (!txPaid) {
-            REWARD_A = PRICING_CONFIG.referral.paid_reward_a;
-            const REWARD_B = PRICING_CONFIG.referral.paid_reward_b;
-            bonusB = REWARD_B;
-            inviterEmail = user.referred_by;
-            const { data: inviterRpc } = await supabase.rpc('apply_points_delta', {
-                p_email: inviterEmail, p_set_monthly: null, p_add_lifetime: REWARD_A, p_add_referral_count: 1
-            });
-            if (inviterRpc?.success) {
-                await supabase.from('transactions').insert([
-                    { user_email: inviterEmail, amount: REWARD_A, transaction_type: 'REFERRAL_PAID_A', order_id: `refA_${fullOrderId}` },
-                    { user_email: customerEmail, amount: REWARD_B, transaction_type: 'REFERRAL_PAID_B', order_id: `refB_${fullOrderId}` }
-                ]);
-            } else {
-                inviterEmail = null; // 邀請人不存在，rollback 時不用補償
-            }
+        if (!user) {
+            await supabase.from('users').insert([{
+                email: customerEmail,
+                points: 0,
+                lifetime_points: 0,
+                is_beta_tester: true,
+                subscription_plan: planName,
+                last_topup_at: new Date().toISOString(),
+                referred_by: kolEmailFromCode || null,
+            }]);
+            const { data: fetchedUser } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
+            user = fetchedUser;
+            if (kolEmailFromCode) console.log(`[💡KOL新用戶歸因] discount_code=${discountCode}: ${customerEmail} → ${kolEmailFromCode}`);
+        } else if (kolEmailFromCode && !user.referred_by) {
+            await supabase.from('users').update({ referred_by: kolEmailFromCode }).eq('email', customerEmail);
+            user.referred_by = kolEmailFromCode;
+            console.log(`[💡KOL晚期綁定] discount_code=${discountCode}: ${customerEmail} → ${kolEmailFromCode}`);
         }
-    }
 
-    if (isSubscription && subscriptionId) {
-        try {
-            await supabase.from('users').update({ dodo_subscription_id: subscriptionId }).eq('email', customerEmail);
-        } catch (e) {
-            console.warn('[subscription_id] store failed (non-fatal):', e.message);
-        }
-    }
-    if (dodoCustomerId) {
-        try {
-            await supabase.from('users').update({ dodo_customer_id: dodoCustomerId }).eq('email', customerEmail);
-        } catch (e) {
-            console.warn('[dodo_customer_id] store failed (non-fatal):', e.message);
-        }
-    }
-
-    // 方案防護：如果用戶目前已經是較高等級的方案，忽略低等級的訂閱覆寫
-    let shouldUpdatePlan = true;
-    const PLAN_TIERS = { starter: 1, pro: 2, studio: 3 };
-    if (planName && user && user.subscription_plan) {
-        const currentTier = PLAN_TIERS[user.subscription_plan] || 0;
-        const newTier = PLAN_TIERS[planName] || 0;
-        if (newTier < currentTier) {
-            shouldUpdatePlan = false;
-            console.log(`[🛡️防護] 忽略低階方案更新: ${customerEmail} (目前: ${user.subscription_plan}, 傳入: ${planName})`);
-        }
-    }
-
-    const isOverridingLowerTier = isSubscription && !shouldUpdatePlan;
-    const lifetimeDelta = (isSubscription ? 0 : pointsToAdd) + bonusB;
-    const { data: mainRpc, error: mainRpcErr } = await supabase.rpc('apply_points_delta', {
-        p_email: customerEmail,
-        p_set_monthly: (isSubscription && !isOverridingLowerTier) ? pointsToAdd : null,
-        p_add_lifetime: lifetimeDelta,
-        p_add_referral_count: 0
-    });
-    if (mainRpcErr || !mainRpc?.success) {
-        const err = new Error(`apply_points_delta failed for ${customerEmail}: ${mainRpcErr?.message || mainRpc?.error}`);
-        err.code = 'POINT_CALC_ERROR';
-        throw err;
-    }
-
-    const otherFields = {
-        is_beta_tester: true,
-        last_topup_at: new Date().toISOString(),
-    };
-    if (planName && shouldUpdatePlan) otherFields.subscription_plan = planName;
-    await supabase.from('users').update(otherFields).eq('email', customerEmail);
-
-    // 記帳金額：優先用實付金額（含折扣後真實營收），其次用 Dodo 記錄的真實訂閱金額，
-    // 兩者都拿不到時才退回內部價格表估算（僅 LS 舊路徑等缺金額資訊的情境會走到這裡）。
-    const listPrice = planName ? (PLAN_PRICES_CENTS[planName] || 490) : 490;
-    const amountPaid = (amountPaidCents != null && amountPaidCents > 0) ? amountPaidCents
-        : (expectedAmountCents != null && expectedAmountCents > 0) ? expectedAmountCents
-        : listPrice;
-    const { error: txInsertErr } = await supabase.from('transactions').insert([{
-        user_email: customerEmail,
-        amount: pointsToAdd,
-        transaction_type: isSubscription ? 'TOPUP_SUBSCRIPTION' : 'TOPUP_SINGLE',
-        order_id: fullOrderId,
-        amount_usd_cents: amountPaid
-    }]);
-    // 23505 = order_id unique constraint：並發請求已先一步處理，視為冪等成功
-    if (txInsertErr) {
-        if (txInsertErr.code === '23505' || txInsertErr.message?.includes('unique')) {
-            return console.log(`[processTopup] 23505 idempotent — ${fullOrderId} 已由並發請求處理`);
-        }
-        // 非冪等錯誤：點數已寫入但交易紀錄失敗 → 補償性回滾（用同一支原子 RPC 反向操作，
-        // 只還原「這筆請求剛剛加的量」，不會動到並發寫入的其他變更）
-        console.error(`[🔴ROLLBACK] transactions insert failed for ${fullOrderId}, attempting rollback`);
-        try {
-            await supabase.rpc('apply_points_delta', {
-                p_email: customerEmail,
-                p_set_monthly: isSubscription ? mainRpc.prev_monthly : null,
-                p_add_lifetime: -lifetimeDelta,
-                p_add_referral_count: 0
-            });
-            if (inviterEmail) {
-                await supabase.rpc('apply_points_delta', {
-                    p_email: inviterEmail, p_set_monthly: null, p_add_lifetime: -REWARD_A, p_add_referral_count: -1
+        // 邀請人分潤 A：先查這個買家是否已經拿過 REFERRAL_PAID_B（獨立於這筆訂單的冪等標記），
+        // 撤銷重試也不會重複發放。
+        let bonusB = 0;
+        if (user?.referred_by) {
+            const { data: txPaid } = await supabase.from('transactions').select('id').eq('user_email', customerEmail).eq('transaction_type', 'REFERRAL_PAID_B').maybeSingle();
+            if (!txPaid) {
+                const REWARD_A = PRICING_CONFIG.referral.paid_reward_a;
+                const REWARD_B = PRICING_CONFIG.referral.paid_reward_b;
+                const inviterEmail = user.referred_by;
+                const { data: inviterRpc } = await supabase.rpc('apply_points_delta', {
+                    p_email: inviterEmail, p_set_monthly: null, p_add_lifetime: REWARD_A, p_add_referral_count: 1
                 });
+                if (inviterRpc?.success) {
+                    bonusB = REWARD_B;
+                    await supabase.from('transactions').insert([
+                        { user_email: inviterEmail, amount: REWARD_A, transaction_type: 'REFERRAL_PAID_A', order_id: `refA_${fullOrderId}` },
+                        { user_email: customerEmail, amount: REWARD_B, transaction_type: 'REFERRAL_PAID_B', order_id: `refB_${fullOrderId}` }
+                    ]);
+                }
             }
-            console.error(`[🔴ROLLBACK] 點數已回滾: ${customerEmail}`);
-        } catch (rollbackErr) {
-            console.error(`[🚨CRITICAL] 回滾失敗，點數不一致！user=${customerEmail} order=${fullOrderId}`, rollbackErr.message);
         }
-        throw txInsertErr;
+
+        if (isSubscription && subscriptionId) {
+            try {
+                await supabase.from('users').update({ dodo_subscription_id: subscriptionId }).eq('email', customerEmail);
+            } catch (e) {
+                console.warn('[subscription_id] store failed (non-fatal):', e.message);
+            }
+        }
+        if (dodoCustomerId) {
+            try {
+                await supabase.from('users').update({ dodo_customer_id: dodoCustomerId }).eq('email', customerEmail);
+            } catch (e) {
+                console.warn('[dodo_customer_id] store failed (non-fatal):', e.message);
+            }
+        }
+
+        // 方案防護：如果用戶目前已經是較高等級的方案，忽略低等級的訂閱覆寫
+        let shouldUpdatePlan = true;
+        const PLAN_TIERS = { starter: 1, pro: 2, studio: 3 };
+        if (planName && user && user.subscription_plan) {
+            const currentTier = PLAN_TIERS[user.subscription_plan] || 0;
+            const newTier = PLAN_TIERS[planName] || 0;
+            if (newTier < currentTier) {
+                shouldUpdatePlan = false;
+                console.log(`[🛡️防護] 忽略低階方案更新: ${customerEmail} (目前: ${user.subscription_plan}, 傳入: ${planName})`);
+            }
+        }
+
+        const isOverridingLowerTier = isSubscription && !shouldUpdatePlan;
+        const lifetimeDelta = (isSubscription ? 0 : pointsToAdd) + bonusB;
+        const { data: mainRpc, error: mainRpcErr } = await supabase.rpc('apply_points_delta', {
+            p_email: customerEmail,
+            p_set_monthly: (isSubscription && !isOverridingLowerTier) ? pointsToAdd : null,
+            p_add_lifetime: lifetimeDelta,
+            p_add_referral_count: 0
+        });
+        if (mainRpcErr || !mainRpc?.success) {
+            throw new Error(`apply_points_delta failed for ${customerEmail}: ${mainRpcErr?.message || mainRpc?.error}`);
+        }
+
+        // ↓↓↓ 點數已真正到帳，以下純屬周邊欄位/分潤紀錄，失敗只記警告，不再撤銷訂單號 ↓↓↓
+        try {
+            const otherFields = { is_beta_tester: true, last_topup_at: new Date().toISOString() };
+            if (planName && shouldUpdatePlan) otherFields.subscription_plan = planName;
+            await supabase.from('users').update(otherFields).eq('email', customerEmail);
+        } catch (e) {
+            console.warn('[otherFields] update failed (non-fatal, 點數已到帳):', e.message);
+        }
+
+        await writeKolCommission(supabase, customerEmail, amountPaid, fullOrderId);
+
+        console.log(`[🚀金流] 成功處理 ${platform} 充值: ${customerEmail} (+${pointsToAdd} pts)`);
+    } catch (grantErr) {
+        console.error(`[🔴撤銷訂單佔用] ${fullOrderId} 發點數過程失敗，撤銷 claim 讓下次重試重跑:`, grantErr.message);
+        try {
+            await supabase.from('transactions').delete().eq('order_id', fullOrderId);
+        } catch (delErr) {
+            console.error(`[🚨CRITICAL] 撤銷 claim 失敗，訂單卡死！order=${fullOrderId}`, delErr.message);
+        }
+        throw grantErr;
     }
-
-    await writeKolCommission(supabase, customerEmail, amountPaid, fullOrderId);
-
-    console.log(`[🚀金流] 成功處理 ${platform} 充值: ${customerEmail} (+${pointsToAdd} pts)`);
 }
 
 // 【Task 2】立即取消一筆 Dodo 訂閱。用於「新訂閱取代舊訂閱」時清掉舊訂閱，避免用戶被雙重扣款。

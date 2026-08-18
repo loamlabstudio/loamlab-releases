@@ -1,11 +1,10 @@
 import crypto from 'crypto';
 
 import { processTopup, makeSupabase, cancelDodoSubscription, fetchDodoSubscriptionInfo } from '../lib/activate.js';
-import { DODO_PRODUCTS } from '../config.js';
+import { PLAN_DEFS } from '../config.js';
 
 const supabase = makeSupabase();
 
-const WEB_SECRET_LS = process.env.LEMONSQUEEZY_WEBHOOK_SECRET || '';
 const WEB_SECRET_DODO = process.env.DODO_WEBHOOK_SECRET || '';
 
 // Dodo 官方訂閱生命週期事件（見 docs.dodopayments.com/developer-resources/webhooks/intents/subscription）
@@ -24,10 +23,9 @@ export const config = {
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    let sigDodo, sigLS, event;
+    let sigDodo, event;
     try {
         const rawBody = await getRawBody(req);
-        sigLS = req.headers['x-signature'];
         sigDodo = req.headers['webhook-signature'];
 
         if (sigDodo) {
@@ -168,73 +166,13 @@ export default async function handler(req, res) {
                 }
             }
             return res.status(200).json({ status: 'success' });
-
-        } else if (sigLS) {
-            // --- 處理 LemonSqueezy Webhook ---
-            if (!verifySignature(rawBody, sigLS, WEB_SECRET_LS)) {
-                await logWebhookError('LS', 'signature_verification', null, null, 'Invalid LS Signature', null);
-                return res.status(401).json({ error: 'Invalid LS Signature' });
-            }
-            event = JSON.parse(rawBody.toString());
-            const eventName = event.meta.event_name;
-            console.log('[LS] Event received:', eventName);
-
-            if (eventName === 'order_refunded') {
-                const orderId = event.data?.id?.toString();
-                if (orderId) await cancelKolCommission(`LS_${orderId}`);
-                return res.status(200).json({ status: 'success' });
-            }
-
-            if (eventName === 'order_created' || eventName === 'subscription_payment_success') {
-                const orderData = event.data.attributes;
-                const customerEmail = orderData.user_email;
-                const variantId = orderData.first_order_item?.variant_id || orderData.variant_id;
-                const orderId = event.data?.id?.toString();
-
-                // 【修復雙倍點數 Bug】如果是訂閱的 order_created，直接忽略，交給 subscription_payment_success 處理
-                if (eventName === 'order_created' && variantId != 1432023) {
-                    console.log(`[LS] 忽略訂閱的 order_created，交給 subscription_payment_success 處理`);
-                    return res.status(200).json({ status: 'ignored' });
-                }
-
-                if (customerEmail && variantId) {
-                    try {
-                        await processTopup(supabase, customerEmail, variantId, orderId, 'LS');
-                    } catch (e) {
-                        await logWebhookError('LS', eventName, orderId, customerEmail, e.message, event.data?.attributes);
-                        throw e;
-                    }
-                }
-            } else if (eventName === 'subscription_cancelled' || eventName === 'subscription_expired') {
-                const orderData = event.data.attributes;
-                const customerEmail = orderData.user_email;
-                if (customerEmail) {
-                    await processCancellation(customerEmail, 'LS');
-                }
-            } else if (eventName === 'subscription_updated') {
-                // 同步 Dodo 邏輯：LS Portal 取消/撤回取消時 status 仍為 active，靠 cancelled 欄位判斷期末生效
-                const orderData = event.data.attributes;
-                const customerEmail = orderData.user_email;
-                if (customerEmail) {
-                    if (orderData.status === 'cancelled' || orderData.status === 'expired') {
-                        await processCancellation(customerEmail, 'LS');
-                    } else {
-                        await Promise.resolve(supabase.from('users').update({
-                            cancel_pending: !!orderData.cancelled,
-                            subscription_period_end: orderData.ends_at || orderData.renews_at || null,
-                        }).eq('email', customerEmail))
-                            .catch(e => console.warn('[LS] subscription_updated update failed:', e.message));
-                    }
-                }
-            }
-            return res.status(200).json({ status: 'success' });
         }
 
         return res.status(401).json({ error: 'Missing Signature' });
 
     } catch (error) {
         console.error('Webhook Error:', error);
-        const platform = sigDodo ? 'DODO' : (sigLS ? 'LS' : 'UNKNOWN');
+        const platform = sigDodo ? 'DODO' : 'UNKNOWN';
         const evData = event?.data || event?.data?.attributes || null;
         const emailGuess = evData?.customer?.email || evData?.email || evData?.customer_email || evData?.user_email || null;
         const orderGuess = evData?.payment_id || evData?.subscription_id || event?.data?.id || null;
@@ -376,13 +314,6 @@ async function cancelKolCommission(fullOrderId) {
     }
 }
 
-function verifySignature(rawBody, signature, secret) {
-    if (!secret || !signature) return false;
-    const hmac = crypto.createHmac('sha256', secret);
-    const digest = hmac.update(rawBody).digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(signature));
-}
-
 // Dodo Payments 使用 Standard Webhooks 規範：簽署內容 = webhook-id.webhook-timestamp.body
 function verifyDodoSignature(rawBody, headers, secret) {
     const msgId = headers['webhook-id'];
@@ -440,11 +371,10 @@ async function sendDunningEmail(email) {
 
 // 付款失敗時寫入審計表，讓每筆付款都有記錄可追蹤與手動補償
 function resolvePlanName(variantId, planKey) {
-    const PLAN_KEY_MAP = { STARTER: 'starter', PRO: 'pro', STUDIO: 'studio' };
-    if (planKey && PLAN_KEY_MAP[planKey.toUpperCase()]) return PLAN_KEY_MAP[planKey.toUpperCase()];
-    if (variantId == DODO_PRODUCTS.STARTER) return 'starter';
-    if (variantId == DODO_PRODUCTS.PRO) return 'pro';
-    if (variantId == DODO_PRODUCTS.STUDIO) return 'studio';
+    if (planKey && PLAN_DEFS[planKey.toLowerCase()]?.isSub) return planKey.toLowerCase();
+    for (const [key, def] of Object.entries(PLAN_DEFS)) {
+        if (def.isSub && variantId == def.productId) return key;
+    }
     return null;
 }
 

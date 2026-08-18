@@ -498,3 +498,55 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS dodo_customer_id TEXT DEFAULT NULL;
 -- 快取，導致自訂節點遺失並被過濾機制一併清除已選取值。改存資料庫與帳號綁定。
 -- ==============================================================================
 ALTER TABLE users ADD COLUMN IF NOT EXISTS user_chips JSONB DEFAULT '{}'::jsonb;
+
+-- ==============================================================================
+-- Phase 36: 退款一律退回 lifetime_points（第一性原理修正）
+-- 背景：render.js 的退款是呼叫 deduct_render_points 傳負數金額重用扣款邏輯，但扣款邏輯是
+-- 「月配額不夠才動用永久點數」，退款卻永遠退回月配額——如果原本扣的其實是永久點數，
+-- 退款會被誤放進月配額，只要在下次訂閱續訂前沒花完，續訂當下 apply_points_delta 的
+-- p_set_monthly 會覆寫（use-it-or-lose-it）月配額，退款就此憑空消失。
+-- 修法：不猜原本扣的是哪個桶，退款一律進 lifetime_points（永久、不會被續訂覆寫）——
+-- 對用戶只會更好不會更差（多數情況下退款金額原本就该是永久點數；即使原本真的是月配額，
+-- 使用者換到不會過期的永久點數也不吃虧），比精確追蹤扣款分桶簡單且不會有漏洞。
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION deduct_render_points(p_email TEXT, p_cost INT)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_monthly  INT;
+  v_lifetime INT;
+BEGIN
+  SELECT COALESCE(points, 0), COALESCE(lifetime_points, 0)
+    INTO v_monthly, v_lifetime
+    FROM users
+   WHERE email = p_email
+     FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN json_build_object('success', false, 'error', 'user_not_found');
+  END IF;
+
+  IF p_cost < 0 THEN
+    UPDATE users SET lifetime_points = v_lifetime - p_cost WHERE email = p_email;
+    RETURN json_build_object('success', true, 'points', v_monthly, 'lifetime_points', v_lifetime - p_cost);
+  END IF;
+
+  IF (v_monthly + v_lifetime) < p_cost THEN
+    RETURN json_build_object(
+      'success', false,
+      'error',   'insufficient_points',
+      'balance', v_monthly + v_lifetime
+    );
+  END IF;
+
+  IF v_monthly >= p_cost THEN
+    UPDATE users SET points = v_monthly - p_cost WHERE email = p_email;
+    RETURN json_build_object('success', true, 'points', v_monthly - p_cost, 'lifetime_points', v_lifetime);
+  ELSE
+    UPDATE users SET points = 0, lifetime_points = v_lifetime - (p_cost - v_monthly) WHERE email = p_email;
+    RETURN json_build_object('success', true, 'points', 0, 'lifetime_points', v_lifetime - (p_cost - v_monthly));
+  END IF;
+END;
+$$;

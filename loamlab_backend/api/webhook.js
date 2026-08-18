@@ -52,7 +52,7 @@ export default async function handler(req, res) {
                 const customerEmail = event.data?.customer?.email;
                 if (customerEmail) {
                     await sendDunningEmail(customerEmail);
-                    await supabase.from('users').update({ payment_failed: true }).eq('email', customerEmail)
+                    await Promise.resolve(supabase.from('users').update({ payment_failed: true }).eq('email', customerEmail))
                         .catch(e => console.warn('[Dodo] set payment_failed failed:', e.message));
                 }
                 return res.status(200).json({ status: 'success' });
@@ -97,7 +97,7 @@ export default async function handler(req, res) {
                 }
 
                 if (customerEmail) {
-                    await supabase.from('users').update({ payment_failed: false }).eq('email', customerEmail)
+                    await Promise.resolve(supabase.from('users').update({ payment_failed: false }).eq('email', customerEmail))
                         .catch(e => console.warn('[Dodo] clear payment_failed failed:', e.message));
                 }
                 if (customerEmail && (variantId || planKey) && orderId) {
@@ -117,8 +117,8 @@ export default async function handler(req, res) {
                     try {
                         await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey, dodoCustomerId, amountPaidCents, expectedAmountCents);
                         if (data.subscription_id) {
-                            await supabase.from('users')
-                                .update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail)
+                            await Promise.resolve(supabase.from('users')
+                                .update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail))
                                 .catch(e => console.warn('[Dodo] update subscription_id failed:', e.message));
                             // 發點成功且確為「不同的新訂閱」→ 取消舊訂閱（立即生效，避免雙重扣款）
                             if (oldSubId && oldSubId !== data.subscription_id) {
@@ -219,10 +219,10 @@ export default async function handler(req, res) {
                     if (orderData.status === 'cancelled' || orderData.status === 'expired') {
                         await processCancellation(customerEmail, 'LS');
                     } else {
-                        await supabase.from('users').update({
+                        await Promise.resolve(supabase.from('users').update({
                             cancel_pending: !!orderData.cancelled,
                             subscription_period_end: orderData.ends_at || orderData.renews_at || null,
-                        }).eq('email', customerEmail)
+                        }).eq('email', customerEmail))
                             .catch(e => console.warn('[LS] subscription_updated update failed:', e.message));
                     }
                 }
@@ -235,7 +235,10 @@ export default async function handler(req, res) {
     } catch (error) {
         console.error('Webhook Error:', error);
         const platform = sigDodo ? 'DODO' : (sigLS ? 'LS' : 'UNKNOWN');
-        await logWebhookError(platform, event?.type || 'uncaught_exception', null, null, error.message, null);
+        const evData = event?.data || event?.data?.attributes || null;
+        const emailGuess = evData?.customer?.email || evData?.email || evData?.customer_email || evData?.user_email || null;
+        const orderGuess = evData?.payment_id || evData?.subscription_id || event?.data?.id || null;
+        await logWebhookError(platform, event?.type || 'uncaught_exception', orderGuess, emailGuess, error.message, evData);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 }
@@ -304,7 +307,7 @@ async function syncSubscriptionState(customerEmail, sub, { clearNextPlan = false
         }
     }
 
-    await supabase.from('users').update(updateFields).eq('email', customerEmail)
+    await Promise.resolve(supabase.from('users').update(updateFields).eq('email', customerEmail))
         .catch(e => console.warn('[Dodo] syncSubscriptionState update failed:', e.message));
 }
 
@@ -347,12 +350,12 @@ async function clawbackPoints(paymentId, eventType) {
             dodo_subscription_id: null,
         }).eq('email', tx.user_email);
 
-        await supabase.from('transactions').insert([{
+        await Promise.resolve(supabase.from('transactions').insert([{
             user_email: tx.user_email,
             amount: -pointsToDeduct,
             transaction_type: eventType === 'payment.disputed' ? 'DISPUTE_PENALTY' : 'REFUND_PENALTY',
             order_id: `PENALTY_${fullOrderId}`,
-        }]).catch(e => console.warn('[clawbackPoints] penalty tx insert failed (non-fatal):', e.message));
+        }])).catch(e => console.warn('[clawbackPoints] penalty tx insert failed (non-fatal):', e.message));
 
         console.warn(`[🚨${eventType}] ${tx.user_email} 扣除 ${pointsToDeduct} 點並終止訂閱`);
     } catch (e) {
@@ -502,8 +505,8 @@ async function sendActivationFailureEmail(customerEmail, orderId) {
         });
 
         // 標記已寄，防後續重試重複發
-        await supabase.from('webhook_errors')
-            .update({ email_sent: true }).eq('order_id', String(orderId))
+        await Promise.resolve(supabase.from('webhook_errors')
+            .update({ email_sent: true }).eq('order_id', String(orderId)))
             .catch(() => {});
 
         console.log(`[📧激活通知] 已寄送給: ${customerEmail}`);

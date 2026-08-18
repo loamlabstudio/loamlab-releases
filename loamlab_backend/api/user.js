@@ -163,7 +163,7 @@ export default async function handler(req, res) {
 
         if (!DODO_API_KEY2 || !undoUser?.dodo_subscription_id) {
             // 無法透過 API 撤回，清除 pending flag 並告知用戶聯繫客服
-            await sb2.from('users').update({ cancel_pending: false }).eq('email', undoEmail).catch(() => {});
+            await Promise.resolve(sb2.from('users').update({ cancel_pending: false }).eq('email', undoEmail)).catch(() => {});
             return res.status(200).json({ code: 2, portal_url: PORTAL_URL2, msg: 'no_api_key_or_id' });
         }
 
@@ -175,7 +175,7 @@ export default async function handler(req, res) {
                 body: JSON.stringify({ cancel_at_next_billing_date: false })
             });
             if (undoRes.ok) {
-                await sb2.from('users').update({ cancel_pending: false }).eq('email', undoEmail).catch(() => {});
+                await Promise.resolve(sb2.from('users').update({ cancel_pending: false }).eq('email', undoEmail)).catch(() => {});
                 return res.json({ code: 0, msg: 'undo_success' });
             }
             console.error('[undo_cancel] Dodo PATCH failed:', undoRes.status, await undoRes.text().catch(() => ''));
@@ -418,9 +418,9 @@ export default async function handler(req, res) {
         activated = didActivate;
 
         if (foundSucceeded) {
-            sb.from('users').update({ payment_failed: false }).eq('email', vEmail).catch(() => {});
-            sb.from('webhook_errors').update({ resolved: true })
-                .eq('customer_email', vEmail).eq('resolved', false).catch(() => {});
+            Promise.resolve(sb.from('users').update({ payment_failed: false }).eq('email', vEmail)).catch(() => {});
+            Promise.resolve(sb.from('webhook_errors').update({ resolved: true })
+                .eq('customer_email', vEmail).eq('resolved', false)).catch(() => {});
         }
 
         return res.status(200).json({ code: 0, activated, msg: activated ? '已成功補發' : '查無未入帳的付款記錄' });
@@ -511,8 +511,8 @@ export default async function handler(req, res) {
                             .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending, subscription_period_end')
                             .eq('email', email).single();
                         if (refreshed) data = refreshed;
-                        supabase.from('webhook_errors').update({ resolved: true })
-                            .eq('customer_email', email).eq('resolved', false)
+                        Promise.resolve(supabase.from('webhook_errors').update({ resolved: true })
+                            .eq('customer_email', email).eq('resolved', false))
                             .catch(() => {});
                         console.log(`[🔄自動修復] ${email} 已自動補發訂閱`);
                     }

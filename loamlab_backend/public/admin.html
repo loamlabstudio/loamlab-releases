@@ -954,6 +954,16 @@
     </div>
   </div>
 
+  <!-- IG 聯名推廣獎勵：一鍵發放 -->
+  <div class="card mb-5">
+    <div class="text-sm font-semibold text-white mb-3">📸 IG 聯名獎勵發放</div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <input type="email" id="collab-reward-email" placeholder="用戶 Email..." class="bg-black/40 border border-white/10 rounded-lg px-3 py-1 text-xs text-white outline-none focus:border-blue-500/50 w-56 transition-colors">
+      <button onclick="grantCollabReward()" class="px-3 py-1 bg-purple-600/70 hover:bg-purple-600 rounded-lg text-xs text-white transition-colors">發放 Collab 獎勵 (300 點)</button>
+      <span id="collab-reward-status" class="text-[10px] text-gray-600"></span>
+    </div>
+  </div>
+
   <!-- 反饋列表 -->
   <div class="card">
     <div class="flex items-center justify-between mb-3">
@@ -3462,6 +3472,34 @@ async function executeInsightPoints(emails, amount) {
     if (j.code === 0) showToast('已補 ' + amount + ' 點給 ' + j.succeeded + ' 位用戶 ✓', 'success');
     else showToast('補點失敗：' + j.msg, 'error');
   } catch(e) { showToast('補點錯誤：' + e.message, 'error'); }
+}
+
+// ── IG 聯名獎勵：一鍵發放 ────────────────────────────────────────────────────
+async function grantCollabReward() {
+  const input = document.getElementById('collab-reward-email');
+  const statusEl = document.getElementById('collab-reward-status');
+  const email = (input.value || '').trim().toLowerCase();
+  if (!email || !email.includes('@')) { showToast('請輸入有效 Email', 'error'); return; }
+  statusEl.textContent = '發放中...';
+  try {
+    const r = await fetch(API_BASE + '/api/stats?action=collab_reward', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + adminKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const j = await r.json();
+    if (j.code === 0) {
+      showToast('已發放 300 點給 ' + email + ' ✓', 'success');
+      statusEl.textContent = '';
+      input.value = '';
+    } else {
+      showToast('發放失敗：' + j.msg, 'error');
+      statusEl.textContent = '';
+    }
+  } catch(e) {
+    showToast('發放錯誤：' + e.message, 'error');
+    statusEl.textContent = '';
+  }
 }
 
 // ── 洞見動作：發郵件（帶審核 Modal）────────────────────────────────────────

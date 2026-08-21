@@ -986,6 +986,39 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0, succeeded, total: emailList.length });
     }
 
+    // ── IG 聯名推廣獎勵（Admin 一鍵發放）─────────────────────────────────────────
+    // order_id 用日期（非 timestamp）鎖同一用戶同一天只能發一次，靠 transactions.order_id
+    // 的 UNIQUE 索引防呆，避免管理員手滑連點造成重複入帳。
+    if (req.method === 'POST' && action === 'collab_reward') {
+        const email = (req.body?.email || '').trim().toLowerCase();
+        if (!email || !email.includes('@')) return res.status(400).json({ code: -1, msg: 'Invalid email' });
+
+        const { data: user, error: userErr } = await supabase.from('users').select('email').eq('email', email).maybeSingle();
+        if (userErr) return res.status(500).json({ code: -1, msg: userErr.message });
+        if (!user) return res.status(404).json({ code: -1, msg: 'User not found' });
+
+        const COLLAB_REWARD = 300;
+        const orderId = `collab_${email}_${new Date().toISOString().slice(0, 10)}`;
+
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('apply_points_delta', {
+            p_email: email, p_set_monthly: null, p_add_lifetime: COLLAB_REWARD, p_add_referral_count: 0
+        });
+        if (rpcErr || !rpcData?.success) {
+            return res.status(500).json({ code: -1, msg: rpcErr?.message || rpcData?.error || 'RPC failed' });
+        }
+
+        const { error: txErr } = await supabase.from('transactions').insert({
+            user_email: email, amount: COLLAB_REWARD, transaction_type: 'COLLAB_REWARD', order_id: orderId,
+            metadata: { reason: 'ig_collab_admin_grant', granted_at: new Date().toISOString() },
+        });
+        if (txErr) {
+            if (txErr.code === '23505') return res.status(409).json({ code: -1, msg: '今日已對此用戶發放過聯名獎勵' });
+            console.error('[collab_reward:tx_insert_failed]', email, txErr.message);
+        }
+
+        return res.status(200).json({ code: 0, msg: 'Granted', email, amount: COLLAB_REWARD });
+    }
+
     // ── Admin: 請求記錄日誌 ────────────────────────────────────────────────────
     if (action === 'request_log' && req.method === 'GET') {
         const limit = Math.min(parseInt(req.query.limit || '100'), 500);

@@ -66,9 +66,14 @@ export default async function handler(req, res) {
                 const discountCode = data.discount?.code || data.discount_code || null;
                 const planKey = data.metadata?.planKey || null;
                 const dodoCustomerId = data.customer?.customer_id || null;
-                // 實付金額（美分），供 processTopup 做洗點金額校驗與精準記帳
-                const amountPaidCents = (typeof data.total_amount === 'number') ? data.total_amount
-                    : (typeof data.settlement_amount === 'number' ? data.settlement_amount : null);
+                // 實付金額（美分），供 processTopup 做洗點金額校驗與精準記帳。
+                // 【Task 3・已用 Dodo 官方文件查證】只能用 total_amount：它跟訂閱物件的
+                // recurring_pre_tax_amount（expectedAmountCents 的來源）同屬「結帳當下幣別」，
+                // 兩者才能直接比對。settlement_amount 是「商戶結算幣別」（adaptive pricing 情境下
+                // 可能是不同幣別，例如客戶用台幣結帳、商戶用美元結算），拿來跟 expectedAmountCents
+                // 比對是拿不同幣別的數字互比，比對結果沒有意義——total_amount 缺失就當作拿不到，
+                // 交由 processTopup 既有的「兩者缺一就跳過驗證」邏輯處理，不要用不同幣別的數字硬湊。
+                const amountPaidCents = (typeof data.total_amount === 'number') ? data.total_amount : null;
 
                 // 無主訂單攔截：email 缺失或為 Apple Pay 匿名信箱 → 留稽核紀錄，不丟棄金流
                 if (isAnonymousEmail(customerEmail)) {

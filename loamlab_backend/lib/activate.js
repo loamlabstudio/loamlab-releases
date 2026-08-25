@@ -91,6 +91,9 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
     // 否則撤銷後的重試會把已經發過的點數再發一次。
     try {
         let { data: user } = await supabase.from('users').select('*').eq('email', customerEmail).maybeSingle();
+        // 【Task 1】記錄「這筆訂單進來之前」DB 上原本的訂閱 ID，用來判斷這是不是一筆全新訂閱
+        // （下面 dodo_subscription_id 馬上就會被覆寫，之後拿 user.dodo_subscription_id 會拿到新值）。
+        const previousSubId = user?.dodo_subscription_id || null;
 
         if (!user) {
             await supabase.from('users').insert([{
@@ -148,10 +151,15 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
             }
         }
 
-        // 方案防護：如果用戶目前已經是較高等級的方案，忽略低等級的訂閱覆寫
+        // 方案防護：如果用戶目前已經是較高等級的方案，忽略低等級的訂閱覆寫。
+        // 【Task 1】但若這筆是「全新訂閱」（subscriptionId 跟舊的 dodo_subscription_id 不同），
+        // 代表舊訂閱即將／已被 webhook.js 取消掉，舊方案的保護已經沒有意義——新訂閱代表用戶
+        // 現在真正在付費的方案，必須讓它生效，否則會卡成「DB 是 studio，但真實訂閱只剩 pro」。
+        // 防護只保留給「同一筆訂閱」內的非遞增事件（例如重試/亂序 webhook 回報較低方案）。
         let shouldUpdatePlan = true;
         const PLAN_TIERS = { starter: 1, pro: 2, studio: 3 };
-        if (planName && user && user.subscription_plan) {
+        const isReplacementSubscription = isSubscription && subscriptionId && previousSubId && subscriptionId !== previousSubId;
+        if (planName && user && user.subscription_plan && !isReplacementSubscription) {
             const currentTier = PLAN_TIERS[user.subscription_plan] || 0;
             const newTier = PLAN_TIERS[planName] || 0;
             if (newTier < currentTier) {
@@ -170,6 +178,17 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
         });
         if (mainRpcErr || !mainRpc?.success) {
             throw new Error(`apply_points_delta failed for ${customerEmail}: ${mainRpcErr?.message || mainRpc?.error}`);
+        }
+
+        // 【Task 2】claim-first 在最前面用 pointsToAdd 佔位寫入了這筆 transactions.amount，
+        // 但此時才確定 isOverridingLowerTier 為真代表點數其實沒發放——回頭把該筆金額改成 0，
+        // 避免前端歷史明細顯示「+2000」卻對不上真實到帳點數（此步驟失敗只記警告，不影響已到帳的點數）。
+        if (isOverridingLowerTier) {
+            try {
+                await supabase.from('transactions').update({ amount: 0 }).eq('order_id', fullOrderId);
+            } catch (e) {
+                console.warn('[transactions.amount 校正] update failed (non-fatal):', e.message);
+            }
         }
 
         // ↓↓↓ 點數已真正到帳，以下純屬周邊欄位/分潤紀錄，失敗只記警告，不再撤銷訂單號 ↓↓↓

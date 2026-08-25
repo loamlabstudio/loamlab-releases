@@ -4068,8 +4068,10 @@ function executeUpdate(_url) {
     } else if (window.sketchup && url) {
         showUpdateToast('⬇️ 下載更新中，請稍候...');
         sketchup.install_update({ url });
+    } else if (url) {
+        window.open(url, '_blank');
     } else {
-        UI.openURL(url);
+        showUpdateToast('❌ 找不到更新網址，請稍後再試');
     }
 }
 

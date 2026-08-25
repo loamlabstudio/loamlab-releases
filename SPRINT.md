@@ -40,4 +40,17 @@
 - Task 3：**根因已由用戶截圖確認並修復**——`style.css` 缺少 cache-busting，導致部分機器讀到舊版快取（字體顏色跟不上新版、SmartCanvas 工具列佈局樣式缺失變成看不見的裸按鈕）。改用跟 index.html 同一把 `?t=` 時間戳動態載入，徹底解決，且此後不需要再手動維護版號。
 - 額外修復：`executeUpdate()` 死代碼 `UI.openURL` 崩潰（Chrome 88/SU2023.1 真實用戶已觸發過）。
 
+## RELEASE_GATE
+release_type: feature
+verified_diff:
+  - loamlab_plugin/ui/app.js
+  - loamlab_plugin/ui/index.html
+  - loamlab_plugin.rb
+  - loamlab_plugin/config.rb
+  - loamlab_backend/api/version.js
+sql_migration: false
+# 註：上一個實際發布的 git tag 是 v1.4.66，main 分支之後累積了 IG 聯合發文功能與訂閱降級修復
+# 兩個已各自完成的 sprint（尚未打包發布過），這次一併帶上，不是只有本 sprint 的兩個 hotfix。
+# 已核對 FEATURE_FLAGS.md：main 分支目前無 wip 的 BLOCKED_FILES，無跨分支 merge，可安全打包。
+
 status: DONE

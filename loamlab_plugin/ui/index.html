@@ -59,8 +59,12 @@
         })();
     </script>
     
-    <!-- Tailwind CSS (靜態編譯版，完全相容舊版 SketchUp CEF) -->
-    <link rel="stylesheet" href="./assets/style.css">
+    <!-- Tailwind CSS (靜態編譯版，完全相容舊版 SketchUp CEF)
+         用 main.rb 載入本頁時附加的 ?t=時間戳記 做 cache-busting：曾回報部分 SketchUp 版本的內建瀏覽器
+         快取住舊版 style.css（介面顏色跟正常版本不同、新版才加的按鈕樣式缺失導致看不到），
+         index.html 本身雖然每次開啟都強制重載，但裡面這個 <link> 網址若不變就可能仍吃到舊快取。
+         JS 用 document.write 同步輸出，確保在 <head> 解析階段就生效（比 JS 動態插入 <link> 更老瀏覽器相容）。-->
+    <script>document.write('<link rel="stylesheet" href="./assets/style.css?' + (location.search ? location.search.slice(1) : Date.now()) + '">');</script>
 
     <!-- QRCode產生庫（本地化，避免 SketchUp WebDialog 無法載入 CDN） -->
     <script src="lib/qrcode.min.js"></script>

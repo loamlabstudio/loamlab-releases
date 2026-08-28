@@ -550,3 +550,61 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- ==============================================================================
+-- Phase 37: 數據版塊第一性重建 (Analytics Revamp)
+-- 將業務邏輯與數據紀錄解耦，提供真實的銷量、成本與活躍度。
+-- ==============================================================================
+
+-- 1. 真實活躍度：新增 last_active_at，每次授權 API 呼叫時更新
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+
+-- 2. 真實銷量 (Revenue)：獨立 payments 表，脫離點數流水表 (transactions)
+CREATE TABLE IF NOT EXISTS public.payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_email TEXT NOT NULL,
+    order_id TEXT UNIQUE NOT NULL,       -- Stripe/Dodo 的真實訂單號或 Subscription Invoice ID
+    amount_usd_cents INTEGER NOT NULL,   -- 真實法幣金額
+    status TEXT NOT NULL DEFAULT 'paid', -- 'paid' | 'refunded' | 'chargeback'
+    payment_method TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+CREATE INDEX IF NOT EXISTS idx_payments_email ON public.payments(user_email);
+CREATE INDEX IF NOT EXISTS idx_payments_created ON public.payments(created_at DESC);
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Enable all access for service role" ON public.payments;
+CREATE POLICY "Enable all access for service role" ON public.payments FOR ALL USING (true);
+
+-- 3. 埋點專用表 (Telemetry)：解耦業務表
+CREATE TABLE IF NOT EXISTS public.telemetry_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_email TEXT,
+    event_type TEXT NOT NULL,          -- 'paywall_trigger', 'SHARE_SESSION', 'LEAD_CAPTURE', etc.
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+CREATE INDEX IF NOT EXISTS idx_telemetry_type ON public.telemetry_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_telemetry_created ON public.telemetry_events(created_at DESC);
+ALTER TABLE public.telemetry_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Enable all access for service role" ON public.telemetry_events;
+CREATE POLICY "Enable all access for service role" ON public.telemetry_events FOR ALL USING (true);
+
+-- 4. 真實成本 (Cost)：擴充 render_history 追蹤 API 供應商成本
+ALTER TABLE public.render_history ADD COLUMN IF NOT EXISTS provider_id TEXT DEFAULT 'replicate';
+ALTER TABLE public.render_history ADD COLUMN IF NOT EXISTS execution_time_ms INTEGER;
+ALTER TABLE public.render_history ADD COLUMN IF NOT EXISTS provider_cost_usd_cents INTEGER;
+
+-- 5. 效能優化：每日聚合表 (Materialized view pattern for dashboard)
+CREATE TABLE IF NOT EXISTS public.daily_metrics (
+    date DATE PRIMARY KEY,
+    active_users INTEGER DEFAULT 0,
+    total_renders INTEGER DEFAULT 0,
+    revenue_usd_cents INTEGER DEFAULT 0,
+    refund_usd_cents INTEGER DEFAULT 0,
+    cost_usd_cents INTEGER DEFAULT 0,
+    new_users INTEGER DEFAULT 0,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+ALTER TABLE public.daily_metrics ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Enable all access for service role" ON public.daily_metrics;
+CREATE POLICY "Enable all access for service role" ON public.daily_metrics FOR ALL USING (true);

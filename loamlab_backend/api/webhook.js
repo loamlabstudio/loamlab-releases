@@ -42,6 +42,7 @@ export default async function handler(req, res) {
                 if (paymentId) {
                     await cancelKolCommission(`DODO_${paymentId}`);
                     await clawbackPoints(paymentId, event.type);
+                    await markPaymentStatus(paymentId, event.type === 'payment.disputed' ? 'chargeback' : 'refunded');
                 }
                 return res.status(200).json({ status: 'success' });
             }
@@ -119,6 +120,7 @@ export default async function handler(req, res) {
 
                     try {
                         await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey, dodoCustomerId, amountPaidCents, expectedAmountCents);
+                        await recordPayment(orderId, customerEmail, amountPaidCents ?? expectedAmountCents, 'paid', 'DODO');
                         if (data.subscription_id) {
                             await Promise.resolve(supabase.from('users')
                                 .update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail))
@@ -303,6 +305,37 @@ async function clawbackPoints(paymentId, eventType) {
         console.warn(`[🚨${eventType}] ${tx.user_email} 扣除 ${pointsToDeduct} 點並終止訂閱`);
     } catch (e) {
         console.error('[clawbackPoints] failed:', e.message);
+    }
+}
+
+// 財務系統與業務系統物理隔離：無論 processTopup 發點邏輯怎麼變，真實進帳都獨立記一筆到
+// payments 表，讓退款/財報有真實資料可查。用 order_id upsert，同一筆付款重試不會重複入帳。
+async function recordPayment(orderId, customerEmail, amountUsdCents, status, paymentMethod) {
+    if (!orderId || !customerEmail || typeof amountUsdCents !== 'number') return;
+    try {
+        const { error } = await supabase.from('payments').upsert([{
+            order_id: orderId,
+            user_email: customerEmail,
+            amount_usd_cents: amountUsdCents,
+            status,
+            payment_method: paymentMethod,
+        }], { onConflict: 'order_id' });
+        if (error) console.error('[payments] record failed:', error.message);
+    } catch (e) {
+        console.error('[payments] record exception:', e.message);
+    }
+}
+
+// 退款/拒付：payment.refunded 只帶 payment_id，訂閱付款的 order_id 是 `${subscription_id}_${payment_id}`，
+// 一般付款則是 payment_id 本身——用後綴比對兩種格式都能命中。
+async function markPaymentStatus(paymentId, status) {
+    try {
+        const { error } = await supabase.from('payments')
+            .update({ status })
+            .like('order_id', `%${paymentId}`);
+        if (error) console.error('[payments] status update failed:', error.message);
+    } catch (e) {
+        console.error('[payments] status update exception:', e.message);
     }
 }
 

@@ -538,7 +538,13 @@ async function _handleRender(req, res) {
                 return res.status(200).json({ code: 0, status: 'processing' });
             }
             const realData = pData?.data || pData || {};
+            
             const state = (realData.state || realData.status || '').toLowerCase();
+            
+            // Extract raw cost from AtlasCloud and calculate double cost in cents
+            const rawCost = realData.cost || realData.usd || realData.cost_usd || (realData.metrics && realData.metrics.cost) || 0;
+            const doubleCostCents = Math.round(parseFloat(rawCost) * 100 * 2) || 0;
+
             let finalUrl = realData.outputs?.[0] || realData.image_url || realData.images?.[0] || realData.output;
             if (!finalUrl && Array.isArray(realData.images)) finalUrl = realData.images[0]?.url || realData.images[0];
             if (!finalUrl && Array.isArray(realData.outputs)) finalUrl = realData.outputs[0]?.url || realData.outputs[0]?.image_url;
@@ -561,7 +567,7 @@ async function _handleRender(req, res) {
                     userEmail, url: finalUrl,
                     userPayload: { parameters: { user_prompt: pollPrompt, style: pollStyle } },
                     resVal: pollResVal, cost: pollCost, activeTool: pollTool, inputUrl: pollInputUrl,
-                    clientIp: getClientIp(req)
+                    clientIp: getClientIp(req), providerCost: doubleCostCents
                 });
                 let balance = null;
                 try {
@@ -985,6 +991,9 @@ async function _handleRender(req, res) {
         // 與 poll_render（約 583-586 行）保持一致的解析邏輯，避免這裡漏抓 outputs/output
         // 或把 images[0]/outputs[0] 的物件形式誤當字串存進 render_history
         const realData2 = data?.data || data || {};
+        // 雙倍成本估算（供 daily_metrics 對帳，同 poll_render 的算法，見 544-546 行）
+        const rawCost2 = realData2.cost || realData2.usd || realData2.cost_usd || (realData2.metrics && realData2.metrics.cost) || 0;
+        const doubleCostCents2 = Math.round(parseFloat(rawCost2) * 100 * 2) || 0;
         let finalUrl = realData2.outputs?.[0] || realData2.image_url || realData2.images?.[0] || realData2.output || null;
         if (!finalUrl && Array.isArray(realData2.images)) finalUrl = realData2.images[0]?.url || realData2.images[0];
         if (!finalUrl && Array.isArray(realData2.outputs)) finalUrl = realData2.outputs[0]?.url || realData2.outputs[0]?.image_url;
@@ -1011,7 +1020,7 @@ async function _handleRender(req, res) {
         await cleanTemp();
 
         if (finalUrl) {
-            const refReward = await saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool, inputUrl: inputUrlForHistory, clientIp: getClientIp(req) });
+            const refReward = await saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool, inputUrl: inputUrlForHistory, clientIp: getClientIp(req), providerCost: doubleCostCents2 });
             return res.status(200).json({
                 code: 0, url: finalUrl, points_deducted: cost, points_remaining: deductResult.balance, transaction_id: transactionId,
                 referral_bonus: refReward?.granted ? refReward.amount : 0
@@ -1058,7 +1067,7 @@ async function refundAndFail(supabase, userEmail, cost, reason, toolId = null, t
 // 執行環境可能立刻被凍結/回收，沒 await 的 insert promise 有機會根本來不及打進資料庫，
 // 導致「明明出圖成功但 render_history 完全沒記錄」——這個表後續也要當異常掃描的成功判斷
 // 依據，記錄不可靠會直接讓自動退款誤判，所以這裡必須是可靠的寫入。失敗只 log，不影響回應。
-async function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal, cost, activeTool, inputUrl, clientIp }) {
+async function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal, cost, activeTool, inputUrl, clientIp, providerCost }) {
     const prompt = userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '';
     const style  = userPayload.parameters?.style || '';
     try {
@@ -1071,7 +1080,8 @@ async function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal
             style,
             resolution:    resVal || '1k',
             tool_id:       activeTool || 1,
-            points_cost:   cost
+            points_cost:   cost,
+            provider_cost_usd_cents: providerCost || null
         }]);
         if (error) console.error('[render_history] save failed:', error.message);
     } catch (e) {

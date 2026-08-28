@@ -488,6 +488,12 @@ export default async function handler(req, res) {
         const isAdmin = isValidAdminKey((req.headers['authorization'] || '').replace(/^Bearer\s+/i, ''));
         if (!isCron && !isAdmin) return res.status(401).json({ code: -1, msg: 'Unauthorized' });
 
+        // 【Sprint: 數據版塊重建】daily_metrics 需要每日自動聚合，但 Vercel Hobby plan 的
+        // Cron Job 數量有上限（目前已有 2 個），不新增第 3 條排程，改為搭便車跑在既有的
+        // scan_render_anomalies（每日 01:30 UTC，此時前一個 UTC 日已完整結束，數據不會算漏）。
+        // 失敗只記 log，不影響本排程原本的孤兒扣款掃描主流程。
+        try { await cron_daily_metrics(supabase); } catch (e) { console.error('[cron_daily_metrics] failed:', e.message); }
+
         const RENDER_TYPES = ['RENDER_1K', 'RENDER_2K', 'RENDER_4K'];
         // 注意：REFUND_PENALTY 故意不列入——那是付款爭議/退單的扣點（amount 是負的、原因跟渲染
         // 無關），列進來會讓真正的孤兒扣款被誤判成「已處理」而漏退
@@ -1065,7 +1071,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0 });
     }
 
-    const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic, mrr: mrrBreakdown, dodo_diff: dodoDiff };
+    const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic, mrr: mrrBreakdown, dodo_diff: dodoDiff, cron_daily_metrics };
     if (!actions[action]) return res.status(400).json({ code: -1, msg: `Unknown action: ${action}` });
 
     try {
@@ -1096,51 +1102,51 @@ async function getPublicStats(supabase) {
 
 // ── Admin: 總覽 KPI ───────────────────────────────────────────────────────────
 async function dashboard(supabase) {
-    const d7  = daysAgo(7);
-    const d30 = daysAgo(30);
-    const d1  = daysAgo(1);
+    const d30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    const [
-        { count: totalUsers },
-        { count: activeToday },
-        { count: active7d },
-        { count: totalRenders30d },
-        { data: topups },
-        { data: renders },
-        { data: ratingRows },
-        { count: paywallHits },
-    ] = await Promise.all([
-        noTest(supabase.from('users').select('*', { count: 'exact', head: true })),
-        noTestRef(supabase.from('transactions').select('user_email', { count: 'exact', head: true }).gte('created_at', d1)),
-        noTestRef(supabase.from('transactions').select('user_email', { count: 'exact', head: true }).gte('created_at', d7)),
-        noTestRef(supabase.from('transactions').select('*', { count: 'exact', head: true }).in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K','RENDER_360']).gte('created_at', d30)),
-        noTestRef(supabase.from('transactions').select('amount_usd_cents, transaction_type').in('transaction_type', ['TOPUP_SINGLE','TOPUP_SUBSCRIPTION']).gte('created_at', d30)),
-        noTestRef(supabase.from('transactions').select('transaction_type, created_at, metadata').in('transaction_type', ['RENDER_1K','RENDER_2K','RENDER_4K','RENDER_360']).gte('created_at', d30).limit(1000)),
-        noTestRef(supabase.from('render_history').select('user_rating, style, tool_id').gte('created_at', d30).limit(5000)),
-        noTestRef(supabase.from('feedback').select('*', { count: 'exact', head: true }).eq('type', 'paywall_trigger').gte('created_at', d30)),
-    ]);
+    // 1. 取得最近 30 天的每日聚合數據
+    const { data: metrics } = await supabase.from('daily_metrics')
+        .select('*')
+        .gte('date', d30)
+        .order('date', { ascending: true });
 
-    const revenue30d = (topups || []).reduce((s, r) => s + ((r.amount_usd_cents || 0) / 100), 0);
+    // 2. 獲取總用戶數
+    const { count: totalUsers } = await noTest(supabase.from('users').select('*', { count: 'exact', head: true }));
+
+    // 3. 獲取 tool breakdown / style / resolution 仍維持抽樣查詢
+    const { data: renders } = await noTestRef(supabase.from('render_history')
+        .select('tool_id, style, resolution')
+        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+        .limit(1000));
+
+    let activeToday = 0;
+    let active7d = 0;
+    let totalRenders30d = 0;
+    let revenue30d = 0;
+    let cost30d = 0;
+    let errorCount = 0;
+
+    if (metrics && metrics.length > 0) {
+        activeToday = metrics[metrics.length - 1].active_users || 0;
+        active7d = metrics.slice(-7).reduce((acc, m) => acc + (m.active_users || 0), 0);
+        totalRenders30d = metrics.reduce((acc, m) => acc + (m.total_renders || 0), 0);
+        revenue30d = metrics.reduce((acc, m) => acc + ((m.revenue_usd_cents || 0) / 100), 0);
+        cost30d = metrics.reduce((acc, m) => acc + ((m.cost_usd_cents || 0) / 100), 0);
+        errorCount = metrics.reduce((acc, m) => acc + ((m.refund_usd_cents || 0) > 0 ? 1 : 0), 0);
+    }
+
     const toolBreakdown = {};
+    const styleBreakdown = {};
+    const resBreakdown = {};
+
     (renders || []).forEach(r => {
-        const tid = String(r.metadata?.tool_id || 1);
+        const tid = String(r.tool_id || 1);
         toolBreakdown[tid] = (toolBreakdown[tid] || 0) + 1;
+        const style = r.style || 'unknown';
+        styleBreakdown[style] = (styleBreakdown[style] || 0) + 1;
+        const res = r.resolution || 'unknown';
+        resBreakdown[res] = (resBreakdown[res] || 0) + 1;
     });
-    
-    // 從 render_history 獲取風格分佈 (30天)
-    const styleBreakdown = groupBy(ratingRows || [], 'style');
-    
-    const errorCount = (topups || []).filter(t => t.transaction_type.startsWith('REFUND_')).length;
-
-    const avgRatingRows = (ratingRows || []).filter(r => r.user_rating != null);
-    const avgRating = avgRatingRows.length
-        ? Math.round((avgRatingRows.reduce((s, r) => s + r.user_rating, 0) / avgRatingRows.length) * 10) / 10
-        : null;
-
-    // 解析度解析
-    const resBreakdown = groupBy((renders || []).map(r => ({
-        ...r, res: (r.transaction_type || '').replace('RENDER_', '').toLowerCase()
-    })), 'res');
 
     return {
         total_users: totalUsers,
@@ -1148,8 +1154,9 @@ async function dashboard(supabase) {
         active_7d: active7d,
         renders_30d: totalRenders30d,
         revenue_30d: revenue30d,
-        paywall_hits_30d: paywallHits,
-        avg_rating: avgRating,
+        cost_30d: cost30d,
+        paywall_hits_30d: 0,
+        avg_rating: null,
         tool_breakdown: toolBreakdown,
         style_breakdown: styleBreakdown,
         resolution_breakdown: resBreakdown,
@@ -1157,7 +1164,7 @@ async function dashboard(supabase) {
     };
 }
 
-// ── Admin: 用戶列表（含分層）────────────────────────────────────────────────
+// ── Admin: 用戶管理 ───────────────────────────────────────────────────────────
 async function users(supabase, query = {}) {
     const d7  = daysAgo(7);
     const d30 = daysAgo(30);
@@ -1201,14 +1208,14 @@ async function users(supabase, query = {}) {
 
 // ── Admin: 收入指標 ───────────────────────────────────────────────────────────
 async function revenue(supabase) {
-    const { data: txns } = await noTestRef(supabase
-        .from('transactions')
-        .select('amount_usd_cents, transaction_type, created_at, user_email')
-        .in('transaction_type', ['TOPUP_SINGLE','TOPUP_SUBSCRIPTION'])
+    const { data: payments } = await noTestRef(supabase
+        .from('payments')
+        .select('amount_usd_cents, created_at, user_email, status')
+        .eq('status', 'paid')
         .gte('created_at', daysAgo(90))
         .order('created_at', { ascending: false }));
 
-    const rows = (txns || []).filter(t => !isTest(t.user_email));
+    const rows = (payments || []).filter(t => !isTest(t.user_email));
     const d30 = daysAgo(30);
     const revenue30d = rows.filter(t => t.created_at >= d30).reduce((s, t) => s + ((t.amount_usd_cents || 0) / 100), 0);
     const daily = groupByDate(rows);
@@ -1870,4 +1877,62 @@ async function churnStats(supabase, days = 30) {
         cancel_pending_users: pendingRes.data || [],
         churned_users_30d: churnedWithContext,
     };
+}
+
+// ── 每日數據聚合 Cron Job (Phase 2) ───────────────────────────────────────────────────────────
+async function cron_daily_metrics(supabase) {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
+    // 1. 抓取昨日的所有 users 活躍數 (依賴 last_active_at)
+    const { count: activeUsers } = await supabase.from('users')
+        .select('*', { count: 'exact', head: true })
+        .gte('last_active_at', yesterday + 'T00:00:00Z')
+        .lt('last_active_at', yesterday + 'T23:59:59Z');
+        
+    // 2. 抓取昨日新註冊用戶
+    const { count: newUsers } = await supabase.from('users')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', yesterday + 'T00:00:00Z')
+        .lt('created_at', yesterday + 'T23:59:59Z');
+        
+    // 3. 抓取昨日的所有 payments 營收 (真實金流)
+    const { data: payments } = await supabase.from('payments')
+        .select('amount_usd_cents, status')
+        .gte('created_at', yesterday + 'T00:00:00Z')
+        .lt('created_at', yesterday + 'T23:59:59Z');
+        
+    let revenue_usd_cents = 0;
+    let refund_usd_cents = 0;
+    (payments || []).forEach(p => {
+        if (p.status === 'paid') revenue_usd_cents += p.amount_usd_cents;
+        if (p.status === 'refunded' || p.status === 'chargeback') refund_usd_cents += p.amount_usd_cents;
+    });
+
+    // 4. 抓取昨日的真實成本 (從 render_history 抓 API 花費)
+    const { data: renders } = await supabase.from('render_history')
+        .select('provider_cost_usd_cents')
+        .gte('created_at', yesterday + 'T00:00:00Z')
+        .lt('created_at', yesterday + 'T23:59:59Z');
+        
+    const total_renders = (renders || []).length;
+    let cost_usd_cents = 0;
+    (renders || []).forEach(r => {
+        cost_usd_cents += (r.provider_cost_usd_cents || 0);
+    });
+
+    // 寫入 daily_metrics
+    const row = {
+        date: yesterday,
+        active_users: activeUsers || 0,
+        total_renders,
+        revenue_usd_cents,
+        refund_usd_cents,
+        cost_usd_cents,
+        new_users: newUsers || 0,
+        updated_at: new Date().toISOString()
+    };
+
+    const { error } = await supabase.from('daily_metrics').upsert(row, { onConflict: 'date' });
+    if (error) return { success: false, error: error.message };
+    return { success: true, date: yesterday, metrics: row };
 }

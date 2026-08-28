@@ -19,11 +19,27 @@ export async function resolveUserEmail(req) {
                 const supabase = createClient(supabaseUrl, supabaseAnonKey);
                 const { data, error } = await supabase.auth.getUser(token);
                 if (!error && data?.user?.email) {
+                    touchLastActive(data.user.email);
                     return { email: data.user.email, verified: true };
                 }
             }
         } catch (_) { /* token 驗證失敗，往下退回舊路徑 */ }
     }
 
+    if (headerEmail) touchLastActive(headerEmail);
     return { email: headerEmail, verified: false };
+}
+
+// DAU 統計依據（users.last_active_at）：這裡是全站唯一的身份解析入口，每次授權 API
+// 呼叫都會經過，故在此更新。Fire-and-forget，用 service role 繞過 RLS，失敗不影響
+// 呼叫端的主流程（不 await、不拋出）。
+function touchLastActive(email) {
+    try {
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+        if (!supabaseUrl || !key) return;
+        createClient(supabaseUrl, key)
+            .from('users').update({ last_active_at: new Date().toISOString() }).eq('email', email)
+            .then(() => {}, () => {});
+    } catch (_) { /* 非致命 */ }
 }

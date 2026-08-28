@@ -5,7 +5,7 @@ import { getClientIp } from '../lib/net.js';
 import { resolveUserEmail } from '../lib/verifyIdentity.js';
 import { getConfig } from '../lib/systemConfig.js';
 import { reportUsageEvent } from '../lib/dodo.js';
-import { grantFreeReferralReward } from '../lib/activate.js';
+import { grantFreeReferralReward, makeSupabase } from '../lib/activate.js';
 
 export const maxDuration = 300; // 提示詞翻譯/圖片代傳等前置作業可能耗時；AtlasCloud 生成本身已改為非同步 task_id，不在此函式內等待
 
@@ -1067,11 +1067,19 @@ async function refundAndFail(supabase, userEmail, cost, reason, toolId = null, t
 // 執行環境可能立刻被凍結/回收，沒 await 的 insert promise 有機會根本來不及打進資料庫，
 // 導致「明明出圖成功但 render_history 完全沒記錄」——這個表後續也要當異常掃描的成功判斷
 // 依據，記錄不可靠會直接讓自動退款誤判，所以這裡必須是可靠的寫入。失敗只 log，不影響回應。
+//
+// 【2026-08-28 查出的根因】這裡原本用呼叫端傳進來的 anon-key client 寫入，但正式環境的
+// render_history RLS 政策其實擋住了 anon key 的 INSERT（跟 supabase_setup.sql 裡寫的政策
+// 對不上，懷疑是 Supabase Dashboard 上被手動改過、沒同步回 repo）——導致這個 insert 已經
+// 靜默失敗了將近 5 個月（最後一筆成功紀錄是 2026-04-09），而 scan_render_anomalies 把
+// render_history 當成「出圖成功」的判斷依據之一，於是把這段期間內大量真正成功的渲染誤判成
+// 孤兒扣款、自動退款給用戶（7 月已查到 22 筆）。改用 service role client 直接繞過 RLS，
+// 不依賴那組可能跟 repo 不同步的政策設定。
 async function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal, cost, activeTool, inputUrl, clientIp, providerCost }) {
     const prompt = userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '';
     const style  = userPayload.parameters?.style || '';
     try {
-        const { error } = await supabase.from('render_history').insert([{
+        const { error } = await makeSupabase().from('render_history').insert([{
             user_email:    userEmail,
             input_url:     inputUrl || null,
             full_url:      url,

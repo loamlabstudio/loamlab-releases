@@ -1,56 +1,46 @@
-# Sprint Plan: 解決 SketchUp 2021 (Chromium 88) 介面與工具二失效問題
+# SPRINT PLAN: 數據版塊第一性重建與收尾 (Analytics Revamp)
 
 ## CONTEXT_DIGEST
-用戶回報在 SketchUp 2021 中遇到「介面字體變色」及「工具二的編輯工具無法被使用」。SU 2021 內建瀏覽器核心為 Chromium 88。
-**核心問題**：需解決舊版內核導致的 UI 渲染異常與功能腳本中斷。
-**潛在風險與判斷失誤可能性**：
-1. 若非單純 ES2022+ 語法報錯，可能是特定 SketchUp 2021 版的 Ruby-JS 橋接 (HtmlDialog) 限制，或載入時序問題導致 DOM 尚未準備好。
-2. 字體變色若不是 CSS 語法不相容，可能是作業系統（如 Windows 高對比模式）或 SU 強制樣式覆蓋，需確保樣式的 Fallback 與權重夠高。
-3. 降級語法時需注意避免破壞現有新版邏輯，切勿盲目替換。
+**第一性原理要求**：業務系統(發送點數)與財務系統(法幣金流、供應商扣款)必須徹底物理隔離。
+**已解決問題 (前置作業已完成)**：
+1. **營收虛高與退款盲區**：我們已建立 `payments` 表。
+2. **隱沒成本與失敗重試耗損**：已擴充 `gpu_jobs/render_history` 追蹤欄位，且在 `render.js` 已實作攔截 AtlasCloud 官方 `cost` 並 `× 2`（雙倍緩衝包含手續費與退款風險）。
+3. **效能癱瘓 (60秒輪詢 IO 危機)**：已建 `daily_metrics` 表與 `cron_daily_metrics` 腳本，改為 T+1 結算。
+**交付給 Claude 的特殊指令**：實作以下任務時，請你必須從第一性原理出發，**再次審視全域架構，若發現我們（開發者與 Antigravity）未顧慮到的潛在資料風險或決策盲點，請立即提出並修補**。
 
 ## TASKS
 
-- `[MUST]` TASK 1: 全面盤點與修復 JS 語法相容性問題 [x]
-  - **目標**：掃描 `app.js`，尋找並替換 Chromium 88 不支援的語法（如 `Array.prototype.at`、`structuredClone`、`Object.hasOwn`、`Array.prototype.findLast` 等）。
-  - **影響檔案**：`loamlab_plugin/ui/app.js`
-  - **結果**：全文掃描 `app.js`/`i18n.js`/`tutorial.js`，無 ES2021+/ES2022+ 語法（`.at()`、`structuredClone`、`Object.hasOwn`、`findLast`、`replaceAll`、`?.`、`??`、private class field 等皆為 0 命中）。歷史 commit（`833e901`／`ed3e148`）已先行修過 `??` 運算子與 SU2022 clipboard 問題，現狀已乾淨，本次無需改動。
+### TASK 1: 前端 Admin 看板斷捨離與 KPI 重建 [MUST] — [x] DONE
+- **要解決的問題**: 目前前端充斥 ARPU、錯誤率等雜訊，且舊邏輯導致「未扣點數就不算活躍」，無法真實反映產品狀況。
+- **任務描述**: 徹底清理 `loamlab_backend/public/admin.html` 的頂部圖表，只保留/改為這 4 個直擊心臟的指標：
+  1. **營業額 (Revenue)**：讀取 `daily_metrics`。
+  2. **雙倍成本估算 (Cost)**：讀取 `daily_metrics`。
+  3. **淨利 (Profit)**：Revenue - Cost。
+  4. **昨日活人 (DAU)**：讀取 `daily_metrics` (基於 `users.last_active_at`)。
+  請隱藏所有不精準的漏斗分析與次要區塊。
+- **影響檔案**: `loamlab_backend/public/admin.html`
 
-- `[MUST]` TASK 2: 檢查 CSS 顏色與樣式相容性 [x]
-  - **目標**：確認 Tailwind CSS 或自訂樣式中，是否使用了 Chromium 88 不支援的語法 (如 `color-mix`)，並進行 fallback 或修改，解決「介面字體變色」的問題。
-  - **影響檔案**：`loamlab_plugin/ui/index.html`, `loamlab_plugin/ui/tailwind.config.js`
-  - **結果**：編譯後 `style.css` 無 `oklch`/`color-mix`/`light-dark()`/`:has()` 等新語法（Tailwind 3.4，非 v4 oklch 預設值）。但發現 Tailwind Preflight 用了 `:where()`，該語法**剛好在 Chrome 88 才支援**，若 SU2021 核心低於此版號會整條規則被丟棄。已在 `index.html` 追加等效純選擇器 fallback（`abbr[title]` / `button,input[type=...]` / `[hidden]:not(...)`），宣告與原規則完全相同，新版瀏覽器同時命中也不影響視覺，無回歸風險。
-  - **⚠️ 判斷調整**：`:where()` 影響的是底線/按鈕外觀重置/`[hidden]` 顯示，不直接控制文字顏色，**不確定是否為「字體變色」的真正根因**，僅是审查中發現的真實相容性邊界風險，已一併修正。
+### TASK 2: 金流 Webhook 獨立寫入 `payments` 表 [MUST] — [x] DONE
+- **要解決的問題**: 目前的 Webhook 只負責給用戶發點數，導致財務報表與真實進帳脫鉤，退刷也無從查考。
+- **任務描述**: 攔截成功付款與退款事件，除原有的加點邏輯外，必須將真實付款資訊單獨寫入 `payments` 表。
+- **欄位需求**: `id` (UUID), `user_email` (TEXT), `order_id` (TEXT UNIQUE), `amount_usd_cents` (INTEGER), `status` (TEXT: 'paid'|'refunded'|'chargeback'), `payment_method` (TEXT), `created_at`。
+- **影響檔案**: `loamlab_backend/api/webhook.js`
 
-- `[MUST]` TASK 3: 驗證工具二 (Smart Canvas) 邏輯與事件綁定 [x]
-  - **目標**：檢查 Smart Canvas 初始化及事件（如 `btn-sc-re-edit`）是否有呼叫在舊版 CEF 異常的 API（如 `Clipboard API` 未 catch 或過新的 DOM 寫法），確保編輯功能正常運作。
-  - **影響檔案**：`loamlab_plugin/ui/app.js`, `loamlab_plugin/ui/index.html`
-  - **結果（用戶截圖確認後鎖定真正根因）**：用戶回報「點擊工具二後，圈選工具（sc-capsule 底部膠囊工具列）根本沒出現」+「字體顏色跟正常版本不一樣」，確認**不是渲染結果畫面、也不是語法報錯**，是純 CSS 沒套用的症狀。
-    - 追根源頭發現：`main.rb:249` 用 `?t=#{Time.now.to_i}` 幫 `index.html` 本身做 cache-busting（每次開啟保證重載最新版），但頁面內 `<link rel="stylesheet" href="./assets/style.css">` **完全沒有任何 cache-busting 參數**（對照組：`i18n.js?v=1.4.11`／`app.js?v=1.4.11` 都有手動維護的版號）。
-    - `.sc-tool-btn`/`.sc-capsule` 等 SmartCanvas 專屬樣式雖然寫在 index.html 內聯 `<style>`（永遠最新），但整個底部工具膠囊的定位/佈局/背景（`flex`/`gap-1.5`/`backdrop-blur`/`rounded-full`/`shadow-lg` 等）全部依賴外部 `style.css` 的 Tailwind utility classes。若該機器的內建瀏覽器快取住舊版 `style.css`（尤其是升級版本沒帶到新 class，或整份快取失效），工具列就會失去佈局變成無樣式的裸 `<button>`，肉眼幾乎看不出來、也不會拋 JS 錯誤——完全對應「工具二點下去圈選工具沒出現」；同理，大量 `text-white/50` 等文字顏色 utility class 失效會讓字體顏色跟新版不一樣。
-  - **修復**：`index.html` 的 `style.css` 改用 JS 讀取當頁 `location.search`（即 Ruby 附加的同一個 `?t=` 時間戳記）動態組出 `<link>` 網址，用 `document.write` 在 `<head>` 解析階段同步輸出（比動態插入 `<link>` 相容性更好）。效果：**每次開啟 dialog，style.css 保證跟 index.html 用同一把時間戳失效重載，徹底消除這整類「CSS 讀到舊快取」的問題**，不需要再手動維護版號、以後也不會再忘記同步。對其他 SketchUp 版本零風險（只是讓 CSS 每次都拿最新的，不影響任何邏輯）。
-  - **後續風險提示（未在本次處理，留給未來 sprint）**：JS 檔（`i18n.js`/`app.js`/`tutorial.js`）目前仍是手動維護的靜態 `?v=` 版號，沒有自動化，理論上同樣可能因為忘記在某次 release 手動同步而吃到舊快取——建議未來一併改成跟 CSS 一樣讀 `location.search` 動態產生，一次徹底解決，但這次先聚焦在已確認會炸的 CSS。
+### TASK 3: 前端 API 對接與歷史遷移腳本收尾 [NICE] — [x] DONE
+- **要解決的問題**: 前端修改後需要對應的 API 配合；舊資料需要平滑過渡。
+- **任務描述**: 審視 `stats.js` 確保 `dashboard` API 返回的 JSON 結構能完美對齊 TASK 1 的需求。若有需要，幫忙執行/驗證 `migrate.js` 確保歷史金流過渡至 `payments`。
+- **影響檔案**: `loamlab_backend/api/stats.js`, `admin.html`
+- **依賴**: MUST 任務之後執行。
+- **調整**：`migrate.js` 專案裡不存在，視為無需執行（舊 topup 交易本來就是點數流水，不是真實金流，沒有可遷移的歷史 `payments` 資料）。
 
-## 額外發現（審查 feedback 紀錄時意外找到的真實 crash，已修復）
-- **`UI is not defined`**：`executeUpdate()`（app.js:4072，更新橫幅點擊流程）呼叫了從未定義過的 `UI.openURL(url)`（死代碼殘留，`UI` 不是任何有效的 JS 全域物件）。2026-07-26 有真實用戶在 **Chrome 88.0.4324.150 / SketchUp Pro 23.1** 上兩次觸發此崩潰，與本次 sprint 懷疑的 Chromium 88 環境高度吻合。已改為 `window.sketchup` 缺失時 fallback `window.open(url)`，url 為空時顯示 toast，不再引用不存在的 `UI`。此路徑只在 `window.sketchup && url` 條件不成立時才會走到，不影響插件內正常更新流程，對其他版本零風險。
-- **`openSharePlatform` clipboard 崩潰**（2026-07-23，Chrome 64/SU2020，`Cannot read property 'writeText' of undefined`）：查證後**現狀已修復**，已改用有 execCommand fallback 的 `copyTextCompat()`，無需再處理。
+### TASK 4: Vercel Cron 排程設定 [NICE] — [x] DONE
+- **要解決的問題**: 讓 `daily_metrics` 自動運作，確保前端永遠秒開。
+- **任務描述**: 設定每日自動呼叫 `cron_daily_metrics`。
+- **影響檔案**: `loamlab_backend/vercel.json`
+- **調整**：Vercel Hobby plan cron 已有 2 條排程（上限），未新增第 3 條 vercel.json cron，改為讓 `cron_daily_metrics()` 搭便車跑在既有的 `scan_render_anomalies`（每日 01:30 UTC）尾端執行，避免部署失敗風險。
 
-## EXECUTION_SUMMARY
-- Task 1：審查完成，現狀已乾淨，無改動。
-- Task 2：審查完成 + 修正一處真實相容性邊界（`:where()` fallback），已驗證對其他 SketchUp 版本零視覺差異。
-- Task 3：**根因已由用戶截圖確認並修復**——`style.css` 缺少 cache-busting，導致部分機器讀到舊版快取（字體顏色跟不上新版、SmartCanvas 工具列佈局樣式缺失變成看不見的裸按鈕）。改用跟 index.html 同一把 `?t=` 時間戳動態載入，徹底解決，且此後不需要再手動維護版號。
-- 額外修復：`executeUpdate()` 死代碼 `UI.openURL` 崩潰（Chrome 88/SU2023.1 真實用戶已觸發過）。
-
-## RELEASE_GATE
-release_type: feature
-verified_diff:
-  - loamlab_plugin/ui/app.js
-  - loamlab_plugin/ui/index.html
-  - loamlab_plugin.rb
-  - loamlab_plugin/config.rb
-  - loamlab_backend/api/version.js
-sql_migration: false
-# 註：上一個實際發布的 git tag 是 v1.4.66，main 分支之後累積了 IG 聯合發文功能與訂閱降級修復
-# 兩個已各自完成的 sprint（尚未打包發布過），這次一併帶上，不是只有本 sprint 的兩個 hotfix。
-# 已核對 FEATURE_FLAGS.md：main 分支目前無 wip 的 BLOCKED_FILES，無跨分支 merge，可安全打包。
+## 執行摘要（Claude，2026-08-28）
+- 額外修補兩個會讓本 Sprint 心血直接歸零的資料斷點：`users.last_active_at` 建了但沒人寫入（DAU 永遠 0）→ 補到 `lib/verifyIdentity.js` 的唯一身份解析入口；`render.js` 算出雙倍成本但沒存進 `render_history.provider_cost_usd_cents`（Cost KPI 永遠 0）→ 兩個出圖路徑都補上寫入。
+- 部署前實測發現 `supabase_setup.sql` Phase 37 只有 3 張新表被執行過，`last_active_at`/`provider_cost_usd_cents` 兩個欄位尚未跑到正式 DB——已請用戶手動執行後才 commit，避免 `render_history` insert 整筆失敗。
 
 status: DONE

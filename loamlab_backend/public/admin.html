@@ -734,27 +734,23 @@
   <!-- ── Tab: 數據 Dashboard ── -->
   <div id="atab-data" class="admin-tab hidden">
 
-  <!-- 核心 KPI -->
+  <!-- 核心 KPI：營業額 / 雙倍成本估算 / 淨利 / 昨日活人（DAU），全部讀 daily_metrics -->
   <section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
     <div class="kpi-card">
-      <div class="kpi-label">總用戶數</div>
-      <div class="kpi-value" id="kpi-users">--</div>
-      <div class="kpi-trend trend-up">新增 <span id="kpi-users-today">0</span></div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">30天 渲染數</div>
-      <div class="kpi-value" id="kpi-renders">--</div>
-      <div class="kpi-trend" id="kpi-error-rate">錯誤率 --</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">30天 總收入</div>
+      <div class="kpi-label">營業額 (30天)</div>
       <div class="kpi-value text-green-400" id="kpi-revenue">--</div>
-      <div class="kpi-trend" id="kpi-arpu">ARPU --</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">用戶評分</div>
-      <div class="kpi-value text-yellow-400" id="kpi-rating">--</div>
-      <div class="kpi-trend">平均 <span id="kpi-rating-count">0</span> 筆</div>
+      <div class="kpi-label">雙倍成本估算 (30天)</div>
+      <div class="kpi-value text-red-400" id="kpi-cost">--</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">淨利 (30天)</div>
+      <div class="kpi-value" id="kpi-profit">--</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">昨日活人 (DAU)</div>
+      <div class="kpi-value" id="kpi-dau">--</div>
     </div>
   </section>
 
@@ -884,14 +880,8 @@
     </div>
   </div>
 
-  <!-- 流量行為與洞見 -->
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
-    <!-- 轉化漏斗 -->
-    <div class="card">
-      <div class="text-sm font-semibold text-white mb-4">轉化漏斗</div>
-      <div id="funnel-steps" class="space-y-2.5"></div>
-    </div>
-
+  <!-- 流量行為與洞見（轉化漏斗數據不精準，已隱藏） -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
     <!-- 用戶分層摘要 -->
     <div class="card">
        <div class="text-sm font-semibold text-white mb-4">用戶分層摘要</div>
@@ -3133,27 +3123,18 @@ function renderDashboard(data) {
   if (!data) return;
   
   // 1. KPI 數值
-  setText('kpi-users', fmt(data.total_users));
-  setText('kpi-users-today', data.active_today || 0); // 使用 active_today 作為近似趨勢
-  
-  const renders = data.renders_30d || (data.renders && data.renders.total) || 0;
-  setText('kpi-renders', fmt(renders));
-  
-  const errCount = data.error_count_30d || 0;
-  const errRate = renders > 0 ? Math.round((errCount / (renders + errCount)) * 100) : 0;
-  const errEl = document.getElementById('kpi-error-rate');
-  if (errEl) {
-    errEl.textContent = `錯誤率 ${errRate}% (${errCount})`;
-    errEl.className = `kpi-trend ${errRate > 10 ? 'trend-down' : 'text-gray-500'}`;
-  }
-
+  // 核心 4 指標：營業額 / 雙倍成本估算 / 淨利 / 昨日活人（DAU），全部來自 daily_metrics
   const rev = (data.revenue_30d || 0);
+  const cost = (data.cost_30d || 0);
+  const profit = rev - cost;
   setText('kpi-revenue', '$' + rev.toFixed(2));
-  const arpu = data.active_7d && rev ? 'ARPU $' + (rev / data.active_7d).toFixed(2) : 'ARPU --';
-  setText('kpi-arpu', arpu);
-  
-  setText('kpi-rating', data.avg_rating ? data.avg_rating + ' ★' : '--');
-  setText('kpi-rating-count', data.total_feedback || (data.feedback && data.feedback.recent?.length) || 0);
+  setText('kpi-cost', '$' + cost.toFixed(2));
+  const profitEl = document.getElementById('kpi-profit');
+  if (profitEl) {
+    profitEl.textContent = (profit >= 0 ? '$' : '-$') + Math.abs(profit).toFixed(2);
+    profitEl.className = `kpi-value ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`;
+  }
+  setText('kpi-dau', fmt(data.active_today || 0));
 
   // 2. 風格偏好排行
   const styleBD = data.style_breakdown || {};

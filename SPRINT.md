@@ -31,7 +31,7 @@
 - **任務描述**: 審視 `stats.js` 確保 `dashboard` API 返回的 JSON 結構能完美對齊 TASK 1 的需求。若有需要，幫忙執行/驗證 `migrate.js` 確保歷史金流過渡至 `payments`。
 - **影響檔案**: `loamlab_backend/api/stats.js`, `admin.html`
 - **依賴**: MUST 任務之後執行。
-- **調整**：`migrate.js` 專案裡不存在，視為無需執行（舊 topup 交易本來就是點數流水，不是真實金流，沒有可遷移的歷史 `payments` 資料）。
+- **調整**：`migrate.js` 專案裡不存在；改為手寫回填腳本，把 `transactions` 裡歷史 TOPUP_* 交易搬進 `payments`（見下方執行摘要）。
 
 ### TASK 4: Vercel Cron 排程設定 [NICE] — [x] DONE
 - **要解決的問題**: 讓 `daily_metrics` 自動運作，確保前端永遠秒開。
@@ -40,7 +40,21 @@
 - **調整**：Vercel Hobby plan cron 已有 2 條排程（上限），未新增第 3 條 vercel.json cron，改為讓 `cron_daily_metrics()` 搭便車跑在既有的 `scan_render_anomalies`（每日 01:30 UTC）尾端執行，避免部署失敗風險。
 
 ## 執行摘要（Claude，2026-08-28）
-- 額外修補兩個會讓本 Sprint 心血直接歸零的資料斷點：`users.last_active_at` 建了但沒人寫入（DAU 永遠 0）→ 補到 `lib/verifyIdentity.js` 的唯一身份解析入口；`render.js` 算出雙倍成本但沒存進 `render_history.provider_cost_usd_cents`（Cost KPI 永遠 0）→ 兩個出圖路徑都補上寫入。
-- 部署前實測發現 `supabase_setup.sql` Phase 37 只有 3 張新表被執行過，`last_active_at`/`provider_cost_usd_cents` 兩個欄位尚未跑到正式 DB——已請用戶手動執行後才 commit，避免 `render_history` insert 整筆失敗。
+
+**Sprint 原始任務內的修補**：
+- `users.last_active_at` 建了但沒人寫入（DAU 永遠 0）→ 補到 `lib/verifyIdentity.js` 的唯一身份解析入口。
+- `render.js` 算出雙倍成本但沒存進 `render_history.provider_cost_usd_cents`（Cost KPI 永遠 0）→ 兩個出圖路徑都補上寫入。
+
+**驗收過程中額外抓到、已修復的問題（比原本 Sprint 範圍嚴重很多）**：
+1. **`render_history` 被 RLS 擋住寫入近 5 個月（緊急）**：render.js 用 anon key 寫入被正式環境 RLS 政策擋下，最後一筆成功紀錄停在 4 月。`scan_render_anomalies` 拿 `render_history` 當「出圖成功」判斷依據之一，這段期間大量真正成功的渲染被誤判成孤兒扣款、自動退款——7 月已查到 22 筆真實誤退款。已改用 service role client 繞過，不再依賴那組跟 repo 不同步的 RLS 政策。
+2. **`payments`/`daily_metrics` 表格 API 層失效**：兩張表在 Postgres 裡實際上是空的／未正確註冊到 Supabase 對外 API（PostgREST schema cache 問題），寫入全部靜默失敗。已請用戶重新執行建表 + 授權 + `NOTIFY pgrst, 'reload schema'`，確認可正常讀寫。
+3. **金流幣別誤標（規模最大的一個）**：Dodo 在 adaptive pricing 下讓台灣/香港客戶用 TWD/HKD 結帳，系統原本直接把 `total_amount`（客戶結帳幣別）存進 `amount_usd_cents`，把新台幣當美元記，金額灌水 30 倍以上。已改用 `settlement_amount`（商戶美元結算金額）修正 webhook.js 的寫入邏輯；歷史交易則逐筆呼叫 Dodo API 查真實結算金額，修正了 44 筆（帳面 $40,611.96 → 實際 $1,273.29）。
+4. **歷史金流回填**：`transactions` 裡 123 筆真實歷史付款（排除內部手動加點與免費贈點）搬進 `payments` 表。
+5. **`daily_metrics` 回填過去 30 天**，KPI 卡片現在有真實數字可看。
+
+**已知限制（誠實揭露，不是還沒做完）**：
+- `daily_metrics.cost_usd_cents` 只有 2026-08-28（今天）起才有真實數字——在此之前 `render_history` 完全沒寫入（見上方問題 1），沒有任何地方留下歷史成本紀錄，無法回填，只能顯示 0。這幾天「淨利」卡片會約等於「營業額」卡片，屬預期現象，會隨新資料累積逐漸準確。
+- `daily_metrics.active_users`（DAU）同理，`last_active_at` 是今天才開始寫入，過去 30 天全部顯示 0，屬預期現象。
+- `daily_metrics.refund_usd_cents` 用「付款當天」的日期去抓退款，若退款發生在購買後的其他天會歸屬到錯誤日期（甚至漏記）；要修需要幫 `payments` 加 `updated_at` 欄位，本次未處理，目前前端也沒有直接顯示這個欄位。
 
 status: DONE

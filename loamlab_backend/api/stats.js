@@ -1887,20 +1887,26 @@ async function cron_daily_metrics(supabase) {
     const { count: activeUsers } = await supabase.from('users')
         .select('*', { count: 'exact', head: true })
         .gte('last_active_at', yesterday + 'T00:00:00Z')
-        .lt('last_active_at', yesterday + 'T23:59:59Z');
-        
-    // 2. 抓取昨日新註冊用戶
+        .lt('last_active_at', yesterday + 'T23:59:59Z')
+        .not('email', 'ilike', '%testsprite%').not('email', 'ilike', '%.test').not('email', 'ilike', '%.test_%')
+        .not('email', 'ilike', '%@example.com').not('email', 'in', '("loamlabstudio@gmail.com","loamlabs@gmail.com")');
+
+    // 2. 抓取昨日新註冊用戶（同樣排除測試帳號，否則每次上架前手動測試都會灌水 DAU/新用戶數）
     const { count: newUsers } = await supabase.from('users')
         .select('*', { count: 'exact', head: true })
         .gte('created_at', yesterday + 'T00:00:00Z')
-        .lt('created_at', yesterday + 'T23:59:59Z');
-        
-    // 3. 抓取昨日的所有 payments 營收 (真實金流)
+        .lt('created_at', yesterday + 'T23:59:59Z')
+        .not('email', 'ilike', '%testsprite%').not('email', 'ilike', '%.test').not('email', 'ilike', '%.test_%')
+        .not('email', 'ilike', '%@example.com').not('email', 'in', '("loamlabstudio@gmail.com","loamlabs@gmail.com")');
+
+    // 3. 抓取昨日的所有 payments 營收 (真實金流，排除測試帳號)
     const { data: payments } = await supabase.from('payments')
         .select('amount_usd_cents, status')
         .gte('created_at', yesterday + 'T00:00:00Z')
-        .lt('created_at', yesterday + 'T23:59:59Z');
-        
+        .lt('created_at', yesterday + 'T23:59:59Z')
+        .not('user_email', 'ilike', '%testsprite%').not('user_email', 'ilike', '%.test').not('user_email', 'ilike', '%.test_%')
+        .not('user_email', 'ilike', '%@example.com').not('user_email', 'in', '("loamlabstudio@gmail.com","loamlabs@gmail.com")');
+
     let revenue_usd_cents = 0;
     let refund_usd_cents = 0;
     (payments || []).forEach(p => {
@@ -1908,7 +1914,8 @@ async function cron_daily_metrics(supabase) {
         if (p.status === 'refunded' || p.status === 'chargeback') refund_usd_cents += p.amount_usd_cents;
     });
 
-    // 4. 抓取昨日的真實成本 (從 render_history 抓 API 花費)
+    // 4. 抓取昨日的真實成本（從 render_history 抓 API 花費）——故意「不」排除測試帳號：
+    // 開發者測試渲染一樣要真金白銀付給 AtlasCloud，這是隱沒成本問題本體，排除掉才是失真
     const { data: renders } = await supabase.from('render_history')
         .select('provider_cost_usd_cents')
         .gte('created_at', yesterday + 'T00:00:00Z')

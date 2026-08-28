@@ -118,9 +118,12 @@ export default async function handler(req, res) {
                         oldSubId = uRow?.dodo_subscription_id || null;
                     }
 
+                    // 財務真相與業務邏輯物理隔離：錢已經進來了，不管下面 processTopup 發點
+                    // 成不成功（例如金額校驗拒發），payments 都要獨立記這一筆，財報才不脫鉤。
+                    await recordPayment(orderId, customerEmail, amountPaidCents ?? expectedAmountCents, 'paid', 'DODO');
+
                     try {
                         await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey, dodoCustomerId, amountPaidCents, expectedAmountCents);
-                        await recordPayment(orderId, customerEmail, amountPaidCents ?? expectedAmountCents, 'paid', 'DODO');
                         if (data.subscription_id) {
                             await Promise.resolve(supabase.from('users')
                                 .update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail))

@@ -33,13 +33,18 @@ export async function resolveUserEmail(req) {
 // DAU 統計依據（users.last_active_at）：這裡是全站唯一的身份解析入口，每次授權 API
 // 呼叫都會經過，故在此更新。Fire-and-forget，用 service role 繞過 RLS，失敗不影響
 // 呼叫端的主流程（不 await、不拋出）。
+// 節流：只在超過 5 分鐘沒更新過才寫——poll_render 出圖等待期間每幾秒就會呼叫一次
+// resolveUserEmail，沒有這個條件會對同一個使用者狂打 UPDATE，白白放大寫入量。
 function touchLastActive(email) {
     try {
         const supabaseUrl = process.env.SUPABASE_URL;
         const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
         if (!supabaseUrl || !key) return;
+        const staleBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
         createClient(supabaseUrl, key)
-            .from('users').update({ last_active_at: new Date().toISOString() }).eq('email', email)
+            .from('users').update({ last_active_at: new Date().toISOString() })
+            .eq('email', email)
+            .or(`last_active_at.is.null,last_active_at.lt.${staleBefore}`)
             .then(() => {}, () => {});
     } catch (_) { /* 非致命 */ }
 }

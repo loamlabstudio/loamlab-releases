@@ -42,7 +42,7 @@ export default async function handler(req, res) {
                 if (paymentId) {
                     await cancelKolCommission(`DODO_${paymentId}`);
                     await clawbackPoints(paymentId, event.type);
-                    await markPaymentStatus(paymentId, event.type === 'payment.disputed' ? 'chargeback' : 'refunded');
+                    await markPaymentStatus(paymentId, event.type === 'payment.disputed' ? 'chargeback' : 'refunded', event.data);
                 }
                 return res.status(200).json({ status: 'success' });
             }
@@ -120,7 +120,7 @@ export default async function handler(req, res) {
 
                     // 財務真相與業務邏輯物理隔離：錢已經進來了，不管下面 processTopup 發點
                     // 成不成功（例如金額校驗拒發），payments 都要獨立記這一筆，財報才不脫鉤。
-                    await recordPayment(orderId, customerEmail, amountPaidCents ?? expectedAmountCents, 'paid', 'DODO');
+                    await recordPayment(orderId, customerEmail, amountPaidCents ?? expectedAmountCents, 'paid', 'DODO', data);
 
                     try {
                         await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey, dodoCustomerId, amountPaidCents, expectedAmountCents);
@@ -313,7 +313,9 @@ async function clawbackPoints(paymentId, eventType) {
 
 // 財務系統與業務系統物理隔離：無論 processTopup 發點邏輯怎麼變，真實進帳都獨立記一筆到
 // payments 表，讓退款/財報有真實資料可查。用 order_id upsert，同一筆付款重試不會重複入帳。
-async function recordPayment(orderId, customerEmail, amountUsdCents, status, paymentMethod) {
+// 失敗落地 webhook_errors（而非只 console.error）：Vercel log 會過期、沒人會主動去翻，
+// 財務記錄寫失敗卻沒人知道等於白做——這是一定要留稽核軌跡的資料。
+async function recordPayment(orderId, customerEmail, amountUsdCents, status, paymentMethod, rawData) {
     if (!orderId || !customerEmail || typeof amountUsdCents !== 'number') return;
     try {
         const { error } = await supabase.from('payments').upsert([{
@@ -323,22 +325,41 @@ async function recordPayment(orderId, customerEmail, amountUsdCents, status, pay
             status,
             payment_method: paymentMethod,
         }], { onConflict: 'order_id' });
-        if (error) console.error('[payments] record failed:', error.message);
+        if (error) {
+            console.error('[payments] record failed:', error.message);
+            await logWebhookError('DODO', 'payments_record_failed', orderId, customerEmail, error.message, rawData);
+        }
     } catch (e) {
         console.error('[payments] record exception:', e.message);
+        await logWebhookError('DODO', 'payments_record_failed', orderId, customerEmail, e.message, rawData);
     }
 }
 
 // 退款/拒付：payment.refunded 只帶 payment_id，訂閱付款的 order_id 是 `${subscription_id}_${payment_id}`，
-// 一般付款則是 payment_id 本身——用後綴比對兩種格式都能命中。
-async function markPaymentStatus(paymentId, status) {
+// 一般付款則是 payment_id 本身——用「完全相等」或「底線前綴結尾」精確比對兩種格式，不用任意子字串
+// LIKE（避免極端情況下誤配到另一筆 order_id 恰好以同樣字串結尾的付款）。
+// 找不到列（0 筆更新）代表 webhook 亂序（refunded 比 succeeded 先到）或資料缺漏，兩者都落地
+// webhook_errors，不能靜默放過——否則之後 succeeded 事件補進來會把這筆重新蓋回 'paid'，
+// 永久遺失退款狀態。
+async function markPaymentStatus(paymentId, status, rawData) {
     try {
-        const { error } = await supabase.from('payments')
+        const { data, error } = await supabase.from('payments')
             .update({ status })
-            .like('order_id', `%${paymentId}`);
-        if (error) console.error('[payments] status update failed:', error.message);
+            .or(`order_id.eq.${paymentId},order_id.ilike.%_${paymentId}`)
+            .select('id');
+        if (error) {
+            console.error('[payments] status update failed:', error.message);
+            await logWebhookError('DODO', 'payments_status_update_failed', paymentId, null, error.message, rawData);
+            return;
+        }
+        if (!data || data.length === 0) {
+            console.warn(`[payments] no matching row for ${status}: paymentId=${paymentId}`);
+            await logWebhookError('DODO', 'payments_status_no_match', paymentId, null,
+                `找不到對應 payments 列（可能是 webhook 亂序，succeeded 尚未處理），需人工核對`, rawData);
+        }
     } catch (e) {
         console.error('[payments] status update exception:', e.message);
+        await logWebhookError('DODO', 'payments_status_update_failed', paymentId, null, e.message, rawData);
     }
 }
 

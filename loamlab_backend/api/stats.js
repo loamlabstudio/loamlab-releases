@@ -1880,30 +1880,32 @@ async function churnStats(supabase, days = 30) {
 }
 
 // ── 每日數據聚合 Cron Job (Phase 2) ───────────────────────────────────────────────────────────
-async function cron_daily_metrics(supabase) {
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    
-    // 1. 抓取昨日的所有 users 活躍數 (依賴 last_active_at)
+// query.date 可選（'YYYY-MM-DD'，經 action dispatch 傳入 req.query）：預設算「昨天」，
+// 供每日排程用；帶入指定日期則可用來補算歷史某一天（?action=cron_daily_metrics&date=2026-08-01）。
+async function cron_daily_metrics(supabase, query = {}) {
+    const dateStr = query?.date || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const dayStart = dateStr + 'T00:00:00.000Z';
+    const dayEnd = new Date(new Date(dayStart).getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+    // 1. 抓取當日的所有 users 活躍數 (依賴 last_active_at，2026-08-28 才開始寫入，
+    // 在此之前的日期查不到資料是真的沒追蹤過，不是 bug)
     const { count: activeUsers } = await supabase.from('users')
         .select('*', { count: 'exact', head: true })
-        .gte('last_active_at', yesterday + 'T00:00:00Z')
-        .lt('last_active_at', yesterday + 'T23:59:59Z')
+        .gte('last_active_at', dayStart).lt('last_active_at', dayEnd)
         .not('email', 'ilike', '%testsprite%').not('email', 'ilike', '%.test').not('email', 'ilike', '%.test_%')
         .not('email', 'ilike', '%@example.com').not('email', 'in', '("loamlabstudio@gmail.com","loamlabs@gmail.com")');
 
-    // 2. 抓取昨日新註冊用戶（同樣排除測試帳號，否則每次上架前手動測試都會灌水 DAU/新用戶數）
+    // 2. 抓取當日新註冊用戶（同樣排除測試帳號，否則每次上架前手動測試都會灌水 DAU/新用戶數）
     const { count: newUsers } = await supabase.from('users')
         .select('*', { count: 'exact', head: true })
-        .gte('created_at', yesterday + 'T00:00:00Z')
-        .lt('created_at', yesterday + 'T23:59:59Z')
+        .gte('created_at', dayStart).lt('created_at', dayEnd)
         .not('email', 'ilike', '%testsprite%').not('email', 'ilike', '%.test').not('email', 'ilike', '%.test_%')
         .not('email', 'ilike', '%@example.com').not('email', 'in', '("loamlabstudio@gmail.com","loamlabs@gmail.com")');
 
-    // 3. 抓取昨日的所有 payments 營收 (真實金流，排除測試帳號)
+    // 3. 抓取當日的所有 payments 營收 (真實金流，排除測試帳號)
     const { data: payments } = await supabase.from('payments')
         .select('amount_usd_cents, status')
-        .gte('created_at', yesterday + 'T00:00:00Z')
-        .lt('created_at', yesterday + 'T23:59:59Z')
+        .gte('created_at', dayStart).lt('created_at', dayEnd)
         .not('user_email', 'ilike', '%testsprite%').not('user_email', 'ilike', '%.test').not('user_email', 'ilike', '%.test_%')
         .not('user_email', 'ilike', '%@example.com').not('user_email', 'in', '("loamlabstudio@gmail.com","loamlabs@gmail.com")');
 
@@ -1914,14 +1916,23 @@ async function cron_daily_metrics(supabase) {
         if (p.status === 'refunded' || p.status === 'chargeback') refund_usd_cents += p.amount_usd_cents;
     });
 
-    // 4. 抓取昨日的真實成本（從 render_history 抓 API 花費）——故意「不」排除測試帳號：
-    // 開發者測試渲染一樣要真金白銀付給 AtlasCloud，這是隱沒成本問題本體，排除掉才是失真
+    // 4a. 渲染次數改從 transactions 的 RENDER_* 扣款算（而非 render_history）：render_history
+    // 在 2026-08-28 之前因為 RLS 政策問題完全沒有寫入資料（見 render.js saveRenderHistory
+    // 的註解），用它算次數會讓所有歷史日期都是 0；transactions 的點數扣款紀錄從一開始就正常，
+    // 是更可靠的「當日確實發生過幾次渲染」來源。
+    const { count: total_renders } = await supabase.from('transactions')
+        .select('*', { count: 'exact', head: true })
+        .in('transaction_type', ['RENDER_1K', 'RENDER_2K', 'RENDER_4K', 'RENDER_360'])
+        .gte('created_at', dayStart).lt('created_at', dayEnd);
+
+    // 4b. 真實成本只能從 render_history 抓（唯一有記錄 AtlasCloud 花費的地方）——故意「不」
+    // 排除測試帳號：開發者測試渲染一樣要真金白銀付給 AtlasCloud，這是隱沒成本問題本體，
+    // 排除掉才是失真。2026-08-28 之前 render_history 是空的，這段期間的成本無法回填，
+    // 只能誠實顯示 0（不是真的沒花錢，是那段時間沒留下花了多少的紀錄）。
     const { data: renders } = await supabase.from('render_history')
         .select('provider_cost_usd_cents')
-        .gte('created_at', yesterday + 'T00:00:00Z')
-        .lt('created_at', yesterday + 'T23:59:59Z');
-        
-    const total_renders = (renders || []).length;
+        .gte('created_at', dayStart).lt('created_at', dayEnd);
+
     let cost_usd_cents = 0;
     (renders || []).forEach(r => {
         cost_usd_cents += (r.provider_cost_usd_cents || 0);
@@ -1929,9 +1940,9 @@ async function cron_daily_metrics(supabase) {
 
     // 寫入 daily_metrics
     const row = {
-        date: yesterday,
+        date: dateStr,
         active_users: activeUsers || 0,
-        total_renders,
+        total_renders: total_renders || 0,
         revenue_usd_cents,
         refund_usd_cents,
         cost_usd_cents,
@@ -1941,5 +1952,5 @@ async function cron_daily_metrics(supabase) {
 
     const { error } = await supabase.from('daily_metrics').upsert(row, { onConflict: 'date' });
     if (error) return { success: false, error: error.message };
-    return { success: true, date: yesterday, metrics: row };
+    return { success: true, date: dateStr, metrics: row };
 }

@@ -75,6 +75,18 @@ export default async function handler(req, res) {
                 // 比對是拿不同幣別的數字互比，比對結果沒有意義——total_amount 缺失就當作拿不到，
                 // 交由 processTopup 既有的「兩者缺一就跳過驗證」邏輯處理，不要用不同幣別的數字硬湊。
                 const amountPaidCents = (typeof data.total_amount === 'number') ? data.total_amount : null;
+                // 【2026-08-28 查出的幣別誤標問題】真實入帳金額只能用 settlement_amount（商戶結算幣別，
+                // 這個業務是 USD）——total_amount 是「客戶結帳當下幣別」，adaptive pricing 下台灣/香港
+                // 等地客戶會用 TWD/HKD 結帳，total_amount 就是台幣/港幣數字，直接存進 amount_usd_cents
+                // 會把台幣當美元記，金額灌水 30 倍以上（已用真實 API 查證，歷史 44 筆受影響）。
+                // 只用來記錄 payments 表的真實營收，不影響上面 amountPaidCents 的洗點金額校驗邏輯
+                // （校驗本來就該比較同一種結帳幣別，維持原樣）。
+                const settlementAmountUsdCents = (data.settlement_currency === 'USD' && typeof data.settlement_amount === 'number')
+                    ? data.settlement_amount
+                    : ((data.currency === 'USD' && amountPaidCents != null) ? amountPaidCents : null);
+                if (settlementAmountUsdCents == null) {
+                    console.warn(`[payments] 無法判斷真實 USD 入帳金額，跳過記錄: orderId=${orderId} currency=${data.currency} settlement_currency=${data.settlement_currency}`);
+                }
 
                 // 無主訂單攔截：email 缺失或為 Apple Pay 匿名信箱 → 留稽核紀錄，不丟棄金流
                 if (isAnonymousEmail(customerEmail)) {
@@ -120,7 +132,7 @@ export default async function handler(req, res) {
 
                     // 財務真相與業務邏輯物理隔離：錢已經進來了，不管下面 processTopup 發點
                     // 成不成功（例如金額校驗拒發），payments 都要獨立記這一筆，財報才不脫鉤。
-                    await recordPayment(orderId, customerEmail, amountPaidCents ?? expectedAmountCents, 'paid', 'DODO', data);
+                    await recordPayment(orderId, customerEmail, settlementAmountUsdCents, 'paid', 'DODO', data);
 
                     try {
                         await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey, dodoCustomerId, amountPaidCents, expectedAmountCents);

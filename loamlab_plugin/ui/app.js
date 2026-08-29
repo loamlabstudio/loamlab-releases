@@ -5656,6 +5656,9 @@ function _scRenderRegionList() {
         };
         card.querySelector('.sc-region-label-input').oninput = (e) => {
             SmartCanvas.regions[idx].label = e.target.value;
+            // 側欄改描述時，畫布上的文字膠囊要跟著更新（只重繪 overlay canvas，
+            // 不重建區域列表 DOM，故不會失焦）
+            _scRenderOverlays();
         };
         // Enter（未按 Shift）= 結束編輯，不要在描述裡插入換行（T7）
         card.querySelector('.sc-region-label-input').onkeydown = (e) => {

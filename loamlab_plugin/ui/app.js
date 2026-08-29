@@ -3756,22 +3756,20 @@ function renderHistoryGrid(files) {
                             onerror="var f=this.getAttribute('data-fb');if(f){this.removeAttribute('data-fb');this.src=f;}else{this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-white/20 text-[10px]\\'>No Preview</div>'}">`
                     : `<div class="w-full h-full flex items-center justify-center text-white/20 text-[10px]">No Preview</div>`
                 }
-                <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3" onclick="event.stopPropagation()">
-                    ${window._historySharePickModeSlot
-                        ? `<button onclick="pickShareImage(window._historyFiles[${i}])"
-                            class="text-[10px] px-4 py-1.5 rounded-full bg-[#e1306c]/90 hover:bg-[#e1306c] text-white font-bold tracking-wider transition-all shadow-lg">
-                            ✓ 選取此圖片 (Select)
-                           </button>`
-                        : window._historyPickMode
-                            ? `<button onclick="pickBaseImage(window._historyFiles[${i}])"
+                ${(window._historySharePickModeSlot || window._historyPickMode)
+                    ? `<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3" onclick="event.stopPropagation()">
+                        ${window._historySharePickModeSlot
+                            ? `<button onclick="pickShareImage(window._historyFiles[${i}])"
+                                class="text-[10px] px-4 py-1.5 rounded-full bg-[#e1306c]/90 hover:bg-[#e1306c] text-white font-bold tracking-wider transition-all shadow-lg">
+                                ✓ 選取此圖片 (Select)
+                               </button>`
+                            : `<button onclick="pickBaseImage(window._historyFiles[${i}])"
                                 class="text-[10px] px-4 py-1.5 rounded-full bg-green-500/90 hover:bg-green-400 text-black font-bold tracking-wider transition-all shadow-lg">
                                 ✓ 選為底圖
                                </button>`
-                            : `<button onclick="applyHistorySettings(window._historyFiles[${i}])"
-                            class="text-[10px] px-4 py-1.5 rounded-full bg-amber-500/90 hover:bg-amber-400 text-black font-bold tracking-wider transition-all shadow-lg">
-                            ${lang['history_rerender'] || '重用設定'}
-                           </button>`
-                    }</div>
+                        }</div>`
+                    : ''
+                }
             </div>
             <div class="px-3 py-2 flex flex-col gap-0.5">
                 <div class="flex items-center gap-1.5">
@@ -3985,14 +3983,6 @@ function clearBaseImageSelection() {
     if (thumb) thumb.src = '';
     if (empty) empty.classList.remove('hidden');
     if (filled) filled.classList.add('hidden');
-}
-
-function applyHistorySettings(entry) {
-    const promptEl = document.getElementById('user-prompt-input');
-    if (promptEl) promptEl.value = entry.prompt || '';
-    const radios = document.querySelectorAll('input[name="resolution"]');
-    radios.forEach(r => { r.checked = (r.value === entry.resolution); });
-    closeHistoryModal();
 }
 
 function openSharePlatform(platform) {

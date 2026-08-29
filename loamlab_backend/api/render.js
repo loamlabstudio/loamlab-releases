@@ -730,31 +730,12 @@ async function _handleRender(req, res) {
             .catch(() => {});
     }
 
-    // 4. 解析圖片並代為上傳至 Supabase Storage（私有暫存，渲染後自動刪除）
-    let imageUrls = userPayload.parameters?.image;
-    if (imageUrls && imageUrls.length > 0 && imageUrls[0].startsWith('data:image')) {
-        try {
-            if (!supabaseAdmin) throw new Error('SUPABASE_SERVICE_ROLE_KEY 未設定，無法安全上傳圖片');
-            const base64Data = imageUrls[0].split(',')[1] || imageUrls[0];
-            const imgBuffer = Buffer.from(base64Data, 'base64');
-            const fileName = `tmp/${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
-            await supabaseAdmin.storage.createBucket('render-temp', { public: false }).catch(() => {});
-            const { error: upErr } = await supabaseAdmin.storage
-                .from('render-temp')
-                .upload(fileName, imgBuffer, { contentType: 'image/jpeg' });
-            if (upErr) throw new Error(`Storage 上傳失敗: ${upErr.message}`);
-            const { data: signedData, error: signErr } = await supabaseAdmin.storage
-                .from('render-temp')
-                .createSignedUrl(fileName, 3600);
-            if (signErr || !signedData?.signedUrl) throw new Error('簽名 URL 生成失敗');
-            userPayload.parameters.image = [signedData.signedUrl];
-            tempStorageFile = fileName;
-        } catch (uploadErr) {
-            try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch(e) {}
-            try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_UPLOAD_FAIL', metadata: { tool_id: activeTool } }]); } catch(e) {}
-            return res.status(500).json({ code: -1, msg: sanitizeError(`圖床代傳失敗: ${uploadErr.message}`), points_refunded: true });
-        }
-    }
+    // 4. 圖片處理：T1/T3 的截圖以 base64 進來，直接原樣傳給 AtlasCloud。
+    //    先前這裡會把 base64 上傳到 Supabase Storage 換一個簽名 URL（宣稱「減少 payload」），
+    //    但下方組 atlasImages 時又會把該 http URL 下載回來轉成 base64——繞一圈（多一次上傳 +
+    //    一次下載，約 1~2 秒 + 雙倍頻寬），AtlasCloud 最終收到的還是同一份 base64。故直接略過，
+    //    base64 由 atlasImages 的 `data:image` 分支原樣帶過。T2 走自己的 base_image/ref_images
+    //    路徑，不經過 parameters.image。
 
     // 5. 處理圖片與提取參數
     let tempBase = null, tempRef = null;
@@ -784,7 +765,6 @@ async function _handleRender(req, res) {
             if (originalImageB64 && !originalImageUrl) {
                 const cleanOrig = originalImageB64.replace(/^data:image\/\w+;base64,/, '');
                 if (supabaseAdmin) {
-                    await supabaseAdmin.storage.createBucket('render-temp', { public: false }).catch(() => {});
                     const origName = `tmp/${Date.now()}_orig_${Math.random().toString(36).slice(2)}.jpg`;
                     const { error: upOrig } = await supabaseAdmin.storage.from('render-temp').upload(origName, Buffer.from(cleanOrig, 'base64'), { contentType: 'image/jpeg' });
                     if (!upOrig) {
@@ -835,35 +815,34 @@ async function _handleRender(req, res) {
 
         // ==========================================
         // 從 Supabase 取得動態工作流設定 (若無則套用預設)
+        // 這 4 個 key 互相獨立，一次平行取回（原本 4 次序列 await，白白多 3 個 round-trip）。
+        // getConfig 內部自己 try/catch 並在錯誤時回 null，這裡再包一層 allSettled 防意外拋出。
         // ==========================================
-        let systemPrompts = {};
-        try {
-            const pVal = await getConfig(supabase, 'SYSTEM_PROMPTS');
-            systemPrompts = pVal?.prompts || {};
-            // 不再靜默降級：DB 讀不到 SYSTEM_PROMPTS 就代表所有工具的提示詞會退回內建
-            // 預設值，等同「管理員的所有調校全部失效」。這在正式環境是嚴重事故，必須在
-            // 日誌用可被告警規則抓到的關鍵字大聲喊出來（T3）。
-            if (pVal == null) {
-                console.error('[render][CRITICAL] SYSTEM_PROMPTS 讀取為 null，已降級為 lib/defaultPrompts.js 內建值 — 請立即檢查 system_config 表與 RLS 政策');
-            }
-        } catch(e) {
-            console.error('[render][CRITICAL] SYSTEM_PROMPTS 讀取拋錯，已降級為內建預設值:', e?.message);
+        const [pR, mR, eR, nR] = await Promise.allSettled([
+            getConfig(supabase, 'SYSTEM_PROMPTS'),
+            getConfig(supabase, 'MODEL_CONFIG'),
+            getConfig(supabase, 'SYSTEM_ENGINE_CONFIG'),
+            getConfig(supabase, 'SYSTEM_T1_NODES'),
+        ]);
+        const pVal = pR.status === 'fulfilled' ? pR.value : null;
+        const mVal = mR.status === 'fulfilled' ? mR.value : null;
+        const eVal = eR.status === 'fulfilled' ? eR.value : null;
+        const nVal = nR.status === 'fulfilled' ? nR.value : null;
+
+        const systemPrompts = pVal?.prompts || {};
+        // 不再靜默降級：DB 讀不到 SYSTEM_PROMPTS 等同「管理員所有調校全部失效」，
+        // 正式環境是嚴重事故，日誌用可被告警規則抓到的關鍵字大聲喊出來（T3）。
+        if (pVal == null) {
+            console.error('[render][CRITICAL] SYSTEM_PROMPTS 讀取為 null，已降級為 lib/defaultPrompts.js 內建值 — 請立即檢查 system_config 表與 RLS 政策');
         }
 
-        let toolModelMap = {};
-        try {
-            const mVal = await getConfig(supabase, 'MODEL_CONFIG');
-            if (mVal?.models) toolModelMap = mVal.models;
-        } catch(e) {}
+        const toolModelMap = mVal?.models || {};
 
         // ── Prompt Engine Mode（nodes | legacy）──
         let promptEngineMode = 'nodes';
         let structureLabels = {};
-        try {
-            const eVal = await getConfig(supabase, 'SYSTEM_ENGINE_CONFIG');
-            if (eVal?.config?.prompt_engine_mode) promptEngineMode = eVal.config.prompt_engine_mode;
-            if (eVal?.config?.structure_labels) structureLabels = eVal.config.structure_labels;
-        } catch(e) {}
+        if (eVal?.config?.prompt_engine_mode) promptEngineMode = eVal.config.prompt_engine_mode;
+        if (eVal?.config?.structure_labels) structureLabels = eVal.config.structure_labels;
 
         // T3：預設提示詞統一由 lib/defaultPrompts.js 提供，前後端同一份
         const p1 = systemPrompts.TOOL_1 || DEFAULT_PROMPTS.TOOL_1;
@@ -876,14 +855,9 @@ async function _handleRender(req, res) {
 
         // ── 進階節點配置 (T1 Nodes) ──
         let t1Nodes = [];
-        try {
-            const nVal = await getConfig(supabase, 'SYSTEM_T1_NODES');
-            if (nVal?.nodes) t1Nodes = nVal.nodes;
-            else if (nVal == null && promptEngineMode !== 'legacy') {
-                console.error('[render][CRITICAL] SYSTEM_T1_NODES 讀取為 null，Tool 1 將退回 legacy 拼接 — 請立即檢查 system_config 表與 RLS 政策');
-            }
-        } catch(e) {
-            console.error('[render][CRITICAL] SYSTEM_T1_NODES 讀取拋錯:', e?.message);
+        if (nVal?.nodes) t1Nodes = nVal.nodes;
+        else if (nVal == null && promptEngineMode !== 'legacy') {
+            console.error('[render][CRITICAL] SYSTEM_T1_NODES 讀取為 null，Tool 1 將退回 legacy 拼接 — 請立即檢查 system_config 表與 RLS 政策');
         }
 
         // 風格參考圖 URL：使用者從歷史渲染裡自選一張（可選）。有值時 buildNodesModePrompt

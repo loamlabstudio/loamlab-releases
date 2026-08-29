@@ -6,6 +6,7 @@ import { resolveUserEmail } from '../lib/verifyIdentity.js';
 import { getConfig } from '../lib/systemConfig.js';
 import { reportUsageEvent } from '../lib/dodo.js';
 import { grantFreeReferralReward, makeSupabase } from '../lib/activate.js';
+import { DEFAULT_PROMPTS, DEFAULT_BATCH_NODES } from '../lib/defaultPrompts.js';
 
 export const maxDuration = 300; // 提示詞翻譯/圖片代傳等前置作業可能耗時；AtlasCloud 生成本身已改為非同步 task_id，不在此函式內等待
 
@@ -32,6 +33,20 @@ function sanitizeError(msg) {
         .replace(/supabase/gi, '資料庫服務')
         .replace(/dodopayments?/gi, '金流服務商')
         .replace(/\bvercel\b/gi, '伺服器');
+}
+
+// 使用者自訂提示詞清洗（T4 Injection 防護）。
+// 只做兩件事：①剝除控制字元（保留 \t \n \r，其餘 C0/DEL 拿掉，防止用不可見字元
+// 破壞下游 payload 或日誌）②壓上限長度。
+// 刻意「不」跳脫引號 / JSON 保留字元——user_prompt 是在 JSON.stringify() 之後才以
+// 純文字附加到 prompt 尾端（見 buildNodesModePrompt / Tool 2、3 組裝），根本不在
+// JSON 結構內，跳脫反而會把正常內容弄壞（例：使用者寫 `"oak" table`）。
+function sanitizeUserPrompt(raw) {
+    if (raw == null) return '';
+    let s = typeof raw === 'string' ? raw : String(raw);
+    s = Array.from(s).filter(c => { const n = c.charCodeAt(0); return n > 31 ? n !== 127 : (n === 9 || n === 10 || n === 13); }).join('');
+    if (s.length > 4000) s = s.slice(0, 4000);
+    return s.trim();
 }
 
 // ── 模型適配器登錄表：新增模型只需加一條 entry ──
@@ -127,20 +142,37 @@ async function buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, adv,
     const officialPrompt = {};
     const projectType = adminValues['project_type'] || '';
 
-    // 2b. 批量出圖：Image Roles / Style Consistency 前置，最大化模型約束力
+    // 2b. 批量出圖：Image Roles / Style Consistency 前置，最大化模型約束力。
+    //     留白邏輯：以「值（value）」為準——admin 把某條的內容清空（""）就代表不要這條
+    //     約束，該條整行從 JSON 剔除；只有「從未設定過」（undefined）才 fallback 到
+    //     defaultPrompts.js 的預設值。key（那串固定標籤）留著不影響剔除判斷。
     if (styleRefUrl) {
-        const bn = batchNodes;
-        const d = defaultBatchNodes;
-        officialPrompt[sl.image_roles_key] = {
-            [bn.img1_key || d.img1_key]: bn.img1 || d.img1,
-            [bn.img2_key || d.img2_key]: bn.img2 || d.img2,
-            [bn.forbidden_key || d.forbidden_key]: bn.forbidden || d.forbidden
+        const bn = batchNodes || {};
+        const d = defaultBatchNodes || {};
+        // 值：undefined → 用預設；"" 或有內容 → 照 admin 存的
+        const val = (userVal, defVal) => userVal !== undefined ? userVal : defVal;
+        // key：admin 清掉標籤時退回預設標籤，避免 JSON 出現空字串 key
+        const key = (userKey, defKey) => (userKey !== undefined && userKey !== '') ? userKey : defKey;
+        const put = (obj, uKey, dKey, uVal, dVal) => {
+            const v = val(uVal, dVal);
+            if (v !== undefined && v !== '') obj[key(uKey, dKey)] = v;
         };
-        officialPrompt[sl.style_consistency_key] = {
-            [bn.apply_key || d.apply_key]: bn.apply || d.apply,
-            [bn.output_must_be_key || d.output_must_be_key]: bn.output_must_be || d.output_must_be,
-            [bn.never_key || d.never_key]: bn.never || d.never
-        };
+
+        const imageRoles = {};
+        put(imageRoles, bn.img1_key, d.img1_key, bn.img1, d.img1);
+        put(imageRoles, bn.img2_key, d.img2_key, bn.img2, d.img2);
+        put(imageRoles, bn.forbidden_key, d.forbidden_key, bn.forbidden, d.forbidden);
+        if (Object.keys(imageRoles).length > 0) {
+            officialPrompt[sl.image_roles_key] = imageRoles;
+        }
+
+        const styleConsistency = {};
+        put(styleConsistency, bn.apply_key, d.apply_key, bn.apply, d.apply);
+        put(styleConsistency, bn.output_must_be_key, d.output_must_be_key, bn.output_must_be, d.output_must_be);
+        put(styleConsistency, bn.never_key, d.never_key, bn.never, d.never);
+        if (Object.keys(styleConsistency).length > 0) {
+            officialPrompt[sl.style_consistency_key] = styleConsistency;
+        }
     }
 
     officialPrompt[sl.project_key] = `${sl.project_prefix}${projectType ? ' - ' + projectType : ''}`;
@@ -376,20 +408,7 @@ async function _handleRender(req, res) {
             const t1Nodes = Array.isArray(req.body.t1_nodes) ? req.body.t1_nodes : [];
             const batchNodes = req.body.batch_nodes && typeof req.body.batch_nodes === 'object' ? req.body.batch_nodes : {};
             const structureLabels = req.body.structure_labels && typeof req.body.structure_labels === 'object' ? req.body.structure_labels : {};
-            const defaultBatchNodes = {
-                img1_key: "Image 1 [PRIMARY OUTPUT BASIS]",
-                img1: "SketchUp scene — every spatial element in the output (room layout, all furniture, all objects, all surfaces, camera viewpoint, geometry, proportions) must originate exclusively from Image 1.",
-                img2_key: "Image 2 [STYLE EXTRACTION ONLY]",
-                img2: "Lighting reference photo — extract ONLY: light direction, color temperature (Kelvin), warmth/coolness ratio, shadow softness, and highlight quality.",
-                forbidden_key: "FORBIDDEN from Image 2",
-                forbidden: "Any furniture, object, surface, wall, floor, architecture, or spatial arrangement from Image 2 must NOT appear in the output.",
-                apply_key: "Apply",
-                apply: "Image 2's photographic lighting quality and color tone onto Image 1's existing scene.",
-                output_must_be_key: "Output must be",
-                output_must_be: "A realistic photo of Image 1's exact spatial layout and objects — lit and color-graded to match Image 2's atmosphere.",
-                never_key: "Never",
-                never: "Blend, composite, or merge spatial content from both images."
-            };
+            const defaultBatchNodes = DEFAULT_BATCH_NODES;
             const withRef = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, {}, 'preview-style-ref-placeholder', '', structureLabels);
             const withoutRef = await buildNodesModePrompt(t1Nodes, batchNodes, defaultBatchNodes, {}, '', '', structureLabels);
             return res.status(200).json({ code: 0, with_ref: withRef, without_ref: withoutRef });
@@ -608,8 +627,9 @@ async function _handleRender(req, res) {
     }
 
     // 整理 payload：統一 prompt 欄位，相容新版 JS (傳 user_prompt) 與舊版 Ruby (傳 prompt)
+    // T4：在此一次性清洗使用者輸入，下游全部拿到已剝除控制字元、已壓長度的版本。
     if (userPayload.parameters) {
-        const rawPrompt = (userPayload.parameters.user_prompt || userPayload.parameters.prompt || "").trim();
+        const rawPrompt = sanitizeUserPrompt(userPayload.parameters.user_prompt || userPayload.parameters.prompt || "");
         userPayload.parameters.user_prompt = rawPrompt; // Coze Python 節點讀取
         userPayload.parameters.prompt = rawPrompt;       // 相容 Coze workflow 宣告的必填欄位
     }
@@ -820,7 +840,15 @@ async function _handleRender(req, res) {
         try {
             const pVal = await getConfig(supabase, 'SYSTEM_PROMPTS');
             systemPrompts = pVal?.prompts || {};
-        } catch(e) {}
+            // 不再靜默降級：DB 讀不到 SYSTEM_PROMPTS 就代表所有工具的提示詞會退回內建
+            // 預設值，等同「管理員的所有調校全部失效」。這在正式環境是嚴重事故，必須在
+            // 日誌用可被告警規則抓到的關鍵字大聲喊出來（T3）。
+            if (pVal == null) {
+                console.error('[render][CRITICAL] SYSTEM_PROMPTS 讀取為 null，已降級為 lib/defaultPrompts.js 內建值 — 請立即檢查 system_config 表與 RLS 政策');
+            }
+        } catch(e) {
+            console.error('[render][CRITICAL] SYSTEM_PROMPTS 讀取拋錯，已降級為內建預設值:', e?.message);
+        }
 
         let toolModelMap = {};
         try {
@@ -830,36 +858,18 @@ async function _handleRender(req, res) {
 
         // ── Prompt Engine Mode（nodes | legacy）──
         let promptEngineMode = 'nodes';
-        let disableBatchStyleLock = false;
         let structureLabels = {};
         try {
             const eVal = await getConfig(supabase, 'SYSTEM_ENGINE_CONFIG');
             if (eVal?.config?.prompt_engine_mode) promptEngineMode = eVal.config.prompt_engine_mode;
-            disableBatchStyleLock = !!eVal?.config?.disable_batch_style_lock;
             if (eVal?.config?.structure_labels) structureLabels = eVal.config.structure_labels;
         } catch(e) {}
 
-        const defaultP1 = "SketchUp interior model (Image 1). Backend pre-generates a spatial depth map (Image 2) and a color-segmented channel map (Image 3). Using Image 1 with reference to Images 2 and 3, restore 99% of spatial depth, camera position, and material texture direction without altering geometry or materials. Convert to a realistic interior photo. Apply natural lighting with supplemental diffuse fill to eliminate pure-black shadows and overexposure. Rationalize minor spatial inconsistencies. Professional photography-grade color grading with natural tonal gradation. ultra-detailed";
-        const defaultP2 = "Edit IMAGE 1 (the original scene photo) by replacing materials/objects as specified below.\nIMAGE 2 shows the same scene with WHITE OUTLINE MARKERS and NUMBER LABELS (1, 2, 3...) — these are PURELY spatial location indicators showing WHERE to apply each change; each number corresponds exactly to the matching \"Region N\" entry in the Changes list below. These white outlines and numbers are NOT part of the desired output and must NOT appear in the final image in any form.\n{{REF_TEXT}}\nChanges:\n{{CHANGES}}\n\nStrict Guidelines:\n① Final result must be based on IMAGE 1, appearing as a natural, original photograph — the white outline markers and numbers from IMAGE 2 must never appear in the output\n② Perspective & Proportion: Render all objects from IMAGE 1's camera angle; do not use the reference photo's original angle\n③ Lighting & Color Temperature: Strictly follow IMAGE 1's light direction, intensity, shadows and color temperature\n④ Boundary Control: Stay mainly within each marked zone; minor edge feathering allowed for seamless blending; do not affect unrelated surfaces\n⑤ Realism & Aesthetics: Replaced objects must have realistic materials, correct scale, and blend harmoniously into the original space";
-        const defaultP3 = "Based on the uploaded reference image, generate a single high-quality 3x3 interior visualization collage in exact 1:1 square aspect ratio. Output only the clean collage - no text, no titles, no watermarks, no borders, no labels.\nHighest priority: Faithfully extract and reproduce all details from the reference image, including material textures, light and shadow characteristics, color tones, object qualities, and unique atmosphere. All 9 panels must maintain the exact same spatial structure, furniture layout, and lighting direction. Accurate perspective with zero distortion or shifting.\n3x3 Mixed Grid Layout:\nTop Row Left: Left 45 wide long shot showing the full spatial layout and depth\nTop Row Center: Exact same viewpoint and framing as the uploaded reference image (visual anchor)\nTop Row Right: Close-up detail 1 - highly faithful reproduction of material textures and craftsmanship from the reference image\nMiddle Row Left: Medium shot focusing on main furniture arrangement and functional area, preserving the original light and shadow atmosphere\nMiddle Row Center: Close-up detail 2 - emphasizing light and shadow interaction and surface qualities from the reference image\nMiddle Row Right: Right 45 wide long shot showing the other side of the space\nBottom Row Left: Close-up detail 3 - faithfully presenting another dimension of details from the reference image (e.g., decorative elements, corner craftsmanship, or material contrast)\nBottom Row Center: Medium shot from an alternative angle showing spatial transparency and overall atmosphere, faithful to the original tone\nBottom Row Right: Balanced medium shot concluding with overall harmony and high-end quality\n\nTechnical Requirements:\nStrictly faithful to the reference image's materials, lighting, colors, and fine details; 8K ultra-high resolution with extreme detail; photorealistic material rendering with accurate reflections, refractions, and micro-surface details; professional multi-layer lighting; cinematic color grading with sophisticated, soft, and luxurious tones; extremely sharp, clean, noise-free, and distortion-free.\nGenerate a single cohesive 3x3 collage with strong visual rhythm and dramatic scale contrast, while perfectly capturing the unique details and atmosphere of the reference image.";
-        
-        const p1 = systemPrompts.TOOL_1 || defaultP1;
-        const p2 = systemPrompts.TOOL_2 || defaultP2;
-        const p3 = systemPrompts.TOOL_3 || defaultP3;
-        const defaultBatchNodes = {
-            img1_key: "Image 1 [PRIMARY OUTPUT BASIS]",
-            img1: "SketchUp scene — every spatial element in the output (room layout, all furniture, all objects, all surfaces, camera viewpoint, geometry, proportions) must originate exclusively from Image 1.",
-            img2_key: "Image 2 [STYLE EXTRACTION ONLY]",
-            img2: "Lighting reference photo — extract ONLY: light direction, color temperature (Kelvin), warmth/coolness ratio, shadow softness, and highlight quality.",
-            forbidden_key: "FORBIDDEN from Image 2",
-            forbidden: "Any furniture, object, surface, wall, floor, architecture, or spatial arrangement from Image 2 must NOT appear in the output.",
-            apply_key: "Apply",
-            apply: "Image 2's photographic lighting quality and color tone onto Image 1's existing scene.",
-            output_must_be_key: "Output must be",
-            output_must_be: "A realistic photo of Image 1's exact spatial layout and objects — lit and color-graded to match Image 2's atmosphere.",
-            never_key: "Never",
-            never: "Blend, composite, or merge spatial content from both images."
-        };
+        // T3：預設提示詞統一由 lib/defaultPrompts.js 提供，前後端同一份
+        const p1 = systemPrompts.TOOL_1 || DEFAULT_PROMPTS.TOOL_1;
+        const p2 = systemPrompts.TOOL_2 || DEFAULT_PROMPTS.TOOL_2;
+        const p3 = systemPrompts.TOOL_3 || DEFAULT_PROMPTS.TOOL_3;
+        const defaultBatchNodes = DEFAULT_BATCH_NODES;
         const batchNodes = systemPrompts.TOOL_1_BATCH_NODES
             ? (() => { try { return JSON.parse(systemPrompts.TOOL_1_BATCH_NODES); } catch(e) { return {}; } })()
             : {};
@@ -869,10 +879,17 @@ async function _handleRender(req, res) {
         try {
             const nVal = await getConfig(supabase, 'SYSTEM_T1_NODES');
             if (nVal?.nodes) t1Nodes = nVal.nodes;
-        } catch(e) {}
+            else if (nVal == null && promptEngineMode !== 'legacy') {
+                console.error('[render][CRITICAL] SYSTEM_T1_NODES 讀取為 null，Tool 1 將退回 legacy 拼接 — 請立即檢查 system_config 表與 RLS 政策');
+            }
+        } catch(e) {
+            console.error('[render][CRITICAL] SYSTEM_T1_NODES 讀取拋錯:', e?.message);
+        }
 
-        // Method B：提前取得風格參考 URL（需在 finalPrompt 組裝前宣告）
-        const styleRefUrl = disableBatchStyleLock ? '' : (userPayload.parameters?.style_ref_url || '').trim();
+        // 風格參考圖 URL：使用者從歷史渲染裡自選一張（可選）。有值時 buildNodesModePrompt
+        // 會附加 Image Roles / Style Consistency 巢狀 JSON。批量出圖已全面平行送出，不再有
+        // 「自動等第一張結果當參考圖」機制。
+        const styleRefUrl = (userPayload.parameters?.style_ref_url || '').trim();
 
         // ── 提示詞組裝 ──
         let finalPrompt = "";
@@ -907,7 +924,12 @@ async function _handleRender(req, res) {
             } else {
                 const hasRefs = refImageUrls.length >= 1;
                 const refText = hasRefs ? "IMAGE 3+ are reference objects: use only their shape, style and form; match lighting to IMAGE 1's environment.\n" : "";
-                finalPrompt = p2.replace("{{REF_TEXT}}", refText).replace("{{CHANGES}}", changes.join('\n'));
+                // 用函式形式做替換：changes 內含使用者輸入，若用字串形式，內容裡的
+                // $&、$'、$`、$1 等會被 String.replace 當成特殊替換樣式，導致提示詞被竄改。
+                const changesJoined = changes.join('\n');
+                finalPrompt = p2
+                    .replace("{{REF_TEXT}}", () => refText)
+                    .replace("{{CHANGES}}", () => changesJoined);
             }
         } else if (activeTool === 3) {
             finalPrompt = userPrompt.trim() ? p3 + ", " + userPrompt : p3;

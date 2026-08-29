@@ -48,7 +48,6 @@ let _tool1StyleRefUrl = null;     // 工具 1：從歷史選擇的風格參考�
 let t1NodesData = []; // Store Tool 1 advanced nodes configuration
 let optionsData = []; // SYSTEM_OPTIONS from backend
 let promptEngineMode = 'nodes'; // 由後端 get_t1_nodes 回傳值決定
-let disableBatchStyleLock = false; // 由後端 get_t1_nodes 回傳值決定（關閉時批次場景可平行送出，不必等第1張）
 let userChips = JSON.parse(localStorage.getItem('loamlab_user_chips') || '{}');
 // { [nodeId]: [{label, value}] }
 let userPresets = JSON.parse(localStorage.getItem('loamlab_presets') || '[]');
@@ -106,7 +105,6 @@ async function fetchT1Nodes() {
         if (data.code === 0) {
             t1NodesData = data.nodes || [];
             promptEngineMode = data.prompt_engine_mode || 'nodes'; // 純後端控制，無本地 override
-            disableBatchStyleLock = !!data.disable_batch_style_lock;
             // 開啟插件時，用「上一次實際送出渲染」的完整配方覆蓋逐欄位累積的 loamlab_node_vals，
             // 避免各節點各自殘留不同時期編輯過、但從未送出的舊值，混雜成一份四不像的配方。
             try {
@@ -2288,7 +2286,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     expected_cost: totalCost,
                     tool: currentActiveTool,
                     advanced_settings,
-                    disable_batch_style_lock: disableBatchStyleLock,
                     render_force_style: JSON.stringify(_forceStyleVal),
                     ...(usingBaseImage && {
                         base_image_url: _baseImageEntry.file_url || _baseImageEntry.cloud_url || '',
@@ -5234,10 +5231,29 @@ function openSmartCanvas(channelBase64, renderedUrl, sceneName, keepRegions = fa
         
         // rAF 確保 layout 完成後再讀尺寸，避免快取圖片同步觸發 onload 時 getBoundingClientRect 回傳 0
         requestAnimationFrame(() => {
-            const w = SmartCanvas.baseImg.naturalWidth;
-            const h = SmartCanvas.baseImg.naturalHeight;
+            const natW = SmartCanvas.baseImg.naturalWidth;
+            const natH = SmartCanvas.baseImg.naturalHeight;
 
-            // 使用 naturalWidth/Height 作為 Canvas 的邏輯尺寸，保證出圖比例與畫素精度 100% 對齊且不模糊
+            // canvas backing store 尺寸 = 底圖貼合視窗後的實際顯示 px（與 _scComputeFitBox / _scApplyStackSize
+            // 同一算式，單一真理來源），不再用 naturalWidth。
+            // Why: 舊做法讓 canvas 內部尺寸 = 底圖原生像素（最高 4096）。2K/4K 底圖會超過 SketchUp 內嵌 CEF 的
+            // canvas backing store 最大邊長限制（部分機器/GPU 為 2048px），超限區域（約右側 1/3）靜默繪製失敗
+            // ——<img> 不受此限所以整張圖看得到，但透明的 draw/cursor canvas 在該區被裁掉，游標消失、無法標註。
+            // canvas 依定義 ≤ 視窗可視範圍後，結構上不可能再撞上限；游標與畫面永遠對齊；undo 記憶體隨視窗而非 4K。
+            const viewport = document.getElementById('sc-canvas-viewport');
+            const availW = (viewport && viewport.clientWidth)  || natW;
+            const availH = (viewport && viewport.clientHeight) || natH;
+            const fitScale = Math.min(availW / natW, availH / natH, 1);
+            // 長邊 clamp 到 [1280, 1920]，且不超過底圖原生：下限確保送 AI 的 composite 夠清晰讓模型讀懂標註
+            // 位置，上限是即使視窗異常大也絕不逼近 CEF backing store 限制的防呆線。單一 scale 同時套用長短邊，
+            // 比例永遠不變。
+            const natLong = Math.max(natW, natH);
+            const minScale = Math.min(1280, natLong) / natLong;
+            const maxScale = Math.min(1920, natLong) / natLong;
+            const scale = Math.min(Math.max(fitScale, minScale), maxScale);
+            const w = Math.max(1, Math.round(natW * scale));
+            const h = Math.max(1, Math.round(natH * scale));
+
             SmartCanvas.canvasW = w;
             SmartCanvas.canvasH = h;
 
@@ -5640,6 +5656,13 @@ function _scRenderRegionList() {
         };
         card.querySelector('.sc-region-label-input').oninput = (e) => {
             SmartCanvas.regions[idx].label = e.target.value;
+        };
+        // Enter（未按 Shift）= 結束編輯，不要在描述裡插入換行（T7）
+        card.querySelector('.sc-region-label-input').onkeydown = (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                e.target.blur();
+            }
         };
         card.querySelector('.sc-ref-file-input').addEventListener('change', (e) => {
             var fileArr = e.target.files;
@@ -6713,8 +6736,4 @@ function handle360CloudExport() {
     })();
 }
 
-// Phase 2: 直接傳回渲染結果 URL，由後端 Prompt 控制 Anti-Collage，避免 16x16 降採樣導致色調異常（如黃昏色調）
-window.generateStyleReference = function(url) {
-    sketchup.returnStyleReference({ style_ref: url });
-};
 

@@ -11,6 +11,30 @@ export async function getConfig(supabase, key) {
     return data?.value || null;
 }
 
+// 帶 updated_at 的讀取——供樂觀鎖（optimistic lock）比對版本用。
+// readError=true 時呼叫端應「拒絕寫入」而非當成「目前沒有值」，避免 DB 抖動時
+// 把新內容硬蓋上去（T1）。
+export async function getConfigWithMeta(supabase, key) {
+    const { data, error } = await supabase.from('system_config').select('value, updated_at').eq('key', key).maybeSingle();
+    if (error) {
+        console.error('[systemConfig:read_failed]', key, error.message);
+        return { value: null, updatedAt: null, readError: true };
+    }
+    return { value: data?.value || null, updatedAt: data?.updated_at || null, readError: false };
+}
+
+// 讀某個 key 的變更歷史（system_config_log，append-only）。新到舊，供 admin 顯示
+// 版本清單與一鍵回滾用（T2）。不新增資料表——這張 log 表本身就是天然的版本快照。
+export async function listConfigHistory(supabase, key, limit = 30) {
+    const { data, error } = await supabase.from('system_config_log')
+        .select('id, value, created_at')
+        .eq('key', key)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+    if (error) { console.error('[systemConfig:history_failed]', key, error.message); return { rows: [], error }; }
+    return { rows: data || [], error: null };
+}
+
 export async function setConfig(supabase, key, value) {
     const { error } = await supabase.from('system_config')
         .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });

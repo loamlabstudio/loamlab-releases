@@ -75,9 +75,6 @@ module LoamLab
     @@requests        ||= []
     @@pending_results   = []
     @@polling_dialog    = nil
-    @@deferred_sends    = []   # Method B：Scene 1+ 的延遲 HTTP 佇列
-    @@scene0_style_url  = nil  # Method B：Scene 0 成功後的結果 URL
-    @@pending_sref      = nil  # Anti-Collage：保留 user_style_ref_url 供 returnStyleReference callback 使用
     @@save_dir_360    ||= nil  # Tool 4 (360) 獨立存檔目錄
     @@pano_task         = nil  # 非同步全景拍攝任務狀態
     @@ao_unsupported    = false # 偵測：用戶是否在 classic engine（AO 不支持）
@@ -410,13 +407,12 @@ module LoamLab
         user_style_ref_url      = (params["style_ref_url"] || "").to_s.strip
         advanced_settings       = params["advanced_settings"] || {}
         render_force_style      = begin; JSON.parse((params["render_force_style"] || "{}").to_s); rescue; {}; end
-        disable_batch_style_lock = !!params["disable_batch_style_lock"]
 
         dialog.execute_script("window.receiveFromRuby({status: 'rendering'})")
 
         # 延遲一點執行，避免阻塞前端 UI 動畫
         UI.start_timer(0.1, false) do
-            self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution, tool, base_image_url, base_image_scene, reference_image_base64, advanced_settings, user_style_ref_url, render_force_style, disable_batch_style_lock)
+            self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution, tool, base_image_url, base_image_scene, reference_image_base64, advanced_settings, user_style_ref_url, render_force_style)
         end
       end
 
@@ -680,12 +676,6 @@ module LoamLab
         rescue => e
           UI.messagebox("Sync Preview Error: #{e.message}")
         end
-      end
-
-      # 5a. Anti-Collage callback：JS 降採樣完成後觸發後續場景渲染
-      dialog.add_action_callback("returnStyleReference") do |action_context, params|
-        style_ref = (params["style_ref"] || '').to_s
-        self.fire_deferred_renders(style_ref.empty? ? nil : style_ref, @@pending_sref || '')
       end
 
       # 5. AI 渲染結果自動存檔 → 下載圖片到 save_path
@@ -1733,7 +1723,7 @@ module LoamLab
     end
 
     # 批量導出指定的場景為實體檔案並上傳 Coze
-    def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1, base_image_url="", base_image_scene="底圖", reference_image_base64="", advanced_settings={}, user_style_ref_url="", render_force_style={}, disable_batch_style_lock=false)
+    def self.batch_export_scenes(dialog, scenes_to_render, user_prompt, resolution="1k", tool=1, base_image_url="", base_image_scene="底圖", reference_image_base64="", advanced_settings={}, user_style_ref_url="", render_force_style={})
       model = Sketchup.active_model
       return unless model
       @@polling_dialog = dialog
@@ -2031,45 +2021,22 @@ module LoamLab
                   captured_ts      = timestamp.dup
                   LoamLab.log "[LoamLab] 截圖完成: #{scene_name}"
 
-                  # 批次風格鎖定關閉時：不需要等第 1 張出圖結果當風格參考，所有場景直接平行送出
-                  has_explicit_style = !user_style_ref_url.to_s.strip.empty? || disable_batch_style_lock
-                  if index == 0 || total_count == 1 || has_explicit_style
-                    _s0_scene   = captured_scene.dup
-                    _s0_channel = captured_channel_b64.dup
-                    _s0_sref    = user_style_ref_url.dup
-                    _s0_ts      = captured_ts.dup
-                    @@pending_sref = _s0_sref  # Anti-Collage：供 returnStyleReference callback 使用
-                    _s0_req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::POST)
-                    _s0_req.headers = self.auth_headers(captured_email, captured_version)
-                    _s0_req.body = captured_body
-                    _s0_headers = _s0_req.headers
-                    @@requests << _s0_req
-                    _s0_req.start do |req, response|
-                      @@requests.delete(req)
-                      self.handle_render_response(response, _s0_headers, { scene_name: _s0_scene, channel_base64: _s0_channel, timestamp: _s0_ts }) do |result|
-                        @@pending_results << result if result
-                        # 若 deferred_sends 已被 style ref 並行模式提前清空，不重複 fire
-                        unless @@deferred_sends.empty? && !_s0_sref.to_s.strip.empty?
-                          style_url = (result && result[:status] == 'render_success') ? result[:url] : nil
-                          if style_url && !@@deferred_sends.empty?
-                            safe_url = style_url.gsub("'", "\\'")
-                            dialog.execute_script("window.generateStyleReference('#{safe_url}')")
-                          elsif !@@deferred_sends.empty?
-                            self.fire_deferred_renders(style_url, _s0_sref)
-                          end
-                        end
-                      end
+                  # 批量出圖：每個場景都直接非同步平行送出，不再有「等第 1 張結果當風格
+                  # 參考圖」的序列等待。使用者若自選了歷史風格參考圖，已在 scene_params
+                  # 的 style_ref_url 帶出，後端會據此組裝提示詞。
+                  _s0_scene   = captured_scene.dup
+                  _s0_channel = captured_channel_b64.dup
+                  _s0_ts      = captured_ts.dup
+                  _s0_req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::POST)
+                  _s0_req.headers = self.auth_headers(captured_email, captured_version)
+                  _s0_req.body = captured_body
+                  _s0_headers = _s0_req.headers
+                  @@requests << _s0_req
+                  _s0_req.start do |req, response|
+                    @@requests.delete(req)
+                    self.handle_render_response(response, _s0_headers, { scene_name: _s0_scene, channel_base64: _s0_channel, timestamp: _s0_ts }) do |result|
+                      @@pending_results << result if result
                     end
-                  else
-                    @@deferred_sends << {
-                      body:      captured_body,
-                      email:     captured_email,
-                      version:   captured_version,
-                      url:       captured_url,
-                      scene:     captured_scene,
-                      channel:   captured_channel_b64,
-                      timestamp: captured_ts
-                    }
                   end
 
                   LoamLab.log "[LoamLab] 第 #{index+1}/#{total_count} 個場景請求中: #{scene_name}"
@@ -2138,79 +2105,10 @@ module LoamLab
         end
       end
 
-      # Method B：每次批量渲染前重置 deferred 狀態
-      @@deferred_sends.clear
-      @@scene0_style_url = nil
-
-      # 啟動鏈式呼叫
+      # 啟動鏈式呼叫（每個場景截圖後即非同步平行送出，不再等待彼此）
       process_chain.call(0)
     end
 
-    # Method B：Scene 0 完成後循序送出所有 deferred scenes
-    # style_ref_url 為 Scene 0 的渲染結果 URL（nil 表示 Scene 0 失敗，不帶風格參考）
-    def self.fire_single_deferred(item, effective_url)
-      body_hash = JSON.parse(item[:body])
-      body_hash['parameters'] ||= {}
-      body_hash['parameters']['style_ref_url'] = effective_url if effective_url
-      req = Sketchup::Http::Request.new(item[:url], Sketchup::Http::POST)
-      req.headers = self.auth_headers(item[:email], item[:version])
-      req.body = JSON.dump(body_hash)
-      captured_scene   = item[:scene].dup
-      captured_channel = item[:channel].dup
-      captured_ts      = item[:timestamp].to_s.dup
-      captured_headers = req.headers
-      @@requests << req
-      req.start do |r, response|
-        @@requests.delete(r)
-        self.handle_render_response(response, captured_headers, { scene_name: captured_scene, channel_base64: captured_channel, timestamp: captured_ts }) do |result|
-          @@pending_results << result if result
-        end
-      end
-    end
-
-    def self.fire_deferred_renders(style_ref_url, user_style_ref_url = '')
-      sends = @@deferred_sends.dup
-      @@deferred_sends.clear
-      @@scene0_style_url = style_ref_url
-      return if sends.empty?
-
-      # 優先使用用戶選擇的風格參考圖，無則沿用 Scene 0 結果 URL
-      effective_url = (!user_style_ref_url.to_s.strip.empty?) ? user_style_ref_url : style_ref_url
-
-      self.process_next_deferred(sends, effective_url)
-    end
-
-    def self.process_next_deferred(sends, effective_url)
-      return if sends.empty?
-
-      item = sends.shift
-      body_hash = JSON.parse(item[:body])
-      if effective_url
-        body_hash['parameters'] ||= {}
-        body_hash['parameters']['style_ref_url'] = effective_url
-      end
-      final_body = JSON.dump(body_hash)
-      captured   = item
-
-      _df_scene   = captured[:scene].dup
-      _df_channel = captured[:channel].dup
-      _df_ts      = captured[:timestamp].to_s.dup
-      _df_req = Sketchup::Http::Request.new(captured[:url], Sketchup::Http::POST)
-      _df_req.headers = self.auth_headers(captured[:email], captured[:version])
-      _df_req.body = final_body
-      _df_headers = _df_req.headers
-
-      @@requests << _df_req
-
-      _df_req.start do |req, response|
-        @@requests.delete(req)
-        self.handle_render_response(response, _df_headers, { scene_name: _df_scene, channel_base64: _df_channel, timestamp: _df_ts }) do |result|
-          @@pending_results << result if result
-          self.process_next_deferred(sends, effective_url)
-        end
-      end
-    end
-    
     # 生成色彩通道圖 (Smart Canvas 用) — 切換至「依材質著色」模式截圖後立即還原
     def self.export_channel_image(view, width, height, path)
       model = Sketchup.active_model

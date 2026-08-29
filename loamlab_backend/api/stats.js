@@ -3,7 +3,28 @@ import nodemailer from 'nodemailer';
 import { reconcilePaymentsForEmail } from '../lib/activate.js';
 import { isValidAdminKey } from '../lib/safeCompare.js';
 import { resolveUserEmail } from '../lib/verifyIdentity.js';
-import { getConfig, setConfig } from '../lib/systemConfig.js';
+import { getConfig, setConfig, getConfigWithMeta, listConfigHistory } from '../lib/systemConfig.js';
+import { DEFAULT_PROMPTS, DEFAULT_BATCH_NODES } from '../lib/defaultPrompts.js';
+
+// set_prompts 寫入前的 Schema 驗證（T1）——回傳錯誤字串，null 表示通過。
+// 目的：擋掉「空物件」「必填工具缺失」「BATCH_NODES 不是合法 JSON」這類會讓
+// render.js 靜默降級到內建預設值的壞資料。
+function validatePromptsPayload(prompts) {
+    if (!prompts || typeof prompts !== 'object' || Array.isArray(prompts)) return 'prompts 必須是物件';
+    for (const k of ['TOOL_1', 'TOOL_2', 'TOOL_3']) {
+        const v = prompts[k];
+        if (typeof v !== 'string') return `${k} 缺失（必須是字串）`;
+        if (v.trim().length < 20) return `${k} 過短（至少 20 字），疑似空值或誤填`;
+    }
+    if (prompts.TOOL_1_BATCH_NODES !== undefined) {
+        if (typeof prompts.TOOL_1_BATCH_NODES !== 'string') return 'TOOL_1_BATCH_NODES 必須是 JSON 字串';
+        let parsed;
+        try { parsed = JSON.parse(prompts.TOOL_1_BATCH_NODES); }
+        catch { return 'TOOL_1_BATCH_NODES 不是合法 JSON'; }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 'TOOL_1_BATCH_NODES 必須是 JSON 物件';
+    }
+    return null;
+}
 
 // ── 洞見郵件共用工具 ──────────────────────────────────────────────────────────
 function getLangKey(locale) {
@@ -190,8 +211,18 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET' && action === 'get_prompts') {
-        const value = await getConfig(supabase, 'SYSTEM_PROMPTS');
-        return res.status(200).json({ code: 0, prompts: value?.prompts || {} });
+        const { value, updatedAt, readError } = await getConfigWithMeta(supabase, 'SYSTEM_PROMPTS');
+        // version = 目前 DB 版本戳記；admin 儲存時要帶回來做樂觀鎖比對（T1）。
+        // read_failed 時明確回 null version + read_error 旗標，讓前端鎖死儲存鈕（T5）。
+        return res.status(200).json({
+            code: 0,
+            prompts: value?.prompts || {},
+            defaults: DEFAULT_PROMPTS,
+            default_batch_nodes: DEFAULT_BATCH_NODES,
+            version: updatedAt,
+            read_error: readError,
+            is_default: !value || !value.prompts
+        });
     }
 
     // --- Share Session (POST: 建立; GET: 讀取) — 用 transactions 表儲存，避免建新表 ---
@@ -307,8 +338,7 @@ export default async function handler(req, res) {
             getConfig(supabase, 'SYSTEM_ENGINE_CONFIG'),
         ]);
         const prompt_engine_mode = cfgVal?.config?.prompt_engine_mode || 'nodes';
-        const disable_batch_style_lock = !!cfgVal?.config?.disable_batch_style_lock;
-        return res.status(200).json({ code: 0, nodes: nodesVal?.nodes || [], prompt_engine_mode, disable_batch_style_lock });
+        return res.status(200).json({ code: 0, nodes: nodesVal?.nodes || [], prompt_engine_mode });
     }
 
     if (req.method === 'GET' && action === 'get_system_config') {
@@ -631,10 +661,69 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST' && action === 'set_prompts') {
-        const prompts = req.body?.prompts || {};
+        const prompts = req.body?.prompts;
+        const baseVersion = req.body?.base_version ?? null;
+        const force = !!req.body?.force;
+
+        // 1. Schema 驗證（T1）
+        const vErr = validatePromptsPayload(prompts);
+        if (vErr) return res.status(400).json({ code: -1, msg: `提示詞格式驗證失敗：${vErr}` });
+
+        // 2. 樂觀鎖（T1）：base_version 必須等於目前 DB 版本，否則代表這份是在別人
+        //    改過之後、或載入失敗（拿不到版本）的狀態下要覆蓋 → 擋下。force 可繞過。
+        if (!force) {
+            const { updatedAt, readError } = await getConfigWithMeta(supabase, 'SYSTEM_PROMPTS');
+            if (readError) {
+                return res.status(503).json({ code: -1, msg: '無法讀取目前版本，為避免覆蓋暫不寫入，請稍後再試' });
+            }
+            if (updatedAt && baseVersion !== updatedAt) {
+                return res.status(409).json({
+                    code: -1, conflict: true, current_version: updatedAt,
+                    msg: '提示詞已被其他人或其他分頁修改。請重新載入頁面，確認內容後再儲存。'
+                });
+            }
+            if (!updatedAt && baseVersion) {
+                return res.status(409).json({
+                    code: -1, conflict: true, current_version: null,
+                    msg: '版本狀態不一致（前端帶了版本但 DB 尚無資料），請重新載入頁面。'
+                });
+            }
+        }
+
         const { error } = await setConfig(supabase, 'SYSTEM_PROMPTS', { prompts });
         if (error) return res.status(500).json({ code: -1, msg: error.message });
-        return res.status(200).json({ code: 0, msg: 'Saved' });
+        const { updatedAt: newVersion } = await getConfigWithMeta(supabase, 'SYSTEM_PROMPTS');
+        return res.status(200).json({ code: 0, msg: 'Saved', version: newVersion });
+    }
+
+    // --- Prompt 版本歷史 / 一鍵回滾（T2）。複用 system_config_log，不新增資料表 ---
+    if (req.method === 'GET' && action === 'get_config_history') {
+        const key = (req.query.key || 'SYSTEM_PROMPTS').toString();
+        const { rows, error } = await listConfigHistory(supabase, key, 30);
+        if (error) return res.status(500).json({ code: -1, msg: error.message });
+        return res.status(200).json({ code: 0, key, history: rows });
+    }
+
+    if (req.method === 'POST' && action === 'rollback_config') {
+        const key = (req.body?.key || 'SYSTEM_PROMPTS').toString();
+        const logId = (req.body?.log_id || '').toString();
+        if (!logId) return res.status(400).json({ code: -1, msg: '缺少 log_id' });
+
+        const { data: row, error: readErr } = await supabase.from('system_config_log')
+            .select('value, created_at').eq('id', logId).eq('key', key).maybeSingle();
+        if (readErr) return res.status(500).json({ code: -1, msg: readErr.message });
+        if (!row) return res.status(404).json({ code: -1, msg: '找不到該版本' });
+
+        // SYSTEM_PROMPTS 回滾一樣過 Schema 驗證，避免把一份歷史壞資料再種回去
+        if (key === 'SYSTEM_PROMPTS') {
+            const vErr = validatePromptsPayload(row.value?.prompts);
+            if (vErr) return res.status(400).json({ code: -1, msg: `該版本內容無法通過驗證，拒絕回滾：${vErr}` });
+        }
+
+        const { error: setErr } = await setConfig(supabase, key, row.value);
+        if (setErr) return res.status(500).json({ code: -1, msg: setErr.message });
+        const { updatedAt: newVersion } = await getConfigWithMeta(supabase, key);
+        return res.status(200).json({ code: 0, msg: `已回滾至 ${row.created_at}`, version: newVersion });
     }
 
     if (req.method === 'POST' && action === 'set_model_config') {

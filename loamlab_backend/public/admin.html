@@ -406,37 +406,24 @@
   <!-- 提示詞語言：不再有全域自動翻譯設定，改由「節點管理」內每個官方節點旁的
        「↻ 免費翻譯此節點」按鈕個別處理（見 renderT1Nodes 的 system 節點區塊）。 -->
 
-  <!-- 批次風格鎖定 (Anti-Collage) 切換 -->
-  <div class="card mb-4 border border-amber-600/30 bg-[#1a120a]/40">
-    <div class="flex items-center justify-between mb-3">
-      <div class="text-sm font-semibold text-white flex items-center gap-2">
-        <span class="text-amber-400">🎨</span> 批次風格鎖定（Anti-Collage）
-      </div>
-      <div id="batch-style-lock-badge" class="text-xs px-2 py-0.5 rounded-full bg-cyan-600/20 text-cyan-300 border border-cyan-600/30">讀取中...</div>
-    </div>
-    <div class="text-[11px] text-gray-500 mb-3 leading-relaxed">
-      T1 多場景批次時，第 2 張起會自動帶入第 1 張的渲染結果作為風格參考（多一段 Image Roles / Style Consistency 提示詞＋一張參考圖），確保同批次光線色調一致，但會讓每張成本不一致。<br>
-      關閉後，批次內每張場景各自獨立送出，不帶額外提示詞與參考圖，成本可預測，但同批次場景間風格可能不一致。
-    </div>
-    <div class="flex gap-2">
-      <button onclick="setBatchStyleLock(false)" id="btn-style-lock-on"
-        class="flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors">
-        ● 開啟鎖定
-      </button>
-      <button onclick="setBatchStyleLock(true)" id="btn-style-lock-off"
-        class="flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors">
-        ○ 關閉鎖定
-      </button>
-    </div>
-    <div id="batch-style-lock-status" class="text-xs text-green-400 mt-2 hidden"></div>
-  </div>
-
   <!-- 渲染工作流咒語管理 -->
   <div class="card mb-5 border border-purple-600/30 bg-[#160f2e]/40">
     <div class="flex items-center justify-between mb-4">
       <div class="text-sm font-semibold text-white flex items-center gap-2">
         <span class="text-purple-400">✨</span> 渲染工作流咒語管理
+        <span id="prompt-dirty-badge" class="hidden text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">● 未儲存變更</span>
       </div>
+      <div class="flex items-center gap-2">
+        <span id="prompt-version-tag" class="text-[10px] text-white/30 font-mono"></span>
+        <button onclick="openPromptHistory()" class="text-[11px] text-purple-300/70 hover:text-purple-200 border border-purple-600/30 rounded px-2 py-1 transition-colors">版本歷史 / 回滾</button>
+      </div>
+    </div>
+
+    <!-- 載入失敗 → 鎖死儲存，防手滑用預設值覆蓋 DB（T5） -->
+    <div id="prompt-lock-banner" class="hidden mb-4 bg-rose-950/40 border border-rose-600/50 rounded-lg p-3 text-[12px] text-rose-200 leading-relaxed">
+      <div class="font-semibold mb-1">⚠️ 提示詞載入失敗，已鎖定「儲存」以防止用預設值覆蓋線上設定。</div>
+      <div id="prompt-lock-reason" class="text-rose-300/80 text-[11px] mb-2"></div>
+      <button onclick="unlockPromptSave()" class="text-[11px] bg-rose-600/30 hover:bg-rose-600/50 border border-rose-500/50 rounded px-2 py-1 transition-colors">我了解風險，仍要編輯並強制儲存</button>
     </div>
 
     <!-- Tool 1 狀態提示（已由節點接管）-->
@@ -545,6 +532,18 @@
       <button onclick="savePrompts()" class="bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-600/50 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ml-auto" id="btn-save-prompts">
         儲存工作流設定
       </button>
+    </div>
+  </div>
+
+  <!-- Prompt 儲存前 Diff 預覽 + 版本歷史（T2/T5）共用彈窗 -->
+  <div id="prompt-modal" class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+    <div class="bg-[#160f2e] border border-purple-600/40 rounded-xl max-w-3xl w-full max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+        <div id="prompt-modal-title" class="text-sm font-semibold text-white">變更預覽</div>
+        <button onclick="closePromptModal()" class="text-white/40 hover:text-white text-lg leading-none">✕</button>
+      </div>
+      <div id="prompt-modal-body" class="p-4 overflow-y-auto text-[12px] text-gray-300 space-y-3 flex-1"></div>
+      <div id="prompt-modal-footer" class="px-4 py-3 border-t border-white/10 flex justify-end gap-2"></div>
     </div>
   </div>
 
@@ -1572,91 +1571,251 @@ async function translateShareTemplate() {
   btn.innerText = '一鍵翻譯至其他語言'; btn.disabled = false;
 }
 
-// ── 渲染工作流預設咒語管理 ─────────────────────────────────────────────────
-async function loadPrompts() {
-  const defaultP1 = "這是sketchup室內建模的模型（圖1），最後的目的是要轉換成iPhone拍的照片：先在後端生成一張鎖死空間感的深度圖（圖2）和一張所有元素鎖死並且轉換成色彩分明的通道圖（圖三），使用圖1參考圖2和圖3，在不改變模型材質和結構的情況下，99%還原圖片的空間感、相機位置、材質紋理方向，轉換成iPhone拍攝室內空間寫實照片，自然的光感，補充其他區域的漫反射光線，避免局部死黑或過曝，根據室內空間合理化極小不合理的元素，專業攝影級色彩，照片整體有自然的明暗過渡的層次,ultra-detailed";
-  const defaultBatchNodes = {
-    img1_key: "Image 1 [PRIMARY OUTPUT BASIS]",
-    img1: "SketchUp scene — every spatial element in the output (room layout, all furniture, all objects, all surfaces, camera viewpoint, geometry, proportions) must originate exclusively from Image 1.",
-    img2_key: "Image 2 [STYLE EXTRACTION ONLY]",
-    img2: "Lighting reference photo — extract ONLY: light direction, color temperature (Kelvin), warmth/coolness ratio, shadow softness, and highlight quality.",
-    forbidden_key: "FORBIDDEN from Image 2",
-    forbidden: "Any furniture, object, surface, wall, floor, architecture, or spatial arrangement from Image 2 must NOT appear in the output.",
-    apply_key: "Apply",
-    apply: "Image 2's photographic lighting quality and color tone onto Image 1's existing scene.",
-    output_must_be_key: "Output must be",
-    output_must_be: "A realistic photo of Image 1's exact spatial layout and objects — lit and color-graded to match Image 2's atmosphere.",
-    never_key: "Never",
-    never: "Blend, composite, or merge spatial content from both images."
+// ── 渲染工作流預設咒語管理（T1/T2/T3/T5）───────────────────────────────────
+// 預設值不再寫死在這裡——由後端 get_prompts 回傳的 j.defaults / j.default_batch_nodes
+// 提供（唯一來源：loamlab_backend/lib/defaultPrompts.js）。
+let _promptsBaseVersion = null;   // 載入時 DB 的版本戳記，儲存時帶回做樂觀鎖
+let _promptsSnapshot = null;      // 載入時的內容快照，供 Diff 比對
+let _promptsSaveLocked = false;   // 載入失敗 → 鎖死儲存
+let _promptsForceOverride = false;// 使用者按「仍要強制儲存」後為 true
+let _promptsDirty = false;
+const _PROMPT_BATCH_FIELDS = [
+  ['img1_key','batch-img1-key'],['img1','batch-img1'],
+  ['img2_key','batch-img2-key'],['img2','batch-img2'],
+  ['forbidden_key','batch-forbidden-key'],['forbidden','batch-forbidden'],
+  ['apply_key','batch-apply-key'],['apply','batch-apply'],
+  ['output_must_be_key','batch-output-must-be-key'],['output_must_be','batch-output-must-be'],
+  ['never_key','batch-never-key'],['never','batch-never'],
+];
+
+function _collectPromptsFromForm() {
+  const bn = {};
+  _PROMPT_BATCH_FIELDS.forEach(([k, id]) => { bn[k] = (document.getElementById(id).value || '').trim(); });
+  return {
+    TOOL_1: document.getElementById('prompt-t1').value.trim(),
+    TOOL_1_BATCH_NODES: JSON.stringify(bn),
+    TOOL_2: document.getElementById('prompt-t2').value.trim(),
+    TOOL_3: document.getElementById('prompt-t3').value.trim(),
   };
-  const defaultP2 = "Edit IMAGE 1 (the original scene photo) by replacing objects as specified below.\nThe colored areas in IMAGE 2 are only location markers — do not use these marker colors in the final result.\n{{REF_TEXT}}\nChanges:\n{{CHANGES}}\n\nStrict Guidelines:\n① Final result must be based on IMAGE 1, appearing as a natural, original photograph — not based on IMAGE 2\n② Perspective & Proportion: Render all objects from IMAGE 1's camera angle, adjust orientation to match scene perspective; do not keep the reference photo's original angle\n③ Lighting & Color Temperature: Strictly follow IMAGE 1's light direction, intensity, shadows and color temperature; remove all color casts, glows and artificial lighting from references\n④ Boundary Control: Stay mainly within marked zones; minor edge feathering is allowed for seamless blending, but do not affect unrelated objects or surfaces\n⑤ Realism & Aesthetics: Replaced objects must have realistic materials, correct scale, elegant composition, and blend harmoniously into the original space with consistent style";
-  const defaultP3 = "Based on the uploaded reference image, generate a single high-quality 3x3 interior visualization collage in exact 1:1 square aspect ratio. Output only the clean collage - no text, no titles, no watermarks, no borders, no labels.\nHighest priority: Faithfully extract and reproduce all details from the reference image, including material textures, light and shadow characteristics, color tones, object qualities, and unique atmosphere. All 9 panels must maintain the exact same spatial structure, furniture layout, and lighting direction. Accurate perspective with zero distortion or shifting.\n3x3 Mixed Grid Layout:\nTop Row Left: Left 45 wide long shot showing the full spatial layout and depth\nTop Row Center: Exact same viewpoint and framing as the uploaded reference image (visual anchor)\nTop Row Right: Close-up detail 1 - highly faithful reproduction of material textures and craftsmanship from the reference image\nMiddle Row Left: Medium shot focusing on main furniture arrangement and functional area, preserving the original light and shadow atmosphere\nMiddle Row Center: Close-up detail 2 - emphasizing light and shadow interaction and surface qualities from the reference image\nMiddle Row Right: Right 45 wide long shot showing the other side of the space\nBottom Row Left: Close-up detail 3 - faithfully presenting another dimension of details from the reference image (e.g., decorative elements, corner craftsmanship, or material contrast)\nBottom Row Center: Medium shot from an alternative angle showing spatial transparency and overall atmosphere, faithful to the original tone\nBottom Row Right: Balanced medium shot concluding with overall harmony and high-end quality\n\nTechnical Requirements:\nStrictly faithful to the reference image's materials, lighting, colors, and fine details; 8K ultra-high resolution with extreme detail; photorealistic material rendering with accurate reflections, refractions, and micro-surface details; professional multi-layer lighting; cinematic color grading with sophisticated, soft, and luxurious tones; extremely sharp, clean, noise-free, and distortion-free.\nGenerate a single cohesive 3x3 collage with strong visual rhythm and dramatic scale contrast, while perfectly capturing the unique details and atmosphere of the reference image.";
-  
+}
+
+function _setPromptsDirty(v) {
+  _promptsDirty = v;
+  document.getElementById('prompt-dirty-badge').classList.toggle('hidden', !v);
+}
+
+function _bindPromptDirtyWatchers() {
+  const ids = ['prompt-t1','prompt-t2','prompt-t3', ..._PROMPT_BATCH_FIELDS.map(f => f[1])];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el.dataset.dirtyBound) {
+      el.dataset.dirtyBound = '1';
+      el.addEventListener('input', () => _setPromptsDirty(true));
+    }
+  });
+}
+
+function lockPromptSave(reason) {
+  _promptsSaveLocked = true;
+  document.getElementById('prompt-lock-banner').classList.remove('hidden');
+  document.getElementById('prompt-lock-reason').innerText = reason || '';
+  const btn = document.getElementById('btn-save-prompts');
+  btn.disabled = true; btn.classList.add('opacity-40', 'cursor-not-allowed');
+}
+
+function unlockPromptSave() {
+  _promptsSaveLocked = false;
+  _promptsForceOverride = true; // 之後 savePrompts 會帶 force:true，繞過樂觀鎖
+  document.getElementById('prompt-lock-banner').classList.add('hidden');
+  const btn = document.getElementById('btn-save-prompts');
+  btn.disabled = false; btn.classList.remove('opacity-40', 'cursor-not-allowed');
+  document.getElementById('prompt-version-tag').innerText = '強制儲存模式';
+}
+
+async function loadPrompts() {
   try {
     const r = await fetch(`${API_BASE}/api/stats?action=get_prompts`);
     const j = await r.json();
-    document.getElementById('prompt-t1').value = (j.prompts && j.prompts.TOOL_1) ? j.prompts.TOOL_1 : defaultP1;
-    const bn = (j.prompts && j.prompts.TOOL_1_BATCH_NODES) ? JSON.parse(j.prompts.TOOL_1_BATCH_NODES) : defaultBatchNodes;
-    const d = defaultBatchNodes;
-    document.getElementById('batch-img1-key').value = bn.img1_key !== undefined ? bn.img1_key : d.img1_key;
-    document.getElementById('batch-img1').value = bn.img1 !== undefined ? bn.img1 : d.img1;
-    document.getElementById('batch-img2-key').value = bn.img2_key !== undefined ? bn.img2_key : d.img2_key;
-    document.getElementById('batch-img2').value = bn.img2 !== undefined ? bn.img2 : d.img2;
-    document.getElementById('batch-forbidden-key').value = bn.forbidden_key !== undefined ? bn.forbidden_key : d.forbidden_key;
-    document.getElementById('batch-forbidden').value = bn.forbidden !== undefined ? bn.forbidden : d.forbidden;
-    document.getElementById('batch-apply-key').value = bn.apply_key !== undefined ? bn.apply_key : d.apply_key;
-    document.getElementById('batch-apply').value = bn.apply !== undefined ? bn.apply : d.apply;
-    document.getElementById('batch-output-must-be-key').value = bn.output_must_be_key !== undefined ? bn.output_must_be_key : d.output_must_be_key;
-    document.getElementById('batch-output-must-be').value = bn.output_must_be !== undefined ? bn.output_must_be : d.output_must_be;
-    document.getElementById('batch-never-key').value = bn.never_key !== undefined ? bn.never_key : d.never_key;
-    document.getElementById('batch-never').value = bn.never !== undefined ? bn.never : d.never;
-    document.getElementById('prompt-t2').value = (j.prompts && j.prompts.TOOL_2) ? j.prompts.TOOL_2 : defaultP2;
-    document.getElementById('prompt-t3').value = (j.prompts && j.prompts.TOOL_3) ? j.prompts.TOOL_3 : defaultP3;
-  } catch(e) { console.error('Failed to load prompts:', e); }
+    if (!r.ok || j.code !== 0 || j.read_error) {
+      throw new Error(j.msg || `HTTP ${r.status}` + (j.read_error ? '（後端回報 read_error）' : ''));
+    }
+    const d = j.default_batch_nodes || {};
+    const defP = j.defaults || {};
+    const p = j.prompts || {};
+
+    document.getElementById('prompt-t1').value = p.TOOL_1 || defP.TOOL_1 || '';
+    document.getElementById('prompt-t2').value = p.TOOL_2 || defP.TOOL_2 || '';
+    document.getElementById('prompt-t3').value = p.TOOL_3 || defP.TOOL_3 || '';
+    let bn = d;
+    try { if (p.TOOL_1_BATCH_NODES) bn = JSON.parse(p.TOOL_1_BATCH_NODES); } catch(e) { bn = d; }
+    _PROMPT_BATCH_FIELDS.forEach(([k, id]) => {
+      document.getElementById(id).value = (bn[k] !== undefined ? bn[k] : (d[k] || ''));
+    });
+
+    _promptsBaseVersion = j.version || null;
+    _promptsSnapshot = _collectPromptsFromForm();
+    _promptsForceOverride = false;
+    _setPromptsDirty(false);
+    _bindPromptDirtyWatchers();
+
+    const tag = document.getElementById('prompt-version-tag');
+    if (j.is_default || !j.version) {
+      // DB 尚無值 → 目前跑的是內建預設。允許首次寫入（base_version 為 null，後端接受），
+      // 但明確標示，避免誤以為在編輯線上版本。
+      tag.innerText = 'DB 尚無自訂值（顯示內建預設）';
+      tag.className = 'text-[10px] text-amber-400/70 font-mono';
+    } else {
+      tag.innerText = 'v ' + new Date(j.version).toLocaleString();
+      tag.className = 'text-[10px] text-white/30 font-mono';
+    }
+    // 載入成功 → 確保沒被上一輪鎖住
+    document.getElementById('prompt-lock-banner').classList.add('hidden');
+    _promptsSaveLocked = false;
+    const btn = document.getElementById('btn-save-prompts');
+    btn.disabled = false; btn.classList.remove('opacity-40', 'cursor-not-allowed');
+  } catch(e) {
+    console.error('Failed to load prompts:', e);
+    lockPromptSave('原因：' + e.message + '。在確認網路/後端正常並重新整理成功前，請勿儲存。');
+  }
 }
 
+// 儲存前的 Diff 預覽（T5）：列出哪幾個欄位有變動、變動前後內容
+function _promptFieldDiffs(next) {
+  const prev = _promptsSnapshot || {};
+  const labels = { TOOL_1: 'Tool 1 備用咒語', TOOL_1_BATCH_NODES: '批量節點（Image Roles / Style Consistency）', TOOL_2: 'Tool 2', TOOL_3: 'Tool 3' };
+  const out = [];
+  for (const k of Object.keys(labels)) {
+    if ((prev[k] || '') !== (next[k] || '')) out.push({ key: k, label: labels[k], before: prev[k] || '(空)', after: next[k] || '(空)' });
+  }
+  return out;
+}
+
+function closePromptModal() { document.getElementById('prompt-modal').classList.add('hidden'); }
+
+function _esc(s) { return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+
 async function savePrompts() {
+  if (_promptsSaveLocked) { alert('提示詞載入失敗，儲存已鎖定。請先重新整理頁面，或按紅色橫幅裡的強制儲存。'); return; }
+  const next = _collectPromptsFromForm();
+
+  // 前端先做一次 Schema 快檢，給即時回饋（後端仍會再驗一次）
+  for (const k of ['TOOL_1', 'TOOL_2', 'TOOL_3']) {
+    if (!next[k] || next[k].trim().length < 20) { alert(`${k} 內容過短或為空，疑似誤刪，已中止儲存。`); return; }
+  }
+
+  const diffs = _promptFieldDiffs(next);
+  if (diffs.length === 0 && !_promptsForceOverride) { alert('沒有偵測到任何變更。'); return; }
+
+  // Diff 預覽彈窗
+  const body = document.getElementById('prompt-modal-body');
+  const footer = document.getElementById('prompt-modal-footer');
+  document.getElementById('prompt-modal-title').innerText = `確認儲存：${diffs.length} 個欄位有變動`;
+  body.innerHTML = diffs.length ? diffs.map(dd => `
+    <div class="border border-white/10 rounded-lg overflow-hidden">
+      <div class="bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-purple-200">${_esc(dd.label)}</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-px bg-white/10">
+        <div class="bg-[#160f2e] p-2"><div class="text-[9px] uppercase text-rose-400/70 mb-1">變更前</div><pre class="whitespace-pre-wrap text-[11px] text-gray-400 max-h-40 overflow-y-auto">${_esc(dd.before)}</pre></div>
+        <div class="bg-[#160f2e] p-2"><div class="text-[9px] uppercase text-emerald-400/70 mb-1">變更後</div><pre class="whitespace-pre-wrap text-[11px] text-gray-200 max-h-40 overflow-y-auto">${_esc(dd.after)}</pre></div>
+      </div>
+    </div>`).join('') : '<div class="text-amber-300 text-[12px]">強制儲存模式：即使無變更也會寫入。</div>';
+  footer.innerHTML = '';
+  const cancel = document.createElement('button');
+  cancel.className = 'text-[12px] px-3 py-1.5 rounded border border-white/15 text-white/60 hover:text-white';
+  cancel.innerText = '取消';
+  cancel.onclick = closePromptModal;
+  const confirm = document.createElement('button');
+  confirm.className = 'text-[12px] px-3 py-1.5 rounded bg-purple-600/40 hover:bg-purple-600/60 text-purple-100 border border-purple-500/50 font-semibold';
+  confirm.innerText = _promptsForceOverride ? '強制儲存' : '確認儲存';
+  confirm.onclick = () => { closePromptModal(); _doSavePrompts(next); };
+  footer.appendChild(cancel); footer.appendChild(confirm);
+  document.getElementById('prompt-modal').classList.remove('hidden');
+}
+
+async function _doSavePrompts(prompts) {
   const btn = document.getElementById('btn-save-prompts');
   const status = document.getElementById('prompt-status');
-  
-  const prompts = {
-    TOOL_1: document.getElementById('prompt-t1').value.trim(),
-    TOOL_1_BATCH_NODES: JSON.stringify({
-      img1_key: document.getElementById('batch-img1-key').value.trim(),
-      img1: document.getElementById('batch-img1').value.trim(),
-      img2_key: document.getElementById('batch-img2-key').value.trim(),
-      img2: document.getElementById('batch-img2').value.trim(),
-      forbidden_key: document.getElementById('batch-forbidden-key').value.trim(),
-      forbidden: document.getElementById('batch-forbidden').value.trim(),
-      apply_key: document.getElementById('batch-apply-key').value.trim(),
-      apply: document.getElementById('batch-apply').value.trim(),
-      output_must_be_key: document.getElementById('batch-output-must-be-key').value.trim(),
-      output_must_be: document.getElementById('batch-output-must-be').value.trim(),
-      never_key: document.getElementById('batch-never-key').value.trim(),
-      never: document.getElementById('batch-never').value.trim()
-    }),
-    TOOL_2: document.getElementById('prompt-t2').value.trim(),
-    TOOL_3: document.getElementById('prompt-t3').value.trim()
-  };
-
-  btn.innerText = '儲存中...';
+  const orig = btn.innerText;
+  btn.innerText = '儲存中...'; btn.disabled = true;
   try {
     const r = await fetch(`${API_BASE}/api/stats?action=set_prompts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
-      body: JSON.stringify({ prompts })
+      body: JSON.stringify({ prompts, base_version: _promptsBaseVersion, force: _promptsForceOverride })
     });
-    if (r.ok) {
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.code === 0) {
+      _promptsBaseVersion = j.version || _promptsBaseVersion;
+      _promptsSnapshot = prompts;
+      _promptsForceOverride = false;
+      _setPromptsDirty(false);
+      const tag = document.getElementById('prompt-version-tag');
+      if (j.version) { tag.innerText = 'v ' + new Date(j.version).toLocaleString(); tag.className = 'text-[10px] text-white/30 font-mono'; }
       status.innerText = '✅ 儲存成功，即刻生效於所有算圖請求';
       status.classList.remove('hidden');
       setTimeout(() => status.classList.add('hidden'), 3000);
+    } else if (r.status === 409) {
+      if (confirm((j.msg || '版本衝突') + '\n\n按「確定」重新載入最新版本（會捨棄目前未儲存的編輯）；按「取消」保留編輯，之後可用紅色橫幅的強制儲存覆蓋。')) {
+        await loadPrompts();
+      }
     } else {
-      alert('儲存失敗');
+      alert('儲存失敗：' + (j.msg || `HTTP ${r.status}`));
     }
   } catch(e) {
-    alert('儲存錯誤');
+    alert('儲存錯誤：' + e.message);
   }
-  btn.innerText = '儲存所有工作流設定';
+  btn.innerText = orig; btn.disabled = _promptsSaveLocked;
+}
+
+// ── 版本歷史 / 一鍵回滾（T2）──────────────────────────────────────────────
+async function openPromptHistory() {
+  const modal = document.getElementById('prompt-modal');
+  const body = document.getElementById('prompt-modal-body');
+  const footer = document.getElementById('prompt-modal-footer');
+  document.getElementById('prompt-modal-title').innerText = 'SYSTEM_PROMPTS 版本歷史';
+  body.innerHTML = '<div class="text-white/40 text-[12px]">載入中…</div>';
+  footer.innerHTML = '';
+  const cancel = document.createElement('button');
+  cancel.className = 'text-[12px] px-3 py-1.5 rounded border border-white/15 text-white/60 hover:text-white';
+  cancel.innerText = '關閉'; cancel.onclick = closePromptModal;
+  footer.appendChild(cancel);
+  modal.classList.remove('hidden');
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=get_config_history&key=SYSTEM_PROMPTS`, {
+      headers: { 'Authorization': `Bearer ${adminKey}` }
+    });
+    const j = await r.json();
+    if (!r.ok || j.code !== 0) throw new Error(j.msg || `HTTP ${r.status}`);
+    if (!j.history || !j.history.length) { body.innerHTML = '<div class="text-white/40 text-[12px]">尚無歷史記錄。</div>'; return; }
+    body.innerHTML = j.history.map(row => {
+      const pr = row.value?.prompts || {};
+      const summary = ['TOOL_1','TOOL_2','TOOL_3'].map(k => `${k}:${(pr[k]||'').length}字`).join(' · ');
+      return `<div class="border border-white/10 rounded-lg p-2.5 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="text-[11px] text-gray-200 font-mono">${_esc(new Date(row.created_at).toLocaleString())}</div>
+          <div class="text-[10px] text-white/35 truncate">${_esc(summary)}</div>
+        </div>
+        <button data-logid="${_esc(row.id)}" class="prompt-rollback-btn shrink-0 text-[11px] px-2 py-1 rounded bg-amber-600/25 hover:bg-amber-600/45 text-amber-200 border border-amber-500/40">回滾至此版本</button>
+      </div>`;
+    }).join('');
+    body.querySelectorAll('.prompt-rollback-btn').forEach(b => {
+      b.onclick = async () => {
+        if (!confirm('確定要把 SYSTEM_PROMPTS 回滾至此版本？目前線上內容會被覆蓋（此動作本身也會記進歷史，可再回滾回來）。')) return;
+        b.innerText = '回滾中…'; b.disabled = true;
+        try {
+          const rr = await fetch(`${API_BASE}/api/stats?action=rollback_config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+            body: JSON.stringify({ key: 'SYSTEM_PROMPTS', log_id: b.dataset.logid })
+          });
+          const jj = await rr.json().catch(() => ({}));
+          if (rr.ok && jj.code === 0) { closePromptModal(); await loadPrompts(); alert('✅ ' + (jj.msg || '已回滾')); }
+          else { alert('回滾失敗：' + (jj.msg || `HTTP ${rr.status}`)); b.innerText = '回滾至此版本'; b.disabled = false; }
+        } catch(e) { alert('回滾錯誤：' + e.message); b.innerText = '回滾至此版本'; b.disabled = false; }
+      };
+    });
+  } catch(e) {
+    body.innerHTML = `<div class="text-rose-300 text-[12px]">載入歷史失敗：${_esc(e.message)}</div>`;
+  }
 }
 
 // ── 模型選擇 ──────────────────────────────────────────────────────────────
@@ -1721,7 +1880,6 @@ async function loadEngineConfig() {
     const j = await r.json();
     _engineConfigCache = j.config || {};
     applyEngineModeBadge(_engineConfigCache.prompt_engine_mode || 'nodes');
-    applyBatchStyleLockBadge(!!_engineConfigCache.disable_batch_style_lock);
     structureLabelsData = {
       ...JSON.parse(JSON.stringify(DEFAULT_STRUCTURE_LABELS)),
       ...(_engineConfigCache.structure_labels || {}),
@@ -1760,45 +1918,6 @@ async function setEngineMode(mode) {
     if (r.ok) {
       applyEngineModeBadge(mode);
       status.innerText = `✅ 已切換為 ${mode === 'legacy' ? 'Legacy' : 'Nodes'} Mode，即刻生效`;
-      status.classList.remove('hidden');
-      setTimeout(() => status.classList.add('hidden'), 3000);
-    } else {
-      alert('切換失敗，請確認 Admin Key 正確');
-    }
-  } catch(e) {
-    alert('切換錯誤: ' + e.message);
-  }
-}
-
-function applyBatchStyleLockBadge(disabled) {
-  const badge = document.getElementById('batch-style-lock-badge');
-  const btnOn = document.getElementById('btn-style-lock-on');
-  const btnOff = document.getElementById('btn-style-lock-off');
-  if (disabled) {
-    badge.innerText = '○ 已關閉';
-    badge.className = 'text-xs px-2 py-0.5 rounded-full bg-gray-600/20 text-gray-400 border border-gray-600/30';
-    btnOn.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-white/10 text-white/30 hover:text-white/60';
-    btnOff.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-gray-500/60 text-gray-300 bg-gray-600/20';
-  } else {
-    badge.innerText = '● 已鎖定';
-    badge.className = 'text-xs px-2 py-0.5 rounded-full bg-cyan-600/20 text-cyan-300 border border-cyan-600/30';
-    btnOn.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-cyan-500/60 text-cyan-300 bg-cyan-600/20';
-    btnOff.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors border-white/10 text-white/30 hover:text-white/60';
-  }
-}
-
-async function setBatchStyleLock(disabled) {
-  const status = document.getElementById('batch-style-lock-status');
-  try {
-    _engineConfigCache.disable_batch_style_lock = disabled;
-    const r = await fetch(`${API_BASE}/api/stats?action=set_system_config`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
-      body: JSON.stringify({ config: _engineConfigCache })
-    });
-    if (r.ok) {
-      applyBatchStyleLockBadge(disabled);
-      status.innerText = disabled ? '✅ 已關閉批次風格鎖定，即刻生效' : '✅ 已開啟批次風格鎖定，即刻生效';
       status.classList.remove('hidden');
       setTimeout(() => status.classList.add('hidden'), 3000);
     } else {
@@ -2445,7 +2564,9 @@ async function translateAllOfficialPrompt() {
     _schedulePreview();
     await saveT1Nodes();
     await saveStructureLabels();
-    await savePrompts();
+    // 批次入口：略過 Diff 彈窗直接寫入（仍走 base_version 樂觀鎖 + 後端 Schema 驗證）
+    if (_promptsSaveLocked) { throw new Error('提示詞載入失敗、儲存已鎖定，請先重新整理'); }
+    await _doSavePrompts(_collectPromptsFromForm());
     if (status) { status.innerText = '✅ 已翻譯並儲存全部官方提示詞'; status.classList.remove('hidden'); setTimeout(() => status.classList.add('hidden'), 4000); }
   } catch (e) {
     if (status) status.innerText = '❌ 翻譯失敗: ' + e.message;

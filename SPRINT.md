@@ -16,9 +16,9 @@
   - **影響檔案**: `loamlab_backend/public/index.html`
   - **描述**: 在 `handleCheckout` 函數中，收到 `data.checkoutUrl` 後，若 `win` 存在則使用 `win.location.href` 導向，若 `win` 為 `null` 則 fallback 使用 `window.location.href` 導向，避免因 popup blocker 阻擋導致跳轉失敗。
 
-- [x] [MUST] Task 3: 修復 Next.js 官網付費牆跳轉失敗問題
-  - **影響檔案**: `loamlab_website/src/app/page.tsx`
-  - **描述**: 在 `doCheckout` 函數中，收到 `data.checkoutUrl` 後，加入相同的 fallback 機制：若 `win` 為 null，則使用 `window.location.href` 跳轉，確保使用者能順利前往結帳頁面。
+- [x] [MUST] Task 3: ~~修復 Next.js 官網付費牆跳轉失敗問題~~ —— 作廢
+  - **原因**: SPRINT 誤把 `loamlab_website`（Next.js）當成線上站。實際線上行銷站是 `loamlab-camera.vercel.app`，由 `loamlab_backend/public/index.html` 提供（見 T2）。`loamlab_website` 是已廢棄的舊改版站，無自訂網域、無任何引用。
+  - **處置**: 該站的 fallback 改動曾隨 commit `1d47514` 提交（不生效），後續 commit 已整個移除 `loamlab_website/` 目錄。
 
 status: DONE
 
@@ -29,6 +29,7 @@ verified_diff:
   - loamlab_backend/api/webhook.js
   - loamlab_backend/lib/activate.js
   - loamlab_backend/public/index.html
-  - loamlab_website/src/app/page.tsx
   - SPRINT.md
+  - CLAUDE.md            # 移除對已廢棄 loamlab_website 的引用
+  - loamlab_website/**   # 整個目錄移除（已廢棄舊站）
 sql_migration: false

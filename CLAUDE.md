@@ -285,9 +285,3 @@ Commit message 格式：`feat(ui): 說明 [T07][DONE]`（`[T\d+][DONE]` 觸發 `
 | `GOOGLE_CLOUD_PROJECT` | Vertex AI Inpainting（未實裝）| GCP 控制台取得 |
 | `RESEND_API_KEY` | `stats.js` (`notify_users` action) | Resend 發信 API key；缺少時 notify_users 回傳 503 |
 | `RESEND_FROM_EMAIL` | `stats.js` (`notify_users` action) | 發件人地址，預設 `LoamLab <noreply@loamlab.studio>` |
-
-**`loamlab_website` 專案自己的 Vercel 環境變數（非 `loamlab_backend/.env.local`）：**
-
-| Variable | Used by | Notes |
-|---|---|---|
-| `NEXT_PUBLIC_AFFONSO_PROGRAM_ID` | `loamlab_website/src/app/layout.tsx` | Affonso 聯盟行銷 pixel 的 Program ID；缺值時 pixel 不注入，即靜默停用該功能 |

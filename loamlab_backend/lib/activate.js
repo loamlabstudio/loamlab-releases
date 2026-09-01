@@ -20,15 +20,18 @@ function resolvePlan(planKey, variantId) {
     return null;
 }
 
-export async function processTopup(supabase, customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null, planKey = null, dodoCustomerId = null, amountPaidCents = null, expectedAmountCents = null) {
+export async function processTopup(supabase, customerEmail, variantId, orderId, platform, discountCode = null, subscriptionId = null, planKey = null, dodoCustomerId = null, amountPaidCents = null, expectedAmountCents = null, quantity = 1) {
     const fullOrderId = `${platform}_${orderId}`;
 
     const plan = resolvePlan(planKey, variantId);
     if (!plan) {
         throw new Error(`Unknown product: planKey=${planKey} variantId=${variantId} (${platform})`);
     }
-    const pointsToAdd = plan.points;
     const isSubscription = plan.isSub;
+    // 加值包可一次買 N 份（結帳端把 N 寫進 metadata.quantity，Dodo 收 N× 金額）；
+    // 訂閱方案不存在「買 N 份」概念，一律鎖 1，避免異常 payload 灌點。
+    const qty = isSubscription ? 1 : Math.max(1, parseInt(quantity, 10) || 1);
+    const pointsToAdd = plan.points * qty;
     const planName = isSubscription ? plan.key : null;
 
     // 【洗點防禦・第一性原理 2026-07】不猜折扣比例，直接比對 Dodo 對「這筆訂閱」真正鎖定的金額
@@ -51,7 +54,7 @@ export async function processTopup(supabase, customerEmail, variantId, orderId, 
     // 兩者都拿不到時才退回商品原價估算（僅 LS 舊路徑等缺金額資訊的情境會走到這裡）。
     const amountPaid = (amountPaidCents != null && amountPaidCents > 0) ? amountPaidCents
         : (expectedAmountCents != null && expectedAmountCents > 0) ? expectedAmountCents
-        : plan.priceCents;
+        : plan.priceCents * qty;
 
     // 【第一性原理・claim-first】先原子性地佔用這筆訂單號，佔不到（UNIQUE 撞號）代表已被處理過，
     // 直接返回，後面「發點數」完全不會執行——徹底消滅「先發點數、最後才發現訂單重複」的並發雙重入帳窗口，
@@ -319,7 +322,8 @@ export async function reconcilePaymentsForEmail(supabase, email, dodoApiKey) {
                     expectedAmountCents = (await fetchDodoSubscriptionInfo(pay.subscription_id, dodoApiKey)).expectedAmountCents;
                 }
                 try {
-                    await processTopup(supabase, email, productId, orderId, 'DODO', null, pay.subscription_id || null, planKey, payCustomerId, pay.total_amount ?? null, expectedAmountCents);
+                    const payQty = pay.metadata?.quantity ?? pay.product_cart?.[0]?.quantity ?? 1;
+                    await processTopup(supabase, email, productId, orderId, 'DODO', null, pay.subscription_id || null, planKey, payCustomerId, pay.total_amount ?? null, expectedAmountCents, payQty);
                     activated = true;
                 } catch (perPayErr) {
                     // 單筆付款失敗（如洗點防禦拒絕的 proration 畸零款）不應中斷其餘付款補發

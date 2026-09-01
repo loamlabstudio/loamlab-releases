@@ -41,7 +41,8 @@ export default async function handler(req, res) {
 
     // ── Checkout sub-route（不需要 Supabase auth）──────────────────────────
     if (req.method === 'POST' && req.query.action === 'checkout') {
-        let { planKey, email, referralCode, affonsoRef } = req.body || {};
+        let { planKey, email, referralCode, affonsoRef, quantity } = req.body || {};
+        const qty = Math.max(1, parseInt(quantity, 10) || 1);
         if (email) email = email.toLowerCase().trim();
         if (!planKey) return res.status(400).json({ error: 'Missing planKey' });
         const productId = DODO_PRODUCTS[planKey.toUpperCase()];
@@ -93,11 +94,12 @@ export default async function handler(req, res) {
         const dodoBase = DODO_API_KEY.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
         // 已命中 KOL 折扣碼的訂單不再附帶 Affonso 歸因，避免同一筆交易被兩套分潤系統各自認領
         const body = {
-            product_cart: [{ product_id: productId, quantity: 1 }],
+            product_cart: [{ product_id: productId, quantity: qty }],
             ...(email && { customer: { email } }),
             metadata: {
                 planKey: planKey.toUpperCase(),
                 email: email || '',
+                quantity: String(qty),
                 ...(affonsoRef && !kolDiscountCode && { affonso_referral: affonsoRef }),
             },
         };

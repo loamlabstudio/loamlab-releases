@@ -141,8 +141,9 @@ export default function Home() {
         body: JSON.stringify({ planKey, email }),
       });
       const data = await res.json();
-      if (data.checkoutUrl && win) {
-        win.location.href = data.checkoutUrl;
+      if (data.checkoutUrl) {
+        if (win) win.location.href = data.checkoutUrl;
+        else window.location.href = data.checkoutUrl;
         setCheckoutLoading(null);
         return;
       }

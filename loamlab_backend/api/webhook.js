@@ -67,6 +67,9 @@ export default async function handler(req, res) {
                 const discountCode = data.discount?.code || data.discount_code || null;
                 const planKey = data.metadata?.planKey || null;
                 const dodoCustomerId = data.customer?.customer_id || null;
+                // 加值包一次買 N 份：結帳端把份數寫進 metadata.quantity（比 product_cart 可靠，
+                // 部分 payment.succeeded 不帶 cart）。processTopup 據此倍增發點，訂閱方案內部強制鎖 1。
+                const purchaseQty = data.metadata?.quantity ?? data.product_cart?.[0]?.quantity ?? 1;
                 // 實付金額（美分），供 processTopup 做洗點金額校驗與精準記帳。
                 // 【Task 3・已用 Dodo 官方文件查證】只能用 total_amount：它跟訂閱物件的
                 // recurring_pre_tax_amount（expectedAmountCents 的來源）同屬「結帳當下幣別」，
@@ -135,7 +138,7 @@ export default async function handler(req, res) {
                     await recordPayment(orderId, customerEmail, settlementAmountUsdCents, 'paid', 'DODO', data);
 
                     try {
-                        await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey, dodoCustomerId, amountPaidCents, expectedAmountCents);
+                        await processTopup(supabase, customerEmail, variantId, orderId, 'DODO', discountCode, data.subscription_id, planKey, dodoCustomerId, amountPaidCents, expectedAmountCents, purchaseQty);
                         if (data.subscription_id) {
                             await Promise.resolve(supabase.from('users')
                                 .update({ dodo_subscription_id: data.subscription_id }).eq('email', customerEmail))
@@ -396,11 +399,14 @@ function verifyDodoSignature(rawBody, headers, secret) {
     if (!msgId || !msgTimestamp || !sigHeader || !secret) return false;
     const signedContent = `${msgId}.${msgTimestamp}.${rawBody.toString()}`;
     const secretBytes = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
-    const hmac = crypto.createHmac('sha256', secretBytes);
-    const digest = hmac.update(signedContent).digest('base64');
-    // sigHeader 可能含多個簽名，格式為 "v1,base64sig v1,base64sig2"
-    const signatures = sigHeader.split(' ').map(s => s.split(',')[1]).filter(Boolean);
-    return signatures.some(sig => sig === digest);
+    const digest = crypto.createHmac('sha256', secretBytes).update(signedContent).digest();
+    // sigHeader 可能含多個簽名，格式為 "v1,base64sig v1,base64sig2"；用定長 timingSafeEqual 比對避免時間側信道
+    const candidates = sigHeader.split(' ').map(s => s.split(',')[1]).filter(Boolean);
+    return candidates.some(sig => {
+        let sigBuf;
+        try { sigBuf = Buffer.from(sig, 'base64'); } catch { return false; }
+        return sigBuf.length === digest.length && crypto.timingSafeEqual(sigBuf, digest);
+    });
 }
 
 async function getRawBody(req) {

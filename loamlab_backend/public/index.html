@@ -718,7 +718,11 @@
                     body: JSON.stringify({ planKey: pk, email: email || undefined, quantity: qty })
                 });
                 const data = await res.json();
-                if (data.checkoutUrl && win) { win.location.href = data.checkoutUrl; return; }
+                if (data.checkoutUrl) {
+                    if (win) win.location.href = data.checkoutUrl;
+                    else window.location.href = data.checkoutUrl;
+                    return;
+                }
             } catch (_) {}
             if (win) win.close();
             alert('無法建立結帳連結，請稍後再試或聯絡客服。');

@@ -33,7 +33,20 @@ Replace `e.clientX - rect.left` with `e.offsetX` and `e.target.clientWidth`. `of
 - Bump the version string from `1.4.70` to `1.4.71` across the client config and the backend API.
 - Ensure `download_url` in `version.js` reflects `v1.4.71`.
 
-status: READY_FOR_CLAUDE
+status: DONE
+# 執行摘要（2026-09-01）：
+# - T1 完成：_scGetXY 滑鼠事件改用 e.offsetX/offsetY + e.target.clientWidth/clientHeight
+#   （事件綁在 draw-canvas、上層 canvas pointer-events:none，e.target 恆為 draw-canvas，
+#    offset 與 clientWidth 同源自洽，對 CEF High-DPI clientX 單位錯亂免疫）；加 clientWidth>0
+#    guard；touch 事件維持舊 getBoundingClientRect 換算。node --check 通過。
+# - T2 完成：版本 1.4.71（config.rb / loamlab_plugin.rb / version.js latest_version + download_url）。
+# - 附帶（經用戶確認一起發）：main.rb poll_render_task 逾時 100→300 次（5→15 分鐘）、
+#   .gitignore 補本機除錯/PII/.env 忽略規則。
+# - Release Gate PASS（ESLint ES2019 OK / WIP 無外洩 / 版本三方同步 / 無 SQL migration）。
+#   Check 3 的 6 個 WARN 為假警報：verified_diff 檔名後帶 # 註解導致整行字串比對失配，檔案實際都在 diff。
+# - 已發佈：GitHub Release v1.4.71 + Vercel prod + tag v1.4.71。
+# - 殘留：Windows 150% 顯示縮放實機「右 1/3」驗證待用戶熱重載確認（不阻擋發佈）。
+#   本機 origin/main 落後 4 個 commit（含發佈前既有 2 個），publish.ps1 只推 tag 不推分支，待用戶決定是否 push。
 
 ## RELEASE_GATE
 release_type: hotfix

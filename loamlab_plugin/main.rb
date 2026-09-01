@@ -1127,11 +1127,13 @@ module LoamLab
       end
     end
 
-    # 每 3 秒問一次後端任務狀態，最多等 5 分鐘（100 次），逾時當作失敗但不擅自標記已退款
+    # 每 3 秒問一次後端任務狀態，最多等 15 分鐘（300 次），逾時當作失敗但不擅自標記已退款
     # （後端才是退款權威來源；逾時多半是任務真的還沒完成，交由用戶自行去 Render History 確認）
+    # 上限拉高至 300 次是為了容忍 AtlasCloud 佇列壅塞：批次多圖時部分任務生成 >5 分鐘，
+    # 過早停止輪詢會導致成功結果無法寫入 render_history，造成「吃點數且漏圖」。
     def self.poll_render_task(task_id, headers, meta, attempt = 0, &on_final)
-      if attempt >= 100
-        on_final.call({ status: 'render_failed', message: '渲染逾時（已等待 5 分鐘），請至 Render History 確認結果是否已完成', points_refunded: false })
+      if attempt >= 300
+        on_final.call({ status: 'render_failed', message: '渲染逾時（已等待 15 分鐘），請至 Render History 確認結果是否已完成', points_refunded: false })
         return
       end
       UI.start_timer(3, false) do

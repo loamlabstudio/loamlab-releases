@@ -5336,7 +5336,23 @@ function _scWatchCanvasResize() {
     SmartCanvas._resizeObserver.observe(viewport);
 }
 
+// High-DPI 免疫：offsetX/offsetY 與 target.clientWidth/clientHeight 同屬一個元素、同一 CSS 單位、
+// 同一原點，換算比例不受舊版 CEF 在 Windows 顯示縮放(125%/150%)下 clientX(物理像素) 與
+// getBoundingClientRect(CSS 像素) 單位錯亂影響——該錯亂會讓 clientX 增速比 rect.width 快 1.5x，
+// 使游標在物理 2/3 處就到畫布右緣，右 1/3 區域游標飄出、點擊落點偏移。
+// 事件綁在 draw-canvas 本身、上層 highlight/cursor canvas 皆 pointer-events:none，
+// 故滑鼠事件 e.target 恆為 draw-canvas，offsetX 與 clientWidth 必然同源自洽。
+// touch 事件無 offsetX，維持舊的 getBoundingClientRect 換算。
 function _scGetXY(e) {
+    if (!e.touches && e.target && e.offsetX !== undefined && e.offsetY !== undefined
+        && e.target.clientWidth > 0 && e.target.clientHeight > 0) {
+        const scaleX = SmartCanvas.canvasW / e.target.clientWidth;
+        const scaleY = SmartCanvas.canvasH / e.target.clientHeight;
+        return {
+            x: Math.round(e.offsetX * scaleX),
+            y: Math.round(e.offsetY * scaleY)
+        };
+    }
     const rect = SmartCanvas.drawCanvas.getBoundingClientRect();
     const scaleX = SmartCanvas.canvasW / rect.width;
     const scaleY = SmartCanvas.canvasH / rect.height;

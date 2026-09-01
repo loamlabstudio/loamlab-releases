@@ -15,3 +15,35 @@ loamlab_backend/poll_test.js
 client_secret_*.json
 skills-lock.json
 auto_deploy.log
+
+# ─────────────────────────────────────────────────────────────
+# 本機除錯 / 一次性腳本 — 禁止進版控（此 repo 為 PUBLIC，內含客戶 PII 與內部邏輯）
+# ─────────────────────────────────────────────────────────────
+/scratch/
+/apply_fix.js
+/fix*.js
+/patch.js
+/patch.txt
+/old_main.rb
+/update_app.js
+/write_sprint.js
+/tmp_*
+/rotate_gh_token.*
+/update_github_token.*
+
+# 會被 Vercel 當靜態檔公開存取
+loamlab_backend/api/test.txt
+
+# 對賬 / 稽核用 scratch 腳本（含客戶 email 等 PII）
+scratch_*
+loamlab_backend/scripts/verify_points*.mjs
+loamlab_backend/scripts/audit_missing_renewals.mjs
+loamlab_backend/scripts/check_errs.mjs
+loamlab_backend/scripts/check_tx.mjs
+loamlab_backend/scripts/check_tx_recent.mjs
+loamlab_backend/scripts/check_user_details.mjs
+scripts/check_i18n.mjs
+scripts/patch_webhook.*
+
+# 保險：任何 .env 變體一律不進版控
+.env*

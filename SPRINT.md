@@ -1,61 +1,49 @@
-# Implementation Plan
+# Sprint
 
-## Bug Analysis: Smart Canvas "Right 1/3" Annotation Issue (v1.4.70)
-**Root Cause:**
-In v1.4.70, we capped the internal canvas resolution to 1920px, which eliminated the CEF max texture size limit crash. However, the right 1/3 bug still occurs.
-The true root cause is a classic SketchUp CEF bug related to Windows High-DPI scaling (e.g., 125%, 150% display scaling).
-In some older versions of CEF embedded in SketchUp, when display scaling is active, `e.clientX` (which returns physical pixels) and `element.getBoundingClientRect()` (which returns CSS pixels) use mismatched coordinate units.
-In `_scGetXY`, we calculate `x = Math.round((clientX - rect.left) * scaleX)`. Because `clientX` grows 1.5x faster (at 150% scaling) than `rect.width`, the calculated `x` reaches the right edge of the canvas when the physical mouse is only at the 66% (2/3) mark. If the mouse moves further into the right 1/3, `x` exceeds `canvasW`, the cursor is drawn out of bounds (disappears), and clicks are registered off-canvas.
+## Context Digest
+- **T2 顯示正在連線**：index.html 中的 preview-placeholder 錯誤重用了 data-i18n="status_waiting"，導致切換至 T2（空底圖狀態）時，佔位符顯示為「正在等待 Ruby 核心連線...」，誤導用戶以為當機。
+- **點數未加總永久點數**：render.js 的 poll_render 邏輯中，僅查詢了 points 而漏掉 lifetime_points；且扣款成功後回傳時誤用了不存在的 deductResult.balance，導致 UI 點數未更新或顯示錯誤。
+- **剖面框影響出圖**：SketchUp 剖面框（Section Planes）在未隱藏時會以半透明灰框顯示，干擾 AI 視覺。渲染截圖時未強制關閉 DisplaySectionPlanes。
 
-**Solution:**
-Replace `e.clientX - rect.left` with `e.offsetX` and `e.target.clientWidth`. `offsetX` and `clientWidth` are properties of the same element and use the exact same unit, completely immunizing the coordinate mapping from CEF DPI scaling bugs.
+## Tasks
 
-## TASKS
+- [x] [MUST] **Task 1: 修復 T2 空間改造佔位符文字**
+  - **影響檔案**: loamlab_plugin/ui/index.html 以及 loamlab_plugin/ui/locales/ 下的語系檔。
+  - **描述**: 將 preview-placeholder 中的 data-i18n="status_waiting" 改為新的 key（如 placeholder_empty），並在語系檔中加入對應翻譯（例如：「請從歷史記錄選擇一張圖作為底圖」）。或者採用更簡潔的 UI 呈現方式，避免與系統連線狀態混淆。
 
-### TASK 1: Fix High-DPI Mouse Mapping in `_scGetXY` [MUST]
-**影響檔案**: `loamlab_plugin/ui/app.js`
-- Locate the `_scGetXY(e)` function.
-- Add logic to preferentially use `e.offsetX` and `e.offsetY`:
-  ```javascript
-  if (e.offsetX !== undefined && e.offsetY !== undefined && e.target) {
-      const scaleX = SmartCanvas.canvasW / e.target.clientWidth;
-      const scaleY = SmartCanvas.canvasH / e.target.clientHeight;
-      return {
-          x: Math.round(e.offsetX * scaleX),
-          y: Math.round(e.offsetY * scaleY)
-      };
-  }
-  ```
-- Keep the existing `clientX / getBoundingClientRect()` logic as a fallback for touch events (`e.touches`).
+- [x] [MUST] **Task 2: 修復後端算圖後點數餘額計算 (lifepoint)**
+  - **影響檔案**: loamlab_backend/api/render.js
+  - **描述**: 
+    1. 在 poll_render 的資料庫查詢中，將 select('points') 改為 select('points, lifetime_points') 並回傳兩者加總。
+    2. 檢查 API 回傳的 points_remaining（約 1007、1021 行），扣款成功時 deductResult 沒有 balance 屬性，請改為 (deductResult.points || 0) + (deductResult.lifetime_points || 0)。
 
-### TASK 2: Update Version to 1.4.71 (Client Official Release) [MUST]
-**影響檔案**: `loamlab_plugin.rb`, `loamlab_plugin/config.rb`, `loamlab_backend/api/version.js`
-- Bump the version string from `1.4.70` to `1.4.71` across the client config and the backend API.
-- Ensure `download_url` in `version.js` reflects `v1.4.71`.
+- [x] [MUST] **Task 3: 隱藏 SketchUp 剖面實體框 (Section Planes)**
+  - **影響檔案**: loamlab_plugin/main.rb
+  - **描述**: 確保出圖時完全尊重場景本身的剖面切割效果 (DisplaySectionCuts)，但強制隱藏剖面實體框。建議最簡潔的做法是在 RENDER_KEYS 中加入 'DisplaySectionPlanes' => false。若 Claude 判斷遍歷 entities 隱藏是更安全的方式，也保留彈性空間。
 
 status: DONE
-# 執行摘要（2026-09-01）：
-# - T1 完成：_scGetXY 滑鼠事件改用 e.offsetX/offsetY + e.target.clientWidth/clientHeight
-#   （事件綁在 draw-canvas、上層 canvas pointer-events:none，e.target 恆為 draw-canvas，
-#    offset 與 clientWidth 同源自洽，對 CEF High-DPI clientX 單位錯亂免疫）；加 clientWidth>0
-#    guard；touch 事件維持舊 getBoundingClientRect 換算。node --check 通過。
-# - T2 完成：版本 1.4.71（config.rb / loamlab_plugin.rb / version.js latest_version + download_url）。
-# - 附帶（經用戶確認一起發）：main.rb poll_render_task 逾時 100→300 次（5→15 分鐘）、
-#   .gitignore 補本機除錯/PII/.env 忽略規則。
-# - Release Gate PASS（ESLint ES2019 OK / WIP 無外洩 / 版本三方同步 / 無 SQL migration）。
-#   Check 3 的 6 個 WARN 為假警報：verified_diff 檔名後帶 # 註解導致整行字串比對失配，檔案實際都在 diff。
-# - 已發佈：GitHub Release v1.4.71 + Vercel prod + tag v1.4.71。
-# - 殘留：Windows 150% 顯示縮放實機「右 1/3」驗證待用戶熱重載確認（不阻擋發佈）。
-#   本機 origin/main 落後 4 個 commit（含發佈前既有 2 個），publish.ps1 只推 tag 不推分支，待用戶決定是否 push。
 
-## RELEASE_GATE
-release_type: hotfix
-verified_diff:
-  - loamlab_plugin/ui/app.js          # T1: _scGetXY High-DPI 座標映射
-  - loamlab_plugin/config.rb          # T2: VERSION 1.4.71
-  - loamlab_plugin.rb                 # T2: ext.version 1.4.71
-  - loamlab_backend/api/version.js    # T2: latest_version + download_url 1.4.71
-  - loamlab_plugin/main.rb            # 附帶: poll_render_task 逾時 5→15 分鐘（扣點漏圖修復）
-  - .gitignore                        # 附帶: 本機除錯腳本/PII/.env 忽略規則
-  - SPRINT.md
-sql_migration: false
+## EXECUTION NOTES (Claude)
+
+### Task 1 — 照做 + 順修既有死碼
+- index.html：`<a href="feedback-beta" data-i18n="status_waiting">` → `<span id="placeholder-text" data-i18n="placeholder_empty">`。
+  （原 `<a>` 在 `pointer-events-none` 容器內，本來就點不到；且 app.js:1608 / 2368 早已 `querySelector('#placeholder-text')` 期待這個 id，過去一直抓到 null——這次補上 id 後 `preview_select_hint` / `syncing_viewport` 兩段動態文字才真正生效。）
+- i18n.js：`placeholder_empty` 已補齊 6 語系（live 系統是 i18n.js `UI_LANG`；`locales/*.json` 全專案零引用，未動）。node 驗證無缺 key。
+
+### Task 2 — 照做（RPC 回傳形狀已核對 supabase_setup.sql:512）
+`deduct_render_points` 成功時回 `{success, points, lifetime_points}`，**無 `balance`**；只有 insufficient 分支回 `balance`。
+- render.js poll_render 成功查詢：`select('points')` → `select('points, lifetime_points')`，回傳兩者加總。
+- render.js 約 1007 / 1021 行：`deductResult.balance`（success 時為 undefined）→ `(deductResult.points||0)+(deductResult.lifetime_points||0)`。
+- 第 707 行的 `deductResult.balance` 是 insufficient_points 分支，**正確，未動**。
+
+### Task 3 — 採 RENDER_KEYS 方案（KISS）
+main.rb `RENDER_KEYS` 加 `'DisplaySectionPlanes' => false`，不碰 `DisplaySectionCuts`（尊重場景切割）。
+`apply_render_keys` 用 model attribute 存原值、`restore_render_keys` 動態迭代 `RENDER_KEYS.keys` 還原，新 key 自動納入存/還原/每場景重套。
+
+**殘留邊界（非本 sprint 範圍，待用戶決定是否另開任務）：**
+1. 場景未勾選儲存剖面狀態 → 切場景不重置剖面，前一場景/全域的切割會殘留；強制 `DisplaySectionCuts` 才能解，但違反「尊重場景」。
+2. 「當前即時視角」直出 → 用戶編輯時開著的剖面框已藏，切割仍保留。
+3. T4 360 預覽（`apply_t4_style` 用獨立 ro 白名單）不套 RENDER_KEYS，預覽仍見灰框；非交付圖。
+
+### 版本
+沿用前一 sprint 已 bump 的 1.4.72（尚未 release），本次三修同版隨行，未再 bump。

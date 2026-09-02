@@ -58,6 +58,9 @@ module LoamLab
       'DrawProfilesOnly'    => true,    # 物件輪廓線保留
       'ProfileWidth'        => 2,       # 物件輪廓粗細
       'DrawDepthQue'        => false,   # Depth Cue
+      # 剖面：只藏剖面「實體框」（半透明灰框，會干擾 AI 視覺），不碰 DisplaySectionCuts
+      # ——切割效果完全交由場景自身設定決定（尊重用戶場景）。截圖後由 restore_render_keys 還原。
+      'DisplaySectionPlanes' => false,
       # AO（AmbientOcclusion；新圖形引擎支援，classic engine 靜默跳過）
       'AmbientOcclusion'          => true,
       'AmbientOcclusionDistance'  => 2.0,

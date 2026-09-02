@@ -4,6 +4,7 @@
 const UI_LANG = {
     "zh-TW": {
         "title": "野人相機 (LoamLab Camera)",
+        "placeholder_empty": "預覽將顯示於此",
         "status_waiting": "正在等待 Ruby 核心連線...",
         "status_success": "核心已就緒",
         "status_rendering": "系統：正在準備場景參數...",
@@ -289,6 +290,7 @@ const UI_LANG = {
     },
     "en-US": {
         "title": "LoamLab Camera",
+        "placeholder_empty": "Preview will appear here",
         "status_waiting": "Waiting for Ruby Core...",
         "status_success": "Core Ready",
         "status_rendering": "System: Preparing parameters...",
@@ -574,6 +576,7 @@ const UI_LANG = {
     },
     "zh-CN": {
         "title": "野人相機 (LoamLab Camera)",
+        "placeholder_empty": "预览将显示于此",
         "status_waiting": "正在等待 Ruby 核心連線...",
         "status_success": "核心已就緒",
         "status_rendering": "系統：正在準備場景參數...",
@@ -859,6 +862,7 @@ const UI_LANG = {
     },
     "es-ES": {
         "title": "LoamLab Camera",
+        "placeholder_empty": "La vista previa aparecerá aquí",
         "status_waiting": "Esperando el núcleo Ruby...",
         "status_success": "Núcleo listo",
         "status_rendering": "Sistema: Preparando parámetros de escena...",
@@ -1144,6 +1148,7 @@ const UI_LANG = {
     },
     "pt-BR": {
         "title": "LoamLab Camera",
+        "placeholder_empty": "A pré-visualização aparecerá aqui",
         "status_waiting": "Aguardando núcleo Ruby...",
         "status_success": "Núcleo pronto",
         "status_rendering": "Sistema: Preparando parâmetros da cena...",
@@ -1429,6 +1434,7 @@ const UI_LANG = {
     },
     "ja-JP": {
         "title": "LoamLab Camera",
+        "placeholder_empty": "プレビューはここに表示されます",
         "status_waiting": "Rubyコアに接続中...",
         "status_success": "コア準備完了",
         "status_rendering": "システム：シーンパラメータを準備中...",

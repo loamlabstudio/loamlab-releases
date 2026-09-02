@@ -590,8 +590,8 @@ async function _handleRender(req, res) {
                 });
                 let balance = null;
                 try {
-                    const { data: uRow } = await supabase.from('users').select('points').eq('email', userEmail).single();
-                    balance = uRow?.points ?? null;
+                    const { data: uRow } = await supabase.from('users').select('points, lifetime_points').eq('email', userEmail).single();
+                    if (uRow) balance = (uRow.points || 0) + (uRow.lifetime_points || 0);
                 } catch (e) {}
                 return res.status(200).json({
                     code: 0, status: 'success', url: finalUrl, points_remaining: balance, transaction_id: pollTxId,
@@ -1004,7 +1004,7 @@ async function _handleRender(req, res) {
         if (!finalUrl && data?.data?.id) {
             return res.status(200).json({
                 code: 0, status: 'processing', task_id: data.data.id,
-                transaction_id: transactionId, points_remaining: deductResult.balance,
+                transaction_id: transactionId, points_remaining: (deductResult.points || 0) + (deductResult.lifetime_points || 0),
                 cost, resolution: normalizedRes, tool: activeTool,
                 prompt: userPrompt, style: userPayload.parameters?.style || '', input_url: inputUrlForHistory
             });
@@ -1018,7 +1018,7 @@ async function _handleRender(req, res) {
         if (finalUrl) {
             const refReward = await saveRenderHistory(supabase, { userEmail, url: finalUrl, userPayload, resVal, cost, activeTool, inputUrl: inputUrlForHistory, clientIp: getClientIp(req), providerCost: doubleCostCents2 });
             return res.status(200).json({
-                code: 0, url: finalUrl, points_deducted: cost, points_remaining: deductResult.balance, transaction_id: transactionId,
+                code: 0, url: finalUrl, points_deducted: cost, points_remaining: (deductResult.points || 0) + (deductResult.lifetime_points || 0), transaction_id: transactionId,
                 referral_bonus: refReward?.granted ? refReward.amount : 0
             });
         } else {

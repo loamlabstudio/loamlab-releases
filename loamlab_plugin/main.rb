@@ -664,6 +664,9 @@ module LoamLab
                     unless force_style.empty?
                       self.apply_force_style_override(model, force_style, skip_shadow: model.shadow_info['DisplayShadows'] == true)
                     end
+                    # 同步預覽也要強制重繪：否則 RENDER_KEYS 的 DisplaySectionPlanes=false 不進畫面，
+                    # 縮圖仍帶剖面灰框（與正式出圖同一個 write_image 不 refresh 就抓不到的問題）
+                    begin; model.active_view.refresh; rescue => _e; end
                     base64_img = self.get_preview_base64
                     _sync_restore.call(model, saved_fs) if saved_fs
                     batch_data << { scene: scene_name, image_data: base64_img }
@@ -1918,8 +1921,14 @@ module LoamLab
         page = model.pages[scene_raw]
         
         if page
-          # 1. 切換場景
+          # 1. 切換場景 + 強制同步重繪
+          #    不加 refresh 的話，selected_page= 對「非 rendering_options」狀態（剖面啟用、
+          #    圖層可見性等）的套用會延到下一個重繪幀，0.1s 計時器內的 write_image 可能截到
+          #    上一個場景的剖切狀態——批量多角度時「剖面沒按場景設定出圖、被切掉」的根因。
+          #    RENDER_KEYS 那批 key 有在下方每場景手動重套，剖面沒有、只能靠這個 refresh。
+          #    360 全景流程 (pano_task_run) 早已這樣做，主批量流程先前漏了。
           model.pages.selected_page = page
+          begin; model.active_view.refresh; rescue => _e; end
 
           # 2. 每場景重新套用強制樣式（selected_page= 已同步相機；p.update 不保證所有 key 被 selected_page= 還原，AmbientOcclusion 等需明確重設）
           begin
@@ -1952,6 +1961,10 @@ module LoamLab
                 when "2k" then [2048, 1366]
                 else [1536, 1024]
               end
+              # 截圖前最後一次強制同步重繪：確保 selected_page= 的剖面/圖層狀態 + 上面
+              # safe_set_render_keys 設的 DisplaySectionPlanes=false 都已進畫面，write_image 才截得到。
+              # 部分 rendering_options（含剖面框）不 refresh 不會反映到 write_image 的輸出。
+              begin; view.refresh; rescue => _e; end
               self.capture_native_then_crop(view, temp_img_path, capture_w, capture_h)
 
               # 定義發送請求的 Proc，避免代碼重複

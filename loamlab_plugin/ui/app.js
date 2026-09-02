@@ -5224,23 +5224,16 @@ function openSmartCanvas(channelBase64, renderedUrl, sceneName, keepRegions = fa
             const natW = SmartCanvas.baseImg.naturalWidth;
             const natH = SmartCanvas.baseImg.naturalHeight;
 
-            // canvas backing store 尺寸 = 底圖貼合視窗後的實際顯示 px（與 _scComputeFitBox / _scApplyStackSize
-            // 同一算式，單一真理來源），不再用 naturalWidth。
-            // Why: 舊做法讓 canvas 內部尺寸 = 底圖原生像素（最高 4096）。2K/4K 底圖會超過 SketchUp 內嵌 CEF 的
-            // canvas backing store 最大邊長限制（部分機器/GPU 為 2048px），超限區域（約右側 1/3）靜默繪製失敗
-            // ——<img> 不受此限所以整張圖看得到，但透明的 draw/cursor canvas 在該區被裁掉，游標消失、無法標註。
-            // canvas 依定義 ≤ 視窗可視範圍後，結構上不可能再撞上限；游標與畫面永遠對齊；undo 記憶體隨視窗而非 4K。
-            const viewport = document.getElementById('sc-canvas-viewport');
-            const availW = (viewport && viewport.clientWidth)  || natW;
-            const availH = (viewport && viewport.clientHeight) || natH;
-            const fitScale = Math.min(availW / natW, availH / natH, 1);
-            // 長邊 clamp 到 [1280, 1920]，且不超過底圖原生：下限確保送 AI 的 composite 夠清晰讓模型讀懂標註
-            // 位置，上限是即使視窗異常大也絕不逼近 CEF backing store 限制的防呆線。單一 scale 同時套用長短邊，
-            // 比例永遠不變。
+            // canvas backing store 邊長 = min(AI 最佳上限 1920, 本機實測可用邊長, 底圖原生)。
+            // Why: 部分機器（舊 GPU / 虛擬機 / SketchUp 軟體渲染）的 2D canvas backing store 邊長被砍在
+            // 1024 或 2048，超限區域（約右側 1/3）靜默繪製失敗——<img> 不受此限所以整張圖看得到，但透明的
+            // draw/cursor canvas 在該區被裁掉，游標消失、無法標註。
+            // 不查 WebGL MAX_TEXTURE_SIZE（那是另一個子系統的代理值），改直接量測 2D canvas 本身的極限。
+            // 解析度不再綁視窗大小：畫布解析度 = f(底圖, 硬體)，顯示尺寸 = f(視窗)，兩者分離。
+            const SAFE_MAX = _scMaxCanvasEdge([1920, 1280, 1024]);
             const natLong = Math.max(natW, natH);
-            const minScale = Math.min(1280, natLong) / natLong;
-            const maxScale = Math.min(1920, natLong) / natLong;
-            const scale = Math.min(Math.max(fitScale, minScale), maxScale);
+            // 只縮不放：底圖比 SAFE_MAX 小就維持原生（向上假造像素對 AI 無意義）
+            const scale = Math.min(1, SAFE_MAX / natLong);
             const w = Math.max(1, Math.round(natW * scale));
             const h = Math.max(1, Math.round(natH * scale));
 
@@ -5274,6 +5267,26 @@ function retryScImageLoad() {
         ? `${SmartCanvas.renderedUrl}&t=${Date.now()}` 
         : `${SmartCanvas.renderedUrl}?t=${Date.now()}`;
     SmartCanvas.baseImg.src = retryUrl;
+}
+
+// 直接量測本機 2D canvas 可安全使用的最大邊長。從大到小試候選值：
+// 情況 A（瀏覽器直接 clamp width）→ c.width 讀回值 !== 候選值；
+// 情況 B（width 保留但超限區靜默失效）→ 最右緣哨兵像素讀回不是白色。
+// 兩者都過才回傳該尺寸；全掛則退回 512。canvas 只有 8px 高，成本極低。
+function _scMaxCanvasEdge(cands) {
+    for (const s of cands) {
+        try {
+            const c = document.createElement('canvas');
+            c.width = s; c.height = 8;
+            if (c.width !== s) continue;
+            const x = c.getContext('2d');
+            if (!x) continue;
+            x.fillStyle = '#fff';
+            x.fillRect(s - 2, 0, 2, 8);
+            if (x.getImageData(s - 1, 0, 1, 1).data[0] === 255) return s;
+        } catch (e) { /* getImageData 可能因尺寸過大直接丟例外，視同不可用 */ }
+    }
+    return 512;
 }
 
 function _scInitCanvases(w, h) {

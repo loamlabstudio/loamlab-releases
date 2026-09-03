@@ -1,8 +1,8 @@
 ﻿// /api/version - 婵炴挻纰嶇粙鎺曘亹閸愨晝顩烽柟顖涙緲濞堜即鏌涢弴鐔哥婵炴彃娼″顒勬偋閸偆鍞梺鍛婂笩閸╂牠鎮￠敍鍕櫣闁靛繆鍓濇禒姗€鏌￠崒娑橆棆濠⒀勵殜瀵?
 // 闂佺粯顨呴悧濠傦耿閹殿喗灏欓柛銉簴閺嬫瑩鏌ｉ埡浣烘憼閻㈩垱鎸冲畷妤勵槻缂佷胶鏁婚弫宥呯暆閳ь剟寮?release.ps1 闂佽皫鍛付缂佹梻鍏樺鏌ュ磼濞戞瑧鍑介梺鍝勫€绘晶妤咁敆濠靛棭鐎堕柡鍐ｅ亾妞?
 const LATEST = {
-    latest_version: "1.4.73",
-    download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.4.73/loamlab_plugin.rbz",
+    latest_version: "1.4.74",
+    download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.4.74/loamlab_plugin.rbz",
     manual_url: "https://github.com/loamlabstudio/loamlab-releases/releases/latest"
 };
 

@@ -5224,13 +5224,10 @@ function openSmartCanvas(channelBase64, renderedUrl, sceneName, keepRegions = fa
             const natW = SmartCanvas.baseImg.naturalWidth;
             const natH = SmartCanvas.baseImg.naturalHeight;
 
-            // canvas backing store 邊長 = min(AI 最佳上限 1920, 本機實測可用邊長, 底圖原生)。
-            // Why: 部分機器（舊 GPU / 虛擬機 / SketchUp 軟體渲染）的 2D canvas backing store 邊長被砍在
-            // 1024 或 2048，超限區域（約右側 1/3）靜默繪製失敗——<img> 不受此限所以整張圖看得到，但透明的
-            // draw/cursor canvas 在該區被裁掉，游標消失、無法標註。
-            // 不查 WebGL MAX_TEXTURE_SIZE（那是另一個子系統的代理值），改直接量測 2D canvas 本身的極限。
-            // 解析度不再綁視窗大小：畫布解析度 = f(底圖, 硬體)，顯示尺寸 = f(視窗)，兩者分離。
-            const SAFE_MAX = _scMaxCanvasEdge([1920, 1280, 1024]);
+            // 【文件解析度】標註座標空間 = 送 AI 的 composite 解析度。
+            // 只由「AI 讀得懂標註」與 payload 預算決定，與顯示/視窗/DPI 完全無關——
+            // 呈現端由 _scApplyStackSize 的「顯示最多 1:1」規則獨立負責（見該處註解）。
+            const SAFE_MAX = SC_DOC_MAX_EDGE;
             const natLong = Math.max(natW, natH);
             // 只縮不放：底圖比 SAFE_MAX 小就維持原生（向上假造像素對 AI 無意義）
             const scale = Math.min(1, SAFE_MAX / natLong);
@@ -5269,25 +5266,16 @@ function retryScImageLoad() {
     SmartCanvas.baseImg.src = retryUrl;
 }
 
-// 直接量測本機 2D canvas 可安全使用的最大邊長。從大到小試候選值：
-// 情況 A（瀏覽器直接 clamp width）→ c.width 讀回值 !== 候選值；
-// 情況 B（width 保留但超限區靜默失效）→ 最右緣哨兵像素讀回不是白色。
-// 兩者都過才回傳該尺寸；全掛則退回 512。canvas 只有 8px 高，成本極低。
-function _scMaxCanvasEdge(cands) {
-    for (const s of cands) {
-        try {
-            const c = document.createElement('canvas');
-            c.width = s; c.height = 8;
-            if (c.width !== s) continue;
-            const x = c.getContext('2d');
-            if (!x) continue;
-            x.fillStyle = '#fff';
-            x.fillRect(s - 2, 0, 2, 8);
-            if (x.getImageData(s - 1, 0, 1, 1).data[0] === 255) return s;
-        } catch (e) { /* getImageData 可能因尺寸過大直接丟例外，視同不可用 */ }
-    }
-    return 512;
-}
+// SmartCanvas 的三個解析度彼此獨立，混在一起就是「右側 1/3 畫不出來」的根源：
+//   ① 來源 = 底圖原生像素（給定）
+//   ② 文件 = canvasW/H，標註座標空間 + 送 AI 的 composite（只看 AI 可讀性與 payload 預算）
+//   ③ 呈現 = stack 的 CSS 尺寸 × devicePixelRatio，合成器實際要柵格化的裝置像素
+// 座標映射 docX = offsetX × (canvasW / clientWidth) 是 ②↔③ 之間的純比值，
+// 所以夾 ③ 不影響標註正確性，也完全不動 ② 的出圖品質。
+
+// ② 文件解析度上限。整個 SmartCanvas 只有這一個尺寸常數——③ 的上限由它推導，
+// 不需要（也無法）知道各機器的合成層上限是多少。
+const SC_DOC_MAX_EDGE = 1920;
 
 function _scInitCanvases(w, h) {
     ['sc-highlight-canvas', 'sc-draw-canvas', 'sc-cursor-canvas'].forEach(id => {
@@ -5333,7 +5321,20 @@ function _scApplyStackSize() {
     const viewport = document.getElementById('sc-canvas-viewport');
     const stack = document.getElementById('sc-canvas-stack');
     if (!viewport || !stack || !SmartCanvas.canvasW) return;
-    const { w, h } = _scComputeFitBox(SmartCanvas.canvasW, SmartCanvas.canvasH, viewport.clientWidth, viewport.clientHeight);
+    // 呈現端唯一的規則：顯示最多 1:1，即 stack 的裝置像素不超過文件像素
+    //   stackCSS × dpr ≤ canvasW  ⟹  stackCSS ≤ canvasW / dpr
+    // 依據是「放大超過 1:1 只有模糊、沒有資訊增益」，不是猜硬體數字。
+    // 副作用即是解方：裝置像素恆 ≤ canvasW ≤ SC_DOC_MAX_EDGE(1920)，永遠不會撞破
+    // 弱 GPU / SwiftShader / Windows DPI 虛擬化 CEF 的合成層邊長上限（常見 2048），
+    // 且連上限只有 1024 的機器也能過（小底圖的 canvasW 本來就小）。
+    // 這也是為什麼用戶不必去勾 SketchUp.exe 的「覆寫高 DPI 縮放行為」：
+    // dpr 變大時 stackCSS 自動等比縮小，乘積不變。
+    // 合成層上限本身無法從 JS 量測（getImageData 讀的是 backing store，合成層不透明），
+    // 所以正確做法是讓乘積有天然上界，而不是去猜那個數字。
+    const dpr = window.devicePixelRatio || 1;
+    const availW = Math.min(viewport.clientWidth, SmartCanvas.canvasW / dpr);
+    const availH = Math.min(viewport.clientHeight, SmartCanvas.canvasH / dpr);
+    const { w, h } = _scComputeFitBox(SmartCanvas.canvasW, SmartCanvas.canvasH, availW, availH);
     stack.style.width = w + 'px';
     stack.style.height = h + 'px';
 }

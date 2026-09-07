@@ -2921,22 +2921,53 @@ function generateShareTextWithReferral() {
 // DEV 專用：從目前選取的渲染節點自動組裝中英雙語貼文（含 Hashtags）
 // Helper to detect and translate Chinese to English
 const hasChinese = (str) => /[\u4e00-\u9fa5]/.test(str);
+const _translateCache = new Map();
+// 舊版 CEF 不支援 AbortSignal.timeout()，改用 AbortController + setTimeout
+async function _fetchWithTimeout(url, ms) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(function() { ctrl.abort(); }, ms);
+    try {
+        return await fetch(url, { signal: ctrl.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
 async function translateToEnglish(text) {
     if (!hasChinese(text)) return text;
+    if (_translateCache.has(text)) return _translateCache.get(text);
+
+    let translated = '';
+
+    // 主要來源：MyMemory（回應帶 Access-Control-Allow-Origin: *，WebView 可直接呼叫）
     try {
-        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-TW&tl=en&dt=t&q=${encodeURIComponent(text)}`;
-        const res = await fetch(url);
+        const url = `https://api.mymemory.translated.net/get?langpair=zh-TW%7Cen&q=${encodeURIComponent(text)}`;
+        const res = await _fetchWithTimeout(url, 8000);
         const data = await res.json();
-        let translated = data[0].map(x => x[0]).join('');
-        // Lowercase the first letter to match parameter style if it's just a word
-        if (translated && translated.length > 0) {
-             translated = translated.charAt(0).toLowerCase() + translated.slice(1);
-        }
-        return translated;
+        const t = data && data.responseData && data.responseData.translatedText;
+        if (t && !/MYMEMORY WARNING|QUERY LENGTH LIMIT/i.test(t) && !hasChinese(t)) translated = t;
     } catch(e) {
-        console.error('Auto-translate failed:', e);
+        console.warn('[LoamLab] MyMemory 翻譯失敗:', e);
+    }
+
+    // 備援：Google gtx（無 CORS 標頭且常回 429，只當後備）
+    if (!translated) {
+        try {
+            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-TW&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+            const res = await _fetchWithTimeout(url, 8000);
+            const data = await res.json();
+            const t = data[0].map(x => x[0]).join('');
+            if (t && !hasChinese(t)) translated = t;
+        } catch(e) {
+            console.warn('[LoamLab] Google 翻譯失敗:', e);
+        }
+    }
+
+    if (!translated) {
+        console.error('[LoamLab] 兩組翻譯來源皆失敗，保留原字串:', text);
         return text;
     }
+    _translateCache.set(text, translated);
+    return translated;
 }
 
 // DEV 專用：從目前選取的渲染節點自動組裝中英雙語貼文（含 Hashtags）
@@ -2988,18 +3019,20 @@ async function generateBilingualPostText() {
             const zhLabel = (opt && opt.labels && (opt.labels['zh-TW'] || opt.labels['zh-CN'])) || (opt && opt.label) || val;
             let enLabel = (opt && opt.labels && opt.labels['en-US']) || val;
             
-            // 若為自訂輸入或無英文翻譯，且包含中文，則自動呼叫 API 翻譯
-            if (!opt || !opt.labels || !opt.labels['en-US']) {
-                if (hasChinese(enLabel)) {
-                    enLabel = await translateToEnglish(enLabel);
-                }
+            // 英文區禁止中文殘留：不論是否已有 en-US 標籤，只要值含中文一律強制翻譯
+            if (hasChinese(enLabel)) {
+                enLabel = await translateToEnglish(enLabel);
             }
             
             zhVals.push(zhLabel);
             enVals.push(enLabel);
         }
         const zhTitle = getI18nStr(node.labels || node.title || node.name, node.id);
-        const rawEnTitle = getI18nEnStr(node.labels || node.title || node.name, node.id);
+        let rawEnTitle = getI18nEnStr(node.labels || node.title || node.name, node.id);
+        // 標題同樣強制檢查：含中文就翻譯後再轉大寫
+        if (hasChinese(rawEnTitle)) {
+            rawEnTitle = await translateToEnglish(rawEnTitle);
+        }
         const enTitle = rawEnTitle ? rawEnTitle.toUpperCase() : '';
         
         const formattedEnVals = enVals.map(val => val ? val.charAt(0).toUpperCase() + val.slice(1) : '').join(' + ');
@@ -3672,7 +3705,7 @@ window.fetchUserPoints = function (email) {
     _doFetchUserPoints(email, 0);
 }
 
-function openImagePreview(url) {
+function openImagePreview(url, fallbackUrl = '') {
     const modal = document.getElementById('image-preview-modal');
     const img = document.getElementById('image-preview-img');
     const loader = document.getElementById('image-preview-loader');
@@ -3681,6 +3714,12 @@ function openImagePreview(url) {
     img.classList.add('opacity-0');
     loader.classList.remove('hidden');
     img.src = '';
+    
+    if (fallbackUrl) {
+        img.setAttribute('data-fb', fallbackUrl);
+    } else {
+        img.removeAttribute('data-fb');
+    }
     
     img.src = url;
     modal.classList.remove('hidden');
@@ -3746,11 +3785,12 @@ function renderHistoryGrid(files) {
         const fileUrl = e.file_url || '';
         const cloudUrl = e.cloud_url || '';
         const imgSrc = fileUrl || cloudUrl;
-        const previewUrl = cloudUrl || fileUrl;
+        const previewUrl = fileUrl || cloudUrl;
+        const previewFallback = (fileUrl && cloudUrl) ? cloudUrl : '';
         const fallback = (fileUrl && cloudUrl) ? cloudUrl : '';
         return `
         <div class="relative group rounded-xl overflow-hidden border border-white/8 hover:border-white/20 transition-colors bg-black/40 flex flex-col">
-            <div class="relative aspect-video bg-white/5 overflow-hidden cursor-pointer" onclick="if('${previewUrl}') { openImagePreview('${previewUrl}'); }">
+            <div class="relative aspect-video bg-white/5 overflow-hidden cursor-pointer" onclick="if('${previewUrl}') { openImagePreview('${previewUrl}', '${previewFallback}'); }">
                 ${imgSrc
                     ? `<img src="${imgSrc}" ${fallback ? `data-fb="${fallback}"` : ''} class="w-full h-full object-cover block" draggable="false"
                             onerror="var f=this.getAttribute('data-fb');if(f){this.removeAttribute('data-fb');this.src=f;}else{this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-white/20 text-[10px]\\'>No Preview</div>'}">`
@@ -5277,6 +5317,59 @@ function retryScImageLoad() {
 // 不需要（也無法）知道各機器的合成層上限是多少。
 const SC_DOC_MAX_EDGE = 1920;
 
+// ── T2 payload guard ────────────────────────────────────────────────────────
+// Vercel serverless 請求上限 4.5MB，超過會在函式執行「之前」就回 413，扣點不會發生，
+// 但前端只看得到 resp.json() 解析失敗後的「網路錯誤」，歸因完全誤導。
+// T1 早就有三層防護（main.rb 的 payload guard + write_image_capped），T2 先前一項都沒有：
+//   base_image / original_image_b64  = canvas toDataURL(0.9)，隨底圖解析度無上限
+//   ref_images[]                     = FileReader 直接讀進來的**用戶原檔**，完全未壓縮、張數無上限
+// 一張手機照片就可能 5MB，兩張就必爆。
+//
+// 不能用「丟掉多餘的參考圖」來省空間：prompt 裡的「see image N」與 _scAssignRefImageIndices()
+// 共用同一份索引，少一張就整組對不上，AI 會抓錯圖。所以一律保留張數、只壓縮內容。
+const SC_BUDGET_ORIGINAL   = 1200000;  // base64 字元數 ≈ payload bytes
+const SC_BUDGET_COMPOSITE  = 1200000;
+const SC_BUDGET_REFS_TOTAL = 1400000;  // 由參考圖張數均分
+// 三者上限相加 3.8MB，加上 prompt 等欄位仍低於後端 4.2MB 的實測安全線。
+
+// 把 data URL 壓進字元數上限：先降 quality，仍超則按比例縮邊長。
+// 舊版 CEF 無 createImageBitmap / OffscreenCanvas，一律走 Image + canvas。
+// 邊長先夾到 SC_DOC_MAX_EDGE，避免用戶上傳的大圖撞破弱 GPU 的 canvas backing store 上限。
+function _scShrinkDataUrl(dataUrl, maxChars) {
+    return new Promise(function (resolve) {
+        if (!dataUrl || dataUrl.length <= maxChars) { resolve(dataUrl); return; }
+        const img = new Image();
+        img.onload = function () {
+            try {
+                const cv = document.createElement('canvas');
+                const ctx = cv.getContext('2d');
+                const longest = Math.max(img.naturalWidth, img.naturalHeight) || 1;
+                const baseScale = Math.min(1, SC_DOC_MAX_EDGE / longest);
+                const scales = [1, 0.75, 0.55, 0.4, 0.28];
+                const qualities = [0.75, 0.6, 0.45, 0.32];
+                let last = dataUrl;
+                for (let s = 0; s < scales.length; s++) {
+                    const k = baseScale * scales[s];
+                    cv.width  = Math.max(1, Math.round(img.naturalWidth  * k));
+                    cv.height = Math.max(1, Math.round(img.naturalHeight * k));
+                    ctx.clearRect(0, 0, cv.width, cv.height);
+                    ctx.drawImage(img, 0, 0, cv.width, cv.height);
+                    for (let q = 0; q < qualities.length; q++) {
+                        last = cv.toDataURL('image/jpeg', qualities[q]);
+                        if (last.length <= maxChars) { resolve(last); return; }
+                    }
+                }
+                resolve(last); // 已壓到最小仍超標：回傳最小版本，交給後端判斷
+            } catch (e) {
+                console.warn('[LoamLab] payload 壓縮失敗，沿用原圖:', e);
+                resolve(dataUrl);
+            }
+        };
+        img.onerror = function () { resolve(dataUrl); };
+        img.src = dataUrl;
+    });
+}
+
 function _scInitCanvases(w, h) {
     ['sc-highlight-canvas', 'sc-draw-canvas', 'sc-cursor-canvas'].forEach(id => {
         const c = document.getElementById(id);
@@ -6479,7 +6572,7 @@ async function executeSmartSwap(overrideBody = null) {
         } else {
             // 正常流程：從 SmartCanvas state 建構（true = 烘進「見圖 N」給 AI 讀）
             const composite = _scCreateAnnotatedComposite(true);
-            const compositeBase64 = composite.toDataURL('image/jpeg', 0.9);
+            const compositeBase64 = await _scShrinkDataUrl(composite.toDataURL('image/jpeg', 0.9), SC_BUDGET_COMPOSITE);
 
             // Prompt：區域編號（Region N）+ 描述（後端會嵌入預設模板）
             // 編號改用數字而非顏色代碼——霓虹色線框只是給 AI 辨識邊界用的中性標記，
@@ -6500,9 +6593,18 @@ async function executeSmartSwap(overrideBody = null) {
             displayLabel = SmartCanvas.regions
                 .map(r => r.label || '').filter(Boolean).join(', ').slice(0, 40) || 'Smart Canvas';
 
-            const refImages = SmartCanvas.regions
+            // 參考圖是用戶上傳的原檔，完全未壓縮。張數必須原封不動（索引與上方 prompt 的
+            // 「see image N」綁定，少一張整組錯位），所以只壓內容，預算按張數均分。
+            const rawRefs = SmartCanvas.regions
                 .filter(r => r.refImageBase64)
                 .map(r => r.refImageBase64);
+            const perRefBudget = rawRefs.length > 0
+                ? Math.floor(SC_BUDGET_REFS_TOTAL / rawRefs.length)
+                : SC_BUDGET_REFS_TOTAL;
+            const refImages = [];
+            for (let ri = 0; ri < rawRefs.length; ri++) {
+                refImages.push(await _scShrinkDataUrl(rawRefs[ri], perRefBudget));
+            }
 
             const resRadio = document.querySelector('input[name="resolution"]:checked');
             resolution = resRadio ? resRadio.value : '1k';
@@ -6514,7 +6616,7 @@ async function executeSmartSwap(overrideBody = null) {
                     oc.width = SmartCanvas.baseImg.naturalWidth;
                     oc.height = SmartCanvas.baseImg.naturalHeight;
                     oc.getContext('2d').drawImage(SmartCanvas.baseImg, 0, 0);
-                    originalParam = { original_image_b64: oc.toDataURL('image/jpeg', 0.9) };
+                    originalParam = { original_image_b64: await _scShrinkDataUrl(oc.toDataURL('image/jpeg', 0.9), SC_BUDGET_ORIGINAL) };
                 } catch (_) {}
             }
 
@@ -6554,6 +6656,16 @@ async function executeSmartSwap(overrideBody = null) {
             clearTimeout(_scAbortTimer);
             clearTimeout(slowToastTimer);
         }
+        // 先看 HTTP 狀態再解析。413 是 Vercel 在函式執行「之前」就擋下的（未扣點、未出圖），
+        // 回的不是 JSON，直接 resp.json() 會拋錯落進 catch，用戶只看到「網路錯誤」——
+        // 完全誤導，會讓人以為是自己網路有問題而重複送出。
+        if (!resp.ok) {
+            const httpErr = new Error(resp.status === 413
+                ? '圖片資料過大，請減少參考圖張數或改用較小的底圖後重試'
+                : '服務暫時無法處理此請求，請稍後再試');
+            httpErr._userFacing = true;   // 已是給用戶看的完整句子，catch 不要再加前綴
+            throw httpErr;
+        }
         let result = await resp.json();
 
         if (result.code === 0 && result.status === 'processing' && result.task_id) {
@@ -6591,7 +6703,9 @@ async function executeSmartSwap(overrideBody = null) {
         SmartCanvas.regions = [];
         _scUpdatePendingIndicator();
         const isTimeout = err.name === 'TimeoutError' || err.name === 'AbortError';
-        const msg = isTimeout ? '任務提交逾時，請至 Render History 確認是否已扣點/出圖，勿重複提交' : '網路錯誤: ' + err.message;
+        const msg = isTimeout
+            ? '任務提交逾時，請至 Render History 確認是否已扣點/出圖，勿重複提交'
+            : (err._userFacing ? err.message : '網路錯誤: ' + err.message);
         showUpdateToast('❌ ' + msg);
         if (window._isDev && window._devViewActive) (document.getElementById('dev-retest-btn') || document.createElement('div')).classList.remove('hidden');
     } finally {

@@ -1714,13 +1714,21 @@
             </div>
             <img id="image-preview-img" src="" class="max-w-full max-h-full object-contain rounded-lg opacity-0 transition-opacity duration-300 pointer-events-auto" 
                  onload="this.classList.remove('opacity-0'); document.getElementById('image-preview-loader').classList.add('hidden')" 
+                 onerror="var fb=this.getAttribute('data-fb'); if(fb && this.src !== fb) { this.removeAttribute('data-fb'); this.src=fb; } else { document.getElementById('image-preview-loader').classList.add('hidden'); }"
                  onclick="event.stopPropagation()">
         </div>
     </div>
     
-    <!-- 引入外部邏輯腳本 (強制加上 ?v=1.2.0 擊破 CEF 瀏覽器快取) -->
-    <script src="i18n.js?v=1.4.11"></script>
-    <script src="app.js?v=1.4.11"></script>
+    <!-- 引入外部邏輯腳本：cache-busting 跟 style.css 一樣改吃 main.rb 附加的 ?t=時間戳記，
+         不再用手動維護的 ?v=x.x.x（版號忘了改就會一直吃到舊快取的 app.js）。
+         document.write 在解析階段同步插入，執行順序與原本的 <script> 標籤完全相同。-->
+    <script>
+    (function() {
+        var bust = location.search ? location.search.slice(1) : Date.now();
+        document.write('<script src="i18n.js?' + bust + '"><\/script>');
+        document.write('<script src="app.js?' + bust + '"><\/script>');
+    })();
+    </script>
     <script>
     // Tutorial config — single source of truth (auto-synced from docs/tutorial_config.json)
     // window.LOAMLAB_VERSION is set dynamically from Ruby init (app.js receiveInit)

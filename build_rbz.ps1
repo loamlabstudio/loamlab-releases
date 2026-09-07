@@ -39,13 +39,18 @@ try {
 } catch {}
 
 # Determine output name and exclude list
+#
+# 'hero-bg'：8.3MB 的網站首圖，在插件端是**孤兒副本**——全專案唯一引用它的是
+#   loamlab_backend/public/index.html，走的是後端自己的 /images/hero-bg.jpg（該檔已存在）。
+#   插件的 TUTORIAL_CONFIG 完全沒有引用它，卻讓每位用戶每次更新都白下載 8.3MB。
+# '_wip'：CLAUDE.md 宣稱存在但實際不存在的隔離機制，2026-09-07 補上。
 if ($ew) {
     $outRbzName = "loamlab_plugin_ew.rbz"
-    $excludePatterns = @('node_modules', 'test_', 'package-lock.json', 'package.json', '.testsprite', 'test_screenshot', 'updater.rb')
+    $excludePatterns = @('_wip', 'hero-bg', 'node_modules', 'test_', 'package-lock.json', 'package.json', '.testsprite', 'test_screenshot', 'updater.rb')
     Write-Host "Packaging LoamLab Plugin (EW Submission Build)..." -ForegroundColor Yellow
 } else {
     $outRbzName = "loamlab_plugin.rbz"
-    $excludePatterns = @('node_modules', 'test_', 'package-lock.json', 'package.json', '.testsprite', 'test_screenshot')
+    $excludePatterns = @('_wip', 'hero-bg', 'node_modules', 'test_', 'package-lock.json', 'package.json', '.testsprite', 'test_screenshot')
     Write-Host "Packaging LoamLab Plugin (Direct Release Build)..."
 }
 

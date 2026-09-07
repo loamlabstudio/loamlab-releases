@@ -47,3 +47,11 @@ scripts/patch_webhook.*
 
 # 保險：任何 .env 變體一律不進版控
 .env*
+
+# === 內部策略與敏感運維腳本（不進公開版控）===
+# .agents/ 存放商業策略與行銷脈絡（競品定價分析、漏斗弱點、客群研究）。
+# moat-strategy.md 與 product-marketing-context.md 本來就未進版控，此處明文化該慣例。
+.agents/
+# 遷移腳本描述「原始碼誤公開於公開 repo」與完整撤下步驟。
+# 在遷移完成前，公開它等於公告「趁現在還沒撤趕快抓」。
+scripts/migrate_release_repo.ps1

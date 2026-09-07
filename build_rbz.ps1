@@ -67,6 +67,38 @@ if ($lintExit -ne 0) {
 }
 Write-Host "[Lint] OK - no ES2020+ syntax detected" -ForegroundColor Green
 
+# Ruby syntax check: JS 端一直有 ESLint 把關，Ruby 端先前完全沒有——
+# main.rb 有 110KB，語法打錯的症狀是「插件整個載不進去」，卻要等打包發布後才會發現。
+# SketchUp 2024 用 Ruby 3.1，這裡用同版本的 ruby -c 驗證。
+Write-Host "[Ruby] Checking plugin Ruby syntax..." -ForegroundColor Yellow
+$rubyExe = (Get-Command ruby -ErrorAction SilentlyContinue).Source
+if (-not $rubyExe) {
+    $rubyExe = (Get-ChildItem "C:\Ruby*\bin\ruby.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+}
+if ($rubyExe) {
+    $rbFiles = @("$sourceDir\loamlab_plugin.rb") + (Get-ChildItem "$sourceDir\loamlab_plugin" -Filter *.rb -Recurse -File |
+                 Where-Object { $_.FullName -notlike "*_wip*" } | ForEach-Object { $_.FullName })
+    $rbFail = 0
+    foreach ($rb in $rbFiles) {
+        $out = & $rubyExe -c $rb 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [FAIL] $rb" -ForegroundColor Red
+            Write-Host "         $out" -ForegroundColor Red
+            $rbFail++
+        }
+    }
+    if ($rbFail -gt 0) {
+        Write-Host "[ABORT] Ruby 語法錯誤 $rbFail 個檔案。修好再打包——這種錯會讓插件完全載不進去。" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "[Ruby] OK - $($rbFiles.Count) files, syntax valid" -ForegroundColor Green
+} else {
+    # 不裝死：說清楚少了什麼、以及少了會怎樣
+    Write-Host "[WARN] 找不到 ruby.exe，跳過 Ruby 語法檢查。" -ForegroundColor Yellow
+    Write-Host "       語法錯誤會讓插件完全無法載入，且只有實機才會發現。" -ForegroundColor Yellow
+    Write-Host "       安裝：winget install --id RubyInstallerTeam.Ruby.3.1 -e" -ForegroundColor DarkYellow
+}
+
 # === Release Gate Check ===
 Write-Host "[Gate] Running pre_release_check.ps1..." -ForegroundColor Cyan
 $gateScript = "$sourceDir\scripts\pre_release_check.ps1"

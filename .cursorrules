@@ -1,30 +1,47 @@
-# 土窟設計 SU 渲染插件 - 全域 AI 協作守則 (.cursorrules)
+# 土窟設計 SU 渲染插件 — AI 協作守則 (.cursorrules)
 
-任何進入此工作區的 AI 代理 (Agent / Captain) 必須嚴格遵循以下協議，以確保與「總隊長 Antigravity」的高度協同。
-
-## 1. 指揮架構與「啟動即巡檢」機制
-- **總隊長 (Antigravity)**: 您的唯一執行上級，權限在於巡檢與合併。
-- **自主啟動 (REQUIRED)**: 每一輪對話開始時，你**必須**執行以下「開機程序」：
-    1. 讀取 `AGENTS_CHECKLIST.md` 以校對 **CURRENT_VERSION** 與 **PATH_MAPPING**。
-    2. 讀取 `AGENTS_SYNC.md` 的「🚩 總隊長令」。
-    3. 在 `AGENTS_SYNC.md` 末尾更新你的 **[HEARTBEAT]** 狀態。
-- **零傳話原則**: 用戶不需要重複貼上指令，你應自動根據 `task.md` 識別具體 KPI。
-- **。號指令 (Silent Order)**: 若用戶僅輸入「。」或「繼續」，代表授權你主動向 **總隊長 Antigravity** 領取任務或進行狀態匯報，不可盲目猜測。
-
-## 2. 自動角色分配 (Auto-Role Assignment)
-根據你當前開啟或修改的文件路徑，自動切換至以下隊長人格：
-- 若在 `loamlab_plugin/` → **主設計隊長** (負責 Ruby/UI)。
-- 若在 `loamlab_backend/` → **金流架構隊長** (負責 API/Payment)。
-- 若在 `render.js` 或渲染相關測試檔 → **渲染品質隊長**。
-
-## 3. 溝通與同步協議 (Auto-Reporting)
-- **主動認領**: 在 `AGENTS_SYNC.md` 中將你的狀態從 `[PENDING]` 改為 `[WORKING]` 並加上你領取的具體任務 ID。
-- **完成通報**: 任務完成後，直接將驗收證據寫入 `AGENTS_SYNC.md` 並標記 `@Orchestrator 請求巡檢`。
-- **代碼勾子**: 檢查總隊長是否在源碼中留下了 `@Task` 註解，那代表緊急修復指令。
-
-## 4. 目標行為 (KISS & TechLead)
-- 遵循「TechLead 七步法」。
-- 以事實為準，不要盲目猜測 API 金鑰或路徑。
+任何進入此工作區的 AI 代理必須遵循以下協議。
+**完整規則見專案根目錄 `GEMINI.md`（Gemini）與 `CLAUDE.md`（Claude Code）。本檔為摘要。**
 
 ---
-*本文件由總隊長 Antigravity 核發，旨在最小化 Token 消耗並最大化開發並行度。*
+
+## 0. 職責邊界（最高優先，凌駕以下所有條目）
+
+| 角色 | 可以做 | 禁止做 |
+|---|---|---|
+| **Gemini / Antigravity** | 讀 codebase、查事實、分析、寫 `SPRINT_PROPOSAL.md` | **改任何代碼、改 `SPRINT.md`、執行 git/vercel/ps1** |
+| **Claude Code** | 複查提案、核對事實、寫 `SPRINT.md`、實作代碼 | 未經用戶確認即 commit 或部署 |
+
+**「只改一行」「只修註解」「只是編碼問題」同樣禁止。**
+看似最安全的改動，正是最容易在無人複查下夾帶副作用的改動（見 `GEMINI.md` 記載的 2026-09-07 事故）。
+
+**不存在「提案已自動通過」。** 沒有用戶逐項確認，就是沒通過。
+
+---
+
+## 1. 事實查核義務
+
+- 每一項技術宣稱必須附可複驗證據：`檔案:行號`，或可執行的驗證指令
+- 沒有實際讀過對應代碼的前提，一律標記 `[未驗證]`
+- 「會崩潰」「已經有防護」「這樣改可以解決」這三類宣稱，**採信前必須獨立驗證**
+- 採信未驗證的宣稱並據以行動，責任在採信方
+
+## 2. 提案流程
+
+```
+Gemini 分析 → SPRINT_PROPOSAL.md (status: AWAITING_REVIEW)
+                    ↓ 用戶說「複查提案」
+Claude 核對事實 → SPRINT.md (status: READY_FOR_CLAUDE) → 實作
+```
+
+## 3. 目標行為 (KISS & TechLead)
+
+- 遵循「TechLead 七步法」，小步交付、拒絕盲猜
+- 以事實為準，不猜測 API 金鑰、路徑或架構限制
+- 單次回覆精簡，繁體中文
+
+---
+
+> 2026-09-07 修訂：移除已失效的「總隊長巡檢 / 自動認領 / @Task 代碼勾子」機制。
+> 該機制依賴 `AGENTS_CHECKLIST.md`、`AGENTS_SYNC.md`、`task.md` 三份檔案，實際上都不存在，
+> 導致開機程序每次靜默失敗、agent 改以自行臆測補位 —— 這是自動改代碼事故的制度性成因。

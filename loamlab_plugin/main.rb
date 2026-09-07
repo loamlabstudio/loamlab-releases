@@ -78,6 +78,10 @@ module LoamLab
     @@requests        ||= []
     @@pending_results   = []
     @@polling_dialog    = nil
+    # 落地存檔進行中的 url（in-flight 去重）。cloud_index 只在寫檔成功後才更新，
+    # 光靠它擋不住「Ruby hook 與 JS 回呼幾乎同時觸發」的競態——兩邊都會在任一方
+    # 寫完前查到 index 沒有這個 url，於是各下載一次。這個表在「發起下載」當下就佔位。
+    @@saving_urls     ||= {}
     @@save_dir_360    ||= nil  # Tool 4 (360) 獨立存檔目錄
     @@pano_task         = nil  # 非同步全景拍攝任務狀態
     @@ao_unsupported    = false # 偵測：用戶是否在 classic engine（AO 不支持）
@@ -684,48 +688,20 @@ module LoamLab
         end
       end
 
-      # 5. AI 渲染結果自動存檔 → 下載圖片到 save_path
+      # 5. AI 渲染結果自動存檔 → 委派給 download_and_save_render（唯一實作）
+      #
+      # T1/T3/批量 的成功結果已由 handle_render_response 內的 deliver 包裝在 Ruby 端直接存檔，
+      # 這條 JS 回呼理論上會撞到 url 去重而直接略過。**但不能刪掉**：
+      # SmartCanvas (T2) 是前端直接 fetch /api/render，完全不經過 handle_render_response
+      # （Ruby 的 smart_canvas_execute callback 前端從未呼叫，是死碼），T2 只剩這條路能存檔。
       dialog.add_action_callback("auto_save_render") do |action_context, params|
-        url    = params["url"]
-        scene  = (params["scene"]      || "render").to_s.dup.force_encoding("UTF-8")
-        res    = (params["resolution"] || "2k").to_s
-        ts_in  = params["timestamp"].to_s
-
+        url = params["url"]
         next unless url
-
-        model        = Sketchup.active_model
-        project_name = (model.title.empty? ? "未命名專案" : model.title).to_s.dup.force_encoding("UTF-8")
-        save_path    = self.get_effective_save_path(model)
-        next if !File.directory?(save_path)
-
-        # 批量匯出時沿用擷取原圖當下的時間戳，讓 _render.jpg 跟對應的 _original.jpg 檔名前綴一致，
-        # 依檔名排序時同一場景的前後圖會緊鄰在一起；沒有對應原圖的流程（如非批量單張渲染）則退回目前時間。
-        timestamp = (ts_in =~ /\A\d{8}_\d{6}\z/) ? ts_in : Time.now.strftime("%Y%m%d_%H%M%S")
-        safe_project_name = project_name.gsub(/[:*?"<>|\\\/]/, "_")
-        safe_scene        = scene.gsub(/[:*?"<>|\\\/]/, "_")[0, 30]
-        # 檔名範例：20231027_120000_專案名稱_場景名稱_render.jpg
-        filename          = "#{timestamp}_#{safe_project_name}_#{safe_scene}_render.jpg"
-        full_path         = File.join(save_path, filename)
-        captured_url      = url.dup
-        captured_path     = full_path.dup
-        captured_filename = filename.dup
-
-        req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::GET)
-        @@requests << req
-        req.start do |r, res|
-          @@requests.delete(r)
-          LoamLab.log "[LoamLab] auto_save_render status=#{res.status_code}"
-          next unless res.status_code == 200
-          begin
-            File.binwrite(captured_path, res.body)
-            index = LoamLab.read_cloud_index
-            index[captured_path] = captured_url
-            LoamLab.write_cloud_index(index)
-            LoamLab.log "[LoamLab] auto_save_render OK: #{captured_filename}"
-          rescue => e
-            LoamLab.log "[LoamLab] auto_save_render failed: #{e.message}"
-          end
-        end
+        self.download_and_save_render(
+          url,
+          (params["scene"] || "render").to_s.dup.force_encoding("UTF-8"),
+          params["timestamp"].to_s
+        )
       end
 
       # 6. 列出已儲存的渲染歷史
@@ -1091,10 +1067,96 @@ module LoamLab
       headers
     end
 
+    # 渲染結果落地存檔（Ruby 直接下載，不經 JS 往返）。
+    #
+    # 為什麼要有這個：舊路徑是「Ruby 收到結果 → 塞 @@pending_results → 輪詢器丟給 JS →
+    # JS 回頭呼叫 auto_save_render」。但輪詢器的條件是 `unless @@pending_results.empty? || d.nil?`，
+    # 用戶在等待期間關掉面板，d 變成 nil，結果就永遠卡在佇列裡，圖再也不會下載——
+    # 點數已經扣了，圖卻沒落地。@@requests 與 UI.start_timer 都不依賴 dialog，改由 Ruby 直接存。
+    #
+    # 去重鍵用 url 不用檔名：檔名是「時間戳_專案_場景_render.jpg」，但只有批量路徑的 extra
+    # 會帶 timestamp，其餘 5 個呼叫點沒有，Ruby 與 JS 各自抓 Time.now，差一秒就是兩個不同檔名，
+    # 用檔名防重等於沒防，反而會存兩份。
+    def self.download_and_save_render(url, scene = nil, ts_in = nil, attempt = 1)
+      captured_url = url.to_s
+      return if captured_url.empty?
+
+      # 已存過（跨 session 有效，cloud_index 會落地）或正在下載中 → 略過
+      if attempt == 1
+        return if @@saving_urls[captured_url]
+        return if LoamLab.read_cloud_index.values.include?(captured_url)
+        @@saving_urls[captured_url] = true
+      end
+
+      model = Sketchup.active_model
+      return unless model
+      save_path = self.get_effective_save_path(model)
+      unless save_path && File.directory?(save_path)
+        @@saving_urls.delete(captured_url)
+        return
+      end
+
+      project_name = (model.title.to_s.empty? ? "未命名專案" : model.title).to_s.dup.force_encoding("UTF-8")
+      scene_s      = (scene || "render").to_s.dup.force_encoding("UTF-8")
+      ts           = (ts_in.to_s =~ /\A\d{8}_\d{6}\z/) ? ts_in.to_s : Time.now.strftime("%Y%m%d_%H%M%S")
+      safe_project = project_name.gsub(/[:*?"<>|\\\/]/, "_")
+      safe_scene   = scene_s.gsub(/[:*?"<>|\\\/]/, "_")[0, 30]
+      filename     = "#{ts}_#{safe_project}_#{safe_scene}_render.jpg"
+      full_path    = File.join(save_path, filename)
+
+      req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::GET)
+      @@requests << req
+      req.start do |r, res|
+        @@requests.delete(r)
+        LoamLab.log "[LoamLab] save_render status=#{res.status_code} attempt=#{attempt}"
+        if res.status_code.to_i == 200
+          begin
+            File.binwrite(full_path, res.body)
+            idx = LoamLab.read_cloud_index
+            idx[full_path] = captured_url
+            LoamLab.write_cloud_index(idx)
+            LoamLab.log "[LoamLab] save_render OK: #{filename}"
+          rescue => e
+            LoamLab.log "[LoamLab] save_render write failed: #{e.message}"
+          ensure
+            @@saving_urls.delete(captured_url)
+          end
+        elsif attempt < 4
+          # 非 200 就直接放棄會讓暫時性網路問題變成永久掉圖，改為退避重試 2s / 4s / 8s
+          delay = 2**attempt
+          LoamLab.log "[LoamLab] save_render 失敗，#{delay}s 後重試 (#{attempt}/3)"
+          UI.start_timer(delay, false) do
+            self.download_and_save_render(captured_url, scene_s, ts, attempt + 1)
+          end
+        else
+          LoamLab.log "[LoamLab] save_render 放棄（重試 #{attempt - 1} 次仍失敗）"
+          @@saving_urls.delete(captured_url)
+        end
+      end
+    rescue => e
+      @@saving_urls.delete(url.to_s)
+      LoamLab.log "[LoamLab] save_render exception: #{e.message}"
+    end
+
     # ─── 非同步渲染輪詢（AtlasCloud 任務可能耗時數分鐘，後端不再 long-poll 佔用連線）──
     # 解析 /api/render 回應：若 status == 'processing' 自動接手輪詢直到完成，否則直接組出最終 result；
     # 透過 on_result callback 統一回傳，呼叫端不需要知道背後是否輪詢過。
     def self.handle_render_response(response, headers, extra = {}, &on_result)
+      # 所有回報路徑統一包一層：成功結果先由 Ruby 落地存檔，再回報前端。
+      # 包在這裡而不是各別呼叫點，是因為 handle_render_response 全專案有 6 個呼叫點
+      # （882 / 1756 / 1791 / 1817 / 1850 / 2055），只改批量那一處會漏掉單張渲染與其他流程。
+      # 存檔失敗絕不影響回報，錯誤只記 log。
+      deliver = lambda do |result|
+        begin
+          if result[:status] == 'render_success' && result[:url]
+            self.download_and_save_render(result[:url], extra[:scene_name], extra[:timestamp])
+          end
+        rescue => e
+          LoamLab.log "[LoamLab] auto-save hook: #{e.message}"
+        end
+        on_result.call(result)
+      end
+
       begin
         raise "FUNCTION_PAYLOAD_TOO_LARGE" if response.status_code.to_i == 413
         data = JSON.parse(response.body.to_s.force_encoding("UTF-8").scrub("?"))
@@ -1112,12 +1174,12 @@ module LoamLab
             started_at: (Time.now.to_f * 1000).to_i
           }
           self.poll_render_task(data['task_id'], headers, meta) do |final_result|
-            on_result.call(final_result.merge(extra))
+            deliver.call(final_result.merge(extra))
           end
           return
         end
         if data['code'] == 0 && data['url']
-          on_result.call({ status: 'render_success', url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'], referral_bonus: data['referral_bonus'] }.merge(extra))
+          deliver.call({ status: 'render_success', url: data['url'], points_remaining: data['points_remaining'], transaction_id: data['transaction_id'], referral_bonus: data['referral_bonus'] }.merge(extra))
           return
         end
         # data['msg'] 缺失代表後端回應不符合任何已知形狀（例如中途被截斷的空 body）——
@@ -1127,9 +1189,9 @@ module LoamLab
         fallback_msg = known_msg || "系統回應異常（HTTP #{response.status_code}），無法確認是否已扣點或出圖，請至「渲染歷史」與點數餘額確認，如有異常請回報問題"
         result = { status: 'render_failed', message: self.sanitize_error(fallback_msg),
           points_refunded: data['points_refunded'], error: data['error'] }
-        on_result.call(result.merge(extra))
+        deliver.call(result.merge(extra))
       rescue => e
-        on_result.call({ status: 'render_failed', message: self.sanitize_error("解析失敗: #{e.message}") }.merge(extra))
+        deliver.call({ status: 'render_failed', message: self.sanitize_error("解析失敗: #{e.message}") }.merge(extra))
       end
     end
 

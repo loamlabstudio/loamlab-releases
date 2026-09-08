@@ -206,11 +206,55 @@ module LoamLab
       folder.force_encoding("UTF-8").gsub("\\", "/")
     end
 
+    # 讀取偏好設定的唯一入口。
+    #
+    # 為什麼一定要包起來：SketchUp 的 `Sketchup.read_default` 內部是用 **eval** 把存進去的
+    # 字串當 Ruby 求值。只要存過含大括號／換行／反斜線的內容（JSON 範本、Windows 路徑、
+    # 用戶自訂提示詞），讀回來就會拋 SyntaxError，而且是在呼叫端炸。
+    # 2026-09-08 實機重現：`dev_post_template_v2` 存了一段 JSON，
+    # 每次開啟面板時 getInitialData 都在這行拋 SyntaxError。
+    #
+    # 該區塊原本沒有任何 rescue，例外會讓整個初始化中斷、response 永遠送不出去——
+    # 面板拿不到 version / save_path / scenes / user_email。這很可能就是
+    # show_dialog 註解裡記載「開啟插件時凍結、需重開多次才能連上」卻查不出根因的那件事。
+    #
+    # 壞掉的值救不回來（read_default 在我們拿到它之前就炸了），退回預設值讓流程走下去，
+    # 用戶下次存檔即自癒。絕不讓一個偏好值毀掉整個初始化。
+    def self.safe_read_default(key, fallback = "")
+      Sketchup.read_default("LoamLabAI", key, fallback)
+    # 必須同時攔 ScriptError：read_default 內部是 eval，壞掉的值拋的是 **SyntaxError**，
+    # 而 SyntaxError < ScriptError < Exception，**不是** StandardError。
+    # 只寫 `rescue => e` 等於預設只攔 StandardError，這個例外會直接穿過去，防護形同虛設。
+    # （2026-09-08 實測驗證腳本抓到：第一版就是這樣寫的，完全沒擋住。）
+    rescue StandardError, ScriptError => e
+      LoamLab.log "[LoamLab] 偏好值 #{key} 讀取失敗（已存的內容無法解析），退回預設值：#{e.class}"
+      fallback
+    end
+
+    # 偏好值裡的「大字串」（JSON 範本、自訂提示詞等）一律以 Base64 存放。
+    # Base64 是純 ASCII、無引號無換行無反斜線，read_default 的 eval 永遠只會拿到一個乾淨字串，
+    # 從源頭消滅上面那類 SyntaxError，而不是靠 rescue 事後補救。
+    # 舊版存的是原始 JSON，這裡向下相容：內容不像 Base64 就當舊格式原樣回傳。
+    def self.encode_pref_blob(str)
+      Base64.strict_encode64(str.to_s)
+    rescue
+      str.to_s
+    end
+
+    def self.decode_pref_blob(raw)
+      s = raw.to_s
+      return "" if s.empty?
+      return s unless s =~ /\A[A-Za-z0-9+\/\r\n]+={0,2}\z/   # 不像 Base64 → 舊格式，原樣回傳
+      Base64.strict_decode64(s).force_encoding("UTF-8")
+    rescue
+      s
+    end
+
     # 取得當前有效的儲存路徑：per-model → global default → Downloads
     def self.get_effective_save_path(model)
       path = model.get_attribute("LoamLabAI", "save_path", "")
       if path.empty? || !File.directory?(path)
-        path = Sketchup.read_default("LoamLabAI", "global_save_path", "")
+        path = self.safe_read_default("global_save_path", "")
       end
       if path.empty? || !File.directory?(path)
         path = self.get_downloads_folder
@@ -278,12 +322,13 @@ module LoamLab
         # 避免 model.rendering_options / Sketchup.active_model 等 API 呼叫與畫面繪製搶主執行緒。
         # 低成本保險：即使不是真因也不影響現有功能。
         UI.start_timer(0.3, false) do
+         begin
           model = Sketchup.active_model
           save_path = self.get_effective_save_path(model)
-          user_email = Sketchup.read_default("LoamLabAI", "user_email", "")
-          saved_lang = Sketchup.read_default("LoamLabAI", "ui_lang", "")
+          user_email = self.safe_read_default("user_email", "")
+          saved_lang = self.safe_read_default("ui_lang", "")
 
-          device_id = Sketchup.read_default("LoamLabAI", "device_id", "")
+          device_id = self.safe_read_default("device_id", "")
           if device_id.to_s.strip.empty?
             device_id = "10000000-1000-4000-8000-100000000000".gsub(/0/){rand(16).to_s(16)}
             Sketchup.write_default("LoamLabAI", "device_id", device_id)
@@ -293,8 +338,8 @@ module LoamLab
           ao_unsupported = RENDER_KEYS['AmbientOcclusion'] == true &&
                            !model.rendering_options.keys.include?('AmbientOcclusion')
 
-          dev_post_template_v2 = Sketchup.read_default("LoamLabAI", "dev_post_template_v2", "")
-          last_resolution = Sketchup.read_default("LoamLabAI", "last_resolution", "1k")
+          dev_post_template_v2 = self.decode_pref_blob(self.safe_read_default("dev_post_template_v2", ""))
+          last_resolution = self.safe_read_default("last_resolution", "1k")
 
           response = {
             status: 'success',
@@ -321,6 +366,31 @@ module LoamLab
           end
           # 注意：apply_render_keys 已移至 batch_export_scenes 渲染開始時才呼叫
           # 此處不再套用強制樣式，避免插件開啟時就改變 SketchUp 視圖
+         rescue StandardError, ScriptError => e
+          # 同時攔 ScriptError：壞掉的偏好值經 read_default 的 eval 拋的是 SyntaxError，
+          # 它不是 StandardError，只寫 `rescue => e` 攔不到。
+          # 初始化不能因為單一欄位失敗就整個中斷。
+          # 這個區塊先前沒有任何 rescue：任一 read_default／SketchUp API 失敗，
+          # response 就永遠送不出去，面板停在等待狀態拿不到 version／save_path／scenes，
+          # 用戶感受到的就是「開不起來、要重開好幾次才連得上」——正是上方註解記載
+          # 卻查不出根因的那個症狀。2026-09-08 由 dev_post_template_v2 的
+          # SyntaxError 實機重現。
+          # 這裡改為降級回應：核心欄位照送，面板至少能起來，缺的資料各自有預設值。
+          LoamLab.log "[LoamLab] getInitialData 失敗，改送降級回應: #{e.class}: #{e.message}"
+          begin
+            minimal = {
+              status: 'success',
+              version: LoamLab::VERSION,
+              api_base: LoamLab::API_BASE_URL,
+              build_type: LoamLab::BUILD_TYPE,
+              dist_channel: LoamLab::DIST_CHANNEL,
+              degraded: true
+            }
+            dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(minimal.to_json)}')")
+          rescue => e2
+            LoamLab.log "[LoamLab] 連降級回應都送不出: #{e2.message}"
+          end
+         end
         end
       end
 
@@ -367,7 +437,7 @@ module LoamLab
           res = params["resolution"]
           tmpl = params["dev_post_template_v2"]
           Sketchup.write_default("LoamLabAI", "last_resolution", res.to_s) unless res.nil? || res.to_s.empty?
-          Sketchup.write_default("LoamLabAI", "dev_post_template_v2", tmpl.to_s) unless tmpl.nil?
+          Sketchup.write_default("LoamLabAI", "dev_post_template_v2", self.encode_pref_blob(tmpl)) unless tmpl.nil?
         end
       end
 
@@ -717,7 +787,7 @@ module LoamLab
           # 收集所有曾用過的存檔目錄：model 專屬 + global + Downloads
           scan_dirs = [
             model.get_attribute("LoamLabAI", "save_path", ""),
-            Sketchup.read_default("LoamLabAI", "global_save_path", ""),
+            self.safe_read_default("global_save_path", ""),
             self.get_downloads_folder
           ].uniq.select { |p| !p.empty? && File.directory?(p) }
 
@@ -996,7 +1066,7 @@ module LoamLab
               force_style: force_style,
               lang: lang,
               cubemap_size: cubemap_size,
-              user_email: Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+              user_email: self.safe_read_default("user_email", "").to_s.force_encoding("UTF-8").scrub("?")
             }
 
             dialog.execute_script("window.receiveFromRuby(#{JSON.generate({status:'rendering', message:"全景圖擷取中 (0/#{scenes_to_capture.length})..."})})")
@@ -1021,7 +1091,7 @@ module LoamLab
     # 有存到就一併帶上 Authorization: Bearer，後端會優先信任這個、忽略 header 自報的信箱。
     # 沒有 token（例如剛升級、尚未重新登入過）就只送 x-user-email，行為與升級前完全一致。
     def self.stored_access_token
-      Sketchup.read_default("LoamLabAI", "access_token", "").to_s.strip
+      self.safe_read_default("access_token", "").to_s.strip
     end
 
     def self.auth_headers(email, version = ::LoamLab::VERSION)
@@ -1846,7 +1916,7 @@ module LoamLab
       # 工具 2 (Smart Canvas)：遠端 URL 直接透傳 render.js，不讀本地檔案
       if tool == 2 && !base_image_url.empty? && base_image_url.start_with?("http")
         begin
-          user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+          user_email = self.safe_read_default("user_email", "").to_s.force_encoding("UTF-8").scrub("?")
           params_hash = {
             "base_image_url" => base_image_url,
             "user_prompt"    => user_prompt,
@@ -1881,7 +1951,7 @@ module LoamLab
           end
           img_data   = self.read_and_maybe_compress(local_path)
           base_data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
-          user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+          user_email = self.safe_read_default("user_email", "").to_s.force_encoding("UTF-8").scrub("?")
           params_hash = {
             "base_image"   => base_data_uri,
             "user_prompt"  => user_prompt,
@@ -1909,7 +1979,7 @@ module LoamLab
       # 非 T2 工具（T3 等）底圖模式：雲端 URL 直接透傳，跳過 SketchUp 截圖
       if tool != 2 && !base_image_url.empty? && base_image_url.start_with?("http")
         begin
-          user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+          user_email = self.safe_read_default("user_email", "").to_s.force_encoding("UTF-8").scrub("?")
           request_body = JSON.dump({
             tool: tool,
             parameters: { "image" => [base_image_url], "user_prompt" => user_prompt, "resolution" => resolution, "aspect_ratio" => "16:9" },
@@ -1942,7 +2012,7 @@ module LoamLab
           end
           img_data   = self.read_and_maybe_compress(local_path)
           data_uri   = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
-          user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+          user_email = self.safe_read_default("user_email", "").to_s.force_encoding("UTF-8").scrub("?")
           request_body = JSON.dump({
             tool: tool,
             parameters: { "image" => [data_uri], "user_prompt" => user_prompt, "resolution" => resolution, "aspect_ratio" => "16:9" },
@@ -2090,7 +2160,7 @@ module LoamLab
                   img_data = File.read(temp_img_path, mode: 'rb')
                   data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
 
-                  user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+                  user_email = self.safe_read_default("user_email", "").to_s.force_encoding("UTF-8").scrub("?")
                   scene_params = {
                     "image" => [data_uri], "user_prompt" => user_prompt,
                     "resolution" => resolution, "aspect_ratio" => closest_ratio

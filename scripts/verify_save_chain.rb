@@ -92,6 +92,39 @@ module LoamLabVerify
         fails << "build_save_path 未處理超長路徑"
       end
 
+      # ── 4. 偏好值讀取安全性 ─────────────────────────────────────
+      # SketchUp 的 read_default 內部用 eval 求值存進去的字串。
+      # 存過含大括號／換行／反斜線的內容（JSON 範本、Windows 路徑），讀回來會拋 SyntaxError，
+      # 而 getInitialData 先前沒有 rescue，一炸整個初始化就中斷、面板拿不到資料。
+      puts "\n[4] 偏好值讀取安全性"
+      if M.respond_to?(:safe_read_default) && M.respond_to?(:encode_pref_blob)
+        risky = "{\"layout\":\"參數分享------\n{zhLine}\",\"tags\":[\"#室內設計\"]}"
+        enc   = M.encode_pref_blob(risky)
+        dec   = M.decode_pref_blob(enc)
+        clean = !(enc =~ /[{}\n\\"]/)
+        puts "    編碼後含危險字元? #{clean ? '否（eval 不會誤解）' : '是'}"
+        puts "    來回還原一致?     #{dec == risky}"
+        puts "    舊格式相容?       #{M.decode_pref_blob(risky) == risky}"
+        if clean && dec == risky && M.decode_pref_blob(risky) == risky
+          puts "    OK  大字串以 Base64 存放，不會再炸"
+        else
+          puts "    X   編碼或相容處理有誤"
+          fails << "encode/decode_pref_blob 行為不正確"
+        end
+        # 真正讀一次目前存著的值，確認不會拋例外
+        begin
+          M.safe_read_default("dev_post_template_v2", "")
+          M.safe_read_default("global_save_path", "")
+          puts "    OK  實際讀取現有偏好值未拋例外"
+        rescue => e
+          puts "    X   仍會拋例外: #{e.class}"
+          fails << "safe_read_default 沒擋住例外"
+        end
+      else
+        puts "    X   缺少 safe_read_default / encode_pref_blob，熱重載沒吃到新版"
+        fails << "偏好值安全存取未載入"
+      end
+
     ensure
       reserved.clear
       backup.each { |k, v| reserved[k] = v }

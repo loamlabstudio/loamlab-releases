@@ -51,22 +51,40 @@ function sanitizeUserPrompt(raw) {
 
 // ── 模型適配器登錄表：新增模型只需加一條 entry ──
 // key = AtlasCloud model ID 前綴；value = (images, prompt, res) => 參數物件
+// ── 出圖比例：單一事實來源 ──────────────────────────────────────────────
+//
+// 不變量：**出圖比例 = 插件實際送上來那張圖的比例**。插件端已改為量實際檔案後才送，
+// 所以這裡只要照用，不要再自己決定。
+//
+// 先前每個轉接器各自判斷（`activeTool === 2 ? aspectRatio : '3:2'`），
+// 加上 gpt-image-2 完全不看比例、寫死 1536x1024，等於比例由四個地方各自決定。
+// 只要有一處與實際圖片不符，渲染前後的對比圖就對不上——這正是用戶回報的症狀，
+// 也是 AtlasCloud 後台看到「同樣是 T1，請求比例卻不一樣」的原因。
+const DEFAULT_ASPECT = '3:2';   // 插件沒送時的保底值（T1 截圖目標就是 3:2）
+
 const MODEL_ADAPTERS = {
-    'openai/gpt-image-2': (images, prompt, res) => {
+    // gpt-image 只接受三種固定尺寸，取最接近要求比例的那個。
+    // 先前寫死 '1536x1024'：不但無視比例，連 1K/2K/4K 都輸出同樣像素，
+    // 4K 扣 30 點卻和 1K 的 15 點拿到一樣大的圖。
+    'openai/gpt-image-2': (images, prompt, res, _activeTool, aspectRatio) => {
         const qualityMap = { '1k': 'low', '2k': 'medium', '4k': 'high' };
-        return { images, prompt, quality: qualityMap[res] || 'medium', size: '1536x1024' };
+        const SIZES = { '1024x1024': 1, '1536x1024': 1.5, '1024x1536': 1024 / 1536 };
+        const target = ratioToNumber(aspectRatio || DEFAULT_ASPECT);
+        const size = Object.keys(SIZES).reduce(
+            (best, k) => Math.abs(SIZES[k] - target) < Math.abs(SIZES[best] - target) ? k : best,
+            '1536x1024'
+        );
+        return { images, prompt, quality: qualityMap[res] || 'medium', size };
     },
-    'google/nano-banana': (images, prompt, res, activeTool, aspectRatio) => ({
+    'google/nano-banana': (images, prompt, res, _activeTool, aspectRatio) => ({
         images, prompt, resolution: res,
-        // T1/T3 對齊 gpt-image-2 的 3:2 固定尺寸（1536x1024），三工具出圖比例一致
-        aspect_ratio: activeTool === 2 ? (aspectRatio || '16:9') : '3:2',
+        aspect_ratio: aspectRatio || DEFAULT_ASPECT,
         output_format: 'jpeg'
     }),
     // ByteDance Seedream 用「WIDTH*HEIGHT」像素字串，不吃 resolution/aspect_ratio；
     // 三檔像素預算對齊官方文件範例（1024x1024 / ~1536x1536 / 2048x2048）
-    'bytedance/seedream': (images, prompt, res, activeTool, aspectRatio) => {
-        const ratio = activeTool === 2 ? (aspectRatio || '16:9') : '3:2';
-        const sizeStr = seedreamSize(res, ratio);
+    'bytedance/seedream': (images, prompt, res, _activeTool, aspectRatio) => {
+        const sizeStr = seedreamSize(res, aspectRatio || DEFAULT_ASPECT);
         const [w, h] = sizeStr.split('*').map(Number);
         return {
             images, prompt,
@@ -75,6 +93,65 @@ const MODEL_ADAPTERS = {
         };
     }
 };
+
+function ratioToNumber(ratio) {
+    const [w, h] = String(ratio).split(':').map(Number);
+    return (w > 0 && h > 0) ? w / h : 1.5;
+}
+
+const ASPECT_OPTIONS = {
+    '1:1': 1, '3:2': 1.5, '2:3': 2 / 3, '3:4': 0.75, '4:3': 4 / 3,
+    '4:5': 0.8, '5:4': 1.25, '9:16': 9 / 16, '16:9': 16 / 9, '21:9': 21 / 9
+};
+function nearestAspect(w, h) {
+    if (!(w > 0) || !(h > 0)) return null;
+    const r = w / h;
+    return Object.keys(ASPECT_OPTIONS).reduce(
+        (best, k) => Math.abs(ASPECT_OPTIONS[k] - r) < Math.abs(ASPECT_OPTIONS[best] - r) ? k : best,
+        '3:2');
+}
+
+// 從 JPEG 位元組直接讀寬高（掃 SOF 標記），不需要任何影像函式庫。
+// 為什麼放在後端：**握有圖片的一端才該決定比例**。
+// 客戶端宣告的值會因為插件版本而不同——1.4.74 以前的底圖模式一律送寫死的 '16:9'，
+// 即使底圖其實是 3:2。信任那個值等於把「前後圖比例一致」這件事綁在用戶有沒有更新插件上。
+// 後端手上就有這張圖，量它最準，也不需要跟任何人協調。
+function jpegDimensions(buf) {
+    try {
+        if (buf.length < 4 || buf[0] !== 0xFF || buf[1] !== 0xD8) return null;
+        let i = 2;
+        while (i < buf.length - 9) {
+            if (buf[i] !== 0xFF) { i++; continue; }
+            const marker = buf[i + 1];
+            // SOF0..SOF15，排除 DHT(C4)/JPG(C8)/DAC(CC) 這三個非 SOF
+            if (marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC) {
+                return { height: buf.readUInt16BE(i + 5), width: buf.readUInt16BE(i + 7) };
+            }
+            i += 2 + buf.readUInt16BE(i + 2);
+        }
+    } catch (_) { /* 格式非預期就當測不到，交給下一層 fallback */ }
+    return null;
+}
+
+// 決定出圖比例。優先序即是「離事實的遠近」：
+//   1. 直接量 data URL 圖片本身（最準，與插件版本無關）
+//   2. 客戶端宣告值（新版插件已改為量實際檔案後才送）
+//   3. 3:2（T1 截圖目標）
+function resolveAspectRatio(atlasImages, clientAspect) {
+    const first = Array.isArray(atlasImages) ? atlasImages[0] : null;
+    if (typeof first === 'string' && first.startsWith('data:image')) {
+        const b64 = first.slice(first.indexOf(',') + 1);
+        const dim = jpegDimensions(Buffer.from(b64, 'base64'));
+        const measured = dim && nearestAspect(dim.width, dim.height);
+        if (measured) {
+            if (clientAspect && clientAspect !== measured) {
+                console.warn(`[render] 客戶端宣告 aspect_ratio=${clientAspect}，實測圖片為 ${dim.width}x${dim.height}(${measured})，以實測為準`);
+            }
+            return measured;
+        }
+    }
+    return clientAspect || DEFAULT_ASPECT;
+}
 
 const SEEDREAM_PIXEL_BUDGET = { '1k': 1048576, '2k': 2359296, '4k': 4194304 };
 function seedreamSize(res, ratio) {
@@ -968,8 +1045,11 @@ async function _handleRender(req, res) {
         }));
 
         const normalizedRes = resolutionMap[resVal] || '2k';
-        const aspectRatioOverride = activeTool === 2 ? (userPayload.parameters?.aspect_ratio || null) : null;
-        const reqBody = buildAtlasReqBody(finalModel, atlasImages, finalPrompt, normalizedRes, activeTool, aspectRatioOverride);
+        // 出圖比例：以實際圖片為準，量不到才退回客戶端宣告值。不再依工具分流。
+        // 先前這裡對 T1/T3 一律丟掉客戶端的值、強制 3:2；而舊版插件的底圖模式又寫死送 16:9。
+        // 兩邊各自宣告、誰也不看圖，於是 AtlasCloud 後台才會出現「同樣是 T1，比例卻不一樣」。
+        const finalAspect = resolveAspectRatio(atlasImages, userPayload.parameters?.aspect_ratio || null);
+        const reqBody = buildAtlasReqBody(finalModel, atlasImages, finalPrompt, normalizedRes, activeTool, finalAspect);
 
         const response = await fetch('https://api.atlascloud.ai/api/v1/model/generateImage', {
             method: 'POST',

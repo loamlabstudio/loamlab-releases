@@ -1893,6 +1893,44 @@ module LoamLab
       [w, h]
     end
 
+    # ── 出圖比例的單一事實來源 ────────────────────────────────────────────
+    #
+    # 不變量：**出圖比例 = 實際送出去那張圖的比例**。
+    #
+    # 先前比例由四個地方各自決定：截圖目標、插件送出的字串、後端的工具分支、
+    # 各模型轉接器。任何一處與實際圖片不符，渲染前後的對比圖就對不上。
+    # 尤其 crop_center_to_ratio 整段包在 rescue 裡，裁切失敗時會靜默保留原生視窗比例，
+    # 但插件仍然宣告 3:2 —— 宣告與事實脫節，前後圖必然不同。
+    #
+    # 解法不是再加一層協調，而是拿掉「宣告」：量實際檔案，送實際比例。
+    # 裁切成功送 3:2、裁切失敗送原生比例，兩種情況下前後圖都一致。
+    ASPECT_OPTIONS = {
+      '1:1' => 1.0, '3:2' => 1.5, '2:3' => 2.0 / 3, '3:4' => 0.75, '4:3' => 4.0 / 3,
+      '4:5' => 0.8, '5:4' => 1.25, '9:16' => 9.0 / 16, '16:9' => 16.0 / 9, '21:9' => 21.0 / 9
+    }.freeze
+
+    # 對齊 app.js 的 getNearestAspectRatio，兩端用同一份清單（AtlasCloud 支援的比例）
+    def self.nearest_aspect_ratio(w, h)
+      return '3:2' if w.to_f <= 0 || h.to_f <= 0
+      r = w.to_f / h
+      ASPECT_OPTIONS.min_by { |_name, v| (r - v).abs }.first
+    end
+
+    # 量實際檔案的比例。讀不到就退回 3:2（與截圖目標一致，不會讓情況更糟）。
+    def self.measure_aspect_ratio(path, fallback = '3:2')
+      return fallback unless File.exist?(path)
+      ir = Sketchup::ImageRep.new
+      ir.load_file(path)
+      w, h = ir.width, ir.height
+      return fallback if w.to_i <= 0 || h.to_i <= 0
+      ratio = self.nearest_aspect_ratio(w, h)
+      LoamLab.log "[LoamLab] 實際出圖尺寸 #{w}x#{h} → aspect_ratio #{ratio}"
+      ratio
+    rescue StandardError, ScriptError => e
+      LoamLab.log "[LoamLab] 量測比例失敗，沿用 #{fallback}: #{e.class}"
+      fallback
+    end
+
     # 依「場景原始構圖」擷取（不鎖定/不撐開 camera.aspect_ratio），
     # 擷取解析度依原生視窗比例放大到至少覆蓋 target_w x target_h，再置中裁切到目標比例
     def self.capture_native_then_crop(view, path, target_w, target_h, quality: nil)
@@ -2022,9 +2060,15 @@ module LoamLab
       if tool != 2 && !base_image_url.empty? && base_image_url.start_with?("http")
         begin
           user_email = self.safe_read_default("user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+          # 底圖是雲端 URL，無法直接量。但 cloud_index 存的就是「本機檔案 → 雲端 URL」的對應，
+          # 反查得到本機那份就能量出真實比例。查不到才退回 3:2（與 T1 出圖一致，
+          # 因為底圖幾乎都是先前 T1 算出來的圖）。
+          # 原本這裡寫死 16:9：底圖多半是 3:2 的 T1 成果，硬要 16:9 出來當然對不上。
+          local_copy = LoamLab.read_cloud_index.key(base_image_url)
+          base_ratio = local_copy ? self.measure_aspect_ratio(local_copy, '3:2') : '3:2'
           request_body = JSON.dump({
             tool: tool,
-            parameters: { "image" => [base_image_url], "user_prompt" => user_prompt, "resolution" => resolution, "aspect_ratio" => "16:9" },
+            parameters: { "image" => [base_image_url], "user_prompt" => user_prompt, "resolution" => resolution, "aspect_ratio" => base_ratio },
             "advanced_settings" => advanced_settings
           })
           req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
@@ -2055,9 +2099,11 @@ module LoamLab
           img_data   = self.read_and_maybe_compress(local_path)
           data_uri   = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
           user_email = self.safe_read_default("user_email", "").to_s.force_encoding("UTF-8").scrub("?")
+          # 底圖就在本機，直接量它的實際比例（原本寫死 16:9，底圖是 3:2 就會對不上）
+          base_ratio = self.measure_aspect_ratio(local_path, '3:2')
           request_body = JSON.dump({
             tool: tool,
-            parameters: { "image" => [data_uri], "user_prompt" => user_prompt, "resolution" => resolution, "aspect_ratio" => "16:9" },
+            parameters: { "image" => [data_uri], "user_prompt" => user_prompt, "resolution" => resolution, "aspect_ratio" => base_ratio },
             "advanced_settings" => advanced_settings
           })
           req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
@@ -2202,10 +2248,15 @@ module LoamLab
                   img_data = File.read(temp_img_path, mode: 'rb')
                   data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
 
+                  # 送「實際這張圖的比例」，不是宣告的目標比例。
+                  # crop_center_to_ratio 失敗時會靜默保留原生視窗比例，
+                  # 若這裡仍宣告 closest_ratio，出圖就會跟原圖對不上。量實際檔案就沒有這個縫。
+                  actual_ratio = self.measure_aspect_ratio(temp_img_path, closest_ratio)
+
                   user_email = self.safe_read_default("user_email", "").to_s.force_encoding("UTF-8").scrub("?")
                   scene_params = {
                     "image" => [data_uri], "user_prompt" => user_prompt,
-                    "resolution" => resolution, "aspect_ratio" => closest_ratio
+                    "resolution" => resolution, "aspect_ratio" => actual_ratio
                   }
                   scene_params["style_ref_url"] = user_style_ref_url unless user_style_ref_url.to_s.strip.empty?
                   request_body = JSON.dump({
@@ -2236,6 +2287,10 @@ module LoamLab
                       img_data = File.read(temp_img_path, mode: 'rb')
                       data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
                       scene_params["image"] = [data_uri]
+
+                      # 重新截圖後比例可能改變（裁切這次成功或失敗都有可能），重新量一次
+
+                      scene_params["aspect_ratio"] = self.measure_aspect_ratio(temp_img_path, actual_ratio)
                       request_body = JSON.dump({ tool: tool, parameters: scene_params, "advanced_settings" => advanced_settings })
                       LoamLab.log "[LoamLab] Payload 壓縮 q#{(estimated_q * 100).round}% → #{request_body.bytesize / 1024}KB"
                       # JPEG 非線性導致仍超：最後縮解析度（保持同 quality、3:2 比例）
@@ -2244,6 +2299,10 @@ module LoamLab
                         img_data = File.read(temp_img_path, mode: 'rb')
                         data_uri = "data:image/jpeg;base64,#{Base64.strict_encode64(img_data)}"
                         scene_params["image"] = [data_uri]
+
+                        # 重新截圖後比例可能改變（裁切這次成功或失敗都有可能），重新量一次
+
+                        scene_params["aspect_ratio"] = self.measure_aspect_ratio(temp_img_path, actual_ratio)
                         request_body = JSON.dump({ tool: tool, parameters: scene_params, "advanced_settings" => advanced_settings })
                         LoamLab.log "[LoamLab] Payload 降解析度 1152x768 → #{request_body.bytesize / 1024}KB"
                       end

@@ -309,14 +309,43 @@ T4 360 分享                    → 分享連結非圖片，前端提早 return
 ## RELEASE_GATE
 
 ```
-release_type: hotfix
+release_type: feature
 verified_diff:
   - build_rbz.ps1
   - loamlab_plugin.rb
+  - loamlab_plugin/config.rb
+  - loamlab_plugin/main.rb
+  - loamlab_plugin/ui/app.js
+  - loamlab_plugin/ui/index.html
+  - loamlab_backend/api/render.js
+  - loamlab_backend/api/version.js
+  - loamlab_backend/public/360-viewer.html
+  - loamlab_backend/public/share.html
+  - loamlab_backend/public/images
+  - scripts/verify_save_chain.rb
+  - scripts/verify_aspect.rb
+  - .cursorrules
+  - .gitignore
+  - GEMINI.md
+  - SPRINT.md
+  - .agents/moat-strategy.md
+  - .agents/product-marketing-context.md
+  - loamlab_plugin.rbz
 sql_migration: false
 ```
 
-> 上述 gate 只涵蓋 T0 + T1，這兩項都已於 2026-09-07 完成。
+> **v1.4.75 涵蓋 T0／T1／T2／T3／T6／T7／T8。**
+> 判為 `feature` 而非 `hotfix`：跨插件端與後端多個模組，且含存檔鏈重整與出圖比例架構變更。
+>
+> 逐項實測紀錄：
+> - `ruby -c` 全數 Syntax OK（本機已安裝 Ruby 3.1.7，與 SketchUp 2024 同版本）
+> - `node --check` + ESLint(ES2019) 零錯誤；`check_cjs.ps1` 通過
+> - 存檔鏈：`scripts/verify_save_chain.rb` 四區塊全過（用戶實機確認）
+> - 出圖比例：`scripts/verify_aspect.rb` 掃 120 組成對圖，修復後樣本一致
+> - 後端已先行部署，線上 `/api/version` 與首頁均正常
+>
+> `.agents/moat-strategy.md` 與 `product-marketing-context.md` 出現在 diff 是因為
+> **從公開版控移除**（商業策略不該存在於公開 repo），非內容變更。
 > T2 / T3 / T6 任一項完成後都要重填 `verified_diff` 並把 `release_type` 改成 `feature`——
 > T6 會動到 `main.rb` 的存檔路徑和 `app.js`，不屬於 hotfix 範圍。
 

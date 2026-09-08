@@ -4,6 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LoamLab 360° 全景</title>
+
+  <!-- 社群預覽：先前完全沒有 og 標籤，設計師把 360 連結傳給客戶時，
+       對方看到的是一條沒有標題、沒有縮圖、沒有來源的裸連結。
+       360 是 0 點免費工具、我方零 API 成本，每一次分享都該帶回歸屬。
+       註：爬蟲不執行 JS，所以 og:image 只能是靜態圖，無法用當次全景。 -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="LoamLab">
+  <meta property="og:title" content="360° 全景空間 | LoamLab Camera">
+  <meta property="og:description" content="用 SketchUp 直接生成的 360 度全景，拖曳即可環顧整個空間，免安裝任何軟體。">
+  <meta property="og:image" content="https://loamlab-camera.vercel.app/images/hero-bg.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="360° 全景空間 | LoamLab Camera">
+  <meta name="twitter:description" content="用 SketchUp 直接生成的 360 度全景，拖曳即可環顧整個空間。">
+  <meta name="twitter:image" content="https://loamlab-camera.vercel.app/images/hero-bg.jpg">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #000; overflow: hidden; font-family: sans-serif; }
@@ -18,7 +32,16 @@
     #error { position: fixed; inset: 0; background: #111; display: none;
       flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #fff; text-align: center; }
     #error h2 { font-size: 18px; } #error p { color: rgba(255,255,255,.5); font-size: 13px; }
-    #brand { position: fixed; top: 12px; left: 14px; color: rgba(255,255,255,.3); font-size: 11px; }
+    #brand { position: fixed; top: 12px; left: 14px; color: rgba(255,255,255,.3); font-size: 11px;
+      text-decoration: none; z-index: 10; }
+    #brand:hover { color: rgba(255,255,255,.7); }
+    /* 回程入口：客戶看到成果後唯一能找到來源的地方。刻意低調，不擋畫面。 */
+    #cta { position: fixed; bottom: 16px; right: 16px; z-index: 10;
+      display: inline-block; padding: 7px 14px; border-radius: 999px;
+      background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.18);
+      color: rgba(255,255,255,.6); font-size: 11px; text-decoration: none;
+      transition: color .2s, border-color .2s, background .2s; }
+    #cta:hover { color: #fff; border-color: rgba(255,255,255,.45); background: rgba(0,0,0,.75); }
     #nav { position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
       display: none; gap: 6px; align-items: center; z-index: 10; }
     #nav button { background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.2);
@@ -42,7 +65,8 @@
     <p>此分享連結已失效（7 天有效期）<br>請重新從 LoamLab 插件產生</p>
   </div>
   <div id="container"></div>
-  <div id="brand">LoamLab AI Renderer</div>
+  <a id="brand" href="https://loamlab-camera.vercel.app" target="_blank" rel="noopener">LoamLab Camera</a>
+  <a id="cta" href="https://loamlab-camera.vercel.app" target="_blank" rel="noopener">用 SketchUp 做出這個</a>
   <div id="nav"></div>
   <div id="scene-label"></div>
   <div id="ui"><span id="msg">拖曳旋轉 · 滾輪縮放</span></div>
@@ -53,6 +77,19 @@
     const shareId = _params.get('id');
     const _sc = _params.get('sc') || '';
     const _sn = _params.get('sn') || '';
+
+    // 分享連結若帶 ref，回程入口一併帶上，讓分享者拿得到邀請獎勵。
+    // share.html 已有把 ref 寫進 localStorage/cookie 的邏輯，這裡只負責把碼傳過去。
+    (function attachRef() {
+      const ref = _params.get('ref');
+      if (!ref) return;
+      const q = '?ref=' + encodeURIComponent(ref);
+      ['brand', 'cta'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) el.href = el.href.replace(/\/?$/, '') + q;
+      });
+    })();
+
     if (!shareId) { showError(); } else { loadPano(shareId); }
 
     function showError() {

@@ -85,6 +85,7 @@ module LoamLab
     # 已被本次 session 佔用的存檔路徑 => url。批量是並行下載，前一張還沒寫進磁碟、
     # 後一張就已經在配路徑，光靠 File.exist? 兩邊都會選到同一個名字而互相覆蓋。
     @@reserved_paths  ||= {}
+    @@pref_blobs_migrated ||= false   # 偏好值 Base64 遷移每個 session 只做一次
     @@save_dir_360    ||= nil  # Tool 4 (360) 獨立存檔目錄
     @@pano_task         = nil  # 非同步全景拍攝任務狀態
     @@ao_unsupported    = false # 偵測：用戶是否在 classic engine（AO 不支持）
@@ -218,8 +219,14 @@ module LoamLab
     # 面板拿不到 version / save_path / scenes / user_email。這很可能就是
     # show_dialog 註解裡記載「開啟插件時凍結、需重開多次才能連上」卻查不出根因的那件事。
     #
-    # 壞掉的值救不回來（read_default 在我們拿到它之前就炸了），退回預設值讓流程走下去，
-    # 用戶下次存檔即自癒。絕不讓一個偏好值毀掉整個初始化。
+    # ⚠️ 2026-09-08 實機更正：這個 rescue **攔不到**那個 SyntaxError，因為
+    # SketchUp 的 read_default 在內部就自己 rescue 掉、把錯誤印到 Ruby 主控台、然後回傳預設值，
+    # 例外根本不會傳出來（實測：本方法的 log 一次都沒印過，而流程照常往下走）。
+    # 所以那則主控台訊息**不是**功能中斷，是 SketchUp 自己的噪音，Ruby 端蓋不掉。
+    # 保留這個 rescue 是防其他 SketchUp 版本行為不同時的保險，成本近乎零。
+    #
+    # 真正的功能損失是：壞掉的值永遠讀回空字串，用戶存的範本再也拿不回來。
+    # 要讓噪音與損失都消失，唯一的辦法是把壞值覆蓋掉 → 見 migrate_pref_blobs。
     def self.safe_read_default(key, fallback = "")
       Sketchup.read_default("LoamLabAI", key, fallback)
     # 必須同時攔 ScriptError：read_default 內部是 eval，壞掉的值拋的是 **SyntaxError**，
@@ -248,6 +255,28 @@ module LoamLab
       Base64.strict_decode64(s).force_encoding("UTF-8")
     rescue
       s
+    end
+
+    # 一次性清理已經存壞的偏好值。
+    #
+    # 為什麼非做不可：SketchUp 存值時會把字串包在雙引號裡，但**不跳脫值裡面的雙引號**。
+    # 存一段 JSON 進去，讀取時 eval 看到的是 `"{"layout":...`——內層那個引號提早把字串結束，
+    # 後面變成裸識別字，於是 SyntaxError。訊息由 SketchUp 自己印出，Ruby 端攔不到也蓋不掉。
+    # 唯一能讓它停止的辦法，就是把那個值覆蓋成 eval 得動的內容。
+    #
+    # Base64 只有英數字與 + / =，不含雙引號，包進引號後永遠是一個合法的 Ruby 字串字面值。
+    # 讀回來是空字串（值壞掉、或本來就沒設）就寫回空字串，噪音一樣消失。
+    BLOB_PREF_KEYS = %w[dev_post_template_v2].freeze
+    def self.migrate_pref_blobs
+      return if @@pref_blobs_migrated
+      @@pref_blobs_migrated = true
+      BLOB_PREF_KEYS.each do |key|
+        current = self.decode_pref_blob(self.safe_read_default(key, ""))
+        Sketchup.write_default("LoamLabAI", key, self.encode_pref_blob(current))
+        LoamLab.log "[LoamLab] 偏好值 #{key} 已改為 Base64 儲存（#{current.empty? ? '原值無法解析，已清空' : '內容保留'}）"
+      end
+    rescue StandardError, ScriptError => e
+      LoamLab.log "[LoamLab] 偏好值遷移略過: #{e.class}"
     end
 
     # 取得當前有效的儲存路徑：per-model → global default → Downloads
@@ -338,6 +367,7 @@ module LoamLab
           ao_unsupported = RENDER_KEYS['AmbientOcclusion'] == true &&
                            !model.rendering_options.keys.include?('AmbientOcclusion')
 
+          self.migrate_pref_blobs   # 一次性：把存壞的偏好值覆蓋掉，消除主控台噪音
           dev_post_template_v2 = self.decode_pref_blob(self.safe_read_default("dev_post_template_v2", ""))
           last_resolution = self.safe_read_default("last_resolution", "1k")
 
@@ -369,13 +399,15 @@ module LoamLab
          rescue StandardError, ScriptError => e
           # 同時攔 ScriptError：壞掉的偏好值經 read_default 的 eval 拋的是 SyntaxError，
           # 它不是 StandardError，只寫 `rescue => e` 攔不到。
-          # 初始化不能因為單一欄位失敗就整個中斷。
-          # 這個區塊先前沒有任何 rescue：任一 read_default／SketchUp API 失敗，
-          # response 就永遠送不出去，面板停在等待狀態拿不到 version／save_path／scenes，
-          # 用戶感受到的就是「開不起來、要重開好幾次才連得上」——正是上方註解記載
-          # 卻查不出根因的那個症狀。2026-09-08 由 dev_post_template_v2 的
-          # SyntaxError 實機重現。
-          # 這裡改為降級回應：核心欄位照送，面板至少能起來，缺的資料各自有預設值。
+          # 初始化不能因為單一欄位失敗就整個中斷。此區塊先前沒有任何 rescue：
+          # 任一 SketchUp API 呼叫拋例外，response 就永遠送不出去，
+          # 面板停在等待狀態拿不到 version／save_path／scenes。
+          # 改為降級回應：核心欄位照送，面板至少能起來，缺的資料各自有預設值。
+          #
+          # 註（2026-09-08 更正）：偏好值那個 SyntaxError **不會**走到這裡——
+          # SketchUp 的 read_default 內部自己就把它 rescue 掉了，只是會把錯誤印在主控台。
+          # 先前一度推測它是「開啟插件時凍結」的根因，實測不成立：錯誤印出後流程照常走完。
+          # 這道保護仍然保留，它防的是其他真的會傳出來的例外。
           LoamLab.log "[LoamLab] getInitialData 失敗，改送降級回應: #{e.class}: #{e.message}"
           begin
             minimal = {

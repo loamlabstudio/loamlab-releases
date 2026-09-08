@@ -321,7 +321,12 @@ verified_diff:
   - loamlab_backend/api/version.js
   - loamlab_backend/public/360-viewer.html
   - loamlab_backend/public/share.html
-  - loamlab_backend/public/images
+  - loamlab_backend/public/images/hero-bg.jpg
+  - loamlab_backend/public/images/after.jpg
+  - loamlab_backend/public/images/multiangle_grid.jpg
+  - loamlab_backend/public/images/multiangle_source.jpg
+  - loamlab_backend/public/images/spacereform_after.jpg
+  - loamlab_backend/public/images/spacereform_before.jpg
   - scripts/verify_save_chain.rb
   - scripts/verify_aspect.rb
   - .cursorrules
@@ -330,7 +335,6 @@ verified_diff:
   - SPRINT.md
   - .agents/moat-strategy.md
   - .agents/product-marketing-context.md
-  - loamlab_plugin.rbz
 sql_migration: false
 ```
 

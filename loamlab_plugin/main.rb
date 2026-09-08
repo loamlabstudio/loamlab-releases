@@ -691,12 +691,15 @@ module LoamLab
         end
       end
 
-      # 5. AI 渲染結果自動存檔 → 委派給 download_and_save_render（唯一實作）
+      # 5. AI 渲染結果自動存檔。全專案**唯一**的寫檔實作是 download_and_save_render，
+      #    這裡只是其中一個觸發點。整條鏈的分工：
       #
-      # T1/T3/批量 的成功結果已由 handle_render_response 內的 deliver 包裝在 Ruby 端直接存檔，
-      # 這條 JS 回呼理論上會撞到 url 去重而直接略過。**但不能刪掉**：
-      # SmartCanvas (T2) 是前端直接 fetch /api/render，完全不經過 handle_render_response
-      # （Ruby 的 smart_canvas_execute callback 前端從未呼叫，是死碼），T2 只剩這條路能存檔。
+      #      T1 單張／批量、T3、T2 家具替換  → 走 handle_render_response → Ruby 自動存檔
+      #      T2 SmartCanvas 標註             → 前端直連 API，不經 Ruby → **只能靠這個回呼**
+      #      T4 360 分享                     → 回傳的是分享連結不是圖，前端提早 return，不觸發
+      #
+      #    每條路徑各自只有一個觸發點，不重複。先前 app.js 的 render_success 也會呼叫這裡，
+      #    對 T1/T3 造成「Ruby 存一次、JS 再存一次」的重複，已移除。
       dialog.add_action_callback("auto_save_render") do |action_context, params|
         url = params["url"]
         next unless url
@@ -827,48 +830,6 @@ module LoamLab
 
       # 8. 生成色塊通道圖 (Segmentation Map) — Tool 2 選物件用
       # Smart Canvas 執行：遠端底圖 URL + 合并 prompt → /api/render Tool 2 → Coze Banana2
-      dialog.add_action_callback("smart_canvas_execute") do |action_context, params|
-        base_image_url = (params["base_image_url"] || "").to_s
-        prompt         = (params["prompt"] || "").to_s.dup.force_encoding("UTF-8")
-        resolution     = (params["resolution"] || "2k").to_s
-        scene_label    = (params["scene_label"] || "Smart Canvas").to_s
-
-        if base_image_url.empty?
-          dialog.execute_script("window.receiveFromRuby(#{JSON.generate({ status: 'render_failed', message: 'Smart Canvas: 缺少底圖 URL' })})")
-          next
-        end
-
-        dialog.execute_script("window.receiveFromRuby({status: 'rendering'})")
-
-        UI.start_timer(0.1, false) do
-          begin
-            user_email = Sketchup.read_default("LoamLabAI", "user_email", "").to_s.force_encoding("UTF-8").scrub("?")
-            request_body = JSON.dump({
-              tool: 2,
-              parameters: {
-                "base_image_url" => base_image_url,
-                "user_prompt"    => prompt,
-                "resolution"     => resolution,
-                "aspect_ratio"   => "16:9"
-              }
-            })
-            req = Sketchup::Http::Request.new("#{::LoamLab::API_BASE_URL}/api/render", Sketchup::Http::POST)
-            req.headers = self.auth_headers(user_email)
-            req.body = request_body
-            captured_label = scene_label
-            captured_headers = req.headers
-            req.start do |_, response|
-              self.handle_render_response(response, captured_headers, { scene_name: captured_label }) do |result|
-                UI.start_timer(0, false) { dialog.execute_script("window.receiveFromRubyBase64('#{Base64.strict_encode64(result.to_json)}')") }
-              end
-            end
-            UI.start_timer(0.1, false) { dialog.execute_script("window.receiveFromRuby({status: 'export_done'})") }
-          rescue => e
-            dialog.execute_script("window.receiveFromRuby(#{JSON.generate({ status: 'render_failed', message: self.sanitize_error("Smart Canvas 執行失敗: #{e.message}") })})")
-          end
-        end
-      end
-
       dialog.add_action_callback("loamlab_generate_seg_map") do |action_context|
         begin
           model = Sketchup.active_model
@@ -1080,6 +1041,26 @@ module LoamLab
     # 去重鍵用 url 不用檔名：檔名是「時間戳_專案_場景_render.jpg」，但只有批量路徑的 extra
     # 會帶 timestamp，其餘 5 個呼叫點沒有，Ruby 與 JS 各自抓 Time.now，差一秒就是兩個不同檔名，
     # 用檔名防重等於沒防，反而會存兩份。
+    # 組出存檔路徑。場景名**不做固定截斷**——場景名在同一個模型內是唯一的，
+    # 它就是這個檔名唯一的唯一性來源，砍掉尾巴就等於自己製造碰撞。
+    #
+    # 舊寫法 `scene[0, 30]` 同時造成兩個問題：
+    #   ① 批量共用同一個 timestamp，兩個前 30 字相同的場景組出同一路徑 → 靜默覆蓋、掉圖
+    #   ② `_original.jpg`（main.rb 的原圖備份）用的是**完整**場景名，前綴對不起來，
+    #      反而破壞了 timestamp 一路帶下來想達成的「前後圖檔名相鄰」
+    #
+    # 只在「路徑真的會超過 OS 上限」時才縮，而且縮的是最小必要量。
+    # 真的縮到撞名，下游的 resolve_collision_free_path 會接住。
+    MAX_SAVE_PATH = 240   # Windows MAX_PATH 260，留 20 給 .loamlab_cache 等衍生路徑
+    def self.build_save_path(dir, ts, safe_project, safe_scene)
+      full = File.join(dir, "#{ts}_#{safe_project}_#{safe_scene}_render.jpg")
+      return full if full.length <= MAX_SAVE_PATH
+      over = full.length - MAX_SAVE_PATH
+      trimmed = safe_scene[0, [safe_scene.length - over, 8].max]
+      LoamLab.log "[LoamLab] 路徑過長，場景名縮短 #{safe_scene.length} → #{trimmed.length} 字"
+      File.join(dir, "#{ts}_#{safe_project}_#{trimmed}_render.jpg")
+    end
+
     # 配一個「絕不蓋到別張圖」的存檔路徑。
     #
     # 為什麼需要：批量的 timestamp 在 process_chain 迴圈「外面」只取一次，整批共用，
@@ -1156,8 +1137,8 @@ module LoamLab
       full_path = resolved_path
       if full_path.nil?
         safe_project = project_name.gsub(/[:*?"<>|\\\/]/, "_")
-        safe_scene   = scene_s.gsub(/[:*?"<>|\\\/]/, "_")[0, 30]
-        base_path    = File.join(save_path, "#{ts}_#{safe_project}_#{safe_scene}_render.jpg")
+        safe_scene   = scene_s.gsub(/[:*?"<>|\\\/]/, "_")
+        base_path    = self.build_save_path(save_path, ts, safe_project, safe_scene)
         full_path    = self.resolve_collision_free_path(base_path, captured_url)
         if full_path.nil?
           release.call

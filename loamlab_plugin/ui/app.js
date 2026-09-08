@@ -1719,18 +1719,11 @@ window.receiveFromRuby = function (data) {
             });
             if (currentActiveTool === 1) _renderStyleRefThumbs();
 
-            // AI 渲染結果自動存檔（Ruby 下載圖片 → save_path + 更新 JSON 索引）
-            if (window.sketchup) {
-                var resEl2 = document.querySelector('input[name="resolution"]:checked');
-                var promptEl2 = document.getElementById('user-prompt-input');
-                sketchup.auto_save_render({
-                    url: targetUrl,
-                    scene: targetScene,
-                    resolution: (resEl2 ? resEl2.value : '2k'),
-                    prompt: (promptEl2 ? promptEl2.value : ''),
-                    timestamp: data.timestamp || ''
-                });
-            }
+            // 存檔不在這裡做。能走到這裡的結果，一定是 Ruby 經 handle_render_response
+            // 送上來的，而 Ruby 在送給前端「之前」就已經自己存好了（main.rb 的 deliver 包裝）。
+            // 先前這裡再呼叫一次 auto_save_render，等於同一張圖存兩次，只能靠 url 去重擋下來，
+            // 且面板一關這條就斷、存檔跟著失效——那正是「關面板掉圖」的成因。
+            // SmartCanvas 例外：它前端直連 API、不經 Ruby，仍保留自己的 auto_save_render 呼叫。
 
             // 工具 2 結果：全寬結果卡（家具替換前後對比）
             if (currentActiveTool === 2) {

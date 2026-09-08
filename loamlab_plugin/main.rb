@@ -82,6 +82,9 @@ module LoamLab
     # 光靠它擋不住「Ruby hook 與 JS 回呼幾乎同時觸發」的競態——兩邊都會在任一方
     # 寫完前查到 index 沒有這個 url，於是各下載一次。這個表在「發起下載」當下就佔位。
     @@saving_urls     ||= {}
+    # 已被本次 session 佔用的存檔路徑 => url。批量是並行下載，前一張還沒寫進磁碟、
+    # 後一張就已經在配路徑，光靠 File.exist? 兩邊都會選到同一個名字而互相覆蓋。
+    @@reserved_paths  ||= {}
     @@save_dir_360    ||= nil  # Tool 4 (360) 獨立存檔目錄
     @@pano_task         = nil  # 非同步全景拍攝任務狀態
     @@ao_unsupported    = false # 偵測：用戶是否在 classic engine（AO 不支持）
@@ -1077,7 +1080,48 @@ module LoamLab
     # 去重鍵用 url 不用檔名：檔名是「時間戳_專案_場景_render.jpg」，但只有批量路徑的 extra
     # 會帶 timestamp，其餘 5 個呼叫點沒有，Ruby 與 JS 各自抓 Time.now，差一秒就是兩個不同檔名，
     # 用檔名防重等於沒防，反而會存兩份。
-    def self.download_and_save_render(url, scene = nil, ts_in = nil, attempt = 1)
+    # 配一個「絕不蓋到別張圖」的存檔路徑。
+    #
+    # 為什麼需要：批量的 timestamp 在 process_chain 迴圈「外面」只取一次，整批共用，
+    # 所以檔名唯一性完全靠場景名，而場景名又被 `[0, 30]` 截斷。兩個場景只要前 30 字相同
+    # （長名稱、或名稱為空），就會組出同一個路徑，File.binwrite 靜默覆蓋——
+    # 用戶收到的張數少於算圖張數，點數卻照扣。**單張渲染不會踩到**：它的呼叫端不帶
+    # timestamp，每次存檔各自抓 Time.now，天然不撞。這正是「批量掉圖、單張正常」的成因。
+    #
+    # 光檢查 File.exist? 不夠：批量是並行下載，前一張還沒寫進磁碟，後一張就已經在配路徑了，
+    # 兩邊都看到「檔案不存在」而選同一個名字。所以要另外用 @@reserved_paths 在「配路徑當下」佔位。
+    #
+    # 回傳 nil 代表「這個 url 已經存過或正在存到這個路徑」，呼叫端應直接放棄，不要重複下載。
+    def self.resolve_collision_free_path(path, url)
+      idx = LoamLab.read_cloud_index
+      occupied = lambda { |p| File.exist?(p) || !@@reserved_paths[p].nil? }
+      same_url = lambda { |p| idx[p] == url || @@reserved_paths[p] == url }
+
+      unless occupied.call(path)
+        @@reserved_paths[path] = url
+        return path
+      end
+      return nil if same_url.call(path)
+
+      dir  = File.dirname(path)
+      ext  = File.extname(path)
+      base = File.basename(path, ext)
+      (2..99).each do |n|
+        cand = File.join(dir, "#{base}_#{n}#{ext}")
+        return nil if same_url.call(cand)
+        unless occupied.call(cand)
+          @@reserved_paths[cand] = url
+          LoamLab.log "[LoamLab] 檔名碰撞，改存 #{File.basename(cand)}"
+          return cand
+        end
+      end
+      # 極端情況：同名已累積 99 個。用秒級時間戳保證唯一，寧可檔名醜也不要掉圖。
+      fallback = File.join(dir, "#{base}_#{Time.now.to_i}#{ext}")
+      @@reserved_paths[fallback] = url
+      fallback
+    end
+
+    def self.download_and_save_render(url, scene = nil, ts_in = nil, attempt = 1, resolved_path = nil)
       captured_url = url.to_s
       return if captured_url.empty?
 
@@ -1088,21 +1132,39 @@ module LoamLab
         @@saving_urls[captured_url] = true
       end
 
+      release = lambda do
+        @@saving_urls.delete(captured_url)
+        @@reserved_paths.delete_if { |_p, u| u == captured_url }
+      end
+
       model = Sketchup.active_model
-      return unless model
+      unless model
+        release.call
+        return
+      end
       save_path = self.get_effective_save_path(model)
       unless save_path && File.directory?(save_path)
-        @@saving_urls.delete(captured_url)
+        release.call
         return
       end
 
       project_name = (model.title.to_s.empty? ? "未命名專案" : model.title).to_s.dup.force_encoding("UTF-8")
       scene_s      = (scene || "render").to_s.dup.force_encoding("UTF-8")
       ts           = (ts_in.to_s =~ /\A\d{8}_\d{6}\z/) ? ts_in.to_s : Time.now.strftime("%Y%m%d_%H%M%S")
-      safe_project = project_name.gsub(/[:*?"<>|\\\/]/, "_")
-      safe_scene   = scene_s.gsub(/[:*?"<>|\\\/]/, "_")[0, 30]
-      filename     = "#{ts}_#{safe_project}_#{safe_scene}_render.jpg"
-      full_path    = File.join(save_path, filename)
+
+      # 重試沿用第一次配好的路徑，不重新配（重配會撞到自己的佔位而誤判成「已存過」）
+      full_path = resolved_path
+      if full_path.nil?
+        safe_project = project_name.gsub(/[:*?"<>|\\\/]/, "_")
+        safe_scene   = scene_s.gsub(/[:*?"<>|\\\/]/, "_")[0, 30]
+        base_path    = File.join(save_path, "#{ts}_#{safe_project}_#{safe_scene}_render.jpg")
+        full_path    = self.resolve_collision_free_path(base_path, captured_url)
+        if full_path.nil?
+          release.call
+          return
+        end
+      end
+      filename = File.basename(full_path)
 
       req = Sketchup::Http::Request.new(captured_url, Sketchup::Http::GET)
       @@requests << req
@@ -1119,6 +1181,7 @@ module LoamLab
           rescue => e
             LoamLab.log "[LoamLab] save_render write failed: #{e.message}"
           ensure
+            # 保留 @@reserved_paths 該筆：檔案已落地，File.exist? 自然會擋住後續碰撞
             @@saving_urls.delete(captured_url)
           end
         elsif attempt < 4
@@ -1126,15 +1189,16 @@ module LoamLab
           delay = 2**attempt
           LoamLab.log "[LoamLab] save_render 失敗，#{delay}s 後重試 (#{attempt}/3)"
           UI.start_timer(delay, false) do
-            self.download_and_save_render(captured_url, scene_s, ts, attempt + 1)
+            self.download_and_save_render(captured_url, scene_s, ts, attempt + 1, full_path)
           end
         else
           LoamLab.log "[LoamLab] save_render 放棄（重試 #{attempt - 1} 次仍失敗）"
-          @@saving_urls.delete(captured_url)
+          release.call
         end
       end
     rescue => e
       @@saving_urls.delete(url.to_s)
+      @@reserved_paths.delete_if { |_p, u| u == url.to_s }
       LoamLab.log "[LoamLab] save_render exception: #{e.message}"
     end
 

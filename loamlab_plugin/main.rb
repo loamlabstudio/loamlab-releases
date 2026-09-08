@@ -266,15 +266,25 @@ module LoamLab
     #
     # Base64 只有英數字與 + / =，不含雙引號，包進引號後永遠是一個合法的 Ruby 字串字面值。
     # 讀回來是空字串（值壞掉、或本來就沒設）就寫回空字串，噪音一樣消失。
-    BLOB_PREF_KEYS = %w[dev_post_template_v2].freeze
+    # 用「寫進偏好值的旗標」判斷是否遷移過，而不是用類別變數——
+    # 類別變數在每次熱重載／SketchUp 重啟都會重置，會讓遷移一再重跑，
+    # 每次都多寫一次、多印一行 log。遷移本來就該是一次性的。
+    BLOB_PREF_KEYS  = %w[dev_post_template_v2].freeze
+    PREF_MIGRATION_FLAG = "pref_blobs_b64_v1"
     def self.migrate_pref_blobs
       return if @@pref_blobs_migrated
       @@pref_blobs_migrated = true
+      return if self.safe_read_default(PREF_MIGRATION_FLAG, "") == "done"
+
       BLOB_PREF_KEYS.each do |key|
+        # 注意：值若已損壞，read_default 會回傳預設值（空字串），
+        # 我們無法分辨「壞掉」與「從沒設過」。兩種情況都寫回乾淨的空字串即可——
+        # 壞值被覆蓋、噪音消失；沒設過的維持沒設過。
         current = self.decode_pref_blob(self.safe_read_default(key, ""))
         Sketchup.write_default("LoamLabAI", key, self.encode_pref_blob(current))
-        LoamLab.log "[LoamLab] 偏好值 #{key} 已改為 Base64 儲存（#{current.empty? ? '原值無法解析，已清空' : '內容保留'}）"
+        LoamLab.log "[LoamLab] 偏好值 #{key} 已轉為 Base64 儲存#{current.empty? ? '（原值為空或無法解析）' : ''}"
       end
+      Sketchup.write_default("LoamLabAI", PREF_MIGRATION_FLAG, "done")
     rescue StandardError, ScriptError => e
       LoamLab.log "[LoamLab] 偏好值遷移略過: #{e.class}"
     end

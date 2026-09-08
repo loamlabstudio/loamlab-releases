@@ -6,9 +6,14 @@
 # 全程不寫任何檔案、不呼叫網路，測完會把佔用的路徑登記還原乾淨。
 
 module LoamLabVerify
-  M = LoamLab::AIURenderer
+  # 用方法而非常數：這支腳本會被重複 load，常數重新賦值會噴
+  # "already initialized constant" 警告。
+  def self.m
+    LoamLab::AIURenderer
+  end
 
   def self.run
+    m_ = m
     puts ""
     puts "=" * 62
     puts " LoamLab 存檔鏈驗證"
@@ -18,10 +23,11 @@ module LoamLabVerify
 
     # ── 0. 確認熱重載真的載到新版 ─────────────────────────────────
     puts "\n[0] 新版程式碼是否已載入"
-    %i[build_save_path resolve_collision_free_path download_and_save_render].each do |m|
-      ok = M.respond_to?(m)
-      puts "    #{ok ? 'OK ' : 'X  '} #{m}"
-      fails << "缺少 #{m}，熱重載沒吃到新版" unless ok
+    %i[build_save_path resolve_collision_free_path download_and_save_render
+       safe_read_default encode_pref_blob migrate_pref_blobs].each do |meth|
+      ok = m_.respond_to?(meth)
+      puts "    #{ok ? 'OK ' : 'X  '} #{meth}"
+      fails << "缺少 #{meth}，熱重載沒吃到新版" unless ok
     end
     if fails.any?
       puts "\n>>> 請先重新執行 dev_reload.rb 再測一次"
@@ -29,7 +35,7 @@ module LoamLabVerify
     end
 
     # 備份佔位表，測完還原（避免污染實際存檔行為）
-    reserved = M.class_variable_get(:@@reserved_paths)
+    reserved = m_.class_variable_get(:@@reserved_paths)
     backup   = reserved.dup
 
     begin
@@ -47,7 +53,7 @@ module LoamLabVerify
 
       # ── 1. 檔名本身是否還會撞 ───────────────────────────────────
       puts "\n[1] 批量檔名唯一性（場景名 #{scenes[0].length} 字，前 30 字相同）"
-      paths = scenes.map { |s| M.build_save_path(dir, ts, proj, s) }
+      paths = scenes.map { |s| m_.build_save_path(dir, ts, proj, s) }
       paths.each { |p| puts "    #{File.basename(p)}" }
       puts "    送出 #{scenes.size} 張 → 相異檔名 #{paths.uniq.size} 個"
       if paths.uniq.size == scenes.size
@@ -60,9 +66,9 @@ module LoamLabVerify
       # ── 2. 最後防線：不同圖不覆蓋、同一張圖不重存 ──────────────
       puts "\n[2] 碰撞防線"
       same = File.join(dir, "collide_render.jpg")
-      a = M.resolve_collision_free_path(same, "https://cdn/a.jpg")
-      b = M.resolve_collision_free_path(same, "https://cdn/b.jpg")
-      c = M.resolve_collision_free_path(same, "https://cdn/a.jpg")   # 與 a 同一張圖
+      a = m_.resolve_collision_free_path(same, "https://cdn/a.jpg")
+      b = m_.resolve_collision_free_path(same, "https://cdn/b.jpg")
+      c = m_.resolve_collision_free_path(same, "https://cdn/a.jpg")   # 與 a 同一張圖
       puts "    圖A          → #{a ? File.basename(a) : 'nil'}"
       puts "    圖B（不同）  → #{b ? File.basename(b) : 'nil'}"
       puts "    圖A（重複）  → #{c ? File.basename(c) : 'nil（正確略過）'}"
@@ -82,8 +88,8 @@ module LoamLabVerify
       # ── 3. 超長路徑仍安全 ───────────────────────────────────────
       puts "\n[3] 超長場景名"
       long = "超長場景名稱" * 40
-      lp = M.build_save_path(dir, ts, proj, long)
-      cap = M.const_get(:MAX_SAVE_PATH)
+      lp = m_.build_save_path(dir, ts, proj, long)
+      cap = m_.const_get(:MAX_SAVE_PATH)
       puts "    場景名 #{long.length} 字 → 路徑 #{lp.length} 字（上限 #{cap}）"
       if lp.length <= cap
         puts "    OK  已縮到上限內"
@@ -92,20 +98,22 @@ module LoamLabVerify
         fails << "build_save_path 未處理超長路徑"
       end
 
-      # ── 4. 偏好值讀取安全性 ─────────────────────────────────────
-      # SketchUp 的 read_default 內部用 eval 求值存進去的字串。
-      # 存過含大括號／換行／反斜線的內容（JSON 範本、Windows 路徑），讀回來會拋 SyntaxError，
-      # 而 getInitialData 先前沒有 rescue，一炸整個初始化就中斷、面板拿不到資料。
-      puts "\n[4] 偏好值讀取安全性"
-      if M.respond_to?(:safe_read_default) && M.respond_to?(:encode_pref_blob)
+      # ── 4. 偏好值儲存安全性 ─────────────────────────────────────
+      # SketchUp 存偏好值時把字串包進雙引號，但**不跳脫值裡面的雙引號**；
+      # 讀取時對它做 eval，於是存過 JSON 的值會拋 SyntaxError。
+      # 該例外由 SketchUp 內部自己 rescue（只把訊息印到主控台、回傳預設值），
+      # Ruby 端攔不到也蓋不掉——真正的損失是那個值永遠讀回空字串。
+      # 解法是改用 Base64 存放（不含引號），並由 migrate_pref_blobs 覆蓋掉已存壞的值。
+      puts "\n[4] 偏好值儲存安全性"
+      if m_.respond_to?(:safe_read_default) && m_.respond_to?(:encode_pref_blob)
         risky = "{\"layout\":\"參數分享------\n{zhLine}\",\"tags\":[\"#室內設計\"]}"
-        enc   = M.encode_pref_blob(risky)
-        dec   = M.decode_pref_blob(enc)
+        enc   = m_.encode_pref_blob(risky)
+        dec   = m_.decode_pref_blob(enc)
         clean = !(enc =~ /[{}\n\\"]/)
         puts "    編碼後含危險字元? #{clean ? '否（eval 不會誤解）' : '是'}"
         puts "    來回還原一致?     #{dec == risky}"
-        puts "    舊格式相容?       #{M.decode_pref_blob(risky) == risky}"
-        if clean && dec == risky && M.decode_pref_blob(risky) == risky
+        puts "    舊格式相容?       #{m_.decode_pref_blob(risky) == risky}"
+        if clean && dec == risky && m_.decode_pref_blob(risky) == risky
           puts "    OK  大字串以 Base64 存放，不會再炸"
         else
           puts "    X   編碼或相容處理有誤"
@@ -113,8 +121,8 @@ module LoamLabVerify
         end
         # 真正讀一次目前存著的值，確認不會拋例外
         begin
-          M.safe_read_default("dev_post_template_v2", "")
-          M.safe_read_default("global_save_path", "")
+          m_.safe_read_default("dev_post_template_v2", "")
+          m_.safe_read_default("global_save_path", "")
           puts "    OK  實際讀取現有偏好值未拋例外"
         rescue => e
           puts "    X   仍會拋例外: #{e.class}"

@@ -427,54 +427,50 @@ T4 360 分享                    → 分享連結非圖片，前端提早 return
 ## RELEASE_GATE
 
 ```
-release_type: feature
+release_type: hotfix
 verified_diff:
-  - build_rbz.ps1
-  - loamlab_plugin.rb
-  - loamlab_plugin/config.rb
-  - loamlab_plugin/main.rb
   - loamlab_plugin/ui/app.js
-  - loamlab_plugin/ui/index.html
-  - loamlab_backend/api/render.js
-  - loamlab_backend/api/stats.js
+  - loamlab_plugin/config.rb
+  - loamlab_plugin.rb
   - loamlab_backend/api/version.js
-  - loamlab_backend/lib/storageCleanup.js
-  - loamlab_backend/supabase_setup.sql
-  - loamlab_backend/public/admin.html
-  - loamlab_backend/public/360-viewer.html
-  - loamlab_backend/public/share.html
-  - loamlab_backend/public/images/hero-bg.jpg
-  - loamlab_backend/public/images/after.jpg
-  - loamlab_backend/public/images/multiangle_grid.jpg
-  - loamlab_backend/public/images/multiangle_source.jpg
-  - loamlab_backend/public/images/spacereform_after.jpg
-  - loamlab_backend/public/images/spacereform_before.jpg
-  - scripts/verify_save_chain.rb
-  - scripts/verify_aspect.rb
-  - .cursorrules
-  - .gitignore
-  - GEMINI.md
+  - scripts/verify_dpi_calibration.js
   - SPRINT.md
-  - .agents/moat-strategy.md
-  - .agents/product-marketing-context.md
-sql_migration: true          # supabase_setup.sql 新增 Phase 31（正式庫補跑區），需人工在 SQL Editor 執行
+  - SPRINT_PROPOSAL.md
+sql_migration: false
 ```
 
-> **v1.4.75 涵蓋 T0／T1／T2／T3／T6／T7／T8。**
-> 判為 `feature` 而非 `hotfix`：跨插件端與後端多個模組，且含存檔鏈重整與出圖比例架構變更。
+> **v1.4.76 — Smart Canvas 高 DPI 游標消失修復（單一根因 hotfix）。**
+>
+> 判為 `hotfix` 而非 `feature`：只動插件端座標換算，不新增功能、不碰後端邏輯、
+> 不碰金流／點數／存檔鏈。後端 diff 僅 `version.js` 的版本號字串。
+>
+> **根因**：SketchUp 舊版 CEF 在 Windows 顯示縮放（125%／150%）下，滑鼠事件座標是實體像素、
+> 版面量測是 CSS 像素，兩者差一個固定倍率，而代碼一直把它當成 1。游標滑到畫布實體 2/3 處，
+> 算出的座標已抵達圖片右緣，再往右就畫不出來——右側 1/3 成為死區。
+> 過去的解法是請用戶去勾 SketchUp.exe 的「覆寫高 DPI 縮放行為」，代價是整個 SU 介面變模糊。
+>
+> **修法**：`DPIFix` 從滑鼠事件本身把倍率量出來
+> （`f = (clientX − offsetX) / rect.left`，同一事件內即可解出），套用在原有的 `offsetX` 換算路徑上。
+> 用戶不需要做任何設定。
+>
+> **為什麼下檔風險為零**：`_scGetXY` 保留原本的 `offsetX` 路徑、只多除一個倍率——
+> 除以 1 就是修復前的算式。四種可能的現實（兩量皆乾淨／皆污染／只有其一污染）中，
+> 結果不是「修好」就是「與 v1.4.75 逐位元相同」，沒有任何一種會變得更糟。
 >
 > 逐項實測紀錄：
-> - `ruby -c` 全數 Syntax OK（本機已安裝 Ruby 3.1.7，與 SketchUp 2024 同版本）
-> - `node --check` + ESLint(ES2019) 零錯誤；`check_cjs.ps1` 通過
-> - 存檔鏈：`scripts/verify_save_chain.rb` 四區塊全過（用戶實機確認）
-> - 出圖比例：`scripts/verify_aspect.rb` 掃 120 組成對圖，修復後樣本一致
-> - 後端已先行部署，線上 `/api/version` 與首頁均正常
+> - `node scripts/verify_dpi_calibration.js` 全數通過；其第 6 節直接從 `app.js` 抽出
+>   **實際出貨**的 `DPIFix` 與 `_scGetXY` 跑端到端，重現修復前「2/3 處 docX 已達 1920
+>   （圖寬 1920）＝死區」，並確認修復後 2/3 處為 1280、最右緣剛好 1920
+> - 100%／125%／150%／175%／200% 五種縮放皆在第 5 個 mousemove 定案，定案後自動移除監聽
+> - 對抗性情境（`clientX` 與 `offsetX` 不同源）8000 段模擬 hover、事件污染率最高 50%，
+>   採信錯誤倍率 **0 次**，一律安全退回 factor = 1
+> - ESLint（ES2019）零錯誤
+> - 尚未在真實 150% 硬體上驗收——這是刻意接受的：最壞情況等於現況，
+>   實機只需看 `DPIFix.factor` 一個數字（150% 機器應為 1.5）
 >
-> `.agents/moat-strategy.md` 與 `product-marketing-context.md` 出現在 diff 是因為
-> **從公開版控移除**（商業策略不該存在於公開 repo），非內容變更。
-> T2 / T3 / T6 任一項完成後都要重填 `verified_diff` 並把 `release_type` 改成 `feature`——
-> T6 會動到 `main.rb` 的存檔路徑和 `app.js`，不屬於 hotfix 範圍。
+> 前一版 v1.4.75 的 RELEASE_GATE 紀錄（T0/T1/T2/T3/T6/T7/T8，含存檔鏈重整與出圖比例修復）
+> 見 git tag `v1.4.75` 的 SPRINT.md。
 
 ---
 
-status: READY_FOR_REVIEW
+status: READY_FOR_RELEASE

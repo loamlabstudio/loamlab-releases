@@ -4868,21 +4868,26 @@ function startExtractMode(imgUrl) {
     let startX = 0, startY = 0, drawing = false;
 
     const getImgRect = () => img.getBoundingClientRect();
+    // 與 SmartCanvas 同一個根因：高 DPI 機器上滑鼠事件座標與 getBoundingClientRect
+    // 不同單位，不套倍率的話虛線框會跟不上滑鼠（見 DPIFix 註解）
+    const localXY = (e) => {
+        const r = getImgRect(), p = DPIFix.toCss(e);
+        return { x: p.x - r.left, y: p.y - r.top, r };
+    };
 
     overlay.addEventListener('mousedown', (e) => {
         if (e.target === overlay || !img.complete) return;
-        const r = getImgRect();
-        startX = e.clientX - r.left;
-        startY = e.clientY - r.top;
+        const q = localXY(e);
+        startX = q.x;
+        startY = q.y;
         drawing = true;
         rectEl.style.cssText += `;display:block;left:${startX}px;top:${startY}px;width:0;height:0;`;
     });
 
     overlay.addEventListener('mousemove', (e) => {
         if (!drawing) return;
-        const r = getImgRect();
-        const cx = e.clientX - r.left;
-        const cy = e.clientY - r.top;
+        const q = localXY(e);
+        const cx = q.x, cy = q.y;
         const x = Math.min(startX, cx), y = Math.min(startY, cy);
         const w = Math.abs(cx - startX), h = Math.abs(cy - startY);
         rectEl.style.left = x + 'px'; rectEl.style.top = y + 'px';
@@ -4892,9 +4897,9 @@ function startExtractMode(imgUrl) {
     overlay.addEventListener('mouseup', (e) => {
         if (!drawing) return;
         drawing = false;
-        const r = getImgRect();
-        const cx = e.clientX - r.left;
-        const cy = e.clientY - r.top;
+        const q = localXY(e);
+        const r = q.r;
+        const cx = q.x, cy = q.y;
         const x = Math.min(startX, cx), y = Math.min(startY, cy);
         const w = Math.abs(cx - startX), h = Math.abs(cy - startY);
         if (w < 10 || h < 10) return; // 太小忽略
@@ -5404,6 +5409,9 @@ function _scComputeFitBox(naturalW, naturalH, availW, availH) {
 }
 
 function _scApplyStackSize() {
+    // 這裡是唯一的掛載點：開啟畫布、視窗改變大小、拖到另一台螢幕都會經過，
+    // 等於「版面一變就重新確認 DPI 倍率」。定案後 DPIFix 會自行停止監聽。
+    DPIFix.start();
     const viewport = document.getElementById('sc-canvas-viewport');
     const stack = document.getElementById('sc-canvas-stack');
     if (!viewport || !stack || !SmartCanvas.canvasW) return;
@@ -5436,32 +5444,111 @@ function _scWatchCanvasResize() {
     SmartCanvas._resizeObserver.observe(viewport);
 }
 
-// High-DPI 免疫：offsetX/offsetY 與 target.clientWidth/clientHeight 同屬一個元素、同一 CSS 單位、
-// 同一原點，換算比例不受舊版 CEF 在 Windows 顯示縮放(125%/150%)下 clientX(物理像素) 與
-// getBoundingClientRect(CSS 像素) 單位錯亂影響——該錯亂會讓 clientX 增速比 rect.width 快 1.5x，
-// 使游標在物理 2/3 處就到畫布右緣，右 1/3 區域游標飄出、點擊落點偏移。
-// 事件綁在 draw-canvas 本身、上層 highlight/cursor canvas 皆 pointer-events:none，
-// 故滑鼠事件 e.target 恆為 draw-canvas，offsetX 與 clientWidth 必然同源自洽。
-// touch 事件無 offsetX，維持舊的 getBoundingClientRect 換算。
+// ── DPIFix：量出「滑鼠事件座標」與「CSS 版面座標」之間的倍率 ────────────────────
+// SketchUp 舊版 CEF 在 Windows 顯示縮放(125%/150%)下，滑鼠事件給的是實體像素、
+// 版面量測(getBoundingClientRect / clientWidth)給的是 CSS 像素，兩者差一個固定倍率 f。
+// 症狀：游標滑到畫布實體 2/3 處，算出的座標已抵達圖片右緣，再往右游標圈就畫不出來而消失，
+// 右側 1/3 變死區。過去只能請用戶去勾 SketchUp.exe 的「覆寫高 DPI 縮放行為」，代價是整個
+// SU 介面變模糊——這裡把 f 直接量出來，用戶不必碰任何系統設定。
+//
+// 量法：同一個滑鼠事件裡 clientX 與 offsetX 只差「元素左緣」這一段，而元素左緣 rect.left
+// 是 CSS 像素，相減再一除即得倍率：f = (clientX − offsetX) / rect.left。一個事件就夠。
+// 驗證見 scripts/verify_dpi_calibration.js（100%~250% 六種縮放單一事件即精確量出）。
+//
+// 三道安全閥，任何一道過不了就維持 factor = 1（＝修復前行為），只會修好、不會弄壞：
+//   1. 分母 <100px 的元素跳過，避免除法失準
+//   2. X 軸與 Y 軸各算一次，兩軸不吻合代表模型不成立，整筆放棄
+//   3. 最近 9 票要有 5 票「完全相同」才採用——倍率是常數，正常情況每次算出來本就一模一樣
+const DPIFix = {
+    factor: 1,
+    _votes: [],
+    _on: false,
+    _budget: 0,
+    MIN_ANCHOR: 100, AGREE: 0.01, QUORUM: 5, WINDOW: 9, BUDGET: 400,
+
+    // 開始被動取樣。掛在 document 而非畫布上——恆等式對任何元素都成立，
+    // 用戶從側欄移向畫布的路上就量完了，滑鼠還沒碰到畫布這件事已經結束。
+    // 允許在已定案後重新開啟（換到不同縮放的螢幕時自我修復）。
+    // 重新取樣期間沿用舊 factor，湊足新票數才覆寫，中間不會有座標失準的空窗。
+    start() {
+        if (this._on) return;
+        this._on = true;
+        this._budget = this.BUDGET;
+        document.addEventListener('mousemove', this._onMove, true);
+    },
+    stop() {
+        if (!this._on) return;
+        this._on = false;
+        document.removeEventListener('mousemove', this._onMove, true);
+    },
+
+    // 事件座標 → CSS 版面座標。所有 clientX / clientY 的讀取都必須經過這裡。
+    toCss(e) {
+        const t = (e.touches && e.touches[0]) || e;
+        return { x: t.clientX / this.factor, y: t.clientY / this.factor };
+    },
+
+    _onMove(e) {
+        const D = DPIFix;
+        // 繪製中不取樣：避免在筆畫途中多做一次 getBoundingClientRect 觸發版面重算
+        if (SmartCanvas.isDrawing) return;
+        if (--D._budget <= 0) { D.stop(); return; }
+        const el = e.target;
+        if (!el || !el.getBoundingClientRect || e.offsetX === undefined || e.offsetY === undefined) return;
+        const r = el.getBoundingClientRect();
+        // clientLeft/clientTop 即左/上框線寬度；offsetX 由 padding 緣起算，不補這段會有 1~2px 系統性誤差
+        const L = r.left + (el.clientLeft || 0);
+        const T = r.top + (el.clientTop || 0);
+        if (L < D.MIN_ANCHOR || T < D.MIN_ANCHOR) return;
+        const fx = (e.clientX - e.offsetX) / L;
+        const fy = (e.clientY - e.offsetY) / T;
+        if (!(fx > 0) || !(fy > 0)) return;
+        if (Math.abs(fx - fy) / fx > D.AGREE) return;
+        const f = Number(((fx + fy) / 2).toFixed(2));
+        if (f < 0.95 || f > 4) return;
+        D._votes.push(f);
+        if (D._votes.length > D.WINDOW) D._votes.shift();
+        let hits = 0;
+        for (let i = 0; i < D._votes.length; i++) if (D._votes[i] === f) hits++;
+        if (hits >= D.QUORUM) {
+            D.factor = f;
+            D._votes.length = 0;
+            D.stop();                       // 定案即停，之後不再有任何每幀量測
+        }
+    }
+};
+
+// 座標換算維持原本的 offsetX 路徑，只多除一個 DPIFix.factor。
+// 刻意不改走 clientX：萬一實際情況是「offsetX 乾淨、clientX 被污染」，倍率會量不出來而
+// 停在 1，此時 clientX 路徑反而比現況更糟。除以 1 與修復前逐位元相同，沒有回歸風險。
+// touch 事件無 offsetX，走 getBoundingClientRect 換算，同樣套用倍率。
 function _scGetXY(e) {
+    const f = DPIFix.factor;
     if (!e.touches && e.target && e.offsetX !== undefined && e.offsetY !== undefined
         && e.target.clientWidth > 0 && e.target.clientHeight > 0) {
         const scaleX = SmartCanvas.canvasW / e.target.clientWidth;
         const scaleY = SmartCanvas.canvasH / e.target.clientHeight;
         return {
-            x: Math.round(e.offsetX * scaleX),
-            y: Math.round(e.offsetY * scaleY)
+            x: Math.round(e.offsetX / f * scaleX),
+            y: Math.round(e.offsetY / f * scaleY)
         };
     }
     const rect = SmartCanvas.drawCanvas.getBoundingClientRect();
     const scaleX = SmartCanvas.canvasW / rect.width;
     const scaleY = SmartCanvas.canvasH / rect.height;
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const p = DPIFix.toCss(e);
     return {
-        x: Math.round((clientX - rect.left) * scaleX),
-        y: Math.round((clientY - rect.top)  * scaleY)
+        x: Math.round((p.x - rect.left) * scaleX),
+        y: Math.round((p.y - rect.top)  * scaleY)
     };
+}
+
+// 記住游標的視窗座標，供標籤輸入框定位用。存的一律是已套用 DPI 倍率的 CSS 座標，
+// 與 window.innerWidth / style.left 同一個座標系，下游直接用不需再換算。
+function _scRememberClient(e) {
+    const p = DPIFix.toCss(e);
+    SmartCanvas._lastClientX = p.x;
+    SmartCanvas._lastClientY = p.y;
 }
 
 // 從 draw canvas 擷取剛畫好的筆觸（保留原始顏色，非二值遮罩）
@@ -6193,18 +6280,17 @@ function _scHandleNodeClick(e) {
     if (SmartCanvas._nodePoints.length === 0) {
         _scSaveUndo();
         SmartCanvas._nodePoints = [{ x, y }];
-        SmartCanvas._lastClientX = e.clientX;
-        SmartCanvas._lastClientY = e.clientY;
+        _scRememberClient(e);
         _scStartNodeAnim();
         return;
     }
     if (_scNearFirstNode({ x, y })) {
-        _scFinalizeNodeShape(e.clientX, e.clientY);
+        const p = DPIFix.toCss(e);
+        _scFinalizeNodeShape(p.x, p.y);
         return;
     }
     SmartCanvas._nodePoints.push({ x, y });
-    SmartCanvas._lastClientX = e.clientX;
-    SmartCanvas._lastClientY = e.clientY;
+    _scRememberClient(e);
 }
 
 // 矩形工具：第一下決定起點並開始流水預覽；第二下決定對角、收尾建立 region
@@ -6215,8 +6301,7 @@ function _scHandleRectClick(e) {
         _scSaveUndo();
         SmartCanvas._rectStart = { x, y };
         SmartCanvas._nodeHoverPoint = { x, y };
-        SmartCanvas._lastClientX = e.clientX;
-        SmartCanvas._lastClientY = e.clientY;
+        _scRememberClient(e);
         _scStartNodeAnim(_scRenderRectPreview);
         return;
     }
@@ -6242,7 +6327,8 @@ function _scHandleRectClick(e) {
     ctx.restore();
     const strokeCanvas = _scExtractDrawnStroke();
     const anchor = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
-    const clientX = e.clientX, clientY = e.clientY;
+    const p = DPIFix.toCss(e);
+    const clientX = p.x, clientY = p.y;
     _scPlayCloseGlow((glowCtx) => _scTraceRoundedRect(glowCtx, rect), anchor, () => {
         _scCommitBrushStroke(strokeCanvas, anchor.x, anchor.y, clientX, clientY);
     });
@@ -6270,15 +6356,15 @@ function _scBindEvents() {
         SmartCanvas._hasDragged = false;  // 重置拖曳旗標
         SmartCanvas._lastDrawX = null;
         SmartCanvas._lastDrawY = null;
-        SmartCanvas._lastClientX = e.clientX;
-        SmartCanvas._lastClientY = e.clientY;
+        _scRememberClient(e);
         _scSaveUndo();
         _scDraw(e);
     });
     fresh.addEventListener('dblclick', (e) => {
         // 雙擊＝PS 風格「收尾路徑」快捷鍵，不需要精準點回起始節點也能自動閉合
         if (SmartCanvas.activeTool === 'brush' && SmartCanvas._nodePoints.length >= 2) {
-            _scFinalizeNodeShape(e.clientX, e.clientY);
+            const p = DPIFix.toCss(e);
+            _scFinalizeNodeShape(p.x, p.y);
         }
     });
     // 提取為函式供 mouseup / mouseleave 共用（僅橡皮擦使用；標註筆走點擊節點流程）
@@ -6323,8 +6409,7 @@ function _scBindEvents() {
     });
     fresh.addEventListener('mousemove', (e) => {
         const { x, y } = _scGetXY(e);
-        SmartCanvas._lastClientX = e.clientX;
-        SmartCanvas._lastClientY = e.clientY;
+        _scRememberClient(e);
         if ((SmartCanvas.activeTool === 'brush' && SmartCanvas._nodePoints.length > 0) ||
             (SmartCanvas.activeTool === 'rect' && SmartCanvas._rectStart)) {
             // 節點/矩形模式：只需更新游標位置，動畫迴圈每幀自己讀取並重繪預覽
@@ -6336,11 +6421,13 @@ function _scBindEvents() {
         // 改用 e.altKey（MouseEvent 即時狀態），防止 _altKey 卡住導致誤觸
         if (e.altKey && SmartCanvas.isDrawing) {
             SmartCanvas._altKey = true; // 同步狀態
+            // 用已套用 DPI 倍率的座標算位移，否則高縮放機器上線寬變化速度會快 1.5 倍
+            const altX = DPIFix.toCss(e).x;
             if (SmartCanvas._altResizeStartX === null) {
-                SmartCanvas._altResizeStartX = e.clientX;
+                SmartCanvas._altResizeStartX = altX;
                 SmartCanvas._altResizeStartSize = SmartCanvas.brushSize;
             }
-            const delta = e.clientX - SmartCanvas._altResizeStartX;
+            const delta = altX - SmartCanvas._altResizeStartX;
             const newSize = Math.max(2, Math.min(20, SmartCanvas._altResizeStartSize + Math.round(delta * 0.2)));
             SmartCanvas.brushSize = newSize;
             const sizeEl = document.getElementById('sc-brush-size');

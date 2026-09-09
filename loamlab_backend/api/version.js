@@ -1,9 +1,16 @@
 ﻿// /api/version - 婵炴挻纰嶇粙鎺曘亹閸愨晝顩烽柟顖涙緲濞堜即鏌涢弴鐔哥婵炴彃娼″顒勬偋閸偆鍞梺鍛婂笩閸╂牠鎮￠敍鍕櫣闁靛繆鍓濇禒姗€鏌￠崒娑橆棆濠⒀勵殜瀵?
 // 闂佺粯顨呴悧濠傦耿閹殿喗灏欓柛銉簴閺嬫瑩鏌ｉ埡浣烘憼閻㈩垱鎸冲畷妤勵槻缂佷胶鏁婚弫宥呯暆閳ь剟寮?release.ps1 闂佽皫鍛付缂佹梻鍏樺鏌ュ磼濞戞瑧鍑介梺鍝勫€绘晶妤咁敆濠靛棭鐎堕柡鍐ｅ亾妞?
+// download_url 由 latest_version 推導，不再手動維護第二個字串。
+// Why：v1.4.76 發佈時只改了 latest_version、漏改寫死的 download_url，導致線上 API
+// 宣告「有 1.4.76」卻讓 updater.rb 下載 v1.4.75 的 .rbz（updater 直接用這個欄位）。
+// 同一件事有兩個真實來源就一定會漂移，改成單一來源根除這一類錯誤。
+const LATEST_VERSION = "1.4.76";
+const RELEASE_REPO = "https://github.com/loamlabstudio/loamlab-releases";
+
 const LATEST = {
-    latest_version: "1.4.76",
-    download_url: "https://github.com/loamlabstudio/loamlab-releases/releases/download/v1.4.75/loamlab_plugin.rbz",
-    manual_url: "https://github.com/loamlabstudio/loamlab-releases/releases/latest"
+    latest_version: LATEST_VERSION,
+    download_url: `${RELEASE_REPO}/releases/download/v${LATEST_VERSION}/loamlab_plugin.rbz`,
+    manual_url: `${RELEASE_REPO}/releases/latest`
 };
 
 const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>

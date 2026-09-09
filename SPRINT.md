@@ -296,6 +296,124 @@ T4 360 分享                    → 分享連結非圖片，前端提早 return
 雲端底圖正確退回宣告值。**後端已部署上線**，插件端待發版。
 診斷工具：`scripts/verify_aspect.rb`。
 
+### `[x] [P0]` T9：render_history 靜默全滅五個月 — 真因是正式庫缺欄位（**2026-09-09 已修代碼，待跑 SQL**）
+
+> **這是本輪最高風險項，而且不在 Gemini 提案的視野內。**
+>
+> - **實測**：`render_history` 全表只有 **16 列**，最新一列停在 `2026-04-09T15:29`；
+>   同期 `transactions` 光是 2026-07-01 之後就有 **6577 筆 RENDER_\***。
+> - **真因**（用 service role 直接 INSERT 測出來，不是推論）：
+>   ```
+>   PGRST204: Could not find the 'input_url' column of 'render_history' in the schema cache
+>   ```
+>   正式庫從來沒跑過 `supabase_setup.sql:184` 的 `ADD COLUMN input_url`。
+>   2026-08-28 那次把 anon key 改成 service role **並沒有解決問題**——當時只驗到「RLS 不再擋」，
+>   沒有實際 INSERT 一筆確認，所以又白漏了 12 天。
+> - **連鎖風險（真金白銀）**：`stats.js` 的 `scan_render_anomalies` 用 `render_history` 判斷
+>   「這筆扣款有沒有對應出圖」，查不到就自動退款、回溯 26 小時。`render_history` 是空的 ⇒
+>   只要這支排程恢復運作，最近 26 小時內所有成功渲染都會被判成孤兒扣款、全額退點。
+> - **修法**：
+>   1. `supabase_setup.sql` 新增「Phase 31 正式庫補跑區」（冪等，含 `NOTIFY pgrst, 'reload schema'`）
+>   2. `render.js` 抽出 `insertRenderHistory()` 作為 render_history 的唯一寫入入口：
+>      收到 PGRST204 就把缺的欄位拿掉重試，並印出「正式庫缺欄位 X」。寧可少存一欄，也不能
+>      整筆消失讓排程去退錯款。**一般渲染與 360 分享兩個呼叫端共用同一份**——原本 360 那支
+>      （`render.js` 的 `create_360` 分支）是另一份 inline insert，同樣中招，抽出後不會
+>      再有「改一邊漏一邊」。
+> - **驗收**：以 `loamlabs@gmail.com`（scan 的 `noTestRef` 有排除，不影響退款判斷）實測
+>   缺欄位情境 → 兜底觸發 → 寫入成功 → 測試列已刪除，總列數回到 16。
+
+### `[x] [P0]` T10：Storage 1.4GB 超標 — 96% 是 render-temp 孤兒暫存檔（**2026-09-09 已清，代碼待部署**）
+
+> **Gemini 提案把優先級搞反了**（`SPRINT_PROPOSAL.md` 把 `cleanup_360` 列 MUST、`render-temp` 列 NICE）。
+> 實測用量：
+>
+> | bucket | 用量 | 檔數 | 佔比 |
+> |---|---|---|---|
+> | `render-temp/tmp/` | **1392 MB** | 5128 | **96%** |
+> | `pano-360` | 54.5 MB | 67 | 4% |
+>
+> - **根因**：AtlasCloud 改非同步 `task_id` 後，抓圖時機落在 `poll_render`，而它是無狀態請求、
+>   拿不到當初的暫存路徑 ⇒ 沒有任何人刪 `render-temp/`（`render.js:1083` 的 TODO 早就寫明了）。
+>   簽名 URL 只活 1 小時，實測 6 小時內 0 檔、24 小時內僅 50 檔 ⇒ 超過 24 小時的全是死檔。
+> - **提案 Task 1 若照做會出事**：現行 `cleanup_360` 用 `folder.created_at` 判齡，但 Supabase
+>   `storage.list()` 對資料夾回傳的 `created_at` 一律是 `null`（實測 12/12）⇒ `new Date(null)`
+>   等於 1970 ⇒ **所有全景圖都會被判成過期，包含當天剛分享出去的**。一掛上 cron 就全刪。
+> - **修法**：
+>   1. 新增 `lib/storageCleanup.js`：改以「資料夾內檔案的 created_at」判齡；`render-temp` 依
+>      檔名（`Date.now()_亂數`，字典序＝時間序）截斷取最舊的一批，工作量可控
+>   2. `render.js` 新增 `action=cleanup_temp`，並把 `cleanup_360` 改走同一個 lib
+>   3. **不新增 cron**（Hobby 上限 2 條、已滿）——沿用 `stats.js:520` 既有的「搭便車跑在
+>      `scan_render_anomalies`」做法，`vercel.json` 一行都不動
+> - **已執行**：2026-09-09 直接以 service role 跑 `cleanupRenderTemp({hours:24})` 回填清理，
+>   刪 5092 檔、釋放 **1379.6 MB**、耗時 75 秒、errors 0；24 小時內的 40 檔全數保留。
+>   實測後 `render-temp` 13.9 MB、`pano-360` 54.5 MB，合計 **68 MB**（原 1.45 GB），
+>   已遠低於免費方案 1.1 GB 紅線 ⇒ Supabase 的 Storage 超額告警信不再成立。
+> - **全景圖保留期維持 7 天**（一度考慮放寬到 180 天，查證後確認不需要）：
+>   原本的顧慮是「排程第一次跑會讓舊分享連結同時失效」。但實測證明**根本沒有用戶的雲端分享**：
+>   最近 50 筆 `RENDER_360` 交易的 `metadata.type` **全部是 `local`**，且 `pano-360` bucket
+>   最新檔案停在 2026-05-11、之後四個月沒有新增。出貨版工具 4 走的是本機匯出
+>   （`main.rb` 的 `export_360_local`），雲端那條（`export_360_cloud`）程式碼還在但沒人走。
+>   ⇒ 庫裡那 12 組 / 54.5MB 是 5 月的測試資料，不是用戶資產，照 7 天規則清掉即可。
+>   dry-run 對照：180 天刪 0 檔、90 天與 7 天都刪光 67 檔 / 54.5MB。
+>   ⚠️ **若日後真的開放雲端分享給用戶，這個 7 天就是玩真的**，屆時要確認 UI 有講清楚效期。
+> - **待辦**：部署後確認排程有在跑（見 T11），否則清理只是一次性的、還會再堆回去。
+
+### `[ ] [P1]` T11：每日排程疑似停擺（**需用戶到 Vercel 後台確認**）
+
+> `daily_metrics` 最新一列是 `2026-08-27`，且 30 列的 `updated_at` 全部是 `2026-08-28T15:52`
+> ——那是人工回填的時間戳，之後 12 天一列都沒新增。`cron_daily_metrics` 是
+> `scan_render_anomalies` 進入後的第一件事，所以合理推論**這支每日排程自 2026-08-28 起就沒有
+> 成功跑過**（要嘛沒被觸發、要嘛在鑑權那關就 401）。
+>
+> - **兩面刃**：排程停擺剛好擋下了 T9 的誤退款（`REFUND_AUTO_ANOMALY` 最新一筆停在
+>   2026-07-14，且是人工批次）。但它一旦恢復、而 T9 的 SQL 還沒跑，就會立刻開始誤退款。
+> - **因此順序不能顛倒**：先跑 T9 的 SQL，再處理排程。
+> - **無法在本機查證**：`.env.local` 的 `VERCEL_ACCESS_TOKEN` 是空的，Vercel API 打不了。
+>   請到 Vercel 後台 → 專案 → Cron Jobs 看最近一次執行狀態與回應碼。
+
+### `[x] [P0]` T12：Disk IO 告警的真因不是索引，是 admin 儀表板在背景空轉（**2026-09-09 已修**）
+
+> Supabase 同一天寄來**兩封不同的告警信**，Gemini 提案把它們混為一談：
+>
+> | 信 | 內容 | 真因 | 狀態 |
+> |---|---|---|---|
+> | Storage 超額 | 用量 1.11GB > 免費額度 1.1GB，10/9 起適用 Fair Use | render-temp 孤兒檔 | **已解決**（見 T10，1.45GB → 68MB）|
+> | Disk IO Budget | IO 用量超過 compute add-on 能負擔的量 | 見下 | **已修主因** |
+>
+> **第一性原理**：Disk IO 預算計的是「讀寫次數」，跟「資料多大」無關。所以要問的不是
+> 「哪張表沒索引」，而是「誰在高頻讀」。
+>
+> **實測否定索引假說**：全庫 16 張表加起來約 13,500 列，最大的 `transactions` 只有 10,475 列
+> （幾 MB）。這種規模全表掃描是瞬間的事，吃不掉 IO 預算。更關鍵的是——`stats.js` 的分析查詢
+> 一律帶 `.not('email','ilike','%testsprite%')` 排除測試帳號，**`ilike` 用不到 B-tree 索引**，
+> Phase 26 那 6 個索引對這些查詢一點忙都幫不上。**Gemini 提案 Task 3 的因果推論不成立。**
+>
+> **真正的高頻讀取端**：`admin.html` 的自動刷新。
+> - `admin.html:4052` 每 60 秒跑一次 `loadAll()`：10 個分析 action + 8 個設定讀取 = 18 個請求，
+>   每個 action 內部 2~6 個查詢，且因為 ilike 條件全是全表掃描
+> - `admin.html:4252` 另外每 30 秒抓一次 logs
+> - **而且分頁切到背景照跑**——一個忘了關的分頁 = 每小時 1000+ 次請求、24 小時不停
+> - 對照組：真實用戶負載每天只有 30~60 次渲染。儀表板的讀取量是真實業務量的百倍以上
+>
+> **修法（不改變任何看得到的行為）**：`document.hidden` 時整個暫停倒數與輪詢，切回分頁立刻補
+> 刷一次。前景使用體感完全不變，背景空轉歸零。
+>
+> **仍未百分之百證實**：本機 `.env.local` 的 `ADMIN_KEY` 是空的，打不了線上 admin API 做量測。
+> 最終確認方式是 Supabase → Reports → Database → Disk IO 圖，看高峰時段是否與開著 admin
+> 分頁的時段吻合。但這個修法無論假說對錯都是純賺（背景空轉本來就沒有價值），故先行修掉。
+>
+> **索引照加**（已寫進 Phase 31）：無害、該補，但別期待它解決 IO。
+
+### `[ ] [P2]` T13：兩張表在正式庫根本不存在
+
+> 盤點時順手發現 `telemetry_events`、`kol_ledger` 兩張表 REST 一律回 404 ——
+> `supabase_setup.sql` 裡有 `CREATE TABLE`，正式庫沒跑過。跟 T9 的 `input_url` 是同一種
+> schema 漂移。目前沒有代碼在寫這兩張表所以沒造成災情，但**這代表「SQL 寫進 repo」和
+> 「正式庫真的有」之間完全沒有任何機制保證一致**——T9 就是這樣漏了五個月才被發現。
+>
+> 建議（未做，待裁決）：要嘛把 Phase 31 的補跑區擴充成完整的「全表存在性檢查 + 補建」，
+> 要嘛乾脆刪掉這兩張沒人用的表定義，別留著假象。
+
 ---
 
 ## 稽核附註（非任務，但需用戶裁決）
@@ -318,7 +436,11 @@ verified_diff:
   - loamlab_plugin/ui/app.js
   - loamlab_plugin/ui/index.html
   - loamlab_backend/api/render.js
+  - loamlab_backend/api/stats.js
   - loamlab_backend/api/version.js
+  - loamlab_backend/lib/storageCleanup.js
+  - loamlab_backend/supabase_setup.sql
+  - loamlab_backend/public/admin.html
   - loamlab_backend/public/360-viewer.html
   - loamlab_backend/public/share.html
   - loamlab_backend/public/images/hero-bg.jpg
@@ -335,7 +457,7 @@ verified_diff:
   - SPRINT.md
   - .agents/moat-strategy.md
   - .agents/product-marketing-context.md
-sql_migration: false
+sql_migration: true          # supabase_setup.sql 新增 Phase 31（正式庫補跑區），需人工在 SQL Editor 執行
 ```
 
 > **v1.4.75 涵蓋 T0／T1／T2／T3／T6／T7／T8。**

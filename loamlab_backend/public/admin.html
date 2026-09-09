@@ -4044,14 +4044,23 @@ function renderTraffic(d) {
   }
 }
 
-// ── 自動刷新（60 秒倒數）────────────────────────────────────────────────────
+// ── 自動刷新（60 秒倒數；分頁切到背景時暫停）──────────────────────────────────
+// 為什麼要暫停：一次 loadAll() 會打 10 個分析 action，每個 action 內部 2~6 個查詢，
+// 而且過濾測試帳號用的是 `ilike`（索引吃不到）⇒ 全部都是全表掃描。真實用戶負載
+// 一天才 30~60 次渲染，但這個分頁只要開著沒關就每分鐘掃一輪、一天上萬次，
+// Supabase 的 Disk IO 預算主要就是這樣被吃掉的（2026-09-09 收到告警信）。
+// 沒人在看的時候不需要即時數據；切回分頁會立刻補一次，所以看得到的行為完全不變。
 let autoRefreshTimer = null, countdown = 60;
 function startAutoRefresh() {
   clearInterval(autoRefreshTimer);
   countdown = 60;
   autoRefreshTimer = setInterval(() => {
-    countdown--;
     const label = document.getElementById('auto-refresh-label');
+    if (document.hidden) {            // 分頁在背景：連倒數都不走，完全不打後端
+      if (label) label.textContent = '⏸';
+      return;
+    }
+    countdown--;
     if (label) label.textContent = countdown + 's';
     if (countdown <= 0) {
       countdown = 60;
@@ -4070,6 +4079,13 @@ function startAutoRefresh() {
     }
   }, 1000);
 }
+
+// 切回分頁：倒數歸位並立刻補一次，確保看到的永遠是最新數據（未登入時不打）
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !adminKey) return;
+  countdown = 60;
+  loadAll();
+});
 
 // ── 工具函數 ──────────────────────────────────────────────────────────────────
 const fmt = v => v!=null ? Number(v).toLocaleString() : '—';
@@ -4249,7 +4265,8 @@ switchAdminTab = function(tab) {
   if (tab === 'logs') {
     loadLogs();
     clearInterval(_logsTimer);
-    _logsTimer = setInterval(loadLogs, 30000);
+    // 同上：分頁在背景就跳過這一輪（30 秒一次、一天 2880 次，全是白工）
+    _logsTimer = setInterval(() => { if (!document.hidden) loadLogs(); }, 30000);
   } else {
     clearInterval(_logsTimer);
     _logsTimer = null;

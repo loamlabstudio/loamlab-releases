@@ -6,6 +6,7 @@ import { resolveUserEmail } from '../lib/verifyIdentity.js';
 import { getConfig } from '../lib/systemConfig.js';
 import { reportUsageEvent } from '../lib/dodo.js';
 import { grantFreeReferralReward, makeSupabase } from '../lib/activate.js';
+import { cleanupPano360, cleanupRenderTemp } from '../lib/storageCleanup.js';
 import { DEFAULT_PROMPTS, DEFAULT_BATCH_NODES } from '../lib/defaultPrompts.js';
 
 export const maxDuration = 300; // 提示詞翻譯/圖片代傳等前置作業可能耗時；AtlasCloud 生成本身已改為非同步 task_id，不在此函式內等待
@@ -294,7 +295,9 @@ async function _handleRender(req, res) {
     }
 
     // GET /api/render?action=get_360&id=<uuid>  — 360 viewer 取得圖片 URL
-    // GET /api/render?action=cleanup_360&key=<ADMIN_KEY> — 刪除 7 天前的全景圖（供 cron 呼叫）
+    // GET /api/render?action=cleanup_360&key=<ADMIN_KEY>[&days=7][&dry_run=1] — 刪除過期全景圖
+    // GET /api/render?action=cleanup_temp&key=<ADMIN_KEY>[&hours=24][&dry_run=1] — 清 render-temp 孤兒暫存檔
+    // 兩者平時由 stats.js 的 scan_render_anomalies 排程搭便車呼叫，此處端點供手動/大量回填用
     if (req.method === 'GET') {
         const qs = new URLSearchParams((req.url || '').split('?')[1] || '');
         const action = qs.get('action');
@@ -392,7 +395,7 @@ async function _handleRender(req, res) {
             const shareUrl = `https://loamlab-camera-backend.vercel.app/360-viewer.html?id=${shareId}&sc=${nScenes}&sn=${snEncoded}`;
             try {
                 await supa.from('transactions').insert([{ user_email: userEmail, amount: 0, transaction_type: 'RENDER_360', metadata: { resolution: '360', tool_id: 4 } }]);
-                await supa.from('render_history').insert([{ user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: 0 }]);
+                await insertRenderHistory(supa, { user_email: userEmail, input_url: null, full_url: shareUrl, thumbnail_url: shareUrl, prompt: '', style: '360', resolution: '360', tool_id: 4, points_cost: 0 });
             } catch(e) {}
             return res.status(200).json({
                 code: 0, share_id: shareId, upload_urls: uploadUrls,
@@ -438,30 +441,35 @@ async function _handleRender(req, res) {
             });
         }
 
+        // 過期全景圖清理（預設保留 7 天，同 360-viewer 宣稱效期；?days= 可覆寫）。
+        // 原本這裡是自己 inline 實作，用 `folder.created_at` 判齡——但
+        // Supabase `storage.list()` 對資料夾項目回傳的 created_at 一律是 null（實測 12/12），
+        // `new Date(null)` 等於 1970，等於「所有資料夾都過期」，一掛上 cron 會把當天剛分享
+        // 出去的全景圖一起刪光。改走 lib/storageCleanup.js，以資料夾內檔案的 created_at 判齡。
         if (action === 'cleanup_360') {
             if (!isValidAdminKey(qs.get('key'))) {
                 return res.status(401).json({ code: -1, msg: 'Unauthorized' });
             }
-            const supa = createClient(
-                process.env.SUPABASE_URL,
-                process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-            );
-            const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-            const { data: folders } = await supa.storage.from('pano-360').list('', { limit: 1000 });
-            if (!folders) return res.status(200).json({ code: 0, deleted: 0 });
+            const days = Math.max(1, parseInt(qs.get('days') || '7', 10) || 7);
+            const dryRun = qs.get('dry_run') === '1';
+            const result = await cleanupPano360(makeSupabase(), { days, dryRun, budgetMs: 240000 });
+            console.log(`[cleanup_360] ${JSON.stringify(result)}`);
+            return res.status(200).json({ code: 0, ...result, deleted: result.removed });
+        }
 
-            let deleted = 0;
-            for (const folder of folders) {
-                if (new Date(folder.created_at) < cutoff) {
-                    const { data: files } = await supa.storage.from('pano-360').list(folder.name, { limit: 10 });
-                    if (files && files.length) {
-                        await supa.storage.from('pano-360').remove(files.map(f => `${folder.name}/${f.name}`));
-                    }
-                    deleted++;
-                }
+        // 孤兒暫存圖清理。AtlasCloud 改成非同步 task_id 之後，抓圖時機落在 poll_render，
+        // 而 poll_render 是無狀態請求、拿不到當初上傳的暫存路徑，所以 render-temp/tmp/ 從此
+        // 只進不出（2026-09-09 實測堆到 5128 檔 / 1.4GB，佔 Storage 用量 96%）。這些檔案的
+        // 簽名 URL 只活 1 小時，超過 hours 小時的一律是死檔。
+        if (action === 'cleanup_temp') {
+            if (!isValidAdminKey(qs.get('key'))) {
+                return res.status(401).json({ code: -1, msg: 'Unauthorized' });
             }
-            console.log(`[cleanup_360] deleted ${deleted} expired panoramas`);
-            return res.status(200).json({ code: 0, deleted });
+            const hours = Math.max(2, parseInt(qs.get('hours') || '24', 10) || 24);
+            const dryRun = qs.get('dry_run') === '1';
+            const result = await cleanupRenderTemp(makeSupabase(), { hours, dryRun, budgetMs: 240000 });
+            console.log(`[cleanup_temp] ${JSON.stringify(result)}`);
+            return res.status(200).json({ code: 0, ...result, deleted: result.removed });
         }
 
         return res.status(405).json({ code: -1, msg: 'Method Not Allowed' });
@@ -1151,11 +1159,33 @@ async function refundAndFail(supabase, userEmail, cost, reason, toolId = null, t
 // render_history 當成「出圖成功」的判斷依據之一，於是把這段期間內大量真正成功的渲染誤判成
 // 孤兒扣款、自動退款給用戶（7 月已查到 22 筆）。改用 service role client 直接繞過 RLS，
 // 不依賴那組可能跟 repo 不同步的政策設定。
+// render_history 寫入的唯一入口。這筆寫入不只是「歷史紀錄」——stats.js 的
+// scan_render_anomalies 每天拿它判斷「這筆扣款有沒有對應的出圖」，查不到就自動退款。
+// 所以 render_history 一漏寫，等於在替真正成功的渲染發退款。2026-04-09 起就這樣漏了五個月：
+// 先是 RLS 擋掉 anon key（已改用 service role），改完仍然全滅，真因是正式庫從來沒跑過
+// supabase_setup.sql 的 `ADD COLUMN input_url`，PostgREST 回 PGRST204，而呼叫端只
+// console.error，沒人看得到。故此處統一兜底：欄位不存在就拿掉該欄位重試——寧可少存一欄，
+// 也不能整筆消失。兩個呼叫端（一般渲染、360 分享）共用同一份，避免改一邊漏一邊。
+async function insertRenderHistory(supa, row) {
+    const payload = { ...row };
+    let { error } = await supa.from('render_history').insert([payload]);
+    // PGRST204 訊息形如：Could not find the 'input_url' column of 'render_history' ...
+    for (let retry = 0; error && error.code === 'PGRST204' && retry < 3; retry++) {
+        const missing = (/'([^']+)' column/.exec(error.message || '') || [])[1];
+        if (!missing || !(missing in payload)) break;
+        console.error('[render_history] 正式庫缺欄位 ' + missing + '，改為不帶該欄位重試（請補跑 supabase_setup.sql）');
+        delete payload[missing];
+        ({ error } = await supa.from('render_history').insert([payload]));
+    }
+    if (error) console.error('[render_history] save failed:', error.code, error.message);
+    return error || null;
+}
+
 async function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal, cost, activeTool, inputUrl, clientIp, providerCost }) {
     const prompt = userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '';
     const style  = userPayload.parameters?.style || '';
     try {
-        const { error } = await makeSupabase().from('render_history').insert([{
+        await insertRenderHistory(makeSupabase(), {
             user_email:    userEmail,
             input_url:     inputUrl || null,
             full_url:      url,
@@ -1166,8 +1196,7 @@ async function saveRenderHistory(supabase, { userEmail, url, userPayload, resVal
             tool_id:       activeTool || 1,
             points_cost:   cost,
             provider_cost_usd_cents: providerCost || null
-        }]);
-        if (error) console.error('[render_history] save failed:', error.message);
+        });
     } catch (e) {
         console.error('[render_history] save exception:', e.message);
     }

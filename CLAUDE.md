@@ -16,6 +16,12 @@ SketchUp Plugin (`loamlab_plugin/`, Ruby + HTML/JS) → Vercel Serverless (`loam
 Key files: `main.rb` (dialog + Ruby↔JS bridge), `coze_api.rb` (image upload + streaming), `render.js` (points waterfall + image hosting + Coze call), `webhook.js` (LemonSqueezy payments), `user.js` (auto-register + profile)。
 Schema: `supabase_setup.sql`；定價邏輯: `POINTS_SYSTEM.md`。
 
+**Storage 回收（2026-09-09 新增）**：`lib/storageCleanup.js` 是唯一入口。管理端點
+`GET /api/render?action=cleanup_360|cleanup_temp&key=<ADMIN_KEY>[&days=|&hours=][&dry_run=1]`
+供手動與大量回填；日常增量清理由 `stats.js` 的 `scan_render_anomalies` 排程搭便車執行
+（Hobby cron 上限 2 條已滿，**不得新增第 3 條**）。判齡一律以「檔案」的 created_at 為準——
+Supabase `storage.list()` 對資料夾項目回傳的 created_at 恆為 null，拿它判齡會把當天的也全刪。
+
 ---
 
 ## 環境隔離（Dev vs Direct vs EW）

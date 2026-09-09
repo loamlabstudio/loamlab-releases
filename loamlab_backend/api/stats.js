@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { reconcilePaymentsForEmail } from '../lib/activate.js';
 import { isValidAdminKey } from '../lib/safeCompare.js';
+import { cleanupPano360, cleanupRenderTemp } from '../lib/storageCleanup.js';
 import { resolveUserEmail } from '../lib/verifyIdentity.js';
 import { getConfig, setConfig, getConfigWithMeta, listConfigHistory } from '../lib/systemConfig.js';
 import { DEFAULT_PROMPTS, DEFAULT_BATCH_NODES } from '../lib/defaultPrompts.js';
@@ -619,6 +620,20 @@ export default async function handler(req, res) {
                     failures.push({ ...o, reason: e.message });
                 }
             }
+
+            // 搭便車做 Storage 回收（Hobby 的 cron 上限 2 條、已滿，不能開第 3 條）。
+            // 刻意放在孤兒退款「做完之後」：退款是錢的事、不能被清理拖到逾時；清理沒做完
+            // 明天會再跑，代價只是晚一天。額度也刻意抓得小（5 秒 / 500 檔），因為 stats.js
+            // 沒有 render.js 那 300 秒的 maxDuration。歷史大量回填走
+            // /api/render?action=cleanup_temp（那支才有 300 秒）。
+            try {
+                const rt = await cleanupRenderTemp(supabase, { hours: 24, budgetMs: 5000, maxFiles: 500 });
+                console.log(`[cleanup_render_temp] ${JSON.stringify(rt)}`);
+            } catch (e) { console.error('[cleanup_render_temp] failed:', e.message); }
+            try {
+                const p360 = await cleanupPano360(supabase, { days: 7, budgetMs: 5000 });
+                console.log(`[cleanup_pano360] ${JSON.stringify(p360)}`);
+            } catch (e) { console.error('[cleanup_pano360] failed:', e.message); }
 
             console.log(`[scan_render_anomalies] orphans_found=${orphans.length} refunded=${toRefund.length - failures.length} points=${totalPoints} failures=${failures.length}`);
             return res.status(200).json({

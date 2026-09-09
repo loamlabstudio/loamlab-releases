@@ -608,3 +608,39 @@ CREATE TABLE IF NOT EXISTS public.daily_metrics (
 ALTER TABLE public.daily_metrics ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Enable all access for service role" ON public.daily_metrics;
 CREATE POLICY "Enable all access for service role" ON public.daily_metrics FOR ALL USING (true);
+
+-- ==============================================================================
+-- Phase 31: 正式庫補跑區（2026-09-09）
+-- 這一段全部是「前面 Phase 已經寫過、但正式庫實測確認沒生效」的項目。全部冪等，
+-- 可以整段重貼、重跑。之所以獨立成一區，是因為前面那些散落在各 Phase 的語句，
+-- 沒有任何機制保證真的被執行過——render_history.input_url 就是漏跑五個月才被發現的。
+--
+-- 【為什麼非跑不可】
+-- render_history 缺 input_url 欄位 → 每次出圖的 INSERT 都被 PostgREST 擋下（PGRST204），
+-- 而 render.js 只 console.error → 靜默全滅。連鎖後果：stats.js 的 scan_render_anomalies
+-- 拿 render_history 判斷「這筆扣款有沒有出圖」，查不到就自動退款——等於在替成功的渲染退錢。
+-- 實測：2026-04-09 之後 render_history 一列都沒有，同期 transactions 卻有 6577 筆 RENDER_*。
+--
+-- 【驗證方式】跑完貼最下面那段 SELECT，input_url 要出現、6 個索引要都在。
+-- ==============================================================================
+
+-- 1) render_history 缺失欄位（Phase 原本就有，正式庫沒生效）
+ALTER TABLE public.render_history ADD COLUMN IF NOT EXISTS input_url TEXT;
+
+-- 2) Phase 26 的 Disk IO 索引（同樣確認一次）
+CREATE INDEX IF NOT EXISTS idx_transactions_type         ON public.transactions (transaction_type);
+CREATE INDEX IF NOT EXISTS idx_transactions_created      ON public.transactions (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_email        ON public.transactions (user_email);
+CREATE INDEX IF NOT EXISTS idx_transactions_type_created ON public.transactions (transaction_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_feedback_type             ON public.feedback (type);
+CREATE INDEX IF NOT EXISTS idx_feedback_created          ON public.feedback (created_at DESC);
+
+-- 3) 讓 PostgREST 立刻重讀 schema（不做這步，改完欄位後 API 可能還是回報找不到）
+NOTIFY pgrst, 'reload schema';
+
+-- 4) 驗證（跑完應該看到 input_url 一列，以及 6 個 idx_transactions_/idx_feedback_ 索引）
+-- SELECT column_name FROM information_schema.columns
+--  WHERE table_schema='public' AND table_name='render_history' AND column_name='input_url';
+-- SELECT indexname FROM pg_indexes
+--  WHERE schemaname='public' AND (indexname LIKE 'idx_transactions_%' OR indexname LIKE 'idx_feedback_%')
+--  ORDER BY indexname;

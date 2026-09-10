@@ -1008,6 +1008,8 @@
         <span id="log-refresh-label" class="text-xs text-gray-500"></span>
       </div>
     </div>
+    <!-- 出圖率彙總：列表本身回答不了「有沒有出圖」，這一列才能。見 _renderLogSummary -->
+    <div id="log-summary" class="text-xs mb-3 pb-2 border-b border-white/[0.04]"></div>
     <div class="overflow-x-auto">
       <table class="w-full text-xs">
         <thead><tr class="text-gray-600 border-b border-white/5 uppercase tracking-wider">
@@ -4218,6 +4220,7 @@ async function loadLogs() {
     const j = await r.json();
     if (j.code !== 0) throw new Error(j.msg);
     _logRows = j.logs || [];
+    _renderLogSummary(j.summary);
 
     tbody.innerHTML = '';
     if (!_logRows.length) {
@@ -4234,7 +4237,12 @@ async function loadLogs() {
       // 退款列補上「為什麼失敗」的一行摘要。2026-09-10 那天後台就是一片紅、卻看不出原因，
       // 要點進每一列的 alert 才知道，145 筆根本看不完。欄位由 render.js 的失敗路徑寫入
       // （stage / http_status / reason），舊資料沒有這些欄位就退回原本的單純「退款」。
-      let statusBadge = isTopup ? '💰 儲值' : '✅ 成功';
+      //
+      // ⚠️ RENDER_* 不再標「✅ 成功」。它只是一筆扣款紀錄，跟 AI 有沒有生出圖片無關——
+      // 舊版把它標成「成功」，於是 alen3388 那 116 筆全滅（render_history 一筆都沒有）
+      // 在後台看起來是「成功／退款」交錯、像時好時壞，把全滅誤判成間歇性問題。
+      // 真實出圖數看上方彙總列（來自 render_history，那才是出圖的唯一憑證）。
+      let statusBadge = isTopup ? '💰 儲值' : '<span class="text-gray-500">已扣款</span>';
       if (isRefund) {
         const why = [meta.http_status ? 'HTTP ' + meta.http_status : '', meta.stage || '', meta.err || meta.reason || '']
           .filter(Boolean).join(' · ');
@@ -4259,6 +4267,25 @@ async function loadLogs() {
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="7" class="py-4 text-center text-red-400 text-xs">載入失敗：${e.message}</td></tr>`;
   }
+}
+
+// 出圖率彙總。這是整個日誌頁唯一能回答「現在到底健不健康」的數字——逐列的「已扣款」
+// 說不出有沒有出圖，只有 render_history 的筆數能。三個數字同基準（同 email／同日期範圍、
+// 都不受列表 limit 200 影響），由 stats.js 的 request_log 一併算好送來。
+function _renderLogSummary(s) {
+  const el = document.getElementById('log-summary');
+  if (!el) return;
+  if (!s || s.rendered === null || s.charged === null) { el.innerHTML = ''; return; }
+  const rate = s.charged > 0 ? Math.round((s.rendered / s.charged) * 100) : null;
+  // 出圖率低於七成就標紅：正常日子（如 9/9）是 46/58 ≈ 79%，掉到七成以下代表有事發生。
+  const tone = rate === null ? 'text-gray-400' : rate >= 70 ? 'text-green-400' : 'text-red-400';
+  const scope = s.scope === 'custom' ? '所選期間' : '最近 24 小時';
+  el.innerHTML = `<span class="text-gray-600">${scope}：</span>`
+    + `<span class="text-gray-300">扣款 ${s.charged}</span>`
+    + `<span class="text-gray-700"> · </span><span class="${tone}">出圖 ${s.rendered}</span>`
+    + `<span class="text-gray-700"> · </span><span class="text-gray-400">退款 ${s.refunded}</span>`
+    + (rate === null ? '' : `<span class="text-gray-700"> · </span><span class="${tone} font-semibold">出圖率 ${rate}%</span>`)
+    + `<span class="text-gray-700 text-[10px] ml-2">（出圖數來自 render_history；列表的「已扣款」不代表有出圖）</span>`;
 }
 
 function showLogDetail(idx) {

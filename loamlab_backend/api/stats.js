@@ -1153,7 +1153,51 @@ export default async function handler(req, res) {
 
         const { data, error } = await q;
         if (error) return res.status(500).json({ code: -1, msg: error.message });
-        return res.status(200).json({ code: 0, logs: data || [] });
+
+        // 【2026-09-10】「有沒有出圖」不能從 transactions 判斷。
+        // RENDER_* 只是「扣款成功」的紀錄，跟 AI 到底有沒有生出圖片完全無關——舊版後台把所有
+        // 非退款、非儲值的列一律標成「✅ 成功」，於是 alen3388 那 116 筆全滅的渲染在後台看起來
+        // 是「成功、退款、成功、退款」交錯，像時好時壞，實際上他 render_history 一筆都沒有。
+        // 這會讓人把「全滅」誤判成「間歇性問題」，是會誤導決策的假數據。
+        // 出圖的唯一憑證是 render_history，故在此用相同的篩選條件補一份彙總。
+        // 逐筆配對做不到（批量渲染同秒送出多筆、render_history 沒有 transaction_id 可對），
+        // 所以給的是區間統計而非逐列判定——寧可少說，不可謊報。
+        // 三個數字必須同基準：logs 受 limit 200 截斷，若拿它算扣款/退款、卻拿全區間算出圖，
+        // 就會生出另一種假數據（例如「扣款 200 / 出圖 500」）。故三者一律走不受 limit 影響的
+        // count 查詢，套用與 logs 相同的 email／日期條件（type 篩選不套用——它只是列表的檢視
+        // 過濾，彙總要的是整體真相）。
+        // ⚠️ 沒選日期時**絕不能**拿「全部歷史」來算出圖率：render_history 在 2026-04-09～09-09
+        // 之間有五個月的空洞（見 T9，寫入靜默失敗了五個月），拿它除以全時間的扣款數會得到
+        // 假的個位數出圖率並亮紅燈——那正是這次要根治的「假數據誤導決策」本身。
+        // 故預設落在最近 24 小時（也正好是「現在健不健康」要問的區間），使用者明確指定日期時才照他的。
+        const hasDateFilter = Boolean(fromDate || toDate);
+        const defaultSince = hasDateFilter ? null : new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+        let summary = null;
+        try {
+            const scoped = (table) => {
+                let sq = noTestRef(supabase.from(table).select('id', { count: 'exact', head: true }));
+                if (emailFilter) sq = sq.ilike('user_email', `%${emailFilter}%`);
+                if (fromDate) sq = sq.gte('created_at', new Date(fromDate).toISOString());
+                if (toDate)   sq = sq.lte('created_at', new Date(toDate + 'T23:59:59.999Z').toISOString());
+                if (defaultSince) sq = sq.gte('created_at', defaultSince);
+                return sq;
+            };
+            const [charged, refunded, rendered] = await Promise.all([
+                scoped('transactions').like('transaction_type', 'RENDER_%'),
+                scoped('transactions').like('transaction_type', 'REFUND_%'),
+                scoped('render_history')
+            ]);
+            summary = {
+                charged:  charged.count  ?? null,
+                refunded: refunded.count ?? null,
+                rendered: rendered.count ?? null,   // null = 查不到，前端就不要顯示假數字
+                scope: hasDateFilter ? 'custom' : 'recent_24h'
+            };
+        } catch (e) {
+            console.error('[request_log] summary failed:', e.message);
+        }
+
+        return res.status(200).json({ code: 0, logs: data || [], summary });
     }
 
     // ── Admin: 付款審計（webhook_errors + 異常用戶）────────────────────────────

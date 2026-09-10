@@ -1219,7 +1219,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ code: 0 });
     }
 
-    const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic, mrr: mrrBreakdown, dodo_diff: dodoDiff, cron_daily_metrics };
+    const actions = { dashboard, users, revenue, renders, feedback, funnel, insights, vercel_traffic, mrr: mrrBreakdown, dodo_diff: dodoDiff, cron_daily_metrics, health };
     if (!actions[action]) return res.status(400).json({ code: -1, msg: `Unknown action: ${action}` });
 
     try {
@@ -2101,4 +2101,137 @@ async function cron_daily_metrics(supabase, query = {}) {
     const { error } = await supabase.from('daily_metrics').upsert(row, { onConflict: 'date' });
     if (error) return { success: false, error: error.message };
     return { success: true, date: dateStr, metrics: row };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 系統健康自檢（2026-09-10）
+//
+// 【為什麼要有這支】當天一天之內查出九個問題：渲染失敗查不出原因、被擋登入完全隱形、
+// 後台把「扣款」謊報成「出圖成功」、成本 KPI 從來就是 0、render_history 靜默全滅五個月、
+// 每日排程停擺 14 天、Storage 堆到 1.4GB、前端放棄卻不退款、kol_ledger 表根本不存在。
+// 它們的共同根因不是九個獨立的 bug，而是同一件事：
+//
+//     系統會說謊或沉默，而沒有任何機制會發現這件事。
+//
+// 逐個修完，下次還會有第十個。所以這裡建的是「主動發現說謊」的機制本身。
+//
+// 【為什麼是 pull 而不是 push】既有的監控全都掛在 scan_render_anomalies 那條排程上，
+// 而那條排程本身已經壞了 14 天沒人知道 —— 監控不能依賴被監控的東西。
+// 所以這支設計成「打開後台就當場算」，即使 Vercel cron 永遠修不好，一開後台就看得到真相。
+//
+// 【為什麼不進自動輪詢】T12 查過：admin 的 60 秒輪詢是 Disk IO 的大戶。這支查詢多，
+// 只在進入儀表板時跑一次、或手動點重整，絕不可掛進 setInterval。
+async function health(supabase) {
+    const checks = [];
+    const push = (id, label, status, detail, value = null) => checks.push({ id, label, status, detail, value });
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+
+    // 1. Schema 完整性。repo 的 supabase_setup.sql 有 CREATE TABLE 不代表正式庫真的跑過 ——
+    //    render_history 少一個欄位漏了五個月（T9）、kol_ledger 整張表不存在（T13），都是這樣來的。
+    //    清單來自 grep 程式碼真正會碰的表。
+    const TABLES = ['users', 'transactions', 'render_history', 'feedback', 'payments', 'daily_metrics',
+        'system_config', 'system_config_log', 'webhook_errors', 'email_logs', 'email_templates',
+        'user_presets', 'user_materials', 'rate_limits', 'auth_sessions', 'otp_lang',
+        'reward_requests', 'kol_ledger'];
+    try {
+        const results = await Promise.all(TABLES.map(async t => {
+            const { error } = await supabase.from(t).select('*', { count: 'exact', head: true }).limit(1);
+            return { t, missing: Boolean(error) };
+        }));
+        const missing = results.filter(r => r.missing).map(r => r.t);
+        push('schema', '資料表完整性', missing.length ? 'critical' : 'ok',
+            missing.length
+                ? '程式碼會寫、但正式庫沒有這些表：' + missing.join(', ') + '（寫入會靜默失敗，資料永久遺失）'
+                : TABLES.length + ' 張表全部存在',
+            missing);
+    } catch (e) { push('schema', '資料表完整性', 'warn', '檢查失敗：' + e.message); }
+
+    // 2. 點數對帳。全系統最重要的一條：扣款 − 退款 − 出圖 不等於 0，就代表有人被吃了點數。
+    //    2026-09-10 alen3388 少退 20 點、hanaxyq 少退 15 點，都是靠人工盤點才發現的。
+    try {
+        const scoped = (table) => noTestRef(supabase.from(table).select('*', { count: 'exact', head: true })).gte('created_at', dayAgo);
+        const [charged, refunded, rendered] = await Promise.all([
+            scoped('transactions').like('transaction_type', 'RENDER_%'),
+            scoped('transactions').like('transaction_type', 'REFUND_%'),
+            scoped('render_history')
+        ]);
+        const c = charged.count || 0, r = refunded.count || 0, d = rendered.count || 0;
+        const hanging = c - r - d;
+        // 容許 ±2：查詢的瞬間可能正好有任務在途（已扣款、還沒出圖也還沒退款）
+        const st = hanging > 2 ? 'critical' : hanging < -2 ? 'warn' : 'ok';
+        push('points_reconcile', '點數對帳（24h）', st,
+            '扣款 ' + c + ' − 退款 ' + r + ' − 出圖 ' + d + ' = ' + hanging
+            + (hanging > 2 ? '　⇒ 有 ' + hanging + ' 筆扣了錢卻既沒出圖也沒退款，請查是誰' : '')
+            + (hanging < -2 ? '　⇒ 退款或出圖多於扣款，可能有重複退款' : ''),
+            { charged: c, refunded: r, rendered: d, hanging });
+    } catch (e) { push('points_reconcile', '點數對帳（24h）', 'warn', '檢查失敗：' + e.message); }
+
+    // 3. 出圖率。與上面對帳的差別：對帳看「錢有沒有被吃」，這裡看「服務好不好用」。
+    //    正常日（如 9/9）是 46/58 ≈ 79%，低於七成代表有事發生。
+    try {
+        const [charged, rendered] = await Promise.all([
+            noTestRef(supabase.from('transactions').select('*', { count: 'exact', head: true })).like('transaction_type', 'RENDER_%').gte('created_at', dayAgo),
+            noTestRef(supabase.from('render_history').select('*', { count: 'exact', head: true })).gte('created_at', dayAgo)
+        ]);
+        const c = charged.count || 0, d = rendered.count || 0;
+        const rate = c > 0 ? Math.round(d / c * 100) : null;
+        push('render_rate', '出圖率（24h）',
+            rate === null ? 'ok' : rate >= 70 ? 'ok' : rate >= 40 ? 'warn' : 'critical',
+            rate === null ? '24 小時內沒有渲染' : d + ' / ' + c + ' = ' + rate + '%', rate);
+    } catch (e) { push('render_rate', '出圖率（24h）', 'warn', '檢查失敗：' + e.message); }
+
+    // 4. 成本記錄管線。provider_cost_usd_cents 全 null 代表成本 KPI 又變成假的 ——
+    //    2026-09-10 查到 AtlasCloud 的欄位叫 price、程式碼卻找 cost，於是 103 筆全 null，
+    //    admin 的「成本 / 淨利」等於成本恆 0、淨利＝營業額。
+    try {
+        const { data: recent } = await supabase.from('render_history')
+            .select('provider_cost_usd_cents').gte('created_at', dayAgo).limit(200);
+        const rows = recent || [];
+        const withCost = rows.filter(r => r.provider_cost_usd_cents != null).length;
+        push('cost_pipeline', '成本記錄管線',
+            rows.length === 0 ? 'ok' : withCost === 0 ? 'critical' : withCost < rows.length / 2 ? 'warn' : 'ok',
+            rows.length === 0 ? '24 小時內沒有出圖'
+                : withCost + ' / ' + rows.length + ' 筆有記到成本'
+                  + (withCost === 0 ? '　⇒ 成本 / 淨利 KPI 目前是假的（成本恆 0）' : ''),
+            { with_cost: withCost, total: rows.length });
+    } catch (e) { push('cost_pipeline', '成本記錄管線', 'warn', '檢查失敗：' + e.message); }
+
+    // 5. 每日排程是否還活著。daily_metrics 是 cron_daily_metrics 的產物，它停在哪天，
+    //    排程就是哪天死的。2026-09-10 實測停在 08-27，已經 14 天沒跑。
+    try {
+        const { data: dm } = await supabase.from('daily_metrics').select('date').order('date', { ascending: false }).limit(1);
+        const last = dm && dm[0] ? dm[0].date : null;
+        const daysAgo = last ? Math.floor((Date.now() - new Date(last + 'T00:00:00Z').getTime()) / 86400000) : null;
+        push('cron_alive', '每日排程',
+            daysAgo === null ? 'critical' : daysAgo <= 2 ? 'ok' : 'critical',
+            last ? 'daily_metrics 最新一筆：' + last + '（' + daysAgo + ' 天前）'
+                   + (daysAgo > 2 ? '　⇒ 排程沒在跑：孤兒扣款不會自動回收、Storage 不會清理' : '')
+                 : '完全沒有資料',
+            daysAgo);
+    } catch (e) { push('cron_alive', '每日排程', 'warn', '檢查失敗：' + e.message); }
+
+    // 6. Storage 堆積。render-temp 的暫存檔沒人刪就會一路堆到爆掉免費額度
+    //    （2026-09-09 實測 1.45GB / 5128 檔）。這裡只數 tmp/ 的檔案數。
+    try {
+        const { data: files } = await supabase.storage.from('render-temp').list('tmp', { limit: 1000 });
+        const n = files ? files.length : 0;
+        push('storage', 'Storage 暫存檔', n >= 1000 ? 'critical' : n > 400 ? 'warn' : 'ok',
+            'render-temp/tmp 目前 ' + n + (n >= 1000 ? '+' : '') + ' 檔'
+            + (n > 400 ? '　⇒ 清理沒跟上，會撐爆免費額度' : ''), n);
+    } catch (e) { push('storage', 'Storage 暫存檔', 'warn', '檢查失敗：' + e.message); }
+
+    // 7. 被擋在門外的人。IP pinning 的 401 發生在扣款之前，不寫交易也不寫歷史 ——
+    //    2026-09-10 之前這條路徑完全隱形，用戶反覆送出、反覆失敗，後台一片空白。
+    try {
+        const { count } = await supabase.from('feedback').select('*', { count: 'exact', head: true })
+            .eq('type', 'auth_ip_blocked').gte('created_at', dayAgo);
+        const n = count || 0;
+        push('auth_blocked', '被擋登入（24h）', n === 0 ? 'ok' : n > 20 ? 'critical' : 'warn',
+            n === 0 ? '沒有人被擋'
+                    : n + ' 次被 IP pinning 擋下　⇒ 這些人根本進不到渲染，畫面只叫他重新登入', n);
+    } catch (e) { push('auth_blocked', '被擋登入（24h）', 'warn', '檢查失敗：' + e.message); }
+
+    const order = { critical: 3, warn: 2, ok: 1 };
+    const overall = checks.reduce((worst, c) => (order[c.status] > order[worst] ? c.status : worst), 'ok');
+    return { overall, checks, generated_at: new Date().toISOString() };
 }

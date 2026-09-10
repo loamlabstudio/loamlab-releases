@@ -75,6 +75,11 @@
     </div>
   </div>
 
+  <!-- 系統健康自檢。刻意放在所有分頁之上、且不進 60 秒輪詢（見 loadHealth 的說明）。
+       2026-09-10 之前，排程停擺 14 天、Storage 堆到 1.4GB、成本 KPI 恆為 0、
+       kol_ledger 整張表不存在——全都沒有任何地方看得出來。這一條就是給那件事用的。 -->
+  <div id="health-banner" class="mb-5 hidden"></div>
+
   <!-- Tab 導航 -->
   <div class="sticky top-0 z-20 bg-[#080b12]/95 backdrop-blur border-b border-white/8 -mx-5 px-5 mb-5">
     <div class="flex gap-1 py-2">
@@ -1254,6 +1259,50 @@ function login() {
   document.getElementById('dashboard').classList.remove('hidden');
   switchAdminTab(localStorage.getItem('admin_active_tab') || 'data');
   loadAll();
+  loadHealth();
+}
+
+// 系統健康自檢。刻意「不」放進 loadAll()——loadAll 每 60 秒跑一次，而 T12 查過那正是
+// Disk IO 的最大來源。這支查詢多，只在登入時跑一次，要重看就按橫幅上的重新檢查。
+async function loadHealth() {
+  const el = document.getElementById('health-banner');
+  if (!el) return;
+  try {
+    const r = await fetch(`${API_BASE}/api/stats?action=health`, { headers: { 'Authorization': `Bearer ${adminKey}` } });
+    if (r.status === 401) return;
+    const j = await r.json();
+    if (j.code !== 0 || !j.data) return;
+    const d = j.data;
+    // 全綠就不佔版面：健康的時候不該有東西吸引注意力，有問題才跳出來
+    if (d.overall === 'ok') {
+      el.className = 'mb-5';
+      el.innerHTML = `<div class="flex items-center gap-2 text-[11px] text-gray-600">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
+        <span>系統自檢通過（${d.checks.length} 項）</span>
+        <button onclick="loadHealth()" class="text-gray-700 hover:text-gray-400 underline">重新檢查</button></div>`;
+      el.classList.remove('hidden');
+      return;
+    }
+    const tone = d.overall === 'critical'
+      ? { border: 'border-red-600/40', bg: 'bg-red-950/30', text: 'text-red-400', label: '需要處理' }
+      : { border: 'border-yellow-600/40', bg: 'bg-yellow-950/30', text: 'text-yellow-400', label: '注意' };
+    const bad = d.checks.filter(c => c.status !== 'ok');
+    const rows = bad.map(c => {
+      const dot = c.status === 'critical' ? 'bg-red-500' : 'bg-yellow-500';
+      return `<div class="flex items-start gap-2 py-1">
+        <span class="w-1.5 h-1.5 rounded-full ${dot} inline-block mt-1.5 shrink-0"></span>
+        <span class="text-gray-300 w-32 shrink-0">${_esc(c.label)}</span>
+        <span class="text-gray-400 flex-1">${_esc(c.detail)}</span></div>`;
+    }).join('');
+    el.className = `mb-5 card border ${tone.border} ${tone.bg}`;
+    el.innerHTML = `<div class="flex items-center justify-between mb-2">
+        <div class="text-sm font-semibold ${tone.text}">系統自檢：${bad.length} 項${tone.label}</div>
+        <button onclick="loadHealth()" class="text-[11px] text-gray-500 hover:text-white border border-white/8 px-2 py-1 rounded-lg">重新檢查</button>
+      </div><div class="text-xs">${rows}</div>`;
+    el.classList.remove('hidden');
+  } catch (e) {
+    console.error('[health] failed:', e);
+  }
 }
 function logout() {
   sessionStorage.removeItem('admin_key');

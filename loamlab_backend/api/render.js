@@ -837,6 +837,15 @@ async function _handleRender(req, res) {
     const refImageUrls = [];
     const userPrompt = (userPayload.parameters?.user_prompt || userPayload.parameters?.prompt || '').trim();
 
+    // 【2026-09-10】失敗診斷用。當天 05:46–06:51 UTC 有 145 筆渲染連續失敗（4 位用戶、1K/2K
+    // 與 T1/T2 都中），全部走下方那個 catch 寫 REFUND_NETWORK_ERROR——但那筆 metadata 只記了
+    // tool_id，Vercel Hobby 的 runtime log 又只保留 1 小時，事後要查「到底是上游掛了、逾時、
+    // 還是我方 bug」完全無據可查，只能猜。這個 try 涵蓋了圖片上傳、參考圖下載、上游請求、
+    // 結果解析四段，範圍很大，光知道「失敗了」沒有任何診斷價值。
+    // 故在此追蹤「卡在哪一段、跑了多久」，由 catch 一併寫進交易紀錄（見該處註解）。
+    let renderStage = 'prepare';
+    const renderStartedAt = Date.now();
+
     try {
         if (activeTool === 2) {
             const baseImageB64 = userPayload.parameters?.base_image;
@@ -1031,6 +1040,7 @@ async function _handleRender(req, res) {
         // 為避免 AtlasCloud 無法下載 TOS 導致 Model input cannot be empty
                 // 將所有參考圖片確保為 URL 或 base64 data URL 容錯機制
         // 為避免 AtlasCloud 無法下載 TOS 導致 Model input cannot be empty
+        renderStage = 'fetch_ref_images';
         const atlasImages = await Promise.all(allImagesStrArray.filter(Boolean).map(async (img) => {
             if (img.startsWith('http')) {
                 try {
@@ -1059,6 +1069,7 @@ async function _handleRender(req, res) {
         const finalAspect = resolveAspectRatio(atlasImages, userPayload.parameters?.aspect_ratio || null);
         const reqBody = buildAtlasReqBody(finalModel, atlasImages, finalPrompt, normalizedRes, activeTool, finalAspect);
 
+        renderStage = 'atlas_request';
         const response = await fetch('https://api.atlascloud.ai/api/v1/model/generateImage', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${ATLASCLOUD_API_KEY}`, 'Content-Type': 'application/json' },
@@ -1068,9 +1079,14 @@ async function _handleRender(req, res) {
 
         if (!response.ok) {
             const errText = await response.text().catch(() => '');
-            throw new Error(`AtlasCloud API error: ${response.status} - ${errText.slice(0, 200)}`);
+            const upstreamErr = new Error(`AtlasCloud API error: ${response.status} - ${errText.slice(0, 200)}`);
+            // 掛在 error 上讓 catch 能把狀態碼原樣存進交易紀錄：429（限流）、401（金鑰失效）、
+            // 5xx（上游故障）事後要採取的行動完全不同，混成一句「網路錯誤」等於沒記。
+            upstreamErr.httpStatus = response.status;
+            throw upstreamErr;
         }
 
+        renderStage = 'parse_response';
         const data = await response.json();
         // 與 poll_render（約 583-586 行）保持一致的解析邏輯，避免這裡漏抓 outputs/output
         // 或把 images[0]/outputs[0] 的物件形式誤當字串存進 render_history
@@ -1111,15 +1127,37 @@ async function _handleRender(req, res) {
             });
         } else {
             try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch(e) {}
-            try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL', metadata: { tool_id: activeTool } }]); } catch(e) {}
-            console.error('[render] no_url response:', JSON.stringify(data).slice(0, 200));
+            // 同樣把現場留在交易紀錄裡：上游回了 200 卻沒有圖，回應長什麼樣是唯一線索
+            const noUrlMeta = {
+                tool_id: activeTool,
+                resolution: resVal || null,
+                elapsed_ms: Date.now() - renderStartedAt,
+                resp: sanitizeError(JSON.stringify(data || {})).slice(0, 300)
+            };
+            try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NO_URL', metadata: noUrlMeta }]); } catch(e) {}
+            console.error('[render] no_url response:', JSON.stringify(noUrlMeta));
             return res.status(500).json({ code: -1, msg: '出圖完成但結果未返回，請稍後再試。', points_refunded: true });
         }
     } catch (apiError) {
         await cleanTemp2().catch(() => {});
         await cleanTemp().catch(() => {});
         try { await supabase.rpc('deduct_render_points', { p_email: userEmail, p_cost: -cost }); } catch(e) {}
-        try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NETWORK_ERROR', metadata: { tool_id: activeTool } }]); } catch(e) {}
+        // 失敗現場一併留存（見 renderStage 宣告處的說明）。這裡刻意存進 transactions.metadata 而
+        // 不是只 console.error：Vercel Hobby 沒有 log drain，runtime log 一小時後就查不到了，而
+        // 交易紀錄是本來就會保留的那張表，不需要新增任何表或排程。
+        // 訊息一律過 sanitizeError：這張表會經 admin 的 request_log 端點回到瀏覽器，不能讓供應商
+        // 名稱與金鑰片段外流（同 feedback_no_backend_leak_to_user）。
+        const failMeta = {
+            tool_id: activeTool,
+            stage: renderStage,
+            elapsed_ms: Date.now() - renderStartedAt,
+            resolution: resVal || null,
+            err: sanitizeError(String(apiError?.message || apiError || 'unknown')).slice(0, 300)
+        };
+        if (apiError?.httpStatus) failMeta.http_status = apiError.httpStatus;
+        if (apiError?.name) failMeta.err_name = apiError.name;   // TimeoutError / AbortError 靠這個分辨
+        try { await supabase.from('transactions').insert([{ user_email: userEmail, amount: cost, transaction_type: 'REFUND_NETWORK_ERROR', metadata: failMeta }]); } catch(e) {}
+        console.error('[render] failed:', JSON.stringify(failMeta));
         return res.status(500).json({ code: -1, msg: sanitizeError(apiError?.message || '渲染失敗，請稍後再試。'), points_refunded: true });
     }
 }
@@ -1141,6 +1179,9 @@ async function refundAndFail(supabase, userEmail, cost, reason, toolId = null, t
             const insertPayload = { user_email: userEmail, amount: cost, transaction_type: 'REFUND_TASK_FAILED', metadata: {} };
             if (toolId) insertPayload.metadata.tool_id = toolId;
             if (taskId) insertPayload.metadata.task_id = taskId;
+            // reason 本來就算好了、卻只回給前端不落地，於是 poll 路徑的失敗事後同樣查不出原因
+            // （與主流程 catch 是同一個缺陷，2026-09-10 一起補）。已是給用戶看的措辭，不含內部細節。
+            if (reason) insertPayload.metadata.reason = String(reason).slice(0, 300);
             await supabase.from('transactions').insert([insertPayload]); 
         } catch (e) {}
     }

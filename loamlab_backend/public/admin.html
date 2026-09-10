@@ -4227,8 +4227,16 @@ async function loadLogs() {
       const isRefund = row.transaction_type.startsWith('REFUND');
       const isTopup  = row.transaction_type.startsWith('TOPUP');
       const typeColor = isRefund ? 'text-red-400' : isTopup ? 'text-green-400' : 'text-blue-400';
-      const statusBadge = isRefund ? '❌ 退款' : isTopup ? '💰 儲值' : '✅ 成功';
       const meta = row.metadata || {};
+      // 退款列補上「為什麼失敗」的一行摘要。2026-09-10 那天後台就是一片紅、卻看不出原因，
+      // 要點進每一列的 alert 才知道，145 筆根本看不完。欄位由 render.js 的失敗路徑寫入
+      // （stage / http_status / reason），舊資料沒有這些欄位就退回原本的單純「退款」。
+      let statusBadge = isTopup ? '💰 儲值' : '✅ 成功';
+      if (isRefund) {
+        const why = [meta.http_status ? 'HTTP ' + meta.http_status : '', meta.stage || '', meta.err || meta.reason || '']
+          .filter(Boolean).join(' · ');
+        statusBadge = '❌ 退款' + (why ? `<div class="text-[10px] text-gray-500 truncate max-w-[280px]" title="${_esc(why)}">${_esc(why)}</div>` : '');
+      }
       const time = new Date(row.created_at).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
       tbody.insertAdjacentHTML('beforeend', `
         <tr class="border-t border-white/5 hover:bg-white/3 cursor-pointer transition-colors"

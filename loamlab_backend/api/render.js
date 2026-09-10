@@ -535,23 +535,46 @@ async function _handleRender(req, res) {
             const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
             // 僅當 last_login_ip 已記錄且與當前 IP 不符時拒絕（null 表示舊版用戶未記錄，不擋）
             if (userRow?.last_login_ip && userRow.last_login_ip !== clientIp) {
-                // 【2026-09-10】把這條路徑從隱形改成可見。
-                // 用戶回報「送出就失敗」，但 transactions 裡查不到任何東西——因為被擋在這裡的請求
-                // 發生在扣款之前，不寫交易、不寫歷史，後台完全看不到，我們甚至無法分辨他到底是
-                // 渲染失敗還是根本沒進到渲染。實測確認：401 前後交易數 254→254，一筆都沒留。
-                // 用戶換 wifi／開手機熱點就會踩到，而且會反覆踩，我們卻無從得知。
-                // 刻意 await（不 fire-and-forget）：serverless 送出回應後可能立刻凍結，
-                // 沒 await 的 insert 有機會來不及進資料庫——這是 saveRenderHistory already 踩過的坑。
-                // 只有「資料庫裡真實存在、且已綁過 IP」的帳號會走到這裡，隨機 email 打不進來，
-                // 不必擔心被灌爆。
+                // 【2026-09-10 改為「換 IP 放行、連續跨 IP 才擋」】
+                //
+                // 原本只要 IP 與登入當下不同就直接 401。但動態 IP 是常態——家用寬頻重連、
+                // 行動網路、wifi 與熱點切換都會換 IP，而用戶完全不知道自己「換了網路環境」。
+                // 他看到的是：按下渲染 → 跳出「登入憑證已過期」→ 沒有圖。那就是他口中的「生圖失敗」。
+                // 而在補上這段記錄之前，這條路徑完全隱形：發生在扣款之前，不寫交易、不寫歷史，
+                // 後台一片空白（實測 401 前後交易數 254→254，一筆都沒留）。
+                //
+                // 實證：2026-09-10 14:19 catchology@gmail.com（pro 方案）被擋，
+                // IP 42.79.86.9 → 42.70.182.187，同一家 ISP 的動態配發，不是換設備、更不是盜用。
+                //
+                // 這道防線防的是「知道某人 email 就能燒他的點數」——攻擊者拿不到錢，只能消耗點數；
+                // 而誤擋的代價是付費用戶當場不能用、還看不懂為什麼。兩相權衡，改為：
+                //   單純換 IP → 放行並把綁定更新成新 IP
+                //   短時間內連續跨多個不同 IP → 那才是真的異常（多地同時盜用），照擋
+                const IP_CHURN_WINDOW_MS = 10 * 60 * 1000;
+                const IP_CHURN_LIMIT = 3;
+                let churn = 0;
                 try {
+                    // 每次變更都記一筆，這同時也是「誰在換 IP、換多兇」的唯一資料來源。
+                    // 刻意 await：serverless 送出回應後可能立刻凍結，沒 await 的 insert 會來不及落地
+                    //（saveRenderHistory 已經踩過這個坑）。只有資料庫裡真實存在且綁過 IP 的帳號
+                    // 會走到這裡，隨機 email 打不進來，不必擔心被灌爆。
                     await supabase.from('feedback').insert([{
                         user_email: userEmail,
-                        type: 'auth_ip_blocked',
+                        type: 'auth_ip_changed',
                         metadata: { plugin_version: pluginVersion, pinned_ip: userRow.last_login_ip, current_ip: clientIp }
                     }]);
-                } catch (e) { /* 記錄失敗不能影響這道安全防線本身 */ }
-                return res.status(401).json({ code: -1, msg: '登入憑證已過期或網路環境發生變更。為保障您的點數安全，請在外掛首頁重新點擊登入以驗證身分。' });
+                    const { count } = await supabase.from('feedback')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('user_email', userEmail).eq('type', 'auth_ip_changed')
+                        .gte('created_at', new Date(Date.now() - IP_CHURN_WINDOW_MS).toISOString());
+                    churn = count || 0;
+                } catch (e) { /* 記錄或查詢失敗都不該連帶擋住正常用戶，churn 維持 0 即放行 */ }
+
+                if (churn > IP_CHURN_LIMIT) {
+                    return res.status(401).json({ code: -1, msg: '登入憑證已過期或網路環境發生變更。為保障您的點數安全，請在外掛首頁重新點擊登入以驗證身分。' });
+                }
+                // 放行：把綁定移到新 IP，下次同一個網路就不會再走進這段
+                try { await supabase.from('users').update({ last_login_ip: clientIp }).eq('email', userEmail); } catch (e) {}
             }
         } catch (ipErr) {
             console.warn('[render] IP check DB error, proceeding:', ipErr?.message);

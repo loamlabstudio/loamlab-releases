@@ -2240,16 +2240,20 @@ async function health(supabase) {
             + (n > 400 ? '　⇒ 清理沒跟上，會撐爆免費額度' : ''), n);
     } catch (e) { push('storage', 'Storage 暫存檔', 'warn', '檢查失敗：' + e.message); }
 
-    // 7. 被擋在門外的人。IP pinning 的 401 發生在扣款之前，不寫交易也不寫歷史 ——
-    //    2026-09-10 之前這條路徑完全隱形，用戶反覆送出、反覆失敗，後台一片空白。
+    // 7. 換網路的人次。IP 變更發生在扣款之前，不寫交易也不寫歷史 ——
+    //    2026-09-10 之前這條路徑完全隱形（而且當時是直接 401 擋下），用戶反覆送出、
+    //    反覆看到「登入憑證已過期」，後台卻一片空白。現在單純換 IP 會放行並更新綁定，
+    //    只有短時間連續跨多個 IP 才擋，所以這個數字是「觀察值」不是「故障數」：
+    //    平時有幾筆很正常（動態 IP、換 wifi），暴增才代表有事。
     try {
         const { count } = await supabase.from('feedback').select('*', { count: 'exact', head: true })
-            .eq('type', 'auth_ip_blocked').gte('created_at', dayAgo);
+            .eq('type', 'auth_ip_changed').gte('created_at', dayAgo);
         const n = count || 0;
-        push('auth_blocked', '被擋登入（24h）', n === 0 ? 'ok' : n > 20 ? 'critical' : 'warn',
-            n === 0 ? '沒有人被擋'
-                    : n + ' 次被 IP pinning 擋下　⇒ 這些人根本進不到渲染，畫面只叫他重新登入', n);
-    } catch (e) { push('auth_blocked', '被擋登入（24h）', 'warn', '檢查失敗：' + e.message); }
+        push('auth_ip_churn', '換網路人次（24h）', n > 50 ? 'warn' : 'ok',
+            n === 0 ? '沒有人換網路'
+                    : n + ' 次 IP 變更（已自動放行並更新綁定）'
+                      + (n > 50 ? '　⇒ 異常偏高，值得看是誰在換' : ''), n);
+    } catch (e) { push('auth_ip_churn', '換網路人次（24h）', 'warn', '檢查失敗：' + e.message); }
 
     const order = { critical: 3, warn: 2, ok: 1 };
     const overall = checks.reduce((worst, c) => (order[c.status] > order[worst] ? c.status : worst), 'ok');

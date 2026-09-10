@@ -535,6 +535,22 @@ async function _handleRender(req, res) {
             const { data: userRow } = await supabase.from('users').select('last_login_ip').eq('email', userEmail).maybeSingle();
             // 僅當 last_login_ip 已記錄且與當前 IP 不符時拒絕（null 表示舊版用戶未記錄，不擋）
             if (userRow?.last_login_ip && userRow.last_login_ip !== clientIp) {
+                // 【2026-09-10】把這條路徑從隱形改成可見。
+                // 用戶回報「送出就失敗」，但 transactions 裡查不到任何東西——因為被擋在這裡的請求
+                // 發生在扣款之前，不寫交易、不寫歷史，後台完全看不到，我們甚至無法分辨他到底是
+                // 渲染失敗還是根本沒進到渲染。實測確認：401 前後交易數 254→254，一筆都沒留。
+                // 用戶換 wifi／開手機熱點就會踩到，而且會反覆踩，我們卻無從得知。
+                // 刻意 await（不 fire-and-forget）：serverless 送出回應後可能立刻凍結，
+                // 沒 await 的 insert 有機會來不及進資料庫——這是 saveRenderHistory already 踩過的坑。
+                // 只有「資料庫裡真實存在、且已綁過 IP」的帳號會走到這裡，隨機 email 打不進來，
+                // 不必擔心被灌爆。
+                try {
+                    await supabase.from('feedback').insert([{
+                        user_email: userEmail,
+                        type: 'auth_ip_blocked',
+                        metadata: { plugin_version: pluginVersion, pinned_ip: userRow.last_login_ip, current_ip: clientIp }
+                    }]);
+                } catch (e) { /* 記錄失敗不能影響這道安全防線本身 */ }
                 return res.status(401).json({ code: -1, msg: '登入憑證已過期或網路環境發生變更。為保障您的點數安全，請在外掛首頁重新點擊登入以驗證身分。' });
             }
         } catch (ipErr) {

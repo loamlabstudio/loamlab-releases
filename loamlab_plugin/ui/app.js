@@ -1368,11 +1368,23 @@ window.receiveFromRuby = function (data) {
         const sessionItems = (window._sessionRenders || [])
             .filter(s => !rubyFiles.some(r => r.cloud_url === s.cloud_url || r.file_url === s.cloud_url))
             .map(s => ({ cloud_url: s.cloud_url, scene: s.scene, resolution: s.resolution, prompt: s.prompt, timestamp: s.timestamp }));
-        renderHistoryGrid([...rubyFiles, ...sessionItems]);
+        const localItems = [...rubyFiles, ...sessionItems];
+        renderHistoryGrid(localItems);      // 先畫本機的，不讓網路拖慢面板
+        _mergeCloudHistory(localItems);     // 再補上「雲端有、本機沒有」的
         return;
     }
     if (data.status === 'system_hint') {
         _showSystemHint(data.hint_id);
+        return;
+    }
+    // 存檔失敗要當場說出來。這條路徑以前完全靜默（只寫 Ruby 主控台），
+    // 用戶只會看到「渲染跑完卻什麼都沒有」，畫面上沒有任何線索可循。
+    // 文案原則：白話講結果 + 一句他真的能做的事，不出現任何技術名詞或例外訊息
+    // （那些留在 Ruby 的 log 給我們查）。三種情況都告訴他圖還在歷史紀錄裡，避免白白焦慮。
+    if (data.status === 'save_failed') {
+        const codes = { no_dir: 1, write: 1, download: 1 };
+        const key = 'save_failed_' + (codes[data.reason] ? data.reason : 'write');
+        showUpdateToast(t(key) || t('save_failed_write'));
         return;
     }
     if (data.action === 'scene_screenshot') {
@@ -3742,6 +3754,68 @@ function openHistoryModal() {
     }, 50);
 }
 
+// 從後端補上「雲端有、但本機沒有」的渲染結果。
+//
+// 【為什麼需要】本機存檔是單點：存檔目錄一旦失效，main.rb 的 download_and_save_render
+// 會靜默放棄——不存檔、不報錯、不通知。用戶端的症狀是點數扣了、後端也確實出圖成功，
+// 但 History 一片空白，看起來就像「渲染失敗」（2026-09-10 用戶回報的正是這個畫面）。
+// 有了這條，圖就不再只存在本機一個地方。
+//
+// 【限制，別當成完整雲端相簿】render_history 自 2026-09-09 才恢復正常寫入（先前靜默漏了
+// 五個月），而且圖片連結約 24 小時後就失效。所以這裡救得回來的是「最近的」，不是全部歷史。
+//
+// 用 AbortController 而非 AbortSignal.timeout()：SketchUp 內嵌的是舊版 CEF，沒有那個靜態方法。
+async function _mergeCloudHistory(localItems) {
+    if (!window.loamlabUserEmail) return;
+    try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(function () { ctrl.abort(); }, 8000);
+        const r = await fetch(`${API_BASE}/api/user?action=history&limit=50`, {
+            headers: { 'X-User-Email': window.loamlabUserEmail },
+            signal: ctrl.signal
+        });
+        clearTimeout(timer);
+        if (!r.ok) return;
+        const j = await r.json();
+        if (j.code !== 0 || !Array.isArray(j.history)) return;
+
+        const have = new Set((localItems || []).map(e => e.cloud_url || e.file_url).filter(Boolean));
+        const cloudOnly = j.history
+            .filter(h => h.full_url && !have.has(h.full_url))
+            .map(h => ({
+                cloud_url: h.full_url,
+                scene: h.style || 'render',
+                resolution: h.resolution || '',
+                prompt: h.prompt || '',
+                // created_at 是 ISO 字串，轉成與本機檔名一致的 YYYYMMDD_HHMMSS 才能一起排序
+                timestamp: (h.created_at || '').replace(/[-:T]/g, '').slice(0, 15).replace(/(\d{8})(\d{6})/, '$1_$2'),
+                is_cloud: true
+            }));
+        if (!cloudOnly.length) return;
+
+        const merged = [...(localItems || []), ...cloudOnly]
+            .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')));
+        renderHistoryGrid(merged);
+    } catch (e) {
+        // 拉不到雲端就維持本機結果，不能讓網路問題把已經畫好的歷史清掉
+    }
+}
+
+// 把雲端的圖存回本機。走 Ruby 的 auto_save_render（與 SmartCanvas 同一條存檔路徑）。
+function saveCloudRenderLocally(idx, btn) {
+    const e = (window._historyFiles || [])[idx];
+    if (!e || !e.cloud_url || !window.sketchup) return;
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    sketchup.auto_save_render({
+        url: e.cloud_url,
+        scene: e.scene || 'render',
+        resolution: e.resolution || '',
+        prompt: e.prompt || ''
+    });
+    // Ruby 端是非同步下載、沒有回呼確認，這裡只反映「已送出」，實際結果重開歷史即可看到
+    if (btn) setTimeout(function () { btn.textContent = '已送出'; }, 300);
+}
+
 function renderHistoryGrid(files) {
     const grid = document.getElementById('history-grid');
     if (!grid) return;
@@ -3813,6 +3887,13 @@ function renderHistoryGrid(files) {
                     <span class="text-[9px] text-white/30 truncate flex-1">${promptSnippet}</span>
                     <span class="text-[9px] text-white/20 shrink-0 ml-1">${date}</span>
                 </div>
+                ${e.is_cloud
+                    ? `<button onclick="event.stopPropagation();saveCloudRenderLocally(${i}, this)"
+                        class="mt-1 text-[9px] px-2 py-1 rounded border border-white/15 text-white/55 hover:bg-white/10 transition-colors">
+                        ${t('history_save_local') || '存到本機'}
+                       </button>`
+                    : ''
+                }
             </div>
         </div>`;
     }).join('');

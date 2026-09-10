@@ -197,16 +197,6 @@ module LoamLab
       end
     end
 
-    # 取得系統的 Downloads 資料夾路徑
-    def self.get_downloads_folder
-      if Sketchup.platform == :platform_win
-        folder = File.join(ENV['USERPROFILE'], 'Downloads')
-      else
-        folder = File.expand_path('~/Downloads')
-      end
-      folder.force_encoding("UTF-8").gsub("\\", "/")
-    end
-
     # 讀取偏好設定的唯一入口。
     #
     # 為什麼一定要包起來：SketchUp 的 `Sketchup.read_default` 內部是用 **eval** 把存進去的
@@ -290,15 +280,72 @@ module LoamLab
     end
 
     # 取得當前有效的儲存路徑：per-model → global default → Downloads
+    # 目錄可用 = 存在（或能被建出來）且可寫。不存在就直接建——使用者的 Downloads 被
+    # OneDrive 資料夾備份重新導向、或被手動移走／刪掉，都會讓原路徑消失，而這件事
+    # 用戶自己不會知道，只會看到「渲染完了但什麼都沒有」。
+    # 存檔失敗必須讓用戶「當場」看到。
+    # 原本三個失敗點（目錄不可用／寫檔失敗／重試三次仍放棄）都只寫 LoamLab.log，
+    # 而 Ruby 主控台用戶不會去開——症狀就變成「渲染跑完了，卻什麼都沒有」，
+    # 畫面上零線索，只能靠用戶回報、我們再回頭猜。2026-09-10 遇到的正是這個。
+    # 走既有的 @@pending_results 管道（每 0.5 秒推給 JS），不新增任何機制。
+    #
+    # ⚠️ 這裡只送 reason **代碼**（no_dir / write / download），不送任何錯誤文字。
+    # 例外訊息是給我們查的，不是給用戶看的：丟一句 Errno::EACCES 給設計師，
+    # 他既看不懂也做不了什麼，只會平白焦慮。文案由前端依語系決定，
+    # 一律「白話說明結果 + 一句他真的能做的事」，技術細節留在上面那行 LoamLab.log。
+    def self.notify_save_failed(reason)
+      @@pending_results << { status: 'save_failed', reason: reason.to_s[0, 32] }
+    rescue => e
+      LoamLab.log "[LoamLab] notify_save_failed 失敗: #{e.message}"
+    end
+
+    def self.usable_dir?(path)
+      return false if path.nil? || path.to_s.strip.empty?
+      p = path.to_s
+      Dir.mkdir(p) unless File.directory?(p)
+      File.directory?(p) && File.writable?(p)
+    rescue => e
+      # 不能直接回 false：批量渲染是並行的，兩張圖可能同時走到這裡，
+      # 其中一個先建好，另一個的 Dir.mkdir 就會拋 EEXIST——那明明是成功，
+      # 當成失敗會讓後者跑去 fallback 存到別的目錄，同一批圖散落兩處。
+      # 所以一律以「現在磁碟上的事實」為準再判一次。
+      ok = (File.directory?(p) && File.writable?(p) rescue false)
+      LoamLab.log "[LoamLab] usable_dir? #{p}: #{e.message}（重判=#{ok}）" unless ok
+      ok
+    end
+
+    # 存檔目錄的候選序列。**這個方法保證回傳一個真的能寫的目錄，或 nil。**
+    #
+    # 【2026-09-10 為什麼要有這串】原本第三層 fallback 只有 `%USERPROFILE%\Downloads` 一個，
+    # 它一旦不存在（OneDrive 重新導向最常見），download_and_save_render 會靜默 return——
+    # 不存檔、不報錯、不通知。用戶端的症狀是：點數扣了、後端也確實出圖成功、
+    # 但本機一個檔案都沒有、History 面板空白，畫面上沒有任何線索。
+    # 這條路徑在 2026-09-07（b0bf575 改為 Ruby 直接落地存檔）之後才變成主要路徑。
+    def self.fallback_save_dirs
+      home = (Sketchup.platform == :platform_win ? ENV['USERPROFILE'] : ENV['HOME']).to_s
+      return [] if home.empty?
+      [
+        File.join(home, 'Downloads'),
+        File.join(home, 'OneDrive', 'Downloads'),   # OneDrive 資料夾備份會把 Downloads 搬到這裡
+        File.join(home, 'Desktop'),
+        File.join(home, 'OneDrive', 'Desktop'),
+        File.join(home, 'Documents'),
+        File.join(home, 'LoamLab')                  # 最後手段：專屬資料夾，一定建得起來
+      ].map { |p| p.to_s.force_encoding("UTF-8").gsub("\\", "/") }
+    end
+
     def self.get_effective_save_path(model)
       path = model.get_attribute("LoamLabAI", "save_path", "")
-      if path.empty? || !File.directory?(path)
-        path = self.safe_read_default("global_save_path", "")
-      end
-      if path.empty? || !File.directory?(path)
-        path = self.get_downloads_folder
-      end
-      path
+      return path if self.usable_dir?(path)
+
+      path = self.safe_read_default("global_save_path", "")
+      return path if self.usable_dir?(path)
+
+      # 逐一嘗試候選目錄，回傳第一個真的能寫的。全部都不行才回 nil，
+      # 由呼叫端明確告知用戶，而不是靜默吞掉。
+      found = self.fallback_save_dirs.find { |p| self.usable_dir?(p) }
+      LoamLab.log "[LoamLab] 存檔目錄全部不可用（已試 #{self.fallback_save_dirs.size} 個候選）" if found.nil?
+      found
     end
 
     def self.show_dialog(force = false)
@@ -826,12 +873,15 @@ module LoamLab
       dialog.add_action_callback("list_saved_renders") do |action_context, params|
         begin
           model = Sketchup.active_model
-          # 收集所有曾用過的存檔目錄：model 專屬 + global + Downloads
-          scan_dirs = [
+          # 收集所有曾用過的存檔目錄：model 專屬 + global + 全部候選 fallback。
+          # ⚠️ 這份清單必須與 get_effective_save_path 的候選序列對稱——存檔會落在
+          # fallback_save_dirs 的任何一個，這裡少掃一個，那些圖就等於不存在：
+          # 檔案明明在磁碟上，History 卻空白，用戶只會以為「渲染沒成功」。
+          # （原本這裡只有 get_downloads_folder 一個，Downloads 被 OneDrive 搬走就全滅。）
+          scan_dirs = ([
             model.get_attribute("LoamLabAI", "save_path", ""),
-            self.safe_read_default("global_save_path", ""),
-            self.get_downloads_folder
-          ].uniq.select { |p| !p.empty? && File.directory?(p) }
+            self.safe_read_default("global_save_path", "")
+          ] + self.fallback_save_dirs).uniq.select { |p| !p.to_s.empty? && File.directory?(p) }
 
           history = []
           if scan_dirs.any?
@@ -1237,6 +1287,7 @@ module LoamLab
       end
       save_path = self.get_effective_save_path(model)
       unless save_path && File.directory?(save_path)
+        self.notify_save_failed('no_dir')
         release.call
         return
       end
@@ -1273,6 +1324,7 @@ module LoamLab
             LoamLab.log "[LoamLab] save_render OK: #{filename}"
           rescue => e
             LoamLab.log "[LoamLab] save_render write failed: #{e.message}"
+            self.notify_save_failed('write')
           ensure
             # 保留 @@reserved_paths 該筆：檔案已落地，File.exist? 自然會擋住後續碰撞
             @@saving_urls.delete(captured_url)
@@ -1286,6 +1338,7 @@ module LoamLab
           end
         else
           LoamLab.log "[LoamLab] save_render 放棄（重試 #{attempt - 1} 次仍失敗）"
+          self.notify_save_failed('download')
           release.call
         end
       end

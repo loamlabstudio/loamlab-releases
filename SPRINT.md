@@ -651,15 +651,40 @@ T4 360 分享                    → 分享連結非圖片，前端提早 return
 ```
 release_type: hotfix
 verified_diff:
+  - loamlab_plugin/main.rb
   - loamlab_plugin/ui/app.js
+  - loamlab_plugin/ui/i18n.js
   - loamlab_plugin/config.rb
   - loamlab_plugin.rb
   - loamlab_backend/api/version.js
-  - scripts/verify_dpi_calibration.js
   - SPRINT.md
-  - SPRINT_PROPOSAL.md
 sql_migration: false
 ```
+
+> **v1.4.77（2026-09-10）**：用戶回報「生圖失敗」，查證後是**兩個各自獨立、都完全隱形**的問題。
+>
+> **① 換網路就被鎖在門外（後端，已部署、無需更新插件即生效）**
+> IP pinning 原本只要 IP 與登入當下不同就直接 401。但動態 IP 是常態——家用寬頻重連、
+> 行動網路、wifi 與熱點切換都會換 IP，用戶根本不知道自己「換了網路環境」，
+> 只看到按下渲染後跳出「登入憑證已過期」、沒有圖。**那就是用戶口中的「生圖失敗」。**
+> 實證：14:19 catchology@gmail.com（pro）IP 42.79.86.9 → 42.70.182.187，同一家 ISP 的動態配發。
+> 改為「單純換 IP 放行並更新綁定；10 分鐘內連續跨超過 3 個 IP 才擋」。
+> 已實測：改動前同一請求回 401，改動後放行、綁定自動更新、變更有留下紀錄。
+>
+> **② 存檔失敗完全靜默（插件端，本次發版）**
+> 存檔目錄只有 `%USERPROFILE%\Downloads` 一個 fallback，一旦不存在（OneDrive 資料夾備份
+> 最常見）`download_and_save_render` 直接 return——不存檔、不報錯、不通知。
+> - 目錄候選 1 → 6 個，且不存在就自動建立（最後一個 `~/LoamLab` 一定建得起來）
+> - `list_saved_renders` 的掃描清單與存檔候選**對稱**（否則存了也掃不到，等於沒存）
+> - 三個原本只寫 log 的失敗點改為當場提示用戶，且**只給白話結果 + 一句能做的事**，
+>   不丟例外訊息給用戶看（技術細節留在 `LoamLab.log`）
+> - History 同時顯示雲端紀錄（後端 `/api/user?action=history` 早就存在、前端從沒用過），
+>   本機存檔失敗也拿得回圖；可一鍵存回本機
+> - 順手修掉自己引入的並發 bug：批量是並行的，`Dir.mkdir` 撞 `EEXIST` 會被誤判成目錄不可用
+>
+> **驗證**：`ruby -c` / `node --check` 全過；替身測試對真實檔案系統實跑 8 項含並發 8 執行緒；
+> i18n 六語系零缺漏；`check_cjs.ps1` 12/12。
+> **渲染時間不變**——所有改動都不在渲染路徑上（雲端歷史只在開啟 History 面板時非同步補）。
 
 > **v1.4.76 — Smart Canvas 高 DPI 游標消失修復（單一根因 hotfix）。**
 >

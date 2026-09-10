@@ -4,7 +4,7 @@
 // Why：v1.4.76 發佈時只改了 latest_version、漏改寫死的 download_url，導致線上 API
 // 宣告「有 1.4.76」卻讓 updater.rb 下載 v1.4.75 的 .rbz（updater 直接用這個欄位）。
 // 同一件事有兩個真實來源就一定會漂移，改成單一來源根除這一類錯誤。
-const LATEST_VERSION = "1.4.76";
+const LATEST_VERSION = "1.4.77";
 const RELEASE_REPO = "https://github.com/loamlabstudio/loamlab-releases";
 
 const LATEST = {

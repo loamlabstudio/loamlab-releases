@@ -2133,18 +2133,38 @@ async function health(supabase) {
         'system_config', 'system_config_log', 'webhook_errors', 'email_logs', 'email_templates',
         'user_presets', 'user_materials', 'rate_limits', 'auth_sessions', 'otp_lang',
         'reward_requests', 'kol_ledger'];
+    // 只查「表在不在」是不夠的：T9 那次整張表都在，缺的是一個欄位（input_url），
+    // PostgREST 回 PGRST204、呼叫端只 console.error，於是靜默漏寫了五個月。
+    // 所以這裡連關鍵欄位一起查——清單挑的是「一旦缺失就會靜默失敗、且損失不可逆」的那些。
+    const COLUMNS = {
+        render_history: 'input_url,provider_cost_usd_cents,tool_id,points_cost',
+        users: 'is_kol,is_partner,last_login_ip,last_active_at,referral_code,subscription_plan',
+        transactions: 'metadata,order_id,amount_usd_cents',
+        payments: 'amount_usd_cents,status,user_email',
+        feedback: 'type,metadata,transaction_id'
+    };
     try {
-        const results = await Promise.all(TABLES.map(async t => {
-            const { error } = await supabase.from(t).select('*', { count: 'exact', head: true }).limit(1);
-            return { t, missing: Boolean(error) };
-        }));
-        const missing = results.filter(r => r.missing).map(r => r.t);
-        push('schema', '資料表完整性', missing.length ? 'critical' : 'ok',
-            missing.length
-                ? '程式碼會寫、但正式庫沒有這些表：' + missing.join(', ') + '（寫入會靜默失敗，資料永久遺失）'
-                : TABLES.length + ' 張表全部存在',
-            missing);
-    } catch (e) { push('schema', '資料表完整性', 'warn', '檢查失敗：' + e.message); }
+        const [tableRes, colRes] = await Promise.all([
+            Promise.all(TABLES.map(async t => {
+                const { error } = await supabase.from(t).select('*', { count: 'exact', head: true }).limit(1);
+                return { t, missing: Boolean(error) };
+            })),
+            Promise.all(Object.entries(COLUMNS).map(async ([t, cols]) => {
+                const { error } = await supabase.from(t).select(cols).limit(1);
+                return { t, cols, bad: error ? (error.message || '').slice(0, 120) : null };
+            }))
+        ]);
+        const missing = tableRes.filter(r => r.missing).map(r => r.t);
+        const badCols = colRes.filter(r => r.bad);
+        const problems = [];
+        if (missing.length) problems.push('缺表：' + missing.join(', '));
+        if (badCols.length) problems.push('缺欄位：' + badCols.map(b => b.t + '（' + b.bad + '）').join('；'));
+        push('schema', '資料表 / 欄位完整性', problems.length ? 'critical' : 'ok',
+            problems.length
+                ? problems.join('　|　') + '　⇒ 寫入會靜默失敗、資料永久遺失（同 T9 漏五個月的成因）'
+                : TABLES.length + ' 張表、' + Object.keys(COLUMNS).length + ' 組關鍵欄位全部存在',
+            { missing_tables: missing, bad_columns: badCols.map(b => b.t) });
+    } catch (e) { push('schema', '資料表 / 欄位完整性', 'warn', '檢查失敗：' + e.message); }
 
     // 2. 點數對帳。全系統最重要的一條：扣款 − 退款 − 出圖 不等於 0，就代表有人被吃了點數。
     //    2026-09-10 alen3388 少退 20 點、hanaxyq 少退 15 點，都是靠人工盤點才發現的。

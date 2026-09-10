@@ -80,7 +80,12 @@ try {
 
     $vConfig = if ($configRb  -match "VERSION\s*=\s*'([^']+)'")         { $matches[1] } else { $null }
     $vPlugin = if ($pluginRb  -match "ext\.version\s*=\s*'([^']+)'")    { $matches[1] } else { $null }
-    $vJs     = if ($versionJs -match 'latest_version:\s*"([^"]+)"')      { $matches[1] } else { $null }
+    # version.js 自 90331b8 起改為「常數 LATEST_VERSION 推導出 download_url」（單一真實來源），
+    # 版本號不再以 `latest_version: "x.x.x"` 的字面值出現，舊寫法在這裡會抓成空字串，
+    # 於是每次 release 都誤報 Version mismatch。兩種格式都認，新格式優先。
+    $vJs = if ($versionJs -match 'LATEST_VERSION\s*=\s*"([^"]+)"')     { $matches[1] }
+           elseif ($versionJs -match 'latest_version:\s*"([^"]+)"')    { $matches[1] }
+           else { $null }
 
     if ($vConfig -and $vPlugin -and $vJs -and ($vConfig -eq $vPlugin) -and ($vPlugin -eq $vJs)) {
         Write-Host "[OK] Version consistent: v$vConfig" -ForegroundColor Green

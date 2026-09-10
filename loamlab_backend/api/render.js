@@ -662,7 +662,12 @@ async function _handleRender(req, res) {
             const state = (realData.state || realData.status || '').toLowerCase();
             
             // Extract raw cost from AtlasCloud and calculate double cost in cents
-            const rawCost = realData.cost || realData.usd || realData.cost_usd || (realData.metrics && realData.metrics.cost) || 0;
+            // 【2026-09-10】補上 `price`——AtlasCloud 實際回的欄位就叫這個（實測 debug_raw：
+            // `"price": "0.072"`，字串），而這裡原本只找 cost/usd/cost_usd/metrics.cost，一個都對不上
+            // ⇒ provider_cost_usd_cents 永遠寫 null（實測 9/9 之後 103 筆全 null）
+            // ⇒ admin 看板的「成本 / 淨利」KPI 等於成本恆為 0、淨利＝營業額，是假數據。
+            // c18d40e 那次修的就是「Cost KPI 永遠 0」，但欄位名猜錯了，所以還是 0。
+            const rawCost = realData.price || realData.cost || realData.usd || realData.cost_usd || (realData.metrics && realData.metrics.cost) || 0;
             const doubleCostCents = Math.round(parseFloat(rawCost) * 100 * 2) || 0;
 
             let finalUrl = realData.outputs?.[0] || realData.image_url || realData.images?.[0] || realData.output;
@@ -712,6 +717,26 @@ async function _handleRender(req, res) {
                 const refundRes = await refundAndFail(supabase, userEmail, pollCost, reason, pollTool, taskId);
                 if (errorKey) refundRes.error_key = errorKey;
                 return res.status(200).json(refundRes);
+            }
+            // 【2026-09-10】前端放棄之前主動退款。
+            // app.js 的 `_pollRenderTask` 是 120 次 × 3 秒 = 6 分鐘就放棄，而且放棄時回的是
+            // `points_refunded: false`，訊息叫用戶「稍後至 Render History 查看結果」——可是任務
+            // 根本沒完成，那裡不會有東西。淨結果是：扣了錢、沒有圖、不退款、還把人導去空頁面。
+            // 當天 hanaxyq 就這樣被吃掉 15 點（23 扣 / 4 退 / 18 出，1 筆懸空），而唯一的安全網
+            // ——scan_render_anomalies 的孤兒掃描——正好停擺（見 SPRINT T17），沒有任何人會發現。
+            //
+            // 判齡一律用 AtlasCloud 自己回的 created_at（已用 debug 模式實測確認該欄位存在，
+            // 形如 "2026-09-10T09:55:41.552Z"）。**刻意不用**前端傳的 started_at：那是客戶端
+            // 時鐘，只要使用者的電腦慢一小時，剛送出的任務就會被立刻誤判逾時而退款。
+            // 拿不到 created_at 時什麼都不做（維持原行為），寧可漏退也不能誤退。
+            //
+            // 5.5 分鐘的依據：實測正常 2K 出圖約 2 分 35 秒（latency_ms 127904），跑到這個時間
+            // 還在 processing 的任務基本上已經壞了。萬一它之後又成功，用戶等於白賺一次——
+            // 這個代價遠小於「扣了錢什麼都沒有」。refundAndFail 以 task_id 去重，不會重複退。
+            const ATLAS_GIVEUP_MS = 330000;
+            const atlasCreatedMs = realData.created_at ? new Date(realData.created_at).getTime() : null;
+            if (atlasCreatedMs && !Number.isNaN(atlasCreatedMs) && Date.now() - atlasCreatedMs > ATLAS_GIVEUP_MS) {
+                return res.status(200).json(await refundAndFail(supabase, userEmail, pollCost, '渲染逾時未完成，已自動退款', pollTool, taskId));
             }
             return res.status(200).json({ code: 0, status: 'processing' });
         } catch (e) {
@@ -1108,7 +1133,8 @@ async function _handleRender(req, res) {
         // 或把 images[0]/outputs[0] 的物件形式誤當字串存進 render_history
         const realData2 = data?.data || data || {};
         // 雙倍成本估算（供 daily_metrics 對帳，同 poll_render 的算法，見 544-546 行）
-        const rawCost2 = realData2.cost || realData2.usd || realData2.cost_usd || (realData2.metrics && realData2.metrics.cost) || 0;
+        // 同 poll_render：AtlasCloud 回的成本欄位叫 `price`，不補上就永遠記成 0（見該處註解）
+        const rawCost2 = realData2.price || realData2.cost || realData2.usd || realData2.cost_usd || (realData2.metrics && realData2.metrics.cost) || 0;
         const doubleCostCents2 = Math.round(parseFloat(rawCost2) * 100 * 2) || 0;
         let finalUrl = realData2.outputs?.[0] || realData2.image_url || realData2.images?.[0] || realData2.output || null;
         if (!finalUrl && Array.isArray(realData2.images)) finalUrl = realData2.images[0]?.url || realData2.images[0];

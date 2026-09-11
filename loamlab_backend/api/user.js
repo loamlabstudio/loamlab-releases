@@ -1,9 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { DODO_PRODUCTS, INITIAL_POINTS } from '../config.js';
-import { makeSupabase, reconcilePaymentsForEmail } from '../lib/activate.js';
+import { makeSupabase, reconcilePaymentsForEmail, fetchDodoSubscriptionInfo, DEAD_SUBSCRIPTION_STATUSES } from '../lib/activate.js';
 import { isValidAdminKey } from '../lib/safeCompare.js';
 import { getClientIp } from '../lib/net.js';
 import { resolveUserEmail } from '../lib/verifyIdentity.js';
+
+// 個人資料查詢的欄位清單。兩處查詢（首次讀取、自動修復後重讀）必須完全一致——過去各自寫一份，
+// 重讀那份少了 next_plan / payment_failed，補發訂閱後回傳的 profile 就會莫名少欄位。
+const PROFILE_COLUMNS = 'points, lifetime_points, referral_code, dodo_discount_code, referred_by, ' +
+    'subscription_plan, next_plan, last_topup_at, is_kol, is_partner, cancel_pending, ' +
+    'referral_success_count, payment_failed, subscription_period_end, dodo_subscription_id';
 
 // Dodo `/customers?customer_email=` 的伺服器端過濾不可信（實測會回傳與 email 無關的帳號列表），
 // 絕不可直接取 customers[0]，一律由呼叫端拿到的 email 做二次精確比對，找不到就回 null。
@@ -457,7 +463,7 @@ export default async function handler(req, res) {
         try {
             let { data, error } = await supabase
                 .from('users')
-                .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, next_plan, last_topup_at, is_kol, is_partner, cancel_pending, referral_success_count, payment_failed, subscription_period_end')
+                .select(PROFILE_COLUMNS)
                 .eq('email', email)
                 .single();
 
@@ -510,7 +516,7 @@ export default async function handler(req, res) {
                     if (activated) {
                         const { data: refreshed } = await supabase
                             .from('users')
-                            .select('points, lifetime_points, referral_code, dodo_discount_code, referred_by, subscription_plan, last_topup_at, is_kol, is_partner, cancel_pending, subscription_period_end')
+                            .select(PROFILE_COLUMNS)
                             .eq('email', email).single();
                         if (refreshed) data = refreshed;
                         Promise.resolve(supabase.from('webhook_errors').update({ resolved: true })
@@ -520,6 +526,48 @@ export default async function handler(req, res) {
                     }
                 } catch (e) {
                     console.warn('[auto-repair] non-fatal:', e.message);
+                }
+            }
+
+            // 反向自癒：DB 還掛著方案，但 Dodo 端訂閱其實早就終止了。
+            // 清空 subscription_plan 的唯一路徑本來是 webhook 的 cancelled/expired/failed 事件，只要漏接一次
+            // （Dodo 沒發、簽章失敗、續訂扣款失敗被直接 cancel），DB 就永遠卡著舊方案——而前端看到
+            // subscription_plan 有值就把「該方案」的購買按鈕鎖死，用戶想回頭付錢都點不動。使用者不會來客訴，
+            // 只會默默流失，所以這裡補上跟上面正向補發對稱的另一半。
+            //
+            // 觸發判據用 subscription_period_end（下次帳單日）：還沒到期就完全不查，正常用戶零額外延遲；
+            // 到期了或根本沒記錄過（舊資料為 null）才查一次 Dodo，順手把日期回寫，之後又回到零延遲。
+            if (data?.subscription_plan && data.dodo_subscription_id && process.env.DODO_API_KEY) {
+                const _periodEnd = data.subscription_period_end ? new Date(data.subscription_period_end) : null;
+                const _needVerify = !_periodEnd || isNaN(_periodEnd) || _periodEnd.getTime() < Date.now();
+                if (_needVerify) {
+                    try {
+                        const info = await fetchDodoSubscriptionInfo(data.dodo_subscription_id, process.env.DODO_API_KEY);
+                        // ⚠️ 只憑「明確拿到的 dead status」清空。查詢失敗時 status 是 null，絕不可當成已取消——
+                        // 否則 Dodo 一次 API 故障就會把全站付費用戶的方案清光。
+                        if (info.status && DEAD_SUBSCRIPTION_STATUSES.has(info.status)) {
+                            await supabase.from('users').update({
+                                subscription_plan: null,
+                                next_plan: null,
+                                cancel_pending: false,
+                                dodo_subscription_id: null,
+                                payment_failed: false,
+                            }).eq('email', email);
+                            Object.assign(data, {
+                                subscription_plan: null, next_plan: null,
+                                cancel_pending: false, payment_failed: false,
+                            });
+                            console.log(`[🔄反向修復] ${email} 訂閱在 Dodo 已是 ${info.status}，清空本地方案解除購買鎖定`);
+                        } else if (info.nextBillingDate) {
+                            // 訂閱還活著，只是帳單日過期沒同步（renewal webhook 漏接）→ 補上日期，
+                            // 下次就不必再查 Dodo。
+                            await supabase.from('users')
+                                .update({ subscription_period_end: info.nextBillingDate }).eq('email', email);
+                            data.subscription_period_end = info.nextBillingDate;
+                        }
+                    } catch (e) {
+                        console.warn('[reverse-repair] non-fatal:', e.message);
+                    }
                 }
             }
 

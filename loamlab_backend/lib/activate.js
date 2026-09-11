@@ -246,27 +246,46 @@ export async function cancelDodoSubscription(subscriptionId, dodoApiKey = proces
 // 已涵蓋任何折扣碼，是洗點防禦驗證（processTopup）與 variantId 補查唯一該問的地方——
 // webhook.js（即時）與 reconcilePaymentsForEmail（補發）共用，不維護兩份查詢邏輯。
 // 查詢失敗回傳全 null，呼叫端自行決定要重試還是略過（此函式不拋錯，避免中斷主流程）。
+// status / nextBillingDate 一併回傳，讓「DB 說還在訂閱、Dodo 說早就終止」這種漂移有辦法對帳。
+// ⚠️ 查不到時 status 必為 null（絕不是 'cancelled'）——呼叫端只能憑明確的 dead status 做破壞性動作，
+// 否則 Dodo 一次 API 故障就會把全站訂閱狀態清光。
 export async function fetchDodoSubscriptionInfo(subscriptionId, dodoApiKey = process.env.DODO_API_KEY) {
-    if (!subscriptionId || !dodoApiKey) return { productId: null, expectedAmountCents: null };
+    const EMPTY = { productId: null, expectedAmountCents: null, status: null, nextBillingDate: null };
+    if (!subscriptionId || !dodoApiKey) return EMPTY;
     const dodoBase = dodoApiKey.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+    // 必須有逾時：這支現在也被 user.js 的個人資料查詢直接 await，Dodo 一旦沒回應，
+    // 用戶開啟插件時就會卡在載入點數那一步直到 serverless function 被砍。
+    // 逾時視同查詢失敗（回 EMPTY）——webhook 那端查不到金額會回 500 重試，不會在沒驗證金額的情況下發點。
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
     try {
         const res = await fetch(`${dodoBase}/subscriptions/${subscriptionId}`, {
-            headers: { 'Authorization': `Bearer ${dodoApiKey}` }
+            headers: { 'Authorization': `Bearer ${dodoApiKey}` },
+            signal: ctrl.signal
         });
         if (!res.ok) {
             console.warn(`[Dodo] subscription lookup HTTP ${res.status}: ${subscriptionId}`);
-            return { productId: null, expectedAmountCents: null };
+            return EMPTY;
         }
         const subData = await res.json();
         return {
             productId: subData.product_id || subData.plan_id || subData.items?.[0]?.product_id || null,
             expectedAmountCents: (typeof subData.recurring_pre_tax_amount === 'number') ? subData.recurring_pre_tax_amount : null,
+            status: subData.status || null,
+            nextBillingDate: subData.next_billing_date || null,
         };
     } catch (e) {
-        console.warn(`[Dodo] subscription lookup failed: ${subscriptionId} —`, e.message);
-        return { productId: null, expectedAmountCents: null };
+        console.warn(`[Dodo] subscription lookup failed: ${subscriptionId} —`, e.name === 'AbortError' ? 'timeout 6s' : e.message);
+        return EMPTY;
+    } finally {
+        clearTimeout(timer);
     }
 }
+
+// Dodo 官方 status 枚舉：pending/active/on_hold/cancelled/failed/expired。
+// 只有這三個代表「這張訂閱已經死透、不會再續訂」——on_hold 是扣款失敗挽救中，pending 是還沒付款，
+// 兩者都還有救，不該當成已終止處理。
+export const DEAD_SUBSCRIPTION_STATUSES = new Set(['cancelled', 'expired', 'failed']);
 
 // 無腦拉取（Dumb Pull）：向 Dodo 拉該 email 的 payments，把還沒入帳的 succeeded 付款全部補發。
 // 冪等完全交給 processTopup 的 UNIQUE(order_id) 檢查。供 verify_payment（用戶手動觸發）與

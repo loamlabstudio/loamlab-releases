@@ -2589,9 +2589,11 @@ function verifyPaymentFromBanner() {
         });
 }
 
+// 注意：這裡刻意不再碰「管理訂閱」那一列。以前取消待生效時會把它藏起來（理由是 banner 上已經有
+// 撤回按鈕），但撤回退訂只是帳戶管理的其中一件事——用戶這時可能還要換卡、查帳單、確認扣款日。
+// 在他最需要掌控帳戶的時刻收走入口，是幫倒忙。入口的顯示條件統一由 refreshPricingModalBadge 管。
 function updateCancelPendingBanner(isPending, periodEnd) {
     var banner = document.getElementById('cancel-pending-banner');
-    var cancelRow = document.getElementById('cancel-subscription-row');
     if (!banner) return;
     if (isPending) {
         var lang = (typeof currentLang !== 'undefined' ? currentLang : null) || localStorage.getItem('loamlab_lang') || 'en-US';
@@ -2603,10 +2605,8 @@ function updateCancelPendingBanner(isPending, periodEnd) {
         banner.querySelector('#cpb-msg').textContent = msg;
         banner.querySelector('#cpb-btn').textContent = ct.btn;
         banner.classList.remove('hidden');
-        if (cancelRow) cancelRow.classList.add('hidden');
     } else {
         banner.classList.add('hidden');
-        if (cancelRow && window.loamlabSubscriptionPlan) cancelRow.classList.remove('hidden');
     }
 }
 
@@ -2680,20 +2680,23 @@ function refreshPricingModalBadge() {
         btn.style.cursor = '';
     });
 
-    // 高亮當前方案
+    // 高亮當前方案：只做視覺標示，按鈕本身保持可點。
+    // 這裡以前是 disabled = true，代價很大：只要後端的 subscription_plan 因為漏接取消事件而卡著舊值，
+    // 用戶就永遠點不動那顆按鈕——而被鎖死的偏偏是他最想回頭買的那個方案，他不會來客訴，只會默默流失。
+    // 付費入口在任何情況下都不該是死的；「是否真的已訂閱」改由 openCheckout 當場向後端核實。
     if (plan && planBtnMap[plan]) {
         const activeBtn = document.getElementById(planBtnMap[plan]);
         if (activeBtn) {
-            activeBtn.disabled = true;
             activeBtn.textContent = t('pricing_btn_current');
             activeBtn.style.opacity = '0.6';
-            activeBtn.style.cursor = 'not-allowed';
         }
     }
 
-    // 訂閱用戶才顯示「取消訂閱」入口
+    // 帳戶管理入口：只要登入就顯示，不看訂閱狀態。
+    // 以前是「系統認為你有方案才顯示」，於是系統一旦誤判（這次就誤判了整整一個月），用戶連退訂、
+    // 換卡、查帳單的入口都找不到。用戶對自己帳戶的控制權，不該由系統的認知正確與否來決定。
     const cancelRow = document.getElementById('cancel-subscription-row');
-    if (cancelRow) cancelRow.classList.toggle('hidden', !plan);
+    if (cancelRow) cancelRow.classList.toggle('hidden', !window.loamlabUserEmail);
 }
 
 function switchPricingTab(tab) {
@@ -4176,6 +4179,32 @@ function executeUpdate(_url) {
     }
 }
 
+// 向後端重新確認訂閱狀態，回傳最新方案名（null = 目前沒有有效訂閱）。
+// 網路或後端出問題時回傳 undefined，代表「問不到」——呼叫端一律當成「不確定」而放行，
+// 因為擋下一個正想付錢的用戶，代價遠大於讓他多開一次結帳頁（重複訂閱後端本來就會自動取消舊的）。
+async function verifySubscriptionPlan() {
+    if (!window.loamlabUserEmail) return undefined;
+    // 舊版 WebView 沒有 AbortSignal.timeout()，一律用 AbortController + setTimeout
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+        const r = await fetch(`${API_BASE}/api/user`, {
+            headers: { 'X-User-Email': window.loamlabUserEmail },
+            signal: ctrl.signal
+        });
+        const d = await r.json();
+        if (!d || d.code !== 0) return undefined;
+        window.loamlabSubscriptionPlan = d.subscription_plan || null;
+        window.loamlabCancelPending = d.cancel_pending || false;
+        window.loamlabSubscriptionPeriodEnd = d.subscription_period_end || null;
+        return window.loamlabSubscriptionPlan;
+    } catch (e) {
+        return undefined;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 // 結帳並跳轉付款頁面（接受 planKey: 'TOPUP'/'STARTER'/'PRO'/'STUDIO'）
 // DODO 路由到後端 /api/checkout 取得帶折扣的 checkout URL（折扣碼由後端環境變數管理）
 window.openCheckout = async function (planKey, quantity = 1) {
@@ -4185,11 +4214,21 @@ window.openCheckout = async function (planKey, quantity = 1) {
         return;
     }
 
-    // 已訂閱相同方案 guard（防止誤觸重複購買）
+    // 已訂閱相同方案 guard（防止誤觸重複購買）。
+    // 刻意先向後端重新確認一次，而不是直接相信本地這份 window.loamlabSubscriptionPlan：它可能是
+    // 好幾天前載入的舊值，也可能後端 DB 本身就因為漏接取消事件而卡著早已失效的方案。只信快取的後果是
+    // 「訂閱早就到期、想回頭付錢的用戶被自己的舊狀態擋在門外」。後端 GET /api/user 會順手跟金流核實
+    // 真實狀態並自動清掉失效方案，所以重新問一次拿到的就是最準的答案。
     const planKeyLower = planKey.toLowerCase();
     if (planKeyLower !== 'topup' && window.loamlabSubscriptionPlan === planKeyLower) {
-        showUpdateToast('✓ ' + t('already_subscribed'));
-        return;
+        const verifiedPlan = await verifySubscriptionPlan();
+        if (verifiedPlan === planKeyLower) {
+            showUpdateToast('✓ ' + t('already_subscribed'));
+            return;
+        }
+        // 後端確認這個方案已經失效（或根本問不到）→ 放行讓用戶重新訂閱，順手把 UI 更新成真實狀態
+        refreshPricingModalBadge();
+        updatePlanBadge(window.loamlabSubscriptionPlan);
     }
 
     const qty = Math.max(1, parseInt(quantity) || 1);

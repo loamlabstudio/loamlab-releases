@@ -651,12 +651,22 @@ T4 360 分享                    → 分享連結非圖片，前端提早 return
 ```
 release_type: hotfix
 verified_diff:
-  - loamlab_plugin/main.rb
+  - loamlab_backend/api/user.js
+  - loamlab_backend/lib/activate.js
+  - loamlab_backend/api/version.js
+  - loamlab_backend/public/i18n.js
+  - loamlab_backend/scripts/audit_stale_subscriptions.mjs
   - loamlab_plugin/ui/app.js
+  - loamlab_plugin/ui/index.html
   - loamlab_plugin/ui/i18n.js
+  - loamlab_plugin/ui/locales/en-US.json
+  - loamlab_plugin/ui/locales/zh-TW.json
+  - loamlab_plugin/ui/locales/zh-CN.json
+  - loamlab_plugin/ui/locales/es-ES.json
+  - loamlab_plugin/ui/locales/pt-BR.json
+  - loamlab_plugin/ui/locales/ja-JP.json
   - loamlab_plugin/config.rb
   - loamlab_plugin.rb
-  - loamlab_backend/api/version.js
   - SPRINT.md
 sql_migration: false
 ```

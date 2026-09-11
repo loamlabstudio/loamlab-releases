@@ -2680,16 +2680,16 @@ function refreshPricingModalBadge() {
         btn.style.cursor = '';
     });
 
-    // 高亮當前方案：只做視覺標示，按鈕本身保持可點。
-    // 這裡以前是 disabled = true，代價很大：只要後端的 subscription_plan 因為漏接取消事件而卡著舊值，
-    // 用戶就永遠點不動那顆按鈕——而被鎖死的偏偏是他最想回頭買的那個方案，他不會來客訴，只會默默流失。
-    // 付費入口在任何情況下都不該是死的；「是否真的已訂閱」改由 openCheckout 當場向後端核實。
+    // 目前方案的那顆按鈕：文字用「管理方案」，而不是「目前方案」。
+    // 按鈕上該寫的是「按下去會發生什麼」，不是「你現在是什麼狀態」——「目前方案」是狀態描述，
+    // 寫在按鈕上本身就矛盾，再加上灰化樣式，看起來就是停用的，沒有人會去點它。
+    // 這裡以前更是直接 disabled：只要後端的 subscription_plan 因為漏接取消事件而卡著舊值，
+    // 用戶就永遠點不動那顆按鈕，而被鎖死的偏偏是他最想回頭買的那個方案。
+    // 現在按鈕永遠是可執行的動作：真的還在訂閱就帶他去管理頁（改方案/換卡/帳單/退訂），
+    // 訂閱其實已經失效就直接放行結帳（判斷在 openCheckout 當場向後端核實）。
     if (plan && planBtnMap[plan]) {
         const activeBtn = document.getElementById(planBtnMap[plan]);
-        if (activeBtn) {
-            activeBtn.textContent = t('pricing_btn_current');
-            activeBtn.style.opacity = '0.6';
-        }
+        if (activeBtn) activeBtn.textContent = t('pricing_btn_manage');
     }
 
     // 帳戶管理入口：只要登入就顯示，不看訂閱狀態。
@@ -4223,7 +4223,10 @@ window.openCheckout = async function (planKey, quantity = 1) {
     if (planKeyLower !== 'topup' && window.loamlabSubscriptionPlan === planKeyLower) {
         const verifiedPlan = await verifySubscriptionPlan();
         if (verifiedPlan === planKeyLower) {
-            showUpdateToast('✓ ' + t('already_subscribed'));
+            // 訂閱確實還有效。這顆按鈕現在寫的是「管理方案」，就帶他去管理頁做他真正想做的事
+            // （改方案、換卡、看帳單、退訂），而不是彈一句「你已經訂閱了」把他擋回去——
+            // 一顆點得下去卻只會拒絕你的按鈕，跟灰掉的按鈕一樣沒用。
+            openManagePlan();
             return;
         }
         // 後端確認這個方案已經失效（或根本問不到）→ 放行讓用戶重新訂閱，順手把 UI 更新成真實狀態

@@ -2654,12 +2654,8 @@ function syncPricingModalI18n() {
 function refreshPricingModalBadge() {
     const plan = window.loamlabSubscriptionPlan;
     const planBtnMap = { starter: 'btn-plan-starter', pro: 'btn-plan-pro', studio: 'btn-plan-studio' };
+    const PLAN_TIERS = { starter: 1, pro: 2, studio: 3 };
     // btn-plan-topup 排除在外（內含 span#btn-plan-topup-label，不能用 textContent 覆蓋）
-    const originalText = {
-        'btn-plan-starter': t('pricing_btn_subscribe'),
-        'btn-plan-pro':     t('pricing_btn_upgrade'),
-        'btn-plan-studio':  t('pricing_btn_subscribe')
-    };
     // 單獨重設 topup label span（保留 DOM 結構）
     const topupLabel = document.getElementById('btn-plan-topup-label');
     if (topupLabel) {
@@ -2670,27 +2666,32 @@ function refreshPricingModalBadge() {
     const topupBtn = document.getElementById('btn-plan-topup');
     if (topupBtn) { topupBtn.disabled = false; topupBtn.style.opacity = ''; topupBtn.style.cursor = ''; }
 
-    // 重設所有按鈕
-    Object.entries(originalText).forEach(([id, txt]) => {
+    // 按鈕文字由「這個方案相對於你現在的位置」決定，而不是寫死。
+    // 寫死的版本同時說了兩個謊：沒訂閱的人看到 PRO 寫「升級方案」（他根本沒方案可升），
+    // STUDIO 用戶看 PRO 也是「升級方案」（那其實是降級）。
+    //
+    // 另外「目前方案」這種狀態描述不該出現在按鈕上——按鈕該說的是「按下去會發生什麼」。
+    // 以前那顆還直接 disabled：只要後端的 subscription_plan 因為漏接取消事件卡著舊值，
+    // 用戶就永遠點不動，而被鎖死的偏偏是他最想回頭買的那個方案。現在每顆都是可執行的動作。
+    const currentTier = plan ? (PLAN_TIERS[plan] || 0) : 0;
+    Object.entries(planBtnMap).forEach(([key, id]) => {
         const btn = document.getElementById(id);
         if (!btn) return;
         btn.disabled = false;
-        btn.textContent = txt;
         btn.style.opacity = '';
         btn.style.cursor = '';
+        if (!plan) {
+            btn.textContent = t('pricing_btn_subscribe');           // 還沒訂閱：三張卡片都是單純的訂閱
+        } else if (key === plan) {
+            btn.textContent = t('pricing_btn_manage');              // 你目前的方案：帶去管理頁
+        } else if (PLAN_TIERS[key] > currentTier) {
+            btn.textContent = t('pricing_btn_upgrade');             // 更高階：真的是升級
+        } else {
+            // 更低階：刻意不寫「降級」。實際發生的是「建立新訂閱取代舊的、當天重新計費」，
+            // 說成切換比說成降級誠實，也不會讓人誤以為這是「比較便宜的選擇」而順手點下去。
+            btn.textContent = t('pricing_btn_switch');
+        }
     });
-
-    // 目前方案的那顆按鈕：文字用「管理方案」，而不是「目前方案」。
-    // 按鈕上該寫的是「按下去會發生什麼」，不是「你現在是什麼狀態」——「目前方案」是狀態描述，
-    // 寫在按鈕上本身就矛盾，再加上灰化樣式，看起來就是停用的，沒有人會去點它。
-    // 這裡以前更是直接 disabled：只要後端的 subscription_plan 因為漏接取消事件而卡著舊值，
-    // 用戶就永遠點不動那顆按鈕，而被鎖死的偏偏是他最想回頭買的那個方案。
-    // 現在按鈕永遠是可執行的動作：真的還在訂閱就帶他去管理頁（改方案/換卡/帳單/退訂），
-    // 訂閱其實已經失效就直接放行結帳（判斷在 openCheckout 當場向後端核實）。
-    if (plan && planBtnMap[plan]) {
-        const activeBtn = document.getElementById(planBtnMap[plan]);
-        if (activeBtn) activeBtn.textContent = t('pricing_btn_manage');
-    }
 
     // 帳戶管理入口：只要登入就顯示，不看訂閱狀態。
     // 以前是「系統認為你有方案才顯示」，於是系統一旦誤判（這次就誤判了整整一個月），用戶連退訂、
